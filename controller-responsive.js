@@ -9,6 +9,7 @@ export function createResponsiveHelpers({ state, dom }) {
         return;
       }
 
+      drawer.hidden = true;
       drawer.classList.remove("is-open", "is-closing");
       drawer.setAttribute("aria-hidden", "true");
     });
@@ -21,7 +22,7 @@ export function createResponsiveHelpers({ state, dom }) {
   function syncResponsiveView() {
     const shell = dom.shell;
     if (!shell) {
-      return;
+      return isMobileViewport();
     }
 
     const mobile = isMobileViewport();
@@ -32,7 +33,7 @@ export function createResponsiveHelpers({ state, dom }) {
       resetDrawerStateForDesktop();
       state.mobileView = "browse";
       shell.dataset.mobileView = "desktop";
-      return;
+      return mobile;
     }
 
     if (state.mobileView !== "chat" && state.mobileView !== "browse") {
@@ -40,6 +41,7 @@ export function createResponsiveHelpers({ state, dom }) {
     }
 
     shell.dataset.mobileView = state.mobileView;
+    return mobile;
   }
 
   function updateLayoutMetrics() {

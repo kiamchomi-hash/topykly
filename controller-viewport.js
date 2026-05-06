@@ -8,10 +8,10 @@ export function createBackToTopicsHandler(state, responsive, render) {
 
 export function createResizeHandler({ responsive, render, actions, syncRankingListHeights = () => {} }) {
   return function handleResize() {
-    const wasMobile = responsive.isMobileViewport();
-    responsive.syncResponsiveView();
+    const root = typeof document !== "undefined" ? document.documentElement : null;
+    const wasMobile = root?.classList?.contains("is-mobile-viewport") ?? responsive.isMobileViewport();
+    const isMobile = responsive.syncResponsiveView();
     responsive.updateLayoutMetrics();
-    const isMobile = responsive.isMobileViewport();
     if (wasMobile && !isMobile) {
       actions.closeDrawers();
     }

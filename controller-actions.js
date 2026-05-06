@@ -178,7 +178,8 @@ export function createActionHandlers({
 
     state.isPaletteModalOpen = false;
     render();
-    dom.paletteButton?.focus();
+    const focusTarget = isMobileViewport() ? dom.openRightDrawer : dom.paletteButton;
+    focusTarget?.focus?.();
   }
 
   function selectPalette(paletteId) {

@@ -1,4 +1,4 @@
-import { createMessage, createTopic, getSelectedTopic, trimMessages } from "./model.js";
+import { createMessage, createTopic, getSelectedTopic } from "./model.js";
 import { dispatch, reducers } from "./store-logic.js";
 
 export function createChatActions({ state, dom, render, refreshFeedbackMs = 750 }) {
@@ -49,12 +49,6 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750 
       topicId: topic.id,
       message: newMessage
     });
-    // Trim messages logic should probably be in the reducer or model, 
-    // but for now let's ensure the state reflects it.
-    const updatedTopic = getSelectedTopic(state.topics, state.selectedTopicId);
-    if (updatedTopic) {
-      updatedTopic.messages = trimMessages(updatedTopic.messages);
-    }
 
     input.value = "";
     render();

@@ -108,15 +108,20 @@ export function createUserItem(user, currentUserId, activeConnectedUserId = null
   const isCurrentUser = user.id === currentUserId;
   const isActive = user.id === activeConnectedUserId;
   const node = el("article", `user-item${isCurrentUser ? " is-current" : ""}${isActive ? " is-active" : ""}`);
-  node.tabIndex = 0;
-  node.setAttribute("role", "button");
-  node.setAttribute("aria-pressed", String(isActive));
-  node.setAttribute("aria-label", `${user.name}${isCurrentUser ? ", usuario actual" : ""}`);
   node.dataset.id = user.id;
   node.dataset.connectedUserId = user.id;
 
   const info = el("div", "user-item__info");
-  info.append(el("p", "user-item__name", user.name));
+  const trigger = el("button", "user-item__trigger");
+  trigger.type = "button";
+  trigger.dataset.connectedUserId = user.id;
+  trigger.setAttribute("aria-pressed", String(isActive));
+  trigger.setAttribute("aria-label", `${isActive ? "Usuario activo" : "Seleccionar usuario"}: ${user.name}${isCurrentUser ? ", usuario actual" : ""}`);
+  if (isCurrentUser) {
+    trigger.setAttribute("aria-current", "true");
+  }
+  trigger.append(el("p", "user-item__name", user.name));
+  info.append(trigger);
 
   const actions = el("div", "user-item__actions");
   actions.append(

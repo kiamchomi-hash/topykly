@@ -19,9 +19,13 @@ const REQUIRED_DOM_KEYS = [
   "authTools",
   "friendRequestsButton",
   "notificationsButton",
-  "messagesButton",  "authButton",
+  "messagesButton",
+  "authButton",
   "storeButton",
-  "paletteButton",  "paletteModalBackdrop",
+  "paletteButton",
+  "mobileTopbarMenu",
+  "mobileDrawerPanels",
+  "paletteModalBackdrop",
   "paletteModal",
   "paletteOptionGrid",
   "closePaletteModalButton",
@@ -46,6 +50,7 @@ const REQUIRED_DOM_KEYS = [
   "drawerRankingsEmpty",
   "drawerRankingsBody",
   "drawerRankingsSection",
+  "drawerUsersSection",
   "drawerRankingSwitch",
   "topicTitleInput",
   "messageInput",
@@ -67,7 +72,7 @@ const DOM_IDS = [
   "drawerRankingPrev", "drawerRankingCurrent", "drawerRankingNext",
   "openRightDrawer", "drawerBackdrop", "profileButton", "backToTopics",
   "authTools", "friendRequestsButton", "notificationsButton", "messagesButton",
-  "authButton", "storeButton", "paletteButton", "paletteModalBackdrop",
+  "authButton", "storeButton", "paletteButton", "mobileTopbarMenu", "mobileDrawerPanels", "paletteModalBackdrop",
   "paletteModal", "paletteOptionGrid", "closePaletteModalButton",
   "chatTopicName", "chatTopicDescription", "rankingsTitle",
   "rankingScopeTabs", "rankingModeList", "rankingsGlyph",
@@ -116,6 +121,7 @@ export function cacheDom() {
   domProxy.rankingsPanel = domProxy.rankingsTitle?.closest(".panel--users-rankings") ?? null;
   domProxy.rankingCarousel = domProxy.rankingPrev?.closest(".ranking-carousel") ?? null;
   domProxy.drawerRankingsSection = domProxy.drawerRankingList?.closest(".drawer__section") ?? null;
+  domProxy.drawerUsersSection = domProxy.drawerUserList?.closest(".drawer__section") ?? null;
   domProxy.drawerRankingSwitch = domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
 
   assertRequiredDom(domProxy);

@@ -8,8 +8,29 @@ import { createResponsiveHelpers } from "./controller-responsive.js";
 import { createRenderers } from "./controller-render.js";
 import { closeTimerRef, dom, state } from "./app-store.js";
 import { applyStoredTheme, createBackToTopicsHandler, createResizeHandler } from "./controller-runtime.js";
+import { dispatch, reducers } from "./store-logic.js";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
+
+function hydrateInitialData(render) {
+  const users = buildUsers(initialUsers);
+  dispatch(state, reducers.setLoadingData, {
+    users,
+    topics: buildTopics(topicSeedData, users)
+  });
+  render();
+}
+
+function scheduleInitialDataHydration(render) {
+  const applyData = () => hydrateInitialData(render);
+
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => requestAnimationFrame(applyData));
+    return;
+  }
+
+  setTimeout(applyData, 0);
+}
 
 export function bootstrap() {
   applyStoredTheme(state);
@@ -36,8 +57,6 @@ export function bootstrap() {
 
   renderRef.current = renderers.render;
 
-  // Immediate initial render to show skeletons without any delay
-  responsive.syncResponsiveView();
   renderers.render();
 
   // Reveal the interface after the first render
@@ -68,7 +87,7 @@ export function bootstrap() {
     updateCustomPaletteHex: actions.updateCustomPaletteHex,
     randomizeCustomPalette: actions.randomizeCustomPalette,
     activateConnectedUser: actions.activateConnectedUser,
-    openDrawer: (side) => openDrawer(side, dom, closeTimerRef),
+    openDrawer: (side, trigger) => openDrawer(side, dom, closeTimerRef, trigger),
     closeDrawers: actions.closeDrawers,
     flashTitle: actions.flashTitle,
     backToTopics,
@@ -76,10 +95,5 @@ export function bootstrap() {
     onWheel: responsive.handleScrollableWheel
   });
 
-  // Simulate loading delay
-  setTimeout(() => {
-    state.users = buildUsers(initialUsers);
-    state.topics = buildTopics(topicSeedData, state.users);
-    renderers.render();
-  }, 2000);
+  scheduleInitialDataHydration(renderers.render);
 }

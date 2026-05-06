@@ -1,3 +1,6 @@
+export const TOPIC_VISIBLE_LIMIT = 20;
+export const TOPIC_ACTIVE_LIMIT = 60;
+
 export function formatCommentCount(count) {
   return count === 1 ? "1 comentario" : `${count} comentarios`;
 }
@@ -78,7 +81,7 @@ export function buildTopics(topicSeedData, users, now = Date.now()) {
     () => "Cierro con una nota mas para variar la lista."
   ];
 
-  return topicSeedData.map(([title, subtitle], index) => {
+  const topics = topicSeedData.map(([title, subtitle], index) => {
     const topicAuthorId = authorIds[topicAuthorPattern[index % topicAuthorPattern.length] % authorIds.length];
     const messageCount = 10;
     const minutesAgo = [48, 44, 39, 34, 29, 24, 19, 14, 9, 4];
@@ -104,6 +107,8 @@ export function buildTopics(topicSeedData, users, now = Date.now()) {
       messages
     };
   });
+
+  return prepareTopicFeed(topics);
 }
 
 export function getSelectedTopic(topics, selectedTopicId) {
@@ -116,4 +121,65 @@ export function getSelectedTopic(topics, selectedTopicId) {
 
 export function trimMessages(messages, limit = 30) {
   return messages.length > limit ? messages.slice(-limit) : messages;
+}
+
+export function appendMessageToTopic(topic, message, limit = 30) {
+  const messages = trimMessages([...topic.messages, message], limit);
+  const subtitle = message.kind === "user"
+    ? summarizeTopicMessage(message.text)
+    : topic.subtitle;
+
+  return {
+    ...topic,
+    subtitle,
+    messages
+  };
+}
+
+export function prepareTopicFeed(
+  topics,
+  activeLimit = TOPIC_ACTIVE_LIMIT,
+  visibleLimit = TOPIC_VISIBLE_LIMIT
+) {
+  return topics.slice(0, activeLimit).map((topic, index) => {
+    const visible = index < visibleLimit;
+    return topic.visible === visible ? topic : { ...topic, visible };
+  });
+}
+
+export function getVisibleTopics(topics, visibleLimit = TOPIC_VISIBLE_LIMIT) {
+  return topics.filter((topic) => topic.visible !== false).slice(0, visibleLimit);
+}
+
+export function insertTopicAtTop(
+  topics,
+  topic,
+  activeLimit = TOPIC_ACTIVE_LIMIT,
+  visibleLimit = TOPIC_VISIBLE_LIMIT
+) {
+  return prepareTopicFeed(
+    [topic, ...topics.filter((entry) => entry.id !== topic.id)],
+    activeLimit,
+    visibleLimit
+  );
+}
+
+export function reviveTopicWithMessage(
+  topics,
+  topicId,
+  message,
+  activeLimit = TOPIC_ACTIVE_LIMIT,
+  visibleLimit = TOPIC_VISIBLE_LIMIT
+) {
+  const targetTopic = topics.find((topic) => topic.id === topicId);
+  if (!targetTopic) {
+    return prepareTopicFeed(topics, activeLimit, visibleLimit);
+  }
+
+  const updatedTopic = appendMessageToTopic(targetTopic, message);
+  return prepareTopicFeed(
+    [updatedTopic, ...topics.filter((topic) => topic.id !== topicId)],
+    activeLimit,
+    visibleLimit
+  );
 }

@@ -1,10 +1,30 @@
 import { CUSTOM_PALETTE_ID } from "../palettes.js";
 
+const AUTH_STORAGE_KEY = "chetrend-auth-demo";
+
+function readStoredAuthState() {
+  if (typeof localStorage === "undefined") {
+    return false;
+  }
+
+  return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
+}
+
+function persistAuthState(isLoggedIn) {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(AUTH_STORAGE_KEY, String(isLoggedIn));
+}
+
 export function bindTopbarActionEvents(dom, handlers) {
   let pickerReopenLockUntil = 0;
   let pickerTriggerUnlockTimer = 0;
-  let isLoggedIn = false;
+  let isLoggedIn = readStoredAuthState();
+  let activeMobileDrawerPanel = null;
   syncAuthUi();
+  setPickerOpenState(false);
 
   function addListener(node, type, listener, options) {
     node?.addEventListener?.(type, listener, options);
@@ -17,6 +37,12 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     setTimeout(task, 0);
+  }
+
+  function isMobileViewport() {
+    return typeof window !== "undefined"
+      && typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 960px)").matches;
   }
 
   function lockPickerReopen() {
@@ -241,22 +267,69 @@ export function bindTopbarActionEvents(dom, handlers) {
     handlers.closePaletteModal();
   }
 
+  function resolveEventElement(event) {
+    if (event.target instanceof Element) {
+      return event.target;
+    }
+
+    if (typeof event.composedPath === "function") {
+      const composedTarget = event.composedPath().find((node) => node instanceof Element);
+      if (composedTarget instanceof Element) {
+        return composedTarget;
+      }
+    }
+
+    return event.target?.parentElement ?? null;
+  }
+
+  function setMobileDrawerPanel(panelName) {
+    activeMobileDrawerPanel = panelName;
+
+    if (dom.mobileTopbarMenu) {
+      dom.mobileTopbarMenu.hidden = Boolean(panelName);
+    }
+
+    if (dom.mobileDrawerPanels) {
+      dom.mobileDrawerPanels.hidden = !panelName;
+    }
+
+    if (dom.drawerUsersSection) {
+      dom.drawerUsersSection.hidden = panelName !== "users";
+    }
+
+    if (dom.drawerRankingsSection) {
+      dom.drawerRankingsSection.hidden = panelName !== "ranking";
+    }
+
+    dom.mobileTopbarMenu
+      ?.querySelectorAll?.("[data-mobile-drawer-panel]")
+      ?.forEach((button) => {
+        const isActive = button.dataset.mobileDrawerPanel === panelName;
+        button.setAttribute("aria-pressed", String(isActive));
+        button.classList?.toggle?.("is-active", isActive);
+      });
+  }
+
   function syncAuthUi() {
+    const isMobile = isMobileViewport();
     const label = dom.authButton?.querySelector(".button-label");
+    const authLabel = isLoggedIn
+      ? (isMobile ? "Salir" : "Cerrar Sesión")
+      : (isMobile ? "Login" : "Iniciar Sesión");
 
     if (label) {
-      label.textContent = isLoggedIn ? "Cerrar Sesión" : "Iniciar Sesión";
+      label.textContent = authLabel;
     }
 
     if (dom.authButton) {
       dom.authButton.className = isLoggedIn
         ? "text-button discreet-auth"
         : "text-button text-button--accent prominent-auth";
-      dom.authButton.setAttribute("aria-label", isLoggedIn ? "Cerrar Sesión" : "Iniciar sesión");
+      dom.authButton.setAttribute("aria-label", authLabel);
     }
 
     if (dom.authTools) {
-      dom.authTools.hidden = !isLoggedIn;
+      dom.authTools.hidden = !(isLoggedIn || isMobile);
     }
   }
 
@@ -267,10 +340,17 @@ export function bindTopbarActionEvents(dom, handlers) {
     handlers.flashTitle("Perfil listo para conectar");
   });
   addListener(dom.backToTopics, "click", handlers.backToTopics);
+  addListener(dom.openRightDrawer, "click", () => {
+    setMobileDrawerPanel(null);
+  });
+  addListener(typeof window !== "undefined" ? window : null, "resize", syncAuthUi, { passive: true });
 
   syncAuthUi();
   addListener(dom.authButton, "click", () => {
-    // Auth functionality moved to backend
+    isLoggedIn = !isLoggedIn;
+    persistAuthState(isLoggedIn);
+    syncAuthUi();
+    handlers.flashTitle(isLoggedIn ? "Sesión iniciada" : "Sesión cerrada");
   });
 
   addListener(dom.friendRequestsButton, "click", () => {
@@ -287,6 +367,58 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   addListener(dom.storeButton, "click", () => {
     handlers.flashTitle("Tienda en preparacion");
+  });
+  addListener(dom.mobileTopbarMenu, "click", (event) => {
+    const eventElement = resolveEventElement(event);
+    const panelTarget = eventElement?.closest?.("[data-mobile-drawer-panel]") ?? null;
+    if (panelTarget instanceof HTMLElement) {
+      const nextPanel = activeMobileDrawerPanel === panelTarget.dataset.mobileDrawerPanel
+        ? null
+        : panelTarget.dataset.mobileDrawerPanel;
+      setMobileDrawerPanel(nextPanel);
+      return;
+    }
+
+    const target = eventElement?.closest?.("[data-mobile-topbar-action]") ?? null;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target.dataset.mobileTopbarAction === "profile") {
+      setMobileDrawerPanel(null);
+      handlers.closeDrawers?.();
+      handlers.flashTitle("Perfil listo para conectar");
+      return;
+    }
+
+    if (target.dataset.mobileTopbarAction === "store") {
+      setMobileDrawerPanel(null);
+      handlers.closeDrawers?.();
+      handlers.flashTitle("Tienda en preparacion");
+      return;
+    }
+
+    if (target.dataset.mobileTopbarAction === "theme") {
+      setMobileDrawerPanel(null);
+      handlers.closeDrawers?.();
+      handlers.toggleTheme();
+      return;
+    }
+
+    if (target.dataset.mobileTopbarAction === "palette") {
+      setMobileDrawerPanel(null);
+      handlers.closeDrawers?.();
+      scheduleOpen(() => {
+        handlers.openPaletteModal();
+      });
+    }
+  });
+  addListener(dom.mobileDrawerPanels, "click", (event) => {
+    const eventElement = resolveEventElement(event);
+    const backTarget = eventElement?.closest?.("[data-mobile-drawer-back]") ?? null;
+    if (backTarget instanceof HTMLElement) {
+      setMobileDrawerPanel(null);
+    }
   });
   addListener(dom.paletteButton, "click", handlers.openPaletteModal);
   addListener(dom.closePaletteModalButton, "click", dismissPaletteModal);

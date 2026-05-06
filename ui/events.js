@@ -1,5 +1,49 @@
 import { bindTopbarEvents } from "./topbar.js";
 
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled]):not([tabindex='-1'])",
+  "[href]:not([tabindex='-1'])",
+  "input:not([disabled]):not([type='hidden']):not([tabindex='-1'])",
+  "textarea:not([disabled]):not([tabindex='-1'])",
+  "select:not([disabled]):not([tabindex='-1'])",
+  "[tabindex]:not([tabindex='-1'])"
+].join(", ");
+
+function getFocusableElements(container) {
+  if (!(container instanceof HTMLElement)) {
+    return [];
+  }
+
+  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter((element) => {
+    if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+
+    return !element.hidden && element.getAttribute("aria-hidden") !== "true";
+  });
+}
+
+function getActiveFocusTrapContainer(dom) {
+  if (
+    dom.paletteModal instanceof HTMLElement &&
+    dom.paletteModalBackdrop &&
+    !dom.paletteModalBackdrop.hidden &&
+    dom.paletteModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.paletteModal;
+  }
+
+  if (dom.rightDrawer instanceof HTMLElement && dom.rightDrawer.classList.contains("is-open")) {
+    return dom.rightDrawer;
+  }
+
+  if (dom.leftDrawer instanceof HTMLElement && dom.leftDrawer.classList.contains("is-open")) {
+    return dom.leftDrawer;
+  }
+
+  return null;
+}
+
 export function bindPageEvents(dom, handlers) {
   bindTopbarEvents(dom, handlers);
 
@@ -32,33 +76,44 @@ export function bindPageEvents(dom, handlers) {
     listNode.addEventListener("click", (event) => {
       handleConnectedUserActivation(event.target);
     });
-
-    listNode.addEventListener("keydown", (event) => {
-      if (!(event.target instanceof HTMLElement)) {
-        return;
-      }
-
-      if (event.target.matches("[data-user-action]")) {
-        return;
-      }
-
-      if (event.key !== "Enter" && event.key !== " ") {
-        return;
-      }
-
-      const handled = handleConnectedUserActivation(event.target);
-      if (!handled) {
-        return;
-      }
-
-      event.preventDefault();
-    });
   }
 
   bindConnectedUserListEvents(dom.userList);
   bindConnectedUserListEvents(dom.drawerUserList);
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") {
+      const focusTrapContainer = getActiveFocusTrapContainer(dom);
+      if (!focusTrapContainer) {
+        return;
+      }
+
+      const focusableElements = getFocusableElements(focusTrapContainer);
+      if (!focusableElements.length) {
+        event.preventDefault();
+        focusTrapContainer.focus?.();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey) {
+        if (activeElement === firstElement || !focusTrapContainer.contains(activeElement)) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+        return;
+      }
+
+      if (activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+      return;
+    }
+
     if (event.key !== "Escape") {
       return;
     }

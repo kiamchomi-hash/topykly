@@ -1,13 +1,14 @@
 import { createTopicItem, createTopicSkeleton } from "../components.js";
+import { getVisibleTopics, TOPIC_VISIBLE_LIMIT } from "../model.js";
 import { renderIntoTargets } from "./render-utils.js";
 
 export function renderTopics(state, dom, onFocusTopic) {
-  const topics = state.topics.slice(0, 20);
+  const topics = getVisibleTopics(state.topics);
   const isLoading = topics.length === 0;
 
   renderIntoTargets([dom.topicList, dom.leftDrawerTopics], "scroll-list topic-list", () => {
     if (isLoading) {
-      return Array.from({ length: 20 }, (_, i) => createTopicSkeleton(i));
+      return Array.from({ length: TOPIC_VISIBLE_LIMIT }, (_, i) => createTopicSkeleton(i));
     }
 
     return topics.map((topic) => {

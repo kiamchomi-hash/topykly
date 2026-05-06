@@ -1,3 +1,5 @@
+import { insertTopicAtTop, prepareTopicFeed, reviveTopicWithMessage } from "./model.js";
+
 /**
  * Store logic for immutable-like state updates.
  * These functions follow the pattern: (state, payload) => nextState
@@ -39,22 +41,18 @@ export const reducers = {
 
   addMessageToTopic: (state, { topicId, message }) => ({
     ...state,
-    topics: state.topics.map((topic) =>
-      topic.id === topicId
-        ? { ...topic, messages: [...topic.messages, message] }
-        : topic
-    )
+    topics: reviveTopicWithMessage(state.topics, topicId, message)
   }),
 
   setLoadingData: (state, { users, topics }) => ({
     ...state,
     users,
-    topics
+    topics: prepareTopicFeed(topics)
   }),
 
   createTopic: (state, topic) => ({
     ...state,
-    topics: [topic, ...state.topics],
+    topics: insertTopicAtTop(state.topics, topic),
     selectedTopicId: topic.id
   }),
 

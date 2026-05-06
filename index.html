@@ -41,7 +41,7 @@
             </span>
             <span class="theme-toggle__label">Tema</span>
           </button>
-          <button class="icon-button" id="paletteButton" type="button" aria-label="Paletas" aria-haspopup="dialog" aria-expanded="false">
+          <button class="icon-button" id="paletteButton" type="button" aria-label="Paletas" aria-haspopup="dialog" aria-controls="paletteModal" aria-expanded="false">
             <span class="icon-button__icon" aria-hidden="true">
               <span class="palette-mark" aria-hidden="true">
                 <span class="palette-mark__swatch palette-mark__swatch--one"></span>
@@ -109,7 +109,7 @@
           <button class="text-button text-button--accent prominent-auth" id="authButton" type="button" aria-label="Iniciar sesión">
             <span class="button-label">Iniciar Sesión</span>
           </button>
-          <button class="icon-button icon-button--drawer mobile-right-drawer" id="openRightDrawer" type="button" aria-label="Abrir usuarios y rankings">
+          <button class="icon-button icon-button--drawer mobile-right-drawer" id="openRightDrawer" type="button" aria-label="Abrir menu" aria-controls="rightDrawer" aria-expanded="false">
             <span class="icon-button__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 6h16M4 12h16M4 18h16"></path>
@@ -247,7 +247,7 @@
     </div>
 
     <div class="palette-modal-backdrop" id="paletteModalBackdrop" hidden>
-      <section class="palette-modal" id="paletteModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="paletteModalTitle">
+      <section class="palette-modal" id="paletteModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="paletteModalTitle" tabindex="-1">
         <div class="palette-modal__header">
           <div class="palette-modal__title-group">
             <h2 id="paletteModalTitle">Paletas</h2>
@@ -264,7 +264,7 @@
 
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
 
-    <aside class="drawer drawer--left" id="leftDrawer" aria-label="Temas" aria-hidden="true">
+    <aside class="drawer drawer--left" id="leftDrawer" role="dialog" aria-modal="true" aria-label="Temas" aria-hidden="true" hidden>
       <div class="drawer__header">
         <div>
           <p class="panel__kicker">Menú</p>
@@ -277,7 +277,7 @@
       <div class="scroll-list" id="leftDrawerTopics"></div>
     </aside>
 
-    <aside class="drawer drawer--right" id="rightDrawer" aria-label="Usuarios y rankings" aria-hidden="true">
+    <aside class="drawer drawer--right" id="rightDrawer" role="dialog" aria-modal="true" aria-label="Menu movil" aria-hidden="true" hidden>
       <div class="drawer__header">
         <div class="drawer__brand" aria-hidden="true">
           <span class="brand-mark__icon drawer__brand-icon" aria-hidden="true">
@@ -293,16 +293,44 @@
             <span class="brand-mark__che">CHE</span><span class="brand-mark__trend">TREND</span>
           </span>
         </div>
-        <button class="icon-button icon-button--compact" data-close-drawer="right" type="button" aria-label="Cerrar usuarios y rankings">
+        <button class="icon-button icon-button--compact" data-close-drawer="right" type="button" aria-label="Cerrar menu">
           <span aria-hidden="true">×</span>
         </button>
       </div>
-      <section class="drawer__section drawer__section--half">
+      <section class="drawer__section drawer__section--menu" id="mobileTopbarMenu" aria-label="Acciones secundarias">
+        <div class="drawer-action-stack">
+          <button class="drawer-action-button" type="button" data-mobile-topbar-action="profile">Perfil</button>
+          <button class="drawer-action-button" type="button" data-mobile-topbar-action="store">Tienda</button>
+          <button class="drawer-action-button" type="button" data-mobile-topbar-action="theme">Tema</button>
+          <button class="drawer-action-button" type="button" data-mobile-topbar-action="palette">Paletas</button>
+          <button class="drawer-action-button" type="button" data-mobile-drawer-panel="users" aria-pressed="false">Usuarios</button>
+          <button class="drawer-action-button" type="button" data-mobile-drawer-panel="ranking" aria-pressed="false">Ranking</button>
+        </div>
+      </section>
+      <div class="drawer-mobile-panels" id="mobileDrawerPanels" hidden>
+      <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerUsersSection" hidden>
         <h3>Últimos usuarios activos</h3>
+        <div class="drawer-mobile-panel__header">
+          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menu">
+            <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6"></path>
+              </svg>
+            </span>
+          </button>
+          <h3>Ultimos usuarios activos</h3>
+        </div>
         <div class="scroll-list" id="drawerUserList"></div>
       </section>
-      <section class="drawer__section drawer__section--half">
-        <div class="drawer-ranking__header">
+      <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerRankingsSection" hidden>
+        <div class="drawer-ranking__header drawer-ranking__header--mobile">
+          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menu">
+            <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6"></path>
+              </svg>
+            </span>
+          </button>
           <div class="panel__title-inline panel__title-inline--ranking">
             <span class="panel__title-glyph" id="drawerRankingsGlyph" aria-hidden="true"></span>
             <h3 id="drawerRankingsTitle">Ranking</h3>
@@ -345,6 +373,7 @@
           </div>
         </div>
       </section>
+      </div>
     </aside>
 
     <script src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js"></script>

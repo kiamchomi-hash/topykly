@@ -2,6 +2,65 @@ import { createMessageItem } from "../components.js";
 import { getSelectedTopic } from "../model.js";
 import { renderIntoTargets } from "./render-utils.js";
 
+const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 24;
+
+function parseRenderedNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function readRenderedChatState(messageStream) {
+  return {
+    topicId: messageStream.dataset.renderedTopicId || "",
+    messageCount: parseRenderedNumber(messageStream.dataset.renderedMessageCount),
+    lastMessageId: messageStream.dataset.renderedLastMessageId || "",
+    width: parseRenderedNumber(messageStream.dataset.renderedWidth)
+  };
+}
+
+function writeRenderedChatState(messageStream, nextState) {
+  messageStream.dataset.renderedTopicId = nextState.topicId;
+  messageStream.dataset.renderedMessageCount = String(nextState.messageCount);
+  messageStream.dataset.renderedLastMessageId = nextState.lastMessageId;
+  messageStream.dataset.renderedWidth = String(nextState.width);
+}
+
+function clearRenderedChatState(messageStream) {
+  delete messageStream.dataset.renderedTopicId;
+  delete messageStream.dataset.renderedMessageCount;
+  delete messageStream.dataset.renderedLastMessageId;
+  delete messageStream.dataset.renderedWidth;
+}
+
+function createNextRenderedChatState(messageStream, topic) {
+  return {
+    topicId: topic.id,
+    messageCount: topic.messages.length,
+    lastMessageId: topic.messages[topic.messages.length - 1]?.id || "",
+    width: messageStream.clientWidth
+  };
+}
+
+function isNearMessageStreamBottom(messageStream) {
+  const remainingDistance = messageStream.scrollHeight - messageStream.clientHeight - messageStream.scrollTop;
+  return remainingDistance <= CHAT_SCROLL_BOTTOM_THRESHOLD_PX;
+}
+
+export function shouldSyncChatLayout(previousState, nextState) {
+  return previousState.topicId !== nextState.topicId
+    || previousState.messageCount !== nextState.messageCount
+    || previousState.lastMessageId !== nextState.lastMessageId
+    || Math.abs(previousState.width - nextState.width) > 1;
+}
+
+export function shouldScrollChatToBottom(previousState, nextState, wasNearBottom) {
+  if (previousState.topicId !== nextState.topicId) {
+    return true;
+  }
+
+  return previousState.lastMessageId !== nextState.lastMessageId && wasNearBottom;
+}
+
 export function renderChat(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
   const isMobileViewport = document.documentElement.classList.contains("is-mobile-viewport");
@@ -22,16 +81,26 @@ export function renderChat(state, dom) {
   if (!topic) {
     if (dom.messageStream) {
       dom.messageStream.innerHTML = "";
+      clearRenderedChatState(dom.messageStream);
     }
     return;
   }
+
+  const previousRenderState = readRenderedChatState(dom.messageStream);
+  const wasNearBottom = previousRenderState.topicId ? isNearMessageStreamBottom(dom.messageStream) : true;
 
   renderIntoTargets([dom.messageStream], "message-stream", () => {
     return topic.messages.map((message) => createMessageItem(message, state.users));
   });
 
-  syncMessageCardHeights(dom.messageStream);
-  dom.messageStream.scrollTop = dom.messageStream.scrollHeight;
+  const nextRenderState = createNextRenderedChatState(dom.messageStream, topic);
+  if (shouldSyncChatLayout(previousRenderState, nextRenderState)) {
+    syncMessageCardHeights(dom.messageStream);
+  }
+  if (shouldScrollChatToBottom(previousRenderState, nextRenderState, wasNearBottom)) {
+    dom.messageStream.scrollTop = dom.messageStream.scrollHeight;
+  }
+  writeRenderedChatState(dom.messageStream, nextRenderState);
 }
 
 function syncMessageCardHeights(messageStream) {

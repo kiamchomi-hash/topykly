@@ -6,13 +6,20 @@ import { fileURLToPath } from "node:url";
 import { createChatActions } from "../controller-chat-actions.js";
 import { initialUsers, topicSeedData } from "../data.js";
 import {
+  appendMessageToTopic,
   buildTopics,
   buildUsers,
   createTopic,
   createMessage,
   formatCommentCount,
+  getVisibleTopics,
   getSelectedTopic,
+  insertTopicAtTop,
+  prepareTopicFeed,
+  reviveTopicWithMessage,
   summarizeTopicMessage,
+  TOPIC_ACTIVE_LIMIT,
+  TOPIC_VISIBLE_LIMIT,
   trimMessages
 } from "../model.js";
 import {
@@ -23,8 +30,10 @@ import {
   setStoredRankingIndex
 } from "../ranking-state.js";
 import { createResponsiveHelpers } from "../controller-responsive.js";
+import { createResizeHandler } from "../controller-runtime.js";
 import { applyStoredTheme } from "../controller-theme.js";
 import { createActionHandlers } from "../controller-actions.js";
+import { reducers } from "../store-logic.js";
 import {
   buildCustomPaletteOption,
   CUSTOM_PALETTE_ID,
@@ -37,6 +46,7 @@ import {
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
+import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
 
 const rootDir = path.dirname(fileURLToPath(new URL("../app.js", import.meta.url)));
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".html", ".css", ".md"]);
@@ -163,6 +173,121 @@ await (async () => {
     assert.equal(trimmed.length, 30);
     assert.equal(trimmed[0].text, "m5");
     assert.equal(trimmed[29].text, "m34");
+  });
+
+  await test("appendMessageToTopic trims overflow and refreshes the subtitle preview", () => {
+    const baseTopic = {
+      id: "topic-1",
+      title: "Tema",
+      subtitle: "Anterior",
+      authorId: "u1",
+      visible: true,
+      messages: Array.from({ length: 30 }, (_, index) => createMessage("u1", `m${index}`, index))
+    };
+    const nextMessage = createMessage("u2", "Este es el nuevo mensaje que debe quedar visible en el preview.", 0);
+
+    const updatedTopic = appendMessageToTopic(baseTopic, nextMessage);
+
+    assert.equal(updatedTopic.messages.length, 30);
+    assert.equal(updatedTopic.messages[0].text, "m1");
+    assert.equal(updatedTopic.messages[29].id, nextMessage.id);
+    assert.equal(updatedTopic.subtitle, "Este es el nuevo mensaje que debe quedar visible en el preview.");
+  });
+
+  await test("prepareTopicFeed keeps 20 visible topics and caps the active feed at 60", () => {
+    const topics = Array.from({ length: 65 }, (_, index) => ({
+      id: `topic-${index + 1}`,
+      title: `Tema ${index + 1}`,
+      subtitle: `Resumen ${index + 1}`,
+      authorId: "u1",
+      visible: true,
+      messages: [createMessage("u1", `m${index + 1}`, index)]
+    }));
+
+    const preparedTopics = prepareTopicFeed(topics);
+
+    assert.equal(preparedTopics.length, TOPIC_ACTIVE_LIMIT);
+    assert.equal(getVisibleTopics(preparedTopics).length, TOPIC_VISIBLE_LIMIT);
+    assert.equal(preparedTopics[TOPIC_VISIBLE_LIMIT - 1].visible, true);
+    assert.equal(preparedTopics[TOPIC_VISIBLE_LIMIT].visible, false);
+    assert.equal(preparedTopics[TOPIC_ACTIVE_LIMIT - 1].id, "topic-60");
+  });
+
+  await test("insertTopicAtTop keeps new topics first and preserves the 60 active topic ceiling", () => {
+    const topics = prepareTopicFeed(
+      Array.from({ length: TOPIC_ACTIVE_LIMIT }, (_, index) => ({
+        id: `topic-${index + 1}`,
+        title: `Tema ${index + 1}`,
+        subtitle: `Resumen ${index + 1}`,
+        authorId: "u1",
+        visible: true,
+        messages: [createMessage("u1", `m${index + 1}`, index)]
+      }))
+    );
+    const newTopic = createTopic("u1", "Tema nuevo", "Primer mensaje", 1_700_000_000_000);
+
+    const nextTopics = insertTopicAtTop(topics, newTopic);
+
+    assert.equal(nextTopics.length, TOPIC_ACTIVE_LIMIT);
+    assert.equal(nextTopics[0].id, newTopic.id);
+    assert.equal(nextTopics[TOPIC_VISIBLE_LIMIT - 1].visible, true);
+    assert.equal(nextTopics[TOPIC_VISIBLE_LIMIT].visible, false);
+    assert.equal(nextTopics.some((topic) => topic.id === "topic-60"), false);
+  });
+
+  await test("reviveTopicWithMessage brings hidden topics back to the top of the visible list", () => {
+    const topics = prepareTopicFeed(
+      Array.from({ length: 25 }, (_, index) => ({
+        id: `topic-${index + 1}`,
+        title: `Tema ${index + 1}`,
+        subtitle: `Resumen ${index + 1}`,
+        authorId: "u1",
+        visible: true,
+        messages: [createMessage("u1", `m${index + 1}`, index)]
+      }))
+    );
+    const revivedTopicId = "topic-25";
+    const nextMessage = createMessage("u2", "Comentario que revive el tema oculto.", 0);
+
+    const nextTopics = reviveTopicWithMessage(topics, revivedTopicId, nextMessage);
+
+    assert.equal(topics.find((topic) => topic.id === revivedTopicId)?.visible, false);
+    assert.equal(nextTopics[0].id, revivedTopicId);
+    assert.equal(nextTopics[0].visible, true);
+    assert.equal(nextTopics[0].subtitle, "Comentario que revive el tema oculto.");
+    assert.equal(nextTopics[TOPIC_VISIBLE_LIMIT].visible, false);
+  });
+
+  await test("addMessageToTopic reducer keeps topic updates centralized", () => {
+    const state = {
+      topics: prepareTopicFeed(
+        Array.from({ length: 25 }, (_, index) => ({
+          id: `topic-${index + 1}`,
+          title: `Tema ${index + 1}`,
+          subtitle: `Resumen ${index + 1}`,
+          authorId: "u1",
+          visible: true,
+          messages: Array.from(
+            { length: index === 24 ? 30 : 1 },
+            (_, messageIndex) => createMessage("u1", `m${index + 1}-${messageIndex}`, messageIndex)
+          )
+        }))
+      )
+    };
+    const nextMessage = createMessage("u2", "Mensaje nuevo para sincronizar reducer y revivir el tema.", 0);
+
+    const nextState = reducers.addMessageToTopic(state, {
+      topicId: "topic-25",
+      message: nextMessage
+    });
+
+    assert.equal(nextState.topics[0].id, "topic-25");
+    assert.equal(nextState.topics[0].visible, true);
+    assert.equal(nextState.topics[0].messages.length, 30);
+    assert.equal(nextState.topics[0].messages[0].text, "m25-1");
+    assert.equal(nextState.topics[0].messages[29].id, nextMessage.id);
+    assert.equal(nextState.topics[0].subtitle, "Mensaje nuevo para sincronizar reducer y revivir el tema.");
+    assert.equal(getVisibleTopics(nextState.topics).length, TOPIC_VISIBLE_LIMIT);
   });
 
   await test("createTopic builds a new topic from title and first message", () => {
@@ -301,6 +426,144 @@ await (async () => {
       globalThis.window = previousWindow;
       globalThis.document = previousDocument;
     }
+  });
+
+  await test("resize handler rerenders when viewport mode changes", () => {
+    const previousDocument = globalThis.document;
+    const rootClassList = createClassList();
+    rootClassList.add("is-mobile-viewport");
+    let renderCalls = 0;
+    let closeDrawerCalls = 0;
+    let rankingSyncCalls = 0;
+
+    try {
+      globalThis.document = {
+        documentElement: {
+          classList: rootClassList
+        }
+      };
+
+      const handleResize = createResizeHandler({
+        responsive: {
+          isMobileViewport() {
+            return false;
+          },
+          syncResponsiveView() {
+            rootClassList.remove("is-mobile-viewport");
+            rootClassList.add("is-desktop-viewport");
+            return false;
+          },
+          updateLayoutMetrics() {}
+        },
+        render() {
+          renderCalls += 1;
+        },
+        actions: {
+          closeDrawers() {
+            closeDrawerCalls += 1;
+          }
+        },
+        syncRankingListHeights() {
+          rankingSyncCalls += 1;
+        }
+      });
+
+      handleResize();
+
+      assert.equal(renderCalls, 1);
+      assert.equal(closeDrawerCalls, 1);
+      assert.equal(rankingSyncCalls, 0);
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
+
+  await test("resize handler only syncs ranking heights when viewport mode stays the same", () => {
+    const previousDocument = globalThis.document;
+    const rootClassList = createClassList();
+    rootClassList.add("is-desktop-viewport");
+    let renderCalls = 0;
+    let closeDrawerCalls = 0;
+    let rankingSyncCalls = 0;
+
+    try {
+      globalThis.document = {
+        documentElement: {
+          classList: rootClassList
+        }
+      };
+
+      const handleResize = createResizeHandler({
+        responsive: {
+          isMobileViewport() {
+            return false;
+          },
+          syncResponsiveView() {
+            return false;
+          },
+          updateLayoutMetrics() {}
+        },
+        render() {
+          renderCalls += 1;
+        },
+        actions: {
+          closeDrawers() {
+            closeDrawerCalls += 1;
+          }
+        },
+        syncRankingListHeights() {
+          rankingSyncCalls += 1;
+        }
+      });
+
+      handleResize();
+
+      assert.equal(renderCalls, 0);
+      assert.equal(closeDrawerCalls, 0);
+      assert.equal(rankingSyncCalls, 1);
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
+
+  await test("chat render helpers only autoscroll when topic changes or a new tail message arrives near the bottom", () => {
+    const previousState = {
+      topicId: "topic-1",
+      messageCount: 30,
+      lastMessageId: "m30",
+      width: 420
+    };
+
+    assert.equal(
+      shouldScrollChatToBottom(previousState, { ...previousState, topicId: "topic-2" }, false),
+      true
+    );
+    assert.equal(
+      shouldScrollChatToBottom(previousState, { ...previousState, lastMessageId: "m31" }, true),
+      true
+    );
+    assert.equal(
+      shouldScrollChatToBottom(previousState, { ...previousState, lastMessageId: "m31" }, false),
+      false
+    );
+    assert.equal(
+      shouldScrollChatToBottom(previousState, { ...previousState }, true),
+      false
+    );
+  });
+
+  await test("chat layout helper only recalculates when rendered content or width changes", () => {
+    const previousState = {
+      topicId: "topic-1",
+      messageCount: 30,
+      lastMessageId: "m30",
+      width: 420
+    };
+
+    assert.equal(shouldSyncChatLayout(previousState, { ...previousState }), false);
+    assert.equal(shouldSyncChatLayout(previousState, { ...previousState, width: 440 }), true);
+    assert.equal(shouldSyncChatLayout(previousState, { ...previousState, lastMessageId: "m31" }), true);
+    assert.equal(shouldSyncChatLayout(previousState, { ...previousState, topicId: "topic-2" }), true);
   });
 
   await test("ranking builders summarise activity and handle empty topics", () => {
@@ -826,6 +1089,339 @@ await (async () => {
     }
   });
 
+  await test("auth button toggles demo login state and persists the UI mode", () => {
+    const previousLocalStorage = globalThis.localStorage;
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.className = "";
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        if (selector === ".button-label") {
+          return this.label;
+        }
+
+        return null;
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const authTools = new FakeElement();
+    const storage = new Map();
+    const flashCalls = [];
+
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      messagesButton: new FakeElement(),
+      authButton,
+      authTools
+    };
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.localStorage = {
+        getItem(key) {
+          return storage.has(key) ? storage.get(key) : null;
+        },
+        setItem(key, value) {
+          storage.set(key, value);
+        }
+      };
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle(message) {
+          flashCalls.push(message);
+        },
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {}
+      });
+
+      assert.equal(authTools.hidden, true);
+      assert.equal(authButton.label.textContent, "Iniciar Sesión");
+
+      authButton.dispatch("click");
+
+      assert.equal(authTools.hidden, false);
+      assert.equal(authButton.label.textContent, "Cerrar Sesión");
+      assert.equal(storage.get("chetrend-auth-demo"), "true");
+      assert.equal(flashCalls.at(-1), "Sesión iniciada");
+
+      authButton.dispatch("click");
+
+      assert.equal(authTools.hidden, true);
+      assert.equal(authButton.label.textContent, "Iniciar Sesión");
+      assert.equal(storage.get("chetrend-auth-demo"), "false");
+      assert.equal(flashCalls.at(-1), "Sesión cerrada");
+    } finally {
+      globalThis.localStorage = previousLocalStorage;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+
+  await test("mobile topbar keeps core actions visible and routes secondary menu actions", () => {
+    const previousLocalStorage = globalThis.localStorage;
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousWindow = globalThis.window;
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.className = "";
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        if (selector === ".button-label") {
+          return this.label;
+        }
+
+        return null;
+      }
+
+      closest(selector) {
+        if (selector === "[data-mobile-topbar-action]" && this.dataset.mobileTopbarAction) {
+          return this;
+        }
+
+        if (selector === "[data-mobile-drawer-panel]" && this.dataset.mobileDrawerPanel) {
+          return this;
+        }
+
+        if (selector === "[data-mobile-drawer-back]" && this.dataset.mobileDrawerBack) {
+          return this;
+        }
+
+        return null;
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const authTools = new FakeElement();
+    const mobileTopbarMenu = new FakeElement();
+    const mobileDrawerPanels = new FakeElement();
+    const drawerUsersSection = new FakeElement();
+    const drawerRankingsSection = new FakeElement();
+    const openRightDrawer = new FakeElement();
+    const usersPanelButton = new FakeElement();
+    usersPanelButton.dataset.mobileDrawerPanel = "users";
+    const rankingPanelButton = new FakeElement();
+    rankingPanelButton.dataset.mobileDrawerPanel = "ranking";
+    const backButton = new FakeElement();
+    backButton.dataset.mobileDrawerBack = "true";
+    mobileTopbarMenu.querySelectorAll = (selector) => (
+      selector === "[data-mobile-drawer-panel]" ? [usersPanelButton, rankingPanelButton] : []
+    );
+    const flashCalls = [];
+    let closeDrawersCalls = 0;
+    let toggleThemeCalls = 0;
+    let openPaletteModalCalls = 0;
+
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      mobileTopbarMenu,
+      mobileDrawerPanels,
+      drawerUsersSection,
+      drawerRankingsSection,
+      openRightDrawer,
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      messagesButton: new FakeElement(),
+      authButton,
+      authTools
+    };
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.window = {
+        addEventListener() {},
+        matchMedia() {
+          return { matches: true };
+        }
+      };
+      globalThis.requestAnimationFrame = (task) => {
+        task();
+        return 0;
+      };
+      globalThis.localStorage = {
+        getItem() {
+          return null;
+        },
+        setItem() {}
+      };
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        toggleTheme() {
+          toggleThemeCalls += 1;
+        },
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle(message) {
+          flashCalls.push(message);
+        },
+        backToTopics() {},
+        openPaletteModal() {
+          openPaletteModalCalls += 1;
+        },
+        closePaletteModal() {},
+        closeDrawers() {
+          closeDrawersCalls += 1;
+        },
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {}
+      });
+
+      assert.equal(authTools.hidden, false);
+      assert.equal(authButton.label.textContent, "Login");
+
+      usersPanelButton.setAttribute = FakeElement.prototype.setAttribute;
+      rankingPanelButton.setAttribute = FakeElement.prototype.setAttribute;
+      openRightDrawer.dispatch("click");
+      assert.equal(mobileDrawerPanels.hidden, true);
+
+      mobileTopbarMenu.dispatch("click", { target: usersPanelButton });
+      assert.equal(mobileDrawerPanels.hidden, false);
+      assert.equal(mobileTopbarMenu.hidden, true);
+      assert.equal(drawerUsersSection.hidden, false);
+      assert.equal(drawerRankingsSection.hidden, true);
+      assert.equal(usersPanelButton["aria-pressed"], "true");
+
+      mobileTopbarMenu.dispatch("click", { target: rankingPanelButton });
+      assert.equal(drawerUsersSection.hidden, true);
+      assert.equal(drawerRankingsSection.hidden, false);
+      assert.equal(rankingPanelButton["aria-pressed"], "true");
+
+      mobileDrawerPanels.dispatch("click", { target: backButton });
+      assert.equal(mobileDrawerPanels.hidden, true);
+      assert.equal(mobileTopbarMenu.hidden, false);
+      assert.equal(drawerRankingsSection.hidden, true);
+
+      const profileTarget = new FakeElement();
+      profileTarget.dataset.mobileTopbarAction = "profile";
+      mobileTopbarMenu.dispatch("click", { target: profileTarget });
+
+      const themeTarget = new FakeElement();
+      themeTarget.dataset.mobileTopbarAction = "theme";
+      mobileTopbarMenu.dispatch("click", { target: themeTarget });
+
+      const paletteTarget = new FakeElement();
+      paletteTarget.dataset.mobileTopbarAction = "palette";
+      mobileTopbarMenu.dispatch("click", { target: paletteTarget });
+
+      assert.equal(closeDrawersCalls, 3);
+      assert.equal(toggleThemeCalls, 1);
+      assert.equal(openPaletteModalCalls, 1);
+      assert.equal(flashCalls.includes("Perfil listo para conectar"), true);
+    } finally {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+      globalThis.window = previousWindow;
+      globalThis.localStorage = previousLocalStorage;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+
   await test("source files stay free of mojibake markers", async () => {
     const files = await collectSourceFiles(rootDir);
     const offenders = [];
@@ -906,6 +1502,12 @@ await (async () => {
     assert.match(html, /localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/);
     assert.match(html, /localStorage\.getItem\("chetrend-palette"\) \|\| "default"/);
     assert.match(html, /id="authTools" hidden/);
+    assert.match(html, /id="mobileTopbarMenu"/);
+    assert.match(html, /id="mobileDrawerPanels" hidden/);
+    assert.match(html, /data-mobile-topbar-action="palette"/);
+    assert.match(html, /data-mobile-drawer-panel="ranking"/);
+    assert.match(html, /data-mobile-drawer-back/);
+    assert.match(html, /id="drawerRankingsSection" hidden/);
     assert.doesNotMatch(html, /5 combinaciones con variante light y dark/);
     assert.doesNotMatch(html, /Personalizacion/);
     assert.match(html, /class="brand-mark__icon"[\s\S]*brand-mark__icon-base/);
@@ -997,15 +1599,22 @@ await (async () => {
     assert.match(styles, /html\[data-theme="light"\]:not\(\[data-palette="default"\]\) \.ranking-scope-tabs__button\.is-active[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 74%,\s*var\(--accent-soft\) 26%\);/);
     assert.match(styles, /html:not\(\[data-theme="dark"\]\) \.ranking-label__main\s*\{[\s\S]*color:\s*var\(--text\);/);
     assert.match(styles, /html\[data-theme="dark"\] #rankingCurrent,\s*[\s\S]*background:\s*var\(--button-fill-bg\);[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*0\.82fr\) minmax\(0,\s*1\.18fr\);/);
+    assert.match(styles, /html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*display:\s*inline;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-stack\s*\{[\s\S]*flex-direction:\s*column;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__back\s*\{/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panels\[hidden\],\s*[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings\s*\{[\s\S]*gap:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings \.drawer-ranking-content,\s*[\s\S]*margin-top:\s*12px;/);
     assert.match(styles, /@media \(max-height:\s*720px\)\s*\{[\s\S]*html\.is-desktop-viewport\s*\{[\s\S]*--ranking-row-height:\s*29px;[\s\S]*--ranking-list-gap:\s*7px;[\s\S]*--ranking-list-padding-y:\s*8px;/);
     assert.match(styles, /\.ranking-mode-list__option\s*\{[\s\S]*grid-template-columns:\s*2rem minmax\(0,\s*1fr\);/);
     assert.match(styles, /\.ranking-mode-list__option\.is-active::before\s*\{[\s\S]*width:\s*12px;/);
-    assert.match(styles, /\.user-item\[data-connected-user-id\]:hover,\s*\.user-item\[data-connected-user-id\]:focus-visible\s*\{/);
+    assert.match(styles, /\.user-item\[data-connected-user-id\]:hover,\s*\.user-item\[data-connected-user-id\]:focus-within\s*\{/);
     assert.match(styles, /\.user-item\[data-connected-user-id\]:active\s*\{/);
     assert.match(styles, /\.user-item\.is-active\s*\{/);
+    assert.match(styles, /\.user-item__trigger\s*\{/);
+    assert.match(styles, /\.user-item__trigger:focus-visible,\s*\.user-item__action:focus-visible\s*\{/);
     assert.match(styles, /html\[data-theme="light"\]\.is-desktop-viewport \.panel--topics \.topics-panel__list-frame\s*\{[\s\S]*border:\s*1px solid/);
     assert.match(styles, /html\[data-theme="light"\] \.panel--chat,\s*html\[data-theme="light"\] \.panel--users-rankings\s*\{[\s\S]*border:\s*1px solid[\s\S]*box-shadow:\s*none;[\s\S]*backdrop-filter:\s*none;/);
     assert.match(styles, /html\[data-theme="light"\] \.panel--chat\s*\{[\s\S]*border-top:\s*1px solid[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-top-right-radius:\s*0;[\s\S]*background:\s*var\(--surface-strong\);/);
@@ -1026,6 +1635,7 @@ await (async () => {
     assert.match(components, /message__time/);
     assert.match(components, /dataset\.connectedUserId/);
     assert.match(components, /dataset\.userAction/);
+    assert.match(components, /user-item__trigger/);
     assert.match(components, /aria-pressed/);
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
     assert.match(controller, /export \{ bootstrap \} from "\.\/controller-app\.js";/);
@@ -1103,6 +1713,9 @@ await (async () => {
     assert.match(domModule, /topicTitleInput/);
     assert.match(domModule, /rankingScopeTabs/);
     assert.match(domModule, /drawerRankingModeList/);
+    assert.match(domModule, /mobileTopbarMenu/);
+    assert.match(domModule, /mobileDrawerPanels/);
+    assert.match(domModule, /drawerUsersSection/);
     assert.match(domModule, /paletteModalBackdrop/);
     assert.match(domModule, /paletteOptionGrid/);
     assert.match(domModule, /assertRequiredDom/);
@@ -1131,9 +1744,15 @@ await (async () => {
     assert.match(topbarActionEvents, /data-dismiss-custom-palette-picker/);
     assert.match(topbarActionEvents, /sanitizeHexDraft/);
     assert.match(topbarActionEvents, /syncAuthUi/);
-    assert.match(topbarActionEvents, /dom\.authTools\.hidden = !isLoggedIn/);
+    assert.match(topbarActionEvents, /AUTH_STORAGE_KEY/);
+    assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
+    assert.match(topbarActionEvents, /dom\.authTools\.hidden = !\(isLoggedIn \|\| isMobile\)/);
     assert.match(topbarActionEvents, /addListener\(dom\.authButton,\s*"click"/);
-    assert.match(topbarActionEvents, /label\.textContent = isLoggedIn \? "Cerrar Sesión" : "Iniciar Sesión"/);
+    assert.match(topbarActionEvents, /authLabel = isLoggedIn[\s\S]*"Salir"[\s\S]*"Login"/);
+    assert.match(topbarActionEvents, /data-mobile-topbar-action/);
+    assert.match(topbarActionEvents, /setMobileDrawerPanel/);
+    assert.match(topbarActionEvents, /data-mobile-drawer-panel/);
+    assert.match(topbarActionEvents, /data-mobile-drawer-back/);
     assert.match(store, /export \{ state \} from "\.\/state-store\.js";/);
     assert.match(store, /export \{ dom \} from "\.\/dom-store\.js";/);
     assert.match(store, /export \{ closeTimerRef \} from "\.\/timer-store\.js";/);

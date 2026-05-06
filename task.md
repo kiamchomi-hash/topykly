@@ -29,6 +29,6 @@ Implementacion del frontend de chat social tipo Cafe/IRC.
 
 ## Pendientes
 
-- Boton de mensajes directos.
+- Panel de admin.
 - Espacio reservado para publicidad.
 - Boton de reporte.
