@@ -147,25 +147,25 @@ function buildLightPaletteVars(hexValue) {
   const accentBase = hexToRgb(hexValue);
   const accent = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.04);
   const accentStrong = mixRgb(accentBase, hexToRgb("#20110A"), 0.18);
-  const bg = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.54);
-  const bgSoft = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.42);
-  const surface = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.4);
-  const surfaceStrong = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.48);
-  const surfaceMuted = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.28);
-  const text = mixRgb(accentBase, hexToRgb("#101114"), 0.72);
-  const textSoft = mixRgb(accentBase, hexToRgb("#23252C"), 0.54);
-  const badgeBorder = rgbToHex(mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.28));
+  const bg = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.88);
+  const bgSoft = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.8);
+  const surface = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.8);
+  const surfaceStrong = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.76);
+  const surfaceMuted = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.72);
+  const text = mixRgb(accentBase, hexToRgb("#101114"), 0.82);
+  const textSoft = mixRgb(accentBase, hexToRgb("#23252C"), 0.6);
+  const badgeBorder = rgbToHex(mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.38));
 
   return {
     "--bg": rgbToHex(bg),
     "--bg-soft": rgbToHex(bgSoft),
-    "--surface": rgba(surface, 0.8),
-    "--surface-strong": rgba(surfaceStrong, 0.96),
-    "--surface-muted": rgba(surfaceMuted, 0.58),
+    "--surface": rgba(surface, 0.86),
+    "--surface-strong": rgba(surfaceStrong, 0.95),
+    "--surface-muted": rgba(surfaceMuted, 0.72),
     "--text": rgbToHex(text),
     "--text-soft": rgbToHex(textSoft),
     "--line": rgba(text, 0.12),
-    "--line-strong": rgba(text, 0.2),
+    "--line-strong": rgba(text, 0.38),
     "--accent": rgbToHex(accent),
     "--accent-strong": rgbToHex(accentStrong),
     "--accent-soft": rgba(accent, 0.12),

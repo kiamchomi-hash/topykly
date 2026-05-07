@@ -74,7 +74,7 @@ export function renderChat(state, dom) {
 
   const chatHero = dom.chatTopicName?.closest(".chat-hero");
   if (chatHero) {
-    chatHero.hidden = isLoading || !topic || !isMobileViewport;
+    chatHero.hidden = true;
   }
 
   dom.messageStream.hidden = isLoading || !topic;
@@ -94,9 +94,9 @@ export function renderChat(state, dom) {
   });
 
   const nextRenderState = createNextRenderedChatState(dom.messageStream, topic);
-  if (shouldSyncChatLayout(previousRenderState, nextRenderState)) {
-    syncMessageCardHeights(dom.messageStream);
-  }
+  // Reconciliation can replace cards when their inline height styles differ from fresh nodes,
+  // so message heights must be re-applied after every render.
+  syncMessageCardHeights(dom.messageStream);
   if (shouldScrollChatToBottom(previousRenderState, nextRenderState, wasNearBottom)) {
     dom.messageStream.scrollTop = dom.messageStream.scrollHeight;
   }

@@ -27,6 +27,16 @@ Implementacion del frontend de chat social tipo Cafe/IRC.
 - Implementado como frontend autocontenido en HTML, CSS y JS puros.
 - No se adiciono backend ni sincronizacion en tiempo real.
 
+## Inspiracion
+
+Este proyecto toma inspiracion de decisiones de producto, navegacion y UI vistas en:
+
+- [Zulip](https://github.com/zulip/zulip)
+- [Elk](https://github.com/elk-zone/elk)
+- [Phanpy](https://github.com/cheeaun/phanpy)
+- [Misskey](https://github.com/misskey-dev/misskey)
+- [Sengi](https://github.com/nolanlawson/sengi)
+
 ## Pendientes
 
 - Panel de admin.

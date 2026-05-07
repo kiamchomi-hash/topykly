@@ -39,6 +39,7 @@ import {
   CUSTOM_PALETTE_ID,
   DEFAULT_CUSTOM_PALETTE_HEX,
   DEFAULT_PALETTE_ID,
+  getCustomPaletteVars,
   normalizeHexColor,
   parseHexColor,
   PALETTE_OPTIONS,
@@ -47,6 +48,7 @@ import {
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
+import { renderTitles } from "../ui/titles.js";
 
 const rootDir = path.dirname(fileURLToPath(new URL("../app.js", import.meta.url)));
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".html", ".css", ".md"]);
@@ -649,6 +651,7 @@ await (async () => {
 
   await test("custom palette builder normalizes hex and derives both previews", () => {
     const customPalette = buildCustomPaletteOption("4a90e2");
+    const lightVars = getCustomPaletteVars("#4A90E2", "light");
 
     assert.equal(customPalette.id, CUSTOM_PALETTE_ID);
     assert.equal(customPalette.name, "Personalizada");
@@ -659,6 +662,10 @@ await (async () => {
     assert.notEqual(customPalette.previews.light.bg, customPalette.previews.dark.bg);
     assert.notEqual(customPalette.previews.light.surface, "rgba(255, 251, 245, 0.96)");
     assert.notEqual(customPalette.previews.light.surface, customPalette.previews.dark.surface);
+    assert.match(customPalette.previews.light.surface, /0\.95\)$/);
+    assert.match(lightVars["--surface"], /0\.86\)$/);
+    assert.match(lightVars["--surface-muted"], /0\.72\)$/);
+    assert.match(lightVars["--line-strong"], /0\.38\)$/);
     assert.equal(normalizeHexColor("#abc"), "#AABBCC");
     assert.equal(parseHexColor("#4a90e2"), "#4A90E2");
     assert.equal(parseHexColor("zzz"), null);
@@ -1101,6 +1108,7 @@ await (async () => {
         this.listeners = new Map();
         this.hidden = false;
         this.className = "";
+        this.parentElement = null;
       }
 
       addEventListener(type, listener) {
@@ -1124,6 +1132,11 @@ await (async () => {
         return null;
       }
 
+      append(child) {
+        child.parentElement = this;
+        this.firstElementChild = child;
+      }
+
       setAttribute(name, value) {
         this[name] = value;
       }
@@ -1132,17 +1145,23 @@ await (async () => {
     const authButton = new FakeElement();
     authButton.label = { textContent: "" };
     const authTools = new FakeElement();
+    const themeToggle = new FakeElement();
+    const themeToggleDesktopSlot = new FakeElement();
+    const themeToggleMobileSlot = new FakeElement();
     const storage = new Map();
     const flashCalls = [];
 
     const dom = {
-      themeToggle: new FakeElement(),
+      themeToggle,
       refreshButton: new FakeElement(),
       messageForm: new FakeElement(),
       profileButton: new FakeElement(),
+      openRightDrawer: new FakeElement(),
       backToTopics: new FakeElement(),
       storeButton: new FakeElement(),
       paletteButton: new FakeElement(),
+      themeToggleDesktopSlot,
+      themeToggleMobileSlot,
       closePaletteModalButton: new FakeElement(),
       paletteModalBackdrop: new FakeElement(),
       paletteOptionGrid: new FakeElement(),
@@ -1192,21 +1211,35 @@ await (async () => {
       });
 
       assert.equal(authTools.hidden, true);
-      assert.equal(authButton.label.textContent, "Iniciar Sesión");
+      assert.equal(dom.profileButton.hidden, true);
+      assert.equal(dom.storeButton.hidden, true);
+      assert.equal(dom.openRightDrawer.hidden, false);
+      assert.equal(themeToggle.parentElement, themeToggleDesktopSlot);
+      assert.equal(themeToggle.dataset.themeTogglePlacement, "desktop");
+      assert.equal(authButton.label.textContent, "Iniciar sesión");
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
 
       authButton.dispatch("click");
 
       assert.equal(authTools.hidden, false);
-      assert.equal(authButton.label.textContent, "Cerrar Sesión");
+      assert.equal(dom.profileButton.hidden, false);
+      assert.equal(dom.storeButton.hidden, false);
+      assert.equal(dom.openRightDrawer.hidden, false);
+      assert.equal(authButton.label.textContent, "Cerrar sesión");
       assert.equal(storage.get("chetrend-auth-demo"), "true");
-      assert.equal(flashCalls.at(-1), "Sesión iniciada");
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
+      assert.equal(flashCalls.at(-1), "Sesion iniciada");
 
       authButton.dispatch("click");
 
       assert.equal(authTools.hidden, true);
-      assert.equal(authButton.label.textContent, "Iniciar Sesión");
+      assert.equal(dom.profileButton.hidden, true);
+      assert.equal(dom.storeButton.hidden, true);
+      assert.equal(dom.openRightDrawer.hidden, false);
+      assert.equal(authButton.label.textContent, "Iniciar sesión");
       assert.equal(storage.get("chetrend-auth-demo"), "false");
-      assert.equal(flashCalls.at(-1), "Sesión cerrada");
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
+      assert.equal(flashCalls.at(-1), "Sesion cerrada");
     } finally {
       globalThis.localStorage = previousLocalStorage;
       globalThis.document = previousDocument;
@@ -1215,7 +1248,7 @@ await (async () => {
     }
   });
 
-  await test("mobile topbar keeps core actions visible and routes secondary menu actions", () => {
+  await test("mobile keeps private actions hidden until login and then routes drawer actions", () => {
     const previousLocalStorage = globalThis.localStorage;
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
@@ -1229,6 +1262,7 @@ await (async () => {
         this.listeners = new Map();
         this.hidden = false;
         this.className = "";
+        this.parentElement = null;
       }
 
       addEventListener(type, listener) {
@@ -1271,6 +1305,11 @@ await (async () => {
       setAttribute(name, value) {
         this[name] = value;
       }
+
+      append(child) {
+        child.parentElement = this;
+        this.firstElementChild = child;
+      }
     }
 
     const authButton = new FakeElement();
@@ -1280,7 +1319,15 @@ await (async () => {
     const mobileDrawerPanels = new FakeElement();
     const drawerUsersSection = new FakeElement();
     const drawerRankingsSection = new FakeElement();
+    const themeToggle = new FakeElement();
+    const themeToggleDesktopSlot = new FakeElement();
+    const themeToggleMobileSlot = new FakeElement();
     const openRightDrawer = new FakeElement();
+    const menuProfileButton = new FakeElement();
+    menuProfileButton.dataset.authPrivate = "true";
+    const menuAuthButton = new FakeElement();
+    menuAuthButton.dataset.authPrivate = "true";
+    menuAuthButton.dataset.mobileTopbarAction = "auth";
     const usersPanelButton = new FakeElement();
     usersPanelButton.dataset.mobileDrawerPanel = "users";
     const rankingPanelButton = new FakeElement();
@@ -1288,7 +1335,9 @@ await (async () => {
     const backButton = new FakeElement();
     backButton.dataset.mobileDrawerBack = "true";
     mobileTopbarMenu.querySelectorAll = (selector) => (
-      selector === "[data-mobile-drawer-panel]" ? [usersPanelButton, rankingPanelButton] : []
+      selector === "[data-mobile-drawer-panel]" ? [usersPanelButton, rankingPanelButton]
+        : selector === "[data-auth-private]" ? [menuProfileButton, menuAuthButton]
+          : []
     );
     const flashCalls = [];
     let closeDrawersCalls = 0;
@@ -1296,13 +1345,15 @@ await (async () => {
     let openPaletteModalCalls = 0;
 
     const dom = {
-      themeToggle: new FakeElement(),
+      themeToggle,
       refreshButton: new FakeElement(),
       messageForm: new FakeElement(),
       profileButton: new FakeElement(),
       backToTopics: new FakeElement(),
       storeButton: new FakeElement(),
       paletteButton: new FakeElement(),
+      themeToggleDesktopSlot,
+      themeToggleMobileSlot,
       mobileTopbarMenu,
       mobileDrawerPanels,
       drawerUsersSection,
@@ -1371,8 +1422,29 @@ await (async () => {
         createNewTopic() {}
       });
 
+      assert.equal(authTools.hidden, true);
+      assert.equal(dom.profileButton.hidden, true);
+      assert.equal(dom.storeButton.hidden, true);
+      assert.equal(dom.openRightDrawer.hidden, false);
+      assert.equal(menuProfileButton.hidden, true);
+      assert.equal(menuAuthButton.hidden, true);
+      assert.equal(authButton.label.textContent, "Iniciar sesión");
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
+      assert.equal(authButton.hidden, false);
+      assert.equal(themeToggle.parentElement, themeToggleMobileSlot);
+      assert.equal(themeToggle.dataset.themeTogglePlacement, "mobile");
+
+      authButton.dispatch("click");
+
       assert.equal(authTools.hidden, false);
-      assert.equal(authButton.label.textContent, "Login");
+      assert.equal(dom.profileButton.hidden, false);
+      assert.equal(dom.storeButton.hidden, false);
+      assert.equal(dom.openRightDrawer.hidden, false);
+      assert.equal(menuProfileButton.hidden, false);
+      assert.equal(menuAuthButton.hidden, false);
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
+      assert.equal(flashCalls.at(-1), "Sesion iniciada");
+      assert.equal(authButton.hidden, true);
 
       usersPanelButton.setAttribute = FakeElement.prototype.setAttribute;
       rankingPanelButton.setAttribute = FakeElement.prototype.setAttribute;
@@ -1400,18 +1472,20 @@ await (async () => {
       profileTarget.dataset.mobileTopbarAction = "profile";
       mobileTopbarMenu.dispatch("click", { target: profileTarget });
 
-      const themeTarget = new FakeElement();
-      themeTarget.dataset.mobileTopbarAction = "theme";
-      mobileTopbarMenu.dispatch("click", { target: themeTarget });
+      themeToggle.dispatch("click");
 
       const paletteTarget = new FakeElement();
       paletteTarget.dataset.mobileTopbarAction = "palette";
       mobileTopbarMenu.dispatch("click", { target: paletteTarget });
 
+      mobileTopbarMenu.dispatch("click", { target: menuAuthButton });
+
       assert.equal(closeDrawersCalls, 3);
       assert.equal(toggleThemeCalls, 1);
       assert.equal(openPaletteModalCalls, 1);
       assert.equal(flashCalls.includes("Perfil listo para conectar"), true);
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
+      assert.equal(authButton.hidden, false);
     } finally {
       globalThis.requestAnimationFrame = previousRequestAnimationFrame;
       globalThis.window = previousWindow;
@@ -1420,6 +1494,34 @@ await (async () => {
       globalThis.Element = previousElement;
       globalThis.HTMLElement = previousHTMLElement;
     }
+  });
+
+  await test("renderTitles syncs theme switch semantics with current theme", () => {
+    const themeToggle = {
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+    };
+
+    const state = {
+      topics: [],
+      selectedTopicId: null,
+      rankingScope: "global",
+      globalRankingIndex: 0,
+      topicRankingIndex: 0,
+      theme: "dark"
+    };
+
+    renderTitles(state, { themeToggle });
+    assert.equal(themeToggle.role, "switch");
+    assert.equal(themeToggle["aria-checked"], "true");
+    assert.equal(themeToggle["aria-label"], "Tema oscuro");
+    assert.equal(themeToggle.title, "Cambiar a tema claro");
+
+    state.theme = "light";
+    renderTitles(state, { themeToggle });
+    assert.equal(themeToggle["aria-checked"], "false");
+    assert.equal(themeToggle.title, "Cambiar a tema oscuro");
   });
 
   await test("source files stay free of mojibake markers", async () => {
@@ -1477,6 +1579,7 @@ await (async () => {
     assert.match(html, /id="createTopicButton"/);
     assert.match(html, /id="topicTitleInput"/);
     assert.match(html, /id="chatTitle"/);
+    assert.match(html, /class="panel__header-title"[\s\S]*id="backToTopics"[\s\S]*aria-label="Volver a temas"[\s\S]*id="chatTitle"/);
     assert.match(html, /icon-button--refresh/);
     assert.match(html, /id="leftDrawerTopics"/);
     assert.match(html, /refresh-button__wheel/);
@@ -1495,16 +1598,42 @@ await (async () => {
     assert.match(html, /id="drawerRankingModeList"/);
     assert.match(html, /id="paletteModalBackdrop"/);
     assert.match(html, /id="paletteModal"/);
+    assert.match(html, /id="paletteModal"[\s\S]*aria-label="Selector de paletas"/);
     assert.match(html, /class="palette-modal__body"/);
     assert.match(html, /id="paletteOptionGrid"/);
+    assert.doesNotMatch(html, /id="paletteModalTitle"/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@latest\/dist\/coloris\.min\.css/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@latest\/dist\/coloris\.min\.js/);
     assert.match(html, /localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/);
     assert.match(html, /localStorage\.getItem\("chetrend-palette"\) \|\| "default"/);
-    assert.match(html, /id="authTools" hidden/);
+    assert.match(html, /localStorage\.getItem\("chetrend-auth-demo"\) === "true" \? "logged-in" : "logged-out"/);
+    assert.match(html, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
+    assert.match(html, /document\.documentElement\.dataset\.authState = authState/);
+    assert.match(html, /document\.documentElement\.classList\.toggle\("is-mobile-viewport", mobile\)/);
+    assert.match(html, /document\.documentElement\.classList\.toggle\("is-desktop-viewport", !mobile\)/);
+    assert.match(styles, /html\[data-auth-state="logged-out"\] \[data-auth-private\]\s*\{[\s\S]*display:\s*none !important;/);
+    assert.match(html, /id="authTools"[\s\S]*hidden/);
+    assert.match(html, /data-auth-private/);
     assert.match(html, /id="mobileTopbarMenu"/);
     assert.match(html, /id="mobileDrawerPanels" hidden/);
+    assert.match(html, /id="themeToggleDesktopSlot"/);
+    assert.match(html, /id="themeToggleMobileSlot"/);
+    assert.match(html, /id="themeToggleTemplate"/);
+    assert.match(html, /id="paletteButton"[\s\S]*id="themeToggleDesktopSlot"/);
+    assert.match(html, /id="storeButton"[\s\S]*id="themeToggleMobileSlot"/);
+    assert.match(html, /class="theme-switch"/);
+    assert.match(html, /role="switch"/);
+    assert.match(html, /aria-checked="true"/);
+    assert.match(html, /theme-switch__icons/);
+    assert.match(html, /theme-switch__icon theme-switch__icon--light/);
+    assert.match(html, /theme-switch__icon theme-switch__icon--dark/);
+    assert.doesNotMatch(html, /id="mobileThemeToggle"/);
+    assert.match(html, /A8\.5 8\.5 0 1 1 9\.8 4a7 7 0 0 0 10\.2 10\.2Z/);
+    assert.match(html, /data-mobile-topbar-action="auth"/);
+    assert.match(html, /drawer-action-button drawer-action-button--auth/);
     assert.match(html, /data-mobile-topbar-action="palette"/);
+    assert.doesNotMatch(html, /data-mobile-topbar-action="store"/);
+    assert.doesNotMatch(html, /data-mobile-topbar-action="theme"/);
     assert.match(html, /data-mobile-drawer-panel="ranking"/);
     assert.match(html, /data-mobile-drawer-back/);
     assert.match(html, /id="drawerRankingsSection" hidden/);
@@ -1530,7 +1659,10 @@ await (async () => {
     assert.match(styles, /:root\s*\{[\s\S]*--button-fill-bg:\s*var\(--accent-strong\);/);
     assert.match(styles, /html\[data-theme="light"\]\[data-palette="coast"\]\s*\{/);
     assert.match(styles, /html\[data-theme="light"\]\[data-palette="coast"\]\s*\{[\s\S]*--surface:\s*rgba\(205,\s*228,\s*232,\s*0\.86\);[\s\S]*--surface-strong:\s*rgba\(197,\s*221,\s*226,\s*0\.95\);/);
+    assert.match(styles, /\.panel__header-title\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*gap:\s*10px;[\s\S]*min-width:\s*0;/);
+    assert.match(styles, /\.chat-header__back\s*\{[\s\S]*display:\s*none;[\s\S]*flex:\s*none;/);
     assert.match(styles, /\.palette-modal-backdrop\s*\{[\s\S]*position:\s*fixed;[\s\S]*z-index:\s*40;/);
+    assert.match(styles, /\.palette-modal__header\s*\{[\s\S]*justify-content:\s*flex-end;/);
     assert.match(styles, /\.palette-modal\s*\{[\s\S]*position:\s*relative;[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[\s\S]*overflow:\s*hidden;/);
     assert.match(styles, /\.palette-modal__body\s*\{[\s\S]*overflow:\s*auto;[\s\S]*padding-right:\s*4px;/);
     assert.match(styles, /\.palette-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
@@ -1560,7 +1692,15 @@ await (async () => {
     assert.match(styles, /\.palette-modal__body::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--palette-modal-scrollbar-thumb\);/);
     assert.match(styles, /html\[data-custom-picker-open="false"\] \.clr-picker\s*\{[\s\S]*display:\s*none !important;/);
     assert.match(styles, /html\[data-theme="dark"\]\s*\{[\s\S]*--ranking-badge-border:\s*color-mix\(in srgb,\s*#f2b97a 62%,\s*var\(--line\)\);/);
-    assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#themeToggle \.theme-toggle__label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/);
+    assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton,\s*[\s\S]*#themeToggle,\s*[\s\S]*#paletteButton,\s*[\s\S]*#contactAdminButton\s*\{[\s\S]*color:\s*#000;/);
+    assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/);
+    assert.match(styles, /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/);
+    assert.match(styles, /\.theme-toggle-slot\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;/);
+    assert.match(styles, /\.theme-toggle-slot:empty\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /\.theme-switch\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*78px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*3px;[\s\S]*border-radius:\s*999px;/);
+    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch\s*\{[\s\S]*border:\s*1px solid var\(--button-ghost-border\);[\s\S]*background:\s*var\(--button-ghost-bg\);/);
+    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch:hover,\s*#themeToggleDesktopSlot \.theme-switch:active\s*\{[\s\S]*background:\s*var\(--button-ghost-bg-hover\);[\s\S]*border-color:\s*var\(--button-ghost-border\);/);
+    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:focus-visible\s*\{[\s\S]*outline:\s*2px solid color-mix/);
     assert.match(styles, /\.message\s*\{[\s\S]*position:\s*relative;[\s\S]*padding:\s*0 0 0 84px;[\s\S]*min-height:\s*84px;[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /\.message \+ \.message::before\s*\{[\s\S]*top:\s*0;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*height:\s*1px;/);
     assert.match(styles, /\.message \+ \.message \.message__avatar\s*\{[\s\S]*border-top:\s*1px solid/);
@@ -1599,12 +1739,38 @@ await (async () => {
     assert.match(styles, /html\[data-theme="light"\]:not\(\[data-palette="default"\]\) \.ranking-scope-tabs__button\.is-active[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 74%,\s*var\(--accent-soft\) 26%\);/);
     assert.match(styles, /html:not\(\[data-theme="dark"\]\) \.ranking-label__main\s*\{[\s\S]*color:\s*var\(--text\);/);
     assert.match(styles, /html\[data-theme="dark"\] #rankingCurrent,\s*[\s\S]*background:\s*var\(--button-fill-bg\);[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*gap:\s*0;[\s\S]*width:\s*44px;[\s\S]*min-width:\s*44px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding-block:\s*0;[\s\S]*padding-inline:\s*0;[\s\S]*border-radius:\s*999px;[\s\S]*flex:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*display:\s*inline;/);
+    assert.match(styles, /html\.is-mobile-viewport #storeButton \.button-label\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport #authButton\s*\{[\s\S]*min-width:\s*0;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding-block:\s*0;[\s\S]*padding-inline:\s*10px;[\s\S]*align-items:\s*center;[\s\S]*font-size:\s*0\.78rem;[\s\S]*letter-spacing:\s*0;/);
+    assert.match(styles, /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*font-weight:\s*900;[\s\S]*letter-spacing:\s*0;[\s\S]*-webkit-text-stroke:\s*0\.2px currentColor;/);
+    assert.match(styles, /#themeToggleMobileSlot \.theme-switch\s*\{[\s\S]*border:\s*2px solid color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);/);
+    assert.match(styles, /#themeToggleMobileSlot \.theme-switch:hover,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);/);
+    assert.match(styles, /\.theme-switch__track\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*border-radius:\s*999px;[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 88%,\s*var\(--accent-soft\) 12%\);[\s\S]*overflow:\s*hidden;/);
+    assert.match(styles, /\.theme-switch__icons\s*\{[\s\S]*display:\s*block;[\s\S]*pointer-events:\s*none;/);
+    assert.match(styles, /\.theme-switch__icon\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*50%;[\s\S]*width:\s*14px;[\s\S]*height:\s*14px;[\s\S]*opacity:\s*0\.96;[\s\S]*transform:\s*translateY\(-50%\);[\s\S]*z-index:\s*2;/);
+    assert.match(styles, /\.theme-switch__icon--light\s*\{[\s\S]*left:\s*10px;/);
+    assert.match(styles, /\.theme-switch__icon--dark\s*\{[\s\S]*right:\s*10\.6px;/);
+    assert.match(styles, /\.theme-switch__icon--dark svg\s*\{[\s\S]*transform:\s*translateY\(-0\.35px\);/);
+    assert.match(styles, /\.theme-switch__thumb\s*\{[\s\S]*left:\s*0;[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*transform:\s*translate\(34px,\s*-50%\);[\s\S]*z-index:\s*1;/);
+    assert.match(styles, /html\[data-theme="light"\] \.theme-switch__thumb\s*\{[\s\S]*transform:\s*translate\(0,\s*-50%\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*2;[\s\S]*justify-content:\s*flex-end;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat\s*\{[\s\S]*gap:\s*10px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat \.chat-header__back\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;[\s\S]*min-width:\s*40px;[\s\S]*min-height:\s*40px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-stack\s*\{[\s\S]*flex-direction:\s*column;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__back\s*\{/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth\s*\{[\s\S]*margin-top:\s*10px;[\s\S]*color:\s*var\(--button-fill-text\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth:hover,\s*html\.is-mobile-viewport \.drawer-action-button--auth:focus-visible\s*\{/);
+    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer\s*\{[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;[\s\S]*position:\s*absolute;[\s\S]*left:\s*12px;[\s\S]*top:\s*50%;[\s\S]*transform:\s*translateY\(-50%\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer:hover,\s*html\.is-mobile-viewport \.mobile-right-drawer:focus-visible,\s*html\.is-mobile-viewport \.mobile-right-drawer:active\s*\{[\s\S]*background:\s*transparent;[\s\S]*transform:\s*translateY\(-50%\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;/);
+    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon svg\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;[\s\S]*stroke-width:\s*2\.6;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panels\[hidden\],\s*[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*auto;[\s\S]*transform:\s*translateX\(-100%\);/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings\s*\{[\s\S]*gap:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings \.drawer-ranking-content,\s*[\s\S]*margin-top:\s*12px;/);
     assert.match(styles, /@media \(max-height:\s*720px\)\s*\{[\s\S]*html\.is-desktop-viewport\s*\{[\s\S]*--ranking-row-height:\s*29px;[\s\S]*--ranking-list-gap:\s*7px;[\s\S]*--ranking-list-padding-y:\s*8px;/);
@@ -1654,6 +1820,7 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
     assert.match(controllerApp, /from "\.\/controller-render\.js"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
+    assert.match(controllerApp, /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/);
     assert.doesNotMatch(controllerApp, /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
@@ -1713,6 +1880,8 @@ await (async () => {
     assert.match(domModule, /topicTitleInput/);
     assert.match(domModule, /rankingScopeTabs/);
     assert.match(domModule, /drawerRankingModeList/);
+    assert.match(domModule, /themeToggleDesktopSlot/);
+    assert.match(domModule, /themeToggleMobileSlot/);
     assert.match(domModule, /mobileTopbarMenu/);
     assert.match(domModule, /mobileDrawerPanels/);
     assert.match(domModule, /drawerUsersSection/);
@@ -1722,6 +1891,9 @@ await (async () => {
     assert.match(domModule, /Missing required DOM nodes/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
+    assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
+    assert.match(chat, /chatHero\.hidden = true;/);
+    assert.doesNotMatch(chat, /if \(shouldSyncChatLayout\(previousRenderState,\s*nextRenderState\)\)\s*\{[\s\S]*syncMessageCardHeights\(dom\.messageStream\);/);
     assert.match(eventsModule, /activateConnectedUser/);
     assert.match(eventsModule, /data-connected-user-id/);
     assert.match(eventsModule, /data-user-action/);
@@ -1746,9 +1918,13 @@ await (async () => {
     assert.match(topbarActionEvents, /syncAuthUi/);
     assert.match(topbarActionEvents, /AUTH_STORAGE_KEY/);
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
-    assert.match(topbarActionEvents, /dom\.authTools\.hidden = !\(isLoggedIn \|\| isMobile\)/);
+    assert.match(topbarActionEvents, /document\.documentElement\.dataset\.authState = isLoggedIn \? "logged-in" : "logged-out"/);
+    assert.match(topbarActionEvents, /dom\.authTools\.hidden = !isLoggedIn/);
+    assert.match(topbarActionEvents, /setLoggedIn/);
     assert.match(topbarActionEvents, /addListener\(dom\.authButton,\s*"click"/);
-    assert.match(topbarActionEvents, /authLabel = isLoggedIn[\s\S]*"Salir"[\s\S]*"Login"/);
+    assert.match(topbarActionEvents, /dom\.authButton\.hidden = isMobile && isLoggedIn/);
+    assert.match(topbarActionEvents, /authLabel = isLoggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/);
+    assert.match(topbarActionEvents, /target\.dataset\.mobileTopbarAction === "auth"/);
     assert.match(topbarActionEvents, /data-mobile-topbar-action/);
     assert.match(topbarActionEvents, /setMobileDrawerPanel/);
     assert.match(topbarActionEvents, /data-mobile-drawer-panel/);

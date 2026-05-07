@@ -45,6 +45,28 @@ export function bindTopbarActionEvents(dom, handlers) {
       && window.matchMedia("(max-width: 960px)").matches;
   }
 
+  function applyDocumentAuthState() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.documentElement.dataset.authState = isLoggedIn ? "logged-in" : "logged-out";
+  }
+
+  function syncThemeTogglePlacement() {
+    const themeToggle = dom.themeToggle;
+    const targetSlot = isMobileViewport() ? dom.themeToggleMobileSlot : dom.themeToggleDesktopSlot;
+    if (!themeToggle || !targetSlot) {
+      return;
+    }
+
+    if (themeToggle.parentElement !== targetSlot) {
+      targetSlot.append(themeToggle);
+    }
+
+    themeToggle.dataset.themeTogglePlacement = isMobileViewport() ? "mobile" : "desktop";
+  }
+
   function lockPickerReopen() {
     pickerReopenLockUntil = Date.now() + 220;
 
@@ -310,12 +332,36 @@ export function bindTopbarActionEvents(dom, handlers) {
       });
   }
 
+  function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
+    if (isLoggedIn === nextLoggedIn) {
+      syncAuthUi();
+      return;
+    }
+
+    isLoggedIn = nextLoggedIn;
+    persistAuthState(isLoggedIn);
+
+    if (!isLoggedIn) {
+      setMobileDrawerPanel(null);
+      handlers.closeDrawers?.();
+    }
+
+    syncAuthUi();
+
+    if (announce) {
+      handlers.flashTitle(isLoggedIn ? "Sesion iniciada" : "Sesion cerrada");
+    }
+  }
+
   function syncAuthUi() {
     const isMobile = isMobileViewport();
     const label = dom.authButton?.querySelector(".button-label");
+    const privateDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-auth-private]") ?? [];
+    applyDocumentAuthState();
+    syncThemeTogglePlacement();
     const authLabel = isLoggedIn
-      ? (isMobile ? "Salir" : "Cerrar Sesión")
-      : (isMobile ? "Login" : "Iniciar Sesión");
+      ? (isMobile ? "Cerrar sesión" : "Cerrar sesión")
+      : "Iniciar sesión";
 
     if (label) {
       label.textContent = authLabel;
@@ -326,11 +372,24 @@ export function bindTopbarActionEvents(dom, handlers) {
         ? "text-button discreet-auth"
         : "text-button text-button--accent prominent-auth";
       dom.authButton.setAttribute("aria-label", authLabel);
+      dom.authButton.hidden = isMobile && isLoggedIn;
     }
 
     if (dom.authTools) {
-      dom.authTools.hidden = !(isLoggedIn || isMobile);
+      dom.authTools.hidden = !isLoggedIn;
     }
+
+    [dom.profileButton, dom.storeButton, dom.openRightDrawer].forEach((node) => {
+      if (node) {
+        node.hidden = node === dom.openRightDrawer ? false : !isLoggedIn;
+      }
+    });
+
+    privateDrawerActions.forEach((node) => {
+      if (node) {
+        node.hidden = !isLoggedIn;
+      }
+    });
   }
 
   addListener(dom.themeToggle, "click", handlers.toggleTheme);
@@ -347,10 +406,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   syncAuthUi();
   addListener(dom.authButton, "click", () => {
-    isLoggedIn = !isLoggedIn;
-    persistAuthState(isLoggedIn);
-    syncAuthUi();
-    handlers.flashTitle(isLoggedIn ? "Sesión iniciada" : "Sesión cerrada");
+    setLoggedIn(!isLoggedIn);
   });
 
   addListener(dom.friendRequestsButton, "click", () => {
@@ -398,10 +454,9 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    if (target.dataset.mobileTopbarAction === "theme") {
+    if (target.dataset.mobileTopbarAction === "auth") {
       setMobileDrawerPanel(null);
-      handlers.closeDrawers?.();
-      handlers.toggleTheme();
+      setLoggedIn(false);
       return;
     }
 

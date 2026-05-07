@@ -80,6 +80,20 @@ export function renderTitles(state, dom) {
   [dom.rankingModeList, dom.drawerRankingModeList].forEach((container) => {
     renderRankingModeOptions(container, state, currentLabel);
   });
+
+  syncThemeToggle(dom.themeToggle, state.theme);
+}
+
+function syncThemeToggle(button, theme) {
+  if (!button) {
+    return;
+  }
+
+  const isDark = theme === "dark";
+  button.setAttribute("role", "switch");
+  button.setAttribute("aria-checked", String(isDark));
+  button.setAttribute("aria-label", "Tema oscuro");
+  button.setAttribute("title", isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro");
 }
 
 function syncScopeTabs(container, scope) {

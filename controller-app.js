@@ -57,6 +57,8 @@ export function bootstrap() {
 
   renderRef.current = renderers.render;
 
+  responsive.syncResponsiveView();
+  responsive.updateLayoutMetrics();
   renderers.render();
 
   // Reveal the interface after the first render
