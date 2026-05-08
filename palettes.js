@@ -111,6 +111,29 @@ export const PALETTE_OPTIONS = [
   }
 ];
 
+const PALETTE_THEME_COLORS = {
+  [DEFAULT_PALETTE_ID]: {
+    light: { accent: "#b25b33", text: "#1f1a17" },
+    dark: { accent: "#f08b58", text: "#f3efe8" }
+  },
+  coast: {
+    light: { accent: "#2d6f73", text: "#152428" },
+    dark: { accent: "#58a6ac", text: "#edf4f5" }
+  },
+  forest: {
+    light: { accent: "#55733b", text: "#1c2416" },
+    dark: { accent: "#698c4f", text: "#eef3e9" }
+  },
+  ember: {
+    light: { accent: "#a44b45", text: "#251917" },
+    dark: { accent: "#8a4d45", text: "#f6eeeb" }
+  },
+  cobalt: {
+    light: { accent: "#4668a8", text: "#171d28" },
+    dark: { accent: "#5d78b3", text: "#eef2fb" }
+  }
+};
+
 function clampChannel(value) {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
@@ -256,6 +279,79 @@ export function buildCustomPaletteOption(hexValue) {
       dark: buildPreviewFromVars(darkVars)
     }
   };
+}
+
+function getResolvedPaletteOption(paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
+  if ((paletteId || DEFAULT_PALETTE_ID) === CUSTOM_PALETTE_ID) {
+    return buildCustomPaletteOption(customHex);
+  }
+
+  return PALETTE_OPTIONS.find((option) => option.id === (paletteId || DEFAULT_PALETTE_ID))
+    || PALETTE_OPTIONS.find((option) => option.id === DEFAULT_PALETTE_ID)
+    || PALETTE_OPTIONS[0];
+}
+
+export function getPalettePreview(theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
+  const palette = getResolvedPaletteOption(paletteId, customHex);
+  return theme === "dark" ? palette.previews.dark : palette.previews.light;
+}
+
+export function getActiveAccentColor(theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
+  if ((paletteId || DEFAULT_PALETTE_ID) === CUSTOM_PALETTE_ID) {
+    return getCustomPaletteVars(customHex, theme)["--accent"];
+  }
+
+  return (PALETTE_THEME_COLORS[paletteId || DEFAULT_PALETTE_ID] || PALETTE_THEME_COLORS[DEFAULT_PALETTE_ID])[theme === "dark" ? "dark" : "light"].accent;
+}
+
+export function getActiveTextColor(theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
+  if ((paletteId || DEFAULT_PALETTE_ID) === CUSTOM_PALETTE_ID) {
+    return getCustomPaletteVars(customHex, theme)["--text"];
+  }
+
+  return (PALETTE_THEME_COLORS[paletteId || DEFAULT_PALETTE_ID] || PALETTE_THEME_COLORS[DEFAULT_PALETTE_ID])[theme === "dark" ? "dark" : "light"].text;
+}
+
+export function getFaviconDataUrl(theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
+  const accentColor = getActiveAccentColor(theme, paletteId, customHex);
+  const faviconForegroundColor = "#fff7ef";
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+      <rect width="64" height="64" rx="16" fill="${accentColor}"/>
+      <path d="M17 19h30v18c0 5.5-4.5 10-10 10H27c-5.5 0-10-4.5-10-10V19Z" fill="${faviconForegroundColor}"/>
+      <path d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44" stroke="${faviconForegroundColor}" stroke-width="3" stroke-linecap="round"/>
+      <path d="M22 48h20" stroke="${faviconForegroundColor}" stroke-width="3" stroke-linecap="round"/>
+      <path d="M26 14v7M32 11v10M38 14v7" stroke="${faviconForegroundColor}" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+  `.trim();
+
+  const encoded = encodeURIComponent(svg)
+    .replace(/'/g, "%27")
+    .replace(/"/g, "%22");
+
+  return `data:image/svg+xml;charset=utf-8,${encoded}`;
+}
+
+export function updateDocumentFavicon(
+  documentRef,
+  theme,
+  paletteId,
+  customHex = DEFAULT_CUSTOM_PALETTE_HEX
+) {
+  if (!documentRef?.head || typeof documentRef.querySelector !== "function") {
+    return;
+  }
+
+  const dataUrl = getFaviconDataUrl(theme, paletteId, customHex);
+
+  let link = documentRef.querySelector("link[rel*='icon']");
+  if (!link) {
+    link = documentRef.createElement("link");
+    link.rel = "shortcut icon";
+    documentRef.head.appendChild(link);
+  }
+  link.href = dataUrl;
 }
 
 export function clearCustomPaletteVars(rootElement) {

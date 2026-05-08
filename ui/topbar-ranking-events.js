@@ -1,17 +1,19 @@
 export function bindTopbarRankingEvents(dom, handlers) {
-  dom.rankingScopeButton.addEventListener("click", handlers.toggleRankingScope);
-  dom.drawerRankingScopeButton.addEventListener("click", handlers.toggleRankingScope);
-  dom.rankingPrev.addEventListener("click", () => handlers.setRankingStep(-1));
-  dom.rankingCurrent.addEventListener("click", () => handlers.setRankingStep(1));
-  dom.rankingNext.addEventListener("click", () => handlers.setRankingStep(1));
-  dom.drawerRankingPrev.addEventListener("click", () => handlers.setRankingStep(-1));
-  dom.drawerRankingCurrent.addEventListener("click", () => handlers.setRankingStep(1));
-  dom.drawerRankingNext.addEventListener("click", () => handlers.setRankingStep(1));
+  addListener(dom.rankingScopeButton, "click", handlers.toggleRankingScope);
+  addListener(dom.rankingPrev, "click", () => handlers.setRankingStep(-1));
+  addListener(dom.rankingCurrent, "click", () => handlers.setRankingStep(1));
+  addListener(dom.rankingNext, "click", () => handlers.setRankingStep(1));
+  addListener(dom.drawerRankingPrev, "click", () => handlers.setRankingStep(-1));
+  addListener(dom.drawerRankingCurrent, "click", () => handlers.setRankingStep(1));
+  addListener(dom.drawerRankingNext, "click", () => handlers.setRankingStep(1));
 
   bindScopeTabs(dom.rankingScopeTabs, handlers.setRankingScope);
   bindScopeTabs(dom.drawerRankingScopeTabs, handlers.setRankingScope);
   bindModeList(dom.rankingModeList, handlers.selectRankingStep);
-  bindModeList(dom.drawerRankingModeList, handlers.selectRankingStep);
+}
+
+function addListener(node, type, listener) {
+  node?.addEventListener?.(type, listener);
 }
 
 function bindScopeTabs(container, onSelect) {

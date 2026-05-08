@@ -8,7 +8,8 @@ import {
   DEFAULT_PALETTE_ID,
   isPaletteId,
   normalizeHexColor,
-  parseHexColor
+  parseHexColor,
+  updateDocumentFavicon
 } from "./palettes.js";
 
 function focusPaletteOption(dom, paletteId) {
@@ -104,6 +105,12 @@ export function createActionHandlers({
 
     applyPaletteToDocument(
       document.documentElement,
+      state.theme,
+      state.paletteId || DEFAULT_PALETTE_ID,
+      state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX
+    );
+    updateDocumentFavicon(
+      document,
       state.theme,
       state.paletteId || DEFAULT_PALETTE_ID,
       state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX

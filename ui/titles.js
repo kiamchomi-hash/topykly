@@ -2,9 +2,15 @@ import { getSelectedTopic } from "../model.js";
 import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel } from "./ranking-labels.js";
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
+const SITE_NAME = "TopicKly";
+
 export function renderTitles(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
   const chatTitleWrapper = dom.chatTitle?.parentElement ?? null;
+
+  if (typeof document !== "undefined") {
+    document.title = topic ? `${SITE_NAME} - ${topic.title}` : SITE_NAME;
+  }
 
   if (dom.chatTitle) {
     dom.chatTitle.textContent = topic ? topic.title : "";
@@ -63,23 +69,12 @@ export function renderTitles(state, dom) {
   if (dom.rankingScopeIcon) {
     dom.rankingScopeIcon.innerHTML = scopeIcon;
   }
-  if (dom.drawerRankingScopeButton) {
-    dom.drawerRankingScopeButton.setAttribute(
-      "aria-label",
-      state.rankingScope === "global" ? "Cambiar a ranking por tema" : "Cambiar a ranking global"
-    );
-  }
-  if (dom.drawerRankingScopeIcon) {
-    dom.drawerRankingScopeIcon.innerHTML = scopeIcon;
-  }
 
   [dom.rankingScopeTabs, dom.drawerRankingScopeTabs].forEach((container) => {
     syncScopeTabs(container, state.rankingScope);
   });
 
-  [dom.rankingModeList, dom.drawerRankingModeList].forEach((container) => {
-    renderRankingModeOptions(container, state, currentLabel);
-  });
+  renderRankingModeOptions(dom.rankingModeList, state, currentLabel);
 
   syncThemeToggle(dom.themeToggle, state.theme);
 }

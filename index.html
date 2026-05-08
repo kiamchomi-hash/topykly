@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chetrend - Café IRC social</title>
+    <title>TopicKly</title>
     <script>
       (function () {
         const theme = localStorage.getItem("chetrend-theme") || "dark";
@@ -50,7 +50,7 @@
           <div class="theme-toggle-slot theme-toggle-slot--desktop" id="themeToggleDesktopSlot"></div>
         </div>
 
-        <div class="topbar__title" aria-label="Chetrend">
+        <div class="topbar__title" aria-label="TopicKly">
           <span class="brand-mark__icon" aria-hidden="true">
             <svg viewBox="0 0 64 64" fill="none">
               <rect class="brand-mark__icon-base" width="64" height="64" rx="16"></rect>
@@ -61,8 +61,8 @@
             </svg>
           </span>
           <span class="brand-mark" aria-hidden="true">
-            <span class="brand-mark__che">CHE</span>
-            <span class="brand-mark__trend">TREND</span>
+            <span class="brand-mark__che">TOPIC</span>
+            <span class="brand-mark__trend">KLY</span>
           </span>
         </div>
 
@@ -326,7 +326,7 @@
             </svg>
           </span>
           <span class="brand-mark">
-            <span class="brand-mark__che">CHE</span><span class="brand-mark__trend">TREND</span>
+            <span class="brand-mark__che">TOPIC</span><span class="brand-mark__trend">KLY</span>
           </span>
         </div>
         <button class="icon-button icon-button--compact" data-close-drawer="right" type="button" aria-label="Cerrar menu">
@@ -413,7 +413,7 @@
       </section>
       <div class="drawer-mobile-panels" id="mobileDrawerPanels" hidden>
       <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerUsersSection" hidden>
-        <h3>Últimos usuarios activos</h3>
+        <h3>Usuarios activos</h3>
         <div class="drawer-mobile-panel__header">
           <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menu">
             <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
@@ -422,12 +422,12 @@
               </svg>
             </span>
           </button>
-          <h3>Ultimos usuarios activos</h3>
+          <h3>Usuarios activos</h3>
         </div>
         <div class="scroll-list" id="drawerUserList"></div>
       </section>
       <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerRankingsSection" hidden>
-        <div class="drawer-ranking__header drawer-ranking__header--mobile">
+        <div class="drawer-ranking__header">
           <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menu">
             <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -439,9 +439,6 @@
             <span class="panel__title-glyph" id="drawerRankingsGlyph" aria-hidden="true"></span>
             <h3 id="drawerRankingsTitle">Ranking</h3>
           </div>
-          <button class="icon-button icon-button--drawer ranking-scope-toggle" id="drawerRankingScopeButton" type="button" aria-label="Cambiar entre ranking global y por tema">
-            <span class="icon-button__icon" aria-hidden="true" id="drawerRankingScopeIcon"></span>
-          </button>
         </div>
         <div class="panel__body panel__body--drawer-rankings">
           <div class="ranking-controls ranking-controls--drawer">
@@ -450,7 +447,6 @@
               <span class="ranking-scope-tabs__divider" aria-hidden="true">/</span>
               <button class="ranking-scope-tabs__button" type="button" data-ranking-scope="topic">TEMA</button>
             </div>
-            <div class="ranking-mode-list" id="drawerRankingModeList" role="group" aria-label="Modo de ranking"></div>
           </div>
           <div class="drawer-ranking__switch">
             <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerRankingPrev" type="button" aria-label="Ranking anterior">

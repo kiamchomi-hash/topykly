@@ -3,7 +3,8 @@ import {
   DEFAULT_CUSTOM_PALETTE_HEX,
   DEFAULT_PALETTE_ID,
   isPaletteId,
-  normalizeHexColor
+  normalizeHexColor,
+  updateDocumentFavicon
 } from "./palettes.js";
 
 const DEFAULT_THEME = "dark";
@@ -28,6 +29,12 @@ export function applyStoredTheme(state) {
   if (hasDocument) {
     applyPaletteToDocument(
       document.documentElement,
+      state.theme,
+      state.paletteId || DEFAULT_PALETTE_ID,
+      state.customPaletteHex
+    );
+    updateDocumentFavicon(
+      document,
       state.theme,
       state.paletteId || DEFAULT_PALETTE_ID,
       state.customPaletteHex

@@ -49,20 +49,12 @@ export function renderTitleBar(state, dom) {
   if (dom.rankingScopeIcon) {
     dom.rankingScopeIcon.innerHTML = viewModel.scopeIcon;
   }
-  if (dom.drawerRankingScopeButton) {
-    dom.drawerRankingScopeButton.setAttribute("aria-label", viewModel.scopeButtonLabel);
-  }
-  if (dom.drawerRankingScopeIcon) {
-    dom.drawerRankingScopeIcon.innerHTML = viewModel.scopeIcon;
-  }
 
   [dom.rankingScopeTabs, dom.drawerRankingScopeTabs].forEach((container) => {
     syncScopeTabs(container, viewModel.rankingScope);
   });
 
-  [dom.rankingModeList, dom.drawerRankingModeList].forEach((container) => {
-    renderRankingModeOptions(container, viewModel.rankingOptions, viewModel.currentAriaLabel);
-  });
+  renderRankingModeOptions(dom.rankingModeList, viewModel.rankingOptions, viewModel.currentAriaLabel);
 }
 
 function syncScopeTabs(container, scope) {

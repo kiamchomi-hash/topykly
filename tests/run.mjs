@@ -39,6 +39,7 @@ import {
   CUSTOM_PALETTE_ID,
   DEFAULT_CUSTOM_PALETTE_HEX,
   DEFAULT_PALETTE_ID,
+  getFaviconDataUrl,
   getCustomPaletteVars,
   normalizeHexColor,
   parseHexColor,
@@ -65,6 +66,38 @@ const MOJIBAKE_PATTERNS = [
 
 async function read(name) {
   return readFile(path.join(rootDir, name), "utf8");
+}
+
+function createMockDocumentWithFavicon(appliedStyle = new Map()) {
+  const faviconLink = { rel: "icon", href: "./favicon.svg" };
+
+  return {
+    head: {
+      appendChild(node) {
+        return node;
+      }
+    },
+    createElement(tagName) {
+      return { tagName, rel: "", href: "" };
+    },
+    querySelector(selector) {
+      if (selector === "link[rel*='icon']") {
+        return faviconLink;
+      }
+      return null;
+    },
+    documentElement: {
+      dataset: {},
+      style: {
+        setProperty(name, value) {
+          appliedStyle.set(name, value);
+        },
+        removeProperty(name) {
+          appliedStyle.delete(name);
+        }
+      }
+    }
+  };
 }
 
 async function collectSourceFiles(dir) {
@@ -694,19 +727,7 @@ await (async () => {
           return null;
         }
       };
-      globalThis.document = {
-        documentElement: {
-          dataset: {},
-          style: {
-            setProperty(name, value) {
-              appliedStyle.set(name, value);
-            },
-            removeProperty(name) {
-              appliedStyle.delete(name);
-            }
-          }
-        }
-      };
+      globalThis.document = createMockDocumentWithFavicon(appliedStyle);
 
       applyStoredTheme(state);
 
@@ -715,6 +736,7 @@ await (async () => {
       assert.equal(state.customPaletteHex, DEFAULT_CUSTOM_PALETTE_HEX);
       assert.equal(document.documentElement.dataset.theme, "dark");
       assert.equal(document.documentElement.dataset.palette, "coast");
+      assert.match(document.querySelector("link[rel*='icon']").href, /^data:image\/svg\+xml/);
       assert.equal(appliedStyle.size, 0);
     } finally {
       globalThis.localStorage = previousLocalStorage;
@@ -738,19 +760,7 @@ await (async () => {
           return null;
         }
       };
-      globalThis.document = {
-        documentElement: {
-          dataset: {},
-          style: {
-            setProperty(name, value) {
-              appliedStyle.set(name, value);
-            },
-            removeProperty(name) {
-              appliedStyle.delete(name);
-            }
-          }
-        }
-      };
+      globalThis.document = createMockDocumentWithFavicon(appliedStyle);
 
       applyStoredTheme(state);
 
@@ -759,6 +769,7 @@ await (async () => {
       assert.equal(state.customPaletteHex, DEFAULT_CUSTOM_PALETTE_HEX);
       assert.equal(document.documentElement.dataset.theme, "dark");
       assert.equal(document.documentElement.dataset.palette, DEFAULT_PALETTE_ID);
+      assert.match(document.querySelector("link[rel*='icon']").href, /^data:image\/svg\+xml/);
       assert.equal(appliedStyle.size, 0);
     } finally {
       globalThis.localStorage = previousLocalStorage;
@@ -791,19 +802,7 @@ await (async () => {
           return null;
         }
       };
-      globalThis.document = {
-        documentElement: {
-          dataset: {},
-          style: {
-            setProperty(name, value) {
-              appliedStyle.set(name, value);
-            },
-            removeProperty(name) {
-              appliedStyle.delete(name);
-            }
-          }
-        }
-      };
+      globalThis.document = createMockDocumentWithFavicon(appliedStyle);
 
       applyStoredTheme(state);
 
@@ -811,6 +810,7 @@ await (async () => {
       assert.equal(state.paletteId, CUSTOM_PALETTE_ID);
       assert.equal(state.customPaletteHex, "#4A90E2");
       assert.equal(document.documentElement.dataset.palette, CUSTOM_PALETTE_ID);
+      assert.match(document.querySelector("link[rel*='icon']").href, /^data:image\/svg\+xml/);
       assert.equal(appliedStyle.get("--accent").startsWith("#"), true);
       assert.equal(appliedStyle.has("--bg"), true);
     } finally {
@@ -1096,6 +1096,22 @@ await (async () => {
     }
   });
 
+  await test("getFaviconDataUrl changes only the favicon background color by palette", () => {
+    const darkCoastIcon = decodeURIComponent(getFaviconDataUrl("dark", "coast").split(",")[1]);
+    const lightEmberIcon = decodeURIComponent(getFaviconDataUrl("light", "ember").split(",")[1]);
+    const customIcon = decodeURIComponent(getFaviconDataUrl("light", CUSTOM_PALETTE_ID, "#4A90E2").split(",")[1]);
+    const customAccent = getCustomPaletteVars("#4A90E2", "light")["--accent"];
+
+    assert.match(darkCoastIcon, /fill="#58a6ac"/i);
+    assert.match(darkCoastIcon, /fill="#fff7ef"/i);
+    assert.match(darkCoastIcon, /stroke="#fff7ef"/i);
+    assert.match(lightEmberIcon, /fill="#a44b45"/i);
+    assert.match(lightEmberIcon, /fill="#fff7ef"/i);
+    assert.match(lightEmberIcon, /stroke="#fff7ef"/i);
+    assert.match(customIcon, new RegExp(`fill="${customAccent}"`, "i"));
+    assert.match(customIcon, /stroke="#fff7ef"/i);
+  });
+
   await test("auth button toggles demo login state and persists the UI mode", () => {
     const previousLocalStorage = globalThis.localStorage;
     const previousDocument = globalThis.document;
@@ -1153,6 +1169,12 @@ await (async () => {
         }
 
         return null;
+      }
+
+      focus() {
+        if (globalThis.document) {
+          globalThis.document.activeElement = this;
+        }
       }
 
       append(child) {
@@ -1403,6 +1425,8 @@ await (async () => {
           : selector === ".drawer-action-button" ? menuButtons
             : []
     );
+    drawerUsersSection.querySelector = () => backButton;
+    drawerRankingsSection.querySelector = () => backButton;
     const flashCalls = [];
     let closeDrawersCalls = 0;
     let toggleThemeCalls = 0;
@@ -1457,6 +1481,7 @@ await (async () => {
       };
       globalThis.document = {
         documentElement: { dataset: {} },
+        activeElement: null,
         addEventListener() {},
         querySelector() {
           return null;
@@ -1572,7 +1597,8 @@ await (async () => {
     }
   });
 
-  await test("renderTitles syncs theme switch semantics with current theme", () => {
+  await test("renderTitles syncs theme switch semantics with current theme and page title", () => {
+    const previousDocument = globalThis.document;
     const themeToggle = {
       setAttribute(name, value) {
         this[name] = value;
@@ -1588,16 +1614,26 @@ await (async () => {
       theme: "dark"
     };
 
-    renderTitles(state, { themeToggle });
-    assert.equal(themeToggle.role, "switch");
-    assert.equal(themeToggle["aria-checked"], "true");
-    assert.equal(themeToggle["aria-label"], "Tema oscuro");
-    assert.equal(themeToggle.title, "Cambiar a tema claro");
+    try {
+      globalThis.document = { title: "" };
 
-    state.theme = "light";
-    renderTitles(state, { themeToggle });
-    assert.equal(themeToggle["aria-checked"], "false");
-    assert.equal(themeToggle.title, "Cambiar a tema oscuro");
+      renderTitles(state, { themeToggle });
+      assert.equal(themeToggle.role, "switch");
+      assert.equal(themeToggle["aria-checked"], "true");
+      assert.equal(themeToggle["aria-label"], "Tema oscuro");
+      assert.equal(themeToggle.title, "Cambiar a tema claro");
+      assert.equal(document.title, "TopicKly");
+
+      state.theme = "light";
+      state.topics = [{ id: "topic-1", title: "Tema alpha", subtitle: "Subtitulo", messages: [] }];
+      state.selectedTopicId = "topic-1";
+      renderTitles(state, { themeToggle });
+      assert.equal(themeToggle["aria-checked"], "false");
+      assert.equal(themeToggle.title, "Cambiar a tema oscuro");
+      assert.equal(document.title, "TopicKly - Tema alpha");
+    } finally {
+      globalThis.document = previousDocument;
+    }
   });
 
   await test("source files stay free of mojibake markers", async () => {
@@ -1651,6 +1687,10 @@ await (async () => {
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
 
+    assert.match(html, /<title>TopicKly<\/title>/);
+    assert.match(html, /class="topbar__title" aria-label="TopicKly"/);
+    assert.match(html, /class="brand-mark__che">TOPIC<\/span>/);
+    assert.match(html, /class="brand-mark__trend">KLY<\/span>/);
     assert.match(html, /id="topicList"/);
     assert.match(html, /id="createTopicButton"/);
     assert.match(html, /id="topicTitleInput"/);
@@ -1671,7 +1711,9 @@ await (async () => {
     assert.match(html, /id="rankingScopeTabs"/);
     assert.match(html, /id="rankingModeList"/);
     assert.match(html, /id="drawerRankingScopeTabs"/);
-    assert.match(html, /id="drawerRankingModeList"/);
+    assert.doesNotMatch(html, /id="drawerRankingModeList"/);
+    assert.match(html, /id="drawerUsersSection"[\s\S]*<h3>Usuarios activos<\/h3>/);
+    assert.doesNotMatch(html, /[ÚU]ltimos usuarios activos/);
     assert.match(html, /id="paletteModalBackdrop"/);
     assert.match(html, /id="paletteModal"/);
     assert.match(html, /id="paletteModal"[\s\S]*aria-label="Selector de paletas"/);
@@ -1848,6 +1890,9 @@ await (async () => {
     assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-stack\s*\{[\s\S]*flex-direction:\s*column;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer__header\s*\{[\s\S]*position:\s*relative;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);[\s\S]*border-color:\s*var\(--button-fill-border\);[\s\S]*color:\s*var\(--button-fill-text\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\] > span\s*\{[\s\S]*display:\s*grid;[\s\S]*place-items:\s*center;[\s\S]*transform:\s*translateY\(-0\.5px\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:hover,\s*html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*#c63834 62%,\s*var\(--accent-strong\) 38%\);[\s\S]*transform:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px minmax\(0,\s*1fr\) 20px;[\s\S]*gap:\s*12px;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__icon\s*\{[\s\S]*width:\s*20px;[\s\S]*height:\s*20px;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__label\s*\{[\s\S]*text-align:\s*center;/);
@@ -1856,6 +1901,7 @@ await (async () => {
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\.is-search-hidden\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__back\s*\{/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth\s*\{[\s\S]*margin-top:\s*10px;[\s\S]*color:\s*var\(--button-fill-text\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth \.drawer-action-button__icon\s*\{[\s\S]*color:\s*var\(--button-fill-text\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth:hover,\s*html\.is-mobile-viewport \.drawer-action-button--auth:focus-visible\s*\{/);
     assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer\s*\{[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;[\s\S]*position:\s*absolute;[\s\S]*left:\s*12px;[\s\S]*top:\s*50%;[\s\S]*transform:\s*translateY\(-50%\);/);
     assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer:hover,\s*html\.is-mobile-viewport \.mobile-right-drawer:focus-visible,\s*html\.is-mobile-viewport \.mobile-right-drawer:active\s*\{[\s\S]*background:\s*transparent;[\s\S]*transform:\s*translateY\(-50%\);/);
@@ -1864,9 +1910,20 @@ await (async () => {
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panels\[hidden\],\s*[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer\s*\{[\s\S]*width:\s*min\(84vw,\s*360px\);[\s\S]*max-width:\s*calc\(100vw - 52px\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header,\s*html\.is-mobile-viewport \.drawer-ranking__header\s*\{[\s\S]*grid-template-columns:\s*40px minmax\(0,\s*1fr\) 40px;[\s\S]*gap:\s*12px;[\s\S]*margin-bottom:\s*12px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header::after,\s*html\.is-mobile-viewport \.drawer-ranking__header::after\s*\{[\s\S]*grid-column:\s*3;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header h3,\s*html\.is-mobile-viewport \.drawer-ranking__header h3\s*\{[\s\S]*justify-content:\s*center;[\s\S]*text-align:\s*center;/);
+    assert.match(styles, /html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header\s*\{[\s\S]*padding-inline:\s*14px;/);
+    assert.match(styles, /html\.is-mobile-viewport #drawerRankingsSection \.drawer-ranking__header\s*\{[\s\S]*padding-inline:\s*16px;/);
+    assert.match(styles, /html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header h3::before,\s*html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header h3::after,\s*html\.is-mobile-viewport \.drawer--right \.drawer-ranking__header h3::before,\s*html\.is-mobile-viewport \.drawer--right \.drawer-ranking__header h3::after\s*\{[\s\S]*content:\s*none;[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-ranking__header \.panel__title-inline\s*\{[\s\S]*position:\s*static;[\s\S]*width:\s*100% !important;[\s\S]*justify-content:\s*center;[\s\S]*padding-inline:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*auto;[\s\S]*transform:\s*translateX\(-100%\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-backdrop\s*\{[\s\S]*background:\s*rgba\(6,\s*10,\s*16,\s*0\.46\);[\s\S]*backdrop-filter:\s*blur\(3px\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings\s*\{[\s\S]*gap:\s*0;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__section--half\s*\{[\s\S]*padding:\s*12px 10px 18px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__section--mobile-panel\s*\{[\s\S]*gap:\s*0;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__section--mobile-panel \+ \.drawer__section--mobile-panel\s*\{[\s\S]*padding-top:\s*12px;[\s\S]*border-top:\s*0;/);
+    assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings\s*\{[\s\S]*gap:\s*0;[\s\S]*padding-top:\s*0;/);
+    assert.match(styles, /html\.is-mobile-viewport #drawerUserList\s*\{[\s\S]*padding-top:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings \.drawer-ranking-content,\s*[\s\S]*margin-top:\s*12px;/);
     assert.match(styles, /@media \(max-height:\s*720px\)\s*\{[\s\S]*html\.is-desktop-viewport\s*\{[\s\S]*--ranking-row-height:\s*29px;[\s\S]*--ranking-list-gap:\s*7px;[\s\S]*--ranking-list-padding-y:\s*8px;/);
     assert.match(styles, /\.ranking-mode-list__option\s*\{[\s\S]*grid-template-columns:\s*2rem minmax\(0,\s*1fr\);/);
@@ -1874,6 +1931,7 @@ await (async () => {
     assert.match(styles, /\.user-item\[data-connected-user-id\]:hover,\s*\.user-item\[data-connected-user-id\]:focus-within\s*\{/);
     assert.match(styles, /\.user-item\[data-connected-user-id\]:active\s*\{/);
     assert.match(styles, /\.user-item\.is-active\s*\{/);
+    assert.match(styles, /\.topic-item\.is-active \.topic-item__avatar\s*\{[\s\S]*border-color:\s*inherit;/);
     assert.match(styles, /\.user-item__trigger\s*\{/);
     assert.match(styles, /\.user-item__trigger:focus-visible,\s*\.user-item__action:focus-visible\s*\{/);
     assert.match(styles, /html\[data-theme="light"\]\.is-desktop-viewport \.panel--topics \.topics-panel__list-frame\s*\{[\s\S]*border:\s*1px solid/);
@@ -1974,7 +2032,7 @@ await (async () => {
     assert.match(domModule, /chatTitle/);
     assert.match(domModule, /topicTitleInput/);
     assert.match(domModule, /rankingScopeTabs/);
-    assert.match(domModule, /drawerRankingModeList/);
+    assert.doesNotMatch(domModule, /drawerRankingModeList/);
     assert.match(domModule, /themeToggleDesktopSlot/);
     assert.match(domModule, /themeToggleMobileSlot/);
     assert.match(domModule, /mobileTopbarMenu/);

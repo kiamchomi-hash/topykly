@@ -2,6 +2,14 @@ import { CUSTOM_PALETTE_ID } from "../palettes.js";
 import { dispatch, reducers } from "../store-logic.js";
 
 const AUTH_STORAGE_KEY = "chetrend-auth-demo";
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled]):not([tabindex='-1'])",
+  "[href]:not([tabindex='-1'])",
+  "input:not([disabled]):not([type='hidden']):not([tabindex='-1'])",
+  "textarea:not([disabled]):not([tabindex='-1'])",
+  "select:not([disabled]):not([tabindex='-1'])",
+  "[tabindex]:not([tabindex='-1'])"
+].join(", ");
 
 function readStoredAuthState() {
   if (typeof localStorage === "undefined") {
@@ -24,6 +32,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   let pickerTriggerUnlockTimer = 0;
   let isLoggedIn = readStoredAuthState();
   let activeMobileDrawerPanel = null;
+  let lastMobilePanelTrigger = null;
   syncAuthUi();
   setPickerOpenState(false);
 
@@ -38,6 +47,47 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     setTimeout(task, 0);
+  }
+
+  function getFirstFocusableElement(container) {
+    if (!(container instanceof HTMLElement)) {
+      return null;
+    }
+
+    return container.querySelector?.(FOCUSABLE_SELECTOR) ?? null;
+  }
+
+  function isFocusableTarget(node) {
+    return node instanceof HTMLElement
+      && !node.hidden
+      && node.getAttribute?.("aria-hidden") !== "true"
+      && !node.classList?.contains?.("is-search-hidden");
+  }
+
+  function focusNode(node) {
+    if (!isFocusableTarget(node)) {
+      return;
+    }
+
+    scheduleOpen(() => {
+      node.focus?.();
+    });
+  }
+
+  function getMobilePanelNode(panelName) {
+    if (panelName === "users") {
+      return dom.drawerUsersSection;
+    }
+
+    if (panelName === "ranking") {
+      return dom.drawerRankingsSection;
+    }
+
+    return null;
+  }
+
+  function getMobileMenuSearchInput() {
+    return dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch") ?? null;
   }
 
   function isMobileViewport() {
@@ -305,7 +355,11 @@ export function bindTopbarActionEvents(dom, handlers) {
     return event.target?.parentElement ?? null;
   }
 
-  function setMobileDrawerPanel(panelName) {
+  function setMobileDrawerPanel(panelName, { trigger = null, restoreFocus = true } = {}) {
+    if (trigger instanceof HTMLElement && trigger.dataset.mobileDrawerPanel) {
+      lastMobilePanelTrigger = trigger;
+    }
+
     activeMobileDrawerPanel = panelName;
 
     if (dom.mobileTopbarMenu) {
@@ -331,10 +385,29 @@ export function bindTopbarActionEvents(dom, handlers) {
         button.setAttribute("aria-pressed", String(isActive));
         button.classList?.toggle?.("is-active", isActive);
       });
+
+    syncMobileMenuSearch();
+
+    if (!restoreFocus) {
+      return;
+    }
+
+    if (panelName) {
+      const panel = getMobilePanelNode(panelName);
+      focusNode(getFirstFocusableElement(panel) || panel);
+      return;
+    }
+
+    const focusTarget = isFocusableTarget(trigger)
+      ? trigger
+      : isFocusableTarget(lastMobilePanelTrigger)
+        ? lastMobilePanelTrigger
+        : getMobileMenuSearchInput();
+    focusNode(focusTarget || getFirstFocusableElement(dom.mobileTopbarMenu));
   }
 
   function syncMobileMenuSearch() {
-    const searchInput = dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch");
+    const searchInput = getMobileMenuSearchInput();
     const buttons = dom.mobileTopbarMenu?.querySelectorAll?.(".drawer-action-button") ?? [];
     const query = typeof searchInput?.value === "string"
       ? searchInput.value.trim().toLowerCase()
@@ -356,7 +429,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function openProfileShortcut() {
-    setMobileDrawerPanel(null);
+    setMobileDrawerPanel(null, { restoreFocus: false });
     handlers.closeDrawers?.();
     handlers.flashTitle("Perfil listo para conectar");
   }
@@ -371,7 +444,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     persistAuthState(isLoggedIn);
 
     if (!isLoggedIn) {
-      setMobileDrawerPanel(null);
+      setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
     }
 
@@ -431,8 +504,9 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
   addListener(dom.backToTopics, "click", handlers.backToTopics);
   addListener(dom.openRightDrawer, "click", () => {
-    setMobileDrawerPanel(null);
-    const searchInput = dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch");
+    lastMobilePanelTrigger = null;
+    setMobileDrawerPanel(null, { restoreFocus: false });
+    const searchInput = getMobileMenuSearchInput();
     if (typeof searchInput?.value === "string") {
       searchInput.value = "";
     }
@@ -467,7 +541,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       const nextPanel = activeMobileDrawerPanel === panelTarget.dataset.mobileDrawerPanel
         ? null
         : panelTarget.dataset.mobileDrawerPanel;
-      setMobileDrawerPanel(nextPanel);
+      setMobileDrawerPanel(nextPanel, { trigger: panelTarget });
       return;
     }
 
@@ -477,7 +551,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (target.dataset.mobileTopbarAction === "home") {
-      setMobileDrawerPanel(null);
+      setMobileDrawerPanel(null, { restoreFocus: false });
       if (handlers.state) {
         dispatch(handlers.state, reducers.setMobileView, "browse");
       }
@@ -492,20 +566,20 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (target.dataset.mobileTopbarAction === "store") {
-      setMobileDrawerPanel(null);
+      setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
       handlers.flashTitle("Tienda en preparacion");
       return;
     }
 
     if (target.dataset.mobileTopbarAction === "auth") {
-      setMobileDrawerPanel(null);
+      setMobileDrawerPanel(null, { restoreFocus: false });
       setLoggedIn(false);
       return;
     }
 
     if (target.dataset.mobileTopbarAction === "palette") {
-      setMobileDrawerPanel(null);
+      setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
       scheduleOpen(() => {
         handlers.openPaletteModal();
