@@ -268,6 +268,8 @@ export function createActionHandlers({
   });
 
   return {
+    state,
+    syncResponsiveView,
     flashTitle,
     toggleTheme,
     setRankingScope: rankingActions.setRankingScope,

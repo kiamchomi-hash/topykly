@@ -1109,6 +1109,29 @@ await (async () => {
         this.hidden = false;
         this.className = "";
         this.parentElement = null;
+        this.textContent = "";
+        const classValues = new Set();
+        this.classList = {
+          add: (...tokens) => tokens.forEach((token) => classValues.add(token)),
+          remove: (...tokens) => tokens.forEach((token) => classValues.delete(token)),
+          toggle: (token, force) => {
+            if (force === undefined) {
+              if (classValues.has(token)) {
+                classValues.delete(token);
+                return false;
+              }
+              classValues.add(token);
+              return true;
+            }
+            if (force) {
+              classValues.add(token);
+              return true;
+            }
+            classValues.delete(token);
+            return false;
+          },
+          contains: (token) => classValues.has(token)
+        };
       }
 
       addEventListener(type, listener) {
@@ -1263,6 +1286,29 @@ await (async () => {
         this.hidden = false;
         this.className = "";
         this.parentElement = null;
+        this.textContent = "";
+        const classValues = new Set();
+        this.classList = {
+          add: (...tokens) => tokens.forEach((token) => classValues.add(token)),
+          remove: (...tokens) => tokens.forEach((token) => classValues.delete(token)),
+          toggle: (token, force) => {
+            if (force === undefined) {
+              if (classValues.has(token)) {
+                classValues.delete(token);
+                return false;
+              }
+              classValues.add(token);
+              return true;
+            }
+            if (force) {
+              classValues.add(token);
+              return true;
+            }
+            classValues.delete(token);
+            return false;
+          },
+          contains: (token) => classValues.has(token)
+        };
       }
 
       addEventListener(type, listener) {
@@ -1323,26 +1369,46 @@ await (async () => {
     const themeToggleDesktopSlot = new FakeElement();
     const themeToggleMobileSlot = new FakeElement();
     const openRightDrawer = new FakeElement();
+    const searchInput = new FakeElement();
+    searchInput.value = "";
     const menuProfileButton = new FakeElement();
     menuProfileButton.dataset.authPrivate = "true";
+    menuProfileButton.dataset.mobileTopbarAction = "profile";
+    menuProfileButton.textContent = "Perfil";
+    const homeButton = new FakeElement();
+    homeButton.dataset.mobileTopbarAction = "home";
+    homeButton.textContent = "Inicio";
     const menuAuthButton = new FakeElement();
     menuAuthButton.dataset.authPrivate = "true";
     menuAuthButton.dataset.mobileTopbarAction = "auth";
+    menuAuthButton.textContent = "Cerrar sesión";
     const usersPanelButton = new FakeElement();
     usersPanelButton.dataset.mobileDrawerPanel = "users";
+    usersPanelButton.textContent = "Usuarios";
     const rankingPanelButton = new FakeElement();
     rankingPanelButton.dataset.mobileDrawerPanel = "ranking";
+    rankingPanelButton.textContent = "Ranking";
     const backButton = new FakeElement();
     backButton.dataset.mobileDrawerBack = "true";
+    const paletteTarget = new FakeElement();
+    paletteTarget.dataset.mobileTopbarAction = "palette";
+    paletteTarget.textContent = "Paletas";
+    const menuButtons = [menuProfileButton, homeButton, paletteTarget, usersPanelButton, rankingPanelButton, menuAuthButton];
+    mobileTopbarMenu.querySelector = (selector) => (
+      selector === "#mobileDrawerSearch" ? searchInput : null
+    );
     mobileTopbarMenu.querySelectorAll = (selector) => (
       selector === "[data-mobile-drawer-panel]" ? [usersPanelButton, rankingPanelButton]
         : selector === "[data-auth-private]" ? [menuProfileButton, menuAuthButton]
-          : []
+          : selector === ".drawer-action-button" ? menuButtons
+            : []
     );
     const flashCalls = [];
     let closeDrawersCalls = 0;
     let toggleThemeCalls = 0;
     let openPaletteModalCalls = 0;
+    let syncResponsiveViewCalls = 0;
+    const state = { mobileView: "chat" };
 
     const dom = {
       themeToggle,
@@ -1406,6 +1472,10 @@ await (async () => {
         flashTitle(message) {
           flashCalls.push(message);
         },
+        state,
+        syncResponsiveView() {
+          syncResponsiveViewCalls += 1;
+        },
         backToTopics() {},
         openPaletteModal() {
           openPaletteModalCalls += 1;
@@ -1468,21 +1538,27 @@ await (async () => {
       assert.equal(mobileTopbarMenu.hidden, false);
       assert.equal(drawerRankingsSection.hidden, true);
 
-      const profileTarget = new FakeElement();
-      profileTarget.dataset.mobileTopbarAction = "profile";
-      mobileTopbarMenu.dispatch("click", { target: profileTarget });
+      mobileTopbarMenu.dispatch("click", { target: menuProfileButton });
 
       themeToggle.dispatch("click");
 
-      const paletteTarget = new FakeElement();
-      paletteTarget.dataset.mobileTopbarAction = "palette";
+      searchInput.value = "rank";
+      searchInput.dispatch("input");
+      assert.equal(menuProfileButton.classList.contains("is-search-hidden"), true);
+      assert.equal(homeButton.classList.contains("is-search-hidden"), true);
+      assert.equal(usersPanelButton.classList.contains("is-search-hidden"), true);
+      assert.equal(rankingPanelButton.classList.contains("is-search-hidden"), false);
+
       mobileTopbarMenu.dispatch("click", { target: paletteTarget });
+      mobileTopbarMenu.dispatch("click", { target: homeButton });
 
       mobileTopbarMenu.dispatch("click", { target: menuAuthButton });
 
-      assert.equal(closeDrawersCalls, 3);
+      assert.equal(closeDrawersCalls, 4);
       assert.equal(toggleThemeCalls, 1);
       assert.equal(openPaletteModalCalls, 1);
+      assert.equal(state.mobileView, "browse");
+      assert.equal(syncResponsiveViewCalls, 1);
       assert.equal(flashCalls.includes("Perfil listo para conectar"), true);
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
       assert.equal(authButton.hidden, false);
@@ -1615,12 +1691,17 @@ await (async () => {
     assert.match(html, /id="authTools"[\s\S]*hidden/);
     assert.match(html, /data-auth-private/);
     assert.match(html, /id="mobileTopbarMenu"/);
+    assert.match(html, /data-mobile-topbar-action="profile"[\s\S]*class="drawer-action-button__label">Perfil/);
+    assert.match(html, /data-mobile-topbar-action="home"[\s\S]*class="drawer-action-button__label">Inicio/);
+    assert.match(html, /class="drawer-action-button__icon"/);
+    assert.match(html, /id="mobileDrawerSearch"[\s\S]*type="text"/);
     assert.match(html, /id="mobileDrawerPanels" hidden/);
     assert.match(html, /id="themeToggleDesktopSlot"/);
     assert.match(html, /id="themeToggleMobileSlot"/);
     assert.match(html, /id="themeToggleTemplate"/);
     assert.match(html, /id="paletteButton"[\s\S]*id="themeToggleDesktopSlot"/);
     assert.match(html, /id="storeButton"[\s\S]*id="themeToggleMobileSlot"/);
+    assert.match(html, /id="profileButton"[\s\S]*class="profile-button__avatar"/);
     assert.match(html, /class="theme-switch"/);
     assert.match(html, /role="switch"/);
     assert.match(html, /aria-checked="true"/);
@@ -1630,6 +1711,7 @@ await (async () => {
     assert.doesNotMatch(html, /id="mobileThemeToggle"/);
     assert.match(html, /A8\.5 8\.5 0 1 1 9\.8 4a7 7 0 0 0 10\.2 10\.2Z/);
     assert.match(html, /data-mobile-topbar-action="auth"/);
+    assert.match(html, /data-mobile-topbar-action="home"/);
     assert.match(html, /drawer-action-button drawer-action-button--auth/);
     assert.match(html, /data-mobile-topbar-action="palette"/);
     assert.doesNotMatch(html, /data-mobile-topbar-action="store"/);
@@ -1693,7 +1775,11 @@ await (async () => {
     assert.match(styles, /html\[data-custom-picker-open="false"\] \.clr-picker\s*\{[\s\S]*display:\s*none !important;/);
     assert.match(styles, /html\[data-theme="dark"\]\s*\{[\s\S]*--ranking-badge-border:\s*color-mix\(in srgb,\s*#f2b97a 62%,\s*var\(--line\)\);/);
     assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton,\s*[\s\S]*#themeToggle,\s*[\s\S]*#paletteButton,\s*[\s\S]*#contactAdminButton\s*\{[\s\S]*color:\s*#000;/);
+    assert.match(styles, /#profileButton\s*\{[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*0 14px 0 0;[\s\S]*gap:\s*0;[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/);
+    assert.match(styles, /\.profile-button__avatar\s*\{[\s\S]*width:\s*42px;[\s\S]*height:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/);
+    assert.match(styles, /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/);
+    assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-item__avatar\s*\{[\s\S]*width:\s*76px;[\s\S]*height:\s*76px;/);
     assert.match(styles, /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/);
     assert.match(styles, /\.theme-toggle-slot\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;/);
     assert.match(styles, /\.theme-toggle-slot:empty\s*\{[\s\S]*display:\s*none;/);
@@ -1761,6 +1847,13 @@ await (async () => {
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat \.chat-header__back\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;[\s\S]*min-width:\s*40px;[\s\S]*min-height:\s*40px;/);
     assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-stack\s*\{[\s\S]*flex-direction:\s*column;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__header\s*\{[\s\S]*position:\s*relative;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px minmax\(0,\s*1fr\) 20px;[\s\S]*gap:\s*12px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__icon\s*\{[\s\S]*width:\s*20px;[\s\S]*height:\s*20px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__label\s*\{[\s\S]*text-align:\s*center;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-search__field\s*\{[\s\S]*position:\s*relative;[\s\S]*display:\s*block;[\s\S]*min-height:\s*52px;[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*0;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-search__input\s*\{[\s\S]*display:\s*block;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*52px;[\s\S]*border:\s*0 !important;[\s\S]*border-radius:\s*0 !important;[\s\S]*padding:\s*0 14px 0 46px;[\s\S]*box-shadow:\s*none !important;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\.is-search-hidden\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__back\s*\{/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth\s*\{[\s\S]*margin-top:\s*10px;[\s\S]*color:\s*var\(--button-fill-text\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth:hover,\s*html\.is-mobile-viewport \.drawer-action-button--auth:focus-visible\s*\{/);
@@ -1769,8 +1862,10 @@ await (async () => {
     assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;/);
     assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon svg\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;[\s\S]*stroke-width:\s*2\.6;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panels\[hidden\],\s*[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer\s*\{[\s\S]*width:\s*min\(84vw,\s*360px\);[\s\S]*max-width:\s*calc\(100vw - 52px\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*auto;[\s\S]*transform:\s*translateX\(-100%\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-backdrop\s*\{[\s\S]*background:\s*rgba\(6,\s*10,\s*16,\s*0\.46\);[\s\S]*backdrop-filter:\s*blur\(3px\);/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings\s*\{[\s\S]*gap:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings \.drawer-ranking-content,\s*[\s\S]*margin-top:\s*12px;/);
     assert.match(styles, /@media \(max-height:\s*720px\)\s*\{[\s\S]*html\.is-desktop-viewport\s*\{[\s\S]*--ranking-row-height:\s*29px;[\s\S]*--ranking-list-gap:\s*7px;[\s\S]*--ranking-list-padding-y:\s*8px;/);

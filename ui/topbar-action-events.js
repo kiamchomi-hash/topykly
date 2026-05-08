@@ -1,4 +1,5 @@
 import { CUSTOM_PALETTE_ID } from "../palettes.js";
+import { dispatch, reducers } from "../store-logic.js";
 
 const AUTH_STORAGE_KEY = "chetrend-auth-demo";
 
@@ -332,6 +333,34 @@ export function bindTopbarActionEvents(dom, handlers) {
       });
   }
 
+  function syncMobileMenuSearch() {
+    const searchInput = dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch");
+    const buttons = dom.mobileTopbarMenu?.querySelectorAll?.(".drawer-action-button") ?? [];
+    const query = typeof searchInput?.value === "string"
+      ? searchInput.value.trim().toLowerCase()
+      : "";
+
+    buttons.forEach((button) => {
+      if (!(button instanceof HTMLElement)) {
+        return;
+      }
+
+      if (!query) {
+        button.classList?.remove?.("is-search-hidden");
+        return;
+      }
+
+      const label = button.textContent?.trim().toLowerCase() ?? "";
+      button.classList?.toggle?.("is-search-hidden", !label.includes(query));
+    });
+  }
+
+  function openProfileShortcut() {
+    setMobileDrawerPanel(null);
+    handlers.closeDrawers?.();
+    handlers.flashTitle("Perfil listo para conectar");
+  }
+
   function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
     if (isLoggedIn === nextLoggedIn) {
       syncAuthUi();
@@ -390,6 +419,8 @@ export function bindTopbarActionEvents(dom, handlers) {
         node.hidden = !isLoggedIn;
       }
     });
+
+    syncMobileMenuSearch();
   }
 
   addListener(dom.themeToggle, "click", handlers.toggleTheme);
@@ -401,6 +432,11 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.backToTopics, "click", handlers.backToTopics);
   addListener(dom.openRightDrawer, "click", () => {
     setMobileDrawerPanel(null);
+    const searchInput = dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch");
+    if (typeof searchInput?.value === "string") {
+      searchInput.value = "";
+    }
+    syncMobileMenuSearch();
   });
   addListener(typeof window !== "undefined" ? window : null, "resize", syncAuthUi, { passive: true });
 
@@ -440,10 +476,18 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    if (target.dataset.mobileTopbarAction === "profile") {
+    if (target.dataset.mobileTopbarAction === "home") {
       setMobileDrawerPanel(null);
+      if (handlers.state) {
+        dispatch(handlers.state, reducers.setMobileView, "browse");
+      }
+      handlers.syncResponsiveView?.();
       handlers.closeDrawers?.();
-      handlers.flashTitle("Perfil listo para conectar");
+      return;
+    }
+
+    if (target.dataset.mobileTopbarAction === "profile") {
+      openProfileShortcut();
       return;
     }
 
@@ -468,6 +512,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       });
     }
   });
+  addListener(dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch") ?? null, "input", syncMobileMenuSearch);
   addListener(dom.mobileDrawerPanels, "click", (event) => {
     const eventElement = resolveEventElement(event);
     const backTarget = eventElement?.closest?.("[data-mobile-drawer-back]") ?? null;
