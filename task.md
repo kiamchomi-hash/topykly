@@ -271,3 +271,27 @@ Este proyecto toma inspiracion de decisiones de producto, navegacion y UI vistas
 - Usar TOPYKLY_PUBLIC_ORIGIN=https://<dominio> y TOPYKLY_COOKIE_SECURE=true en produccion.
 - Registrar en Google OAuth el redirect URI https://<dominio>/auth/oidc/callback.
 - Mantener SQLite en una ruta persistente configurada con TOPYKLY_DB_PATH.
+
+## Proxima sesion - Funcionamiento y usuarios
+
+Estado al cierre:
+- TOPYKLY esta online en `https://topykly.com` y `https://www.topykly.com`.
+- Render esta conectado al repo `kiamchomi-hash/topykly`.
+- Se corrigio el envio de mensajes: el composer ahora envia y la ruta `/api/topics/:id/messages` usa el topic id correcto.
+- Se probo en produccion con el mensaje `QA automatico 1700` en `Patio abierto`.
+- Se agrego QA automatizado: `npm run qa`, `tests/smoke.mjs` y GitHub Actions `.github/workflows/qa.yml`.
+
+Pendientes pedidos por Matias:
+- Estandarizar usuarios anonimos para que se llamen `*Topys`, con sufijo numerico si hace falta distinguir sesiones, por ejemplo `*Topys 24`.
+- Revisar el flujo de registro/login de usuarios reales.
+- Permitir que usuarios logueados cambien su foto/avatar.
+- Agregar feedback rectangular en la zona inferior izquierda cuando una accion no se pueda realizar, por ejemplo rate limit, tema bloqueado, tema expulsado, falta de login o error de backend.
+- Mantener el feedback pequeño, visible y no invasivo; debe desaparecer solo tras unos segundos.
+- Antes de tocar produccion, cubrir estos flujos con tests automaticos.
+
+Orden recomendado:
+1. Cambiar generacion/nombre de invitados en backend y tests.
+2. Definir modelo minimo de perfil para avatar de usuario registrado.
+3. Agregar endpoint y UI para cambiar avatar.
+4. Crear sistema global de toast/feedback inferior izquierdo.
+5. Cubrir con `npm run qa` y, si aplica, smoke UI con Playwright.
