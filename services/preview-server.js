@@ -220,7 +220,7 @@ async function handleApiRequest(store, authService, req, res, url) {
 
     if (req.method === "POST" && url.pathname.startsWith("/api/topics/") && url.pathname.endsWith("/messages")) {
       const segments = url.pathname.split("/").filter(Boolean);
-      const topicId = segments[1] || "";
+      const topicId = segments[2] || "";
       const body = await readJsonBody(req);
       sendBackendPayload(res, req, authService, 200, store.addMessage(topicId, {
         ...context,

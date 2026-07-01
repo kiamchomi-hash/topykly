@@ -2477,6 +2477,7 @@ await (async () => {
     const topics = await read("ui/topics.js");
     const users = await read("ui/users.js");
     const renderUtils = await read("ui/render-utils.js");
+    const previewServer = await read("services/preview-server.js");
     const drawers = await read("ui/drawers.js");
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
@@ -2843,6 +2844,7 @@ await (async () => {
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
     assert.match(eventsModule, /messageForm\.addEventListener\("submit", handlers\.submitMessage\)/);
+    assert.match(previewServer, /const topicId = segments\[2\] \|\| "";/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
     assert.match(chat, /syncTopicReportButton/);
     assert.match(chat, /chatHero\.hidden = true;/);
