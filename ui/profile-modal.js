@@ -21,7 +21,12 @@ function setPreviewImage(preview, avatarUrl) {
 export function renderProfileModal(state, dom) {
   const isOpen = Boolean(state.isProfileModalOpen);
   const viewer = state.viewer || {};
-  const avatarUrl = viewer.avatarUrl || "";
+  const displayName = viewer.profilePending
+    ? viewer.profileSuggestedName || viewer.displayName || "Usuario"
+    : viewer.displayName || "Usuario";
+  const avatarUrl = viewer.profilePending
+    ? viewer.profileSuggestedAvatarUrl || viewer.avatarUrl || ""
+    : viewer.avatarUrl || "";
 
   if (dom.profileModalBackdrop) {
     dom.profileModalBackdrop.hidden = !isOpen;
@@ -32,7 +37,12 @@ export function renderProfileModal(state, dom) {
   }
 
   if (dom.profileDisplayName) {
-    dom.profileDisplayName.textContent = viewer.displayName || "Usuario";
+    dom.profileDisplayName.textContent = viewer.profilePending ? "Completa tu perfil" : displayName;
+  }
+
+  if (dom.profileNameInput && dom.profileNameInput.dataset.renderedDisplayName !== displayName) {
+    dom.profileNameInput.value = displayName;
+    dom.profileNameInput.dataset.renderedDisplayName = displayName;
   }
 
   if (dom.profileAvatarInput && dom.profileAvatarInput.dataset.renderedAvatarUrl !== avatarUrl) {

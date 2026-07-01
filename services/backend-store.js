@@ -189,6 +189,9 @@ function initSchema(db) {
       auth_subject TEXT,
       email TEXT,
       avatar_url TEXT,
+      profile_pending INTEGER NOT NULL DEFAULT 0,
+      profile_suggested_name TEXT,
+      profile_suggested_avatar_url TEXT,
       last_topic_at TEXT,
       last_message_at TEXT,
       created_at TEXT NOT NULL,
@@ -279,6 +282,9 @@ function initSchema(db) {
   ensureColumn(db, "users", "auth_subject", "TEXT");
   ensureColumn(db, "users", "email", "TEXT");
   ensureColumn(db, "users", "avatar_url", "TEXT");
+  ensureColumn(db, "users", "profile_pending", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "profile_suggested_name", "TEXT");
+  ensureColumn(db, "users", "profile_suggested_avatar_url", "TEXT");
   ensureColumn(db, "reports", "reporter_session_id", "TEXT");
   ensureColumn(db, "reports", "reporter_user_id", "TEXT");
   ensureColumn(db, "reports", "status", `TEXT NOT NULL DEFAULT '${REPORT_STATUS_OPEN}'`);
@@ -417,6 +423,9 @@ function mapViewerRow(row, sessionRow) {
     role: row.role || "",
     email: row.email ?? null,
     avatarUrl: row.avatar_url ?? null,
+    profilePending: Boolean(row.profile_pending),
+    profileSuggestedName: row.profile_suggested_name ?? null,
+    profileSuggestedAvatarUrl: row.profile_suggested_avatar_url ?? null,
     authProvider: row.auth_provider ?? null,
     rateLimits: {
       createTopicMs: rateLimits.createTopicMs,
@@ -573,7 +582,7 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "" }) {
 
 function getFrontendUsers(db, viewerId) {
   return db.prepare(`
-    SELECT id, name, type, role, score, email, avatar_url AS avatarUrl
+    SELECT id, name, type, role, score, email, avatar_url AS avatarUrl, profile_pending AS profilePending
     FROM users
     WHERE status = 'active' AND (type = 'registered' OR id = ?)
     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, score DESC, created_at ASC
@@ -835,9 +844,18 @@ function assertContextNotBlocked(db, context) {
   }
 }
 
+function assertProfileReady(context) {
+  if (context.viewerRow?.type !== "registered" || !context.viewerRow.profile_pending) {
+    return;
+  }
+
+  throw new ApiError(403, "PROFILE_REQUIRED", "Completa tu perfil antes de participar como usuario registrado.");
+}
+
 function assertContextCanParticipate(db, context) {
   assertViewerCanParticipate(context.viewerRow);
   assertContextNotBlocked(db, context);
+  assertProfileReady(context);
 }
 
 function assertExistingTopic(db, topicId) {
@@ -879,8 +897,8 @@ function getOrCreateAuthenticatedUser(db, {
   const normalizedProvider = String(authProvider || "").trim();
   const normalizedSubject = String(authSubject || "").trim();
   const normalizedEmail = normalizeOptionalEmail(email);
-  const normalizedAvatarUrl = normalizeAvatarUrl(avatarUrl);
-  const normalizedDisplayName = normalizeUserDisplayName(
+  const normalizedSuggestedAvatarUrl = normalizeAvatarUrl(avatarUrl);
+  const normalizedSuggestedDisplayName = normalizeUserDisplayName(
     displayName,
     normalizedEmail ? normalizedEmail.split("@")[0] : "Usuario"
   );
@@ -899,25 +917,32 @@ function getOrCreateAuthenticatedUser(db, {
   if (existingUser) {
     db.prepare(`
       UPDATE users
-      SET name = ?, email = ?, avatar_url = ?, updated_at = ?
+      SET email = ?, profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
       WHERE id = ?
-    `).run(normalizedDisplayName, normalizedEmail, normalizedAvatarUrl, nowIso, existingUser.id);
+    `).run(
+      normalizedEmail,
+      normalizedSuggestedDisplayName,
+      normalizedSuggestedAvatarUrl,
+      nowIso,
+      existingUser.id
+    );
     return db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
   }
 
   const userId = `user-${crypto.randomUUID()}`;
   db.prepare(`
     INSERT INTO users (
-      id, name, type, role, score, status, auth_provider, auth_subject, email, avatar_url, created_at, updated_at
-    ) VALUES (?, ?, 'registered', ?, 0, 'active', ?, ?, ?, ?, ?, ?)
+      id, name, type, role, score, status, auth_provider, auth_subject, email, avatar_url,
+      profile_pending, profile_suggested_name, profile_suggested_avatar_url, created_at, updated_at
+    ) VALUES (?, 'Usuario', 'registered', ?, 0, 'active', ?, ?, ?, NULL, 1, ?, ?, ?, ?)
   `).run(
     userId,
-    normalizedDisplayName,
     DEFAULT_REGISTERED_ROLE,
     normalizedProvider,
     normalizedSubject,
     normalizedEmail,
-    normalizedAvatarUrl,
+    normalizedSuggestedDisplayName,
+    normalizedSuggestedAvatarUrl,
     nowIso,
     nowIso
   );
@@ -1197,21 +1222,23 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({ sessionId, authMode, avatarUrl = null, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateProfile({ sessionId, authMode, displayName = null, avatarUrl = null, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertContextCanParticipate(db, context);
+        assertViewerCanParticipate(context.viewerRow);
+        assertContextNotBlocked(db, context);
         if (context.viewer.type !== "registered") {
           throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para editar el perfil.");
         }
 
+        const normalizedDisplayName = normalizeUserDisplayName(displayName, context.viewer.displayName || "Usuario");
         const normalizedAvatarUrl = normalizeAvatarUrl(avatarUrl);
         const nowIso = new Date().toISOString();
         db.prepare(`
           UPDATE users
-          SET avatar_url = ?, updated_at = ?
+          SET name = ?, avatar_url = ?, profile_pending = 0, profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
-        `).run(normalizedAvatarUrl, nowIso, context.viewer.id);
+        `).run(normalizedDisplayName, normalizedAvatarUrl, nowIso, context.viewer.id);
 
         const refreshedContext = resolveViewer(db, {
           sessionId: context.sessionId,

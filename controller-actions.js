@@ -148,7 +148,7 @@ export function createActionHandlers({
   function openProfileModal() {
     dispatch(state, reducers.setProfileModalOpen, true);
     render();
-    setTimeout(() => dom.profileAvatarInput?.focus?.(), 0);
+    setTimeout(() => dom.profileNameInput?.focus?.(), 0);
   }
 
   function closeProfileModal() {
@@ -159,6 +159,7 @@ export function createActionHandlers({
 
   async function saveProfile(event) {
     event?.preventDefault?.();
+    const displayName = dom.profileNameInput?.value?.trim() || null;
     const avatarUrl = dom.profileAvatarInput?.value?.trim() || null;
 
     if (dom.saveProfileButton) {
@@ -168,6 +169,7 @@ export function createActionHandlers({
 
     try {
       const payload = await api.updateProfile({
+        displayName,
         avatarUrl,
         selectedTopicId: state.selectedTopicId
       });

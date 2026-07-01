@@ -447,7 +447,25 @@ await (async () => {
       assert.notEqual(initialPayload.viewer.id, "u1");
       assert.equal(initialPayload.viewer.email, "test@example.com");
       assert.equal(initialPayload.viewer.authProvider, "https://accounts.example.com");
-      assert.equal(initialPayload.viewer.avatarUrl, "https://cdn.example.com/avatar.png");
+      assert.equal(initialPayload.viewer.displayName, "Usuario");
+      assert.equal(initialPayload.viewer.avatarUrl, null);
+      assert.equal(initialPayload.viewer.profilePending, true);
+      assert.equal(initialPayload.viewer.profileSuggestedName, "Test User");
+      assert.equal(initialPayload.viewer.profileSuggestedAvatarUrl, "https://cdn.example.com/avatar.png");
+      assert.throws(() => store.createTopic({
+        sessionId: "session-oidc-1",
+        title: "Tema OAuth",
+        text: "Mensaje"
+      }), /Completa tu perfil/);
+
+      const completedPayload = store.updateProfile({
+        sessionId: "session-oidc-1",
+        displayName: "Alias elegido",
+        avatarUrl: "https://cdn.example.com/chosen.png"
+      });
+      assert.equal(completedPayload.viewer.profilePending, false);
+      assert.equal(completedPayload.viewer.displayName, "Alias elegido");
+      assert.equal(completedPayload.viewer.avatarUrl, "https://cdn.example.com/chosen.png");
 
       const secondPayload = store.loginWithIdentity({
         sessionId: "session-oidc-2",
@@ -459,11 +477,13 @@ await (async () => {
       });
 
       assert.equal(secondPayload.viewer.id, initialPayload.viewer.id);
-      assert.equal(secondPayload.viewer.displayName, "Test User Renamed");
+      assert.equal(secondPayload.viewer.displayName, "Alias elegido");
+      assert.equal(secondPayload.viewer.profilePending, false);
+      assert.equal(secondPayload.viewer.profileSuggestedName, "Test User Renamed");
     });
   });
 
-  await test("backend updateProfile lets registered users change or clear avatar only", async () => {
+  await test("backend updateProfile lets registered users change display name and avatar only", async () => {
     await withTempStore((store) => {
       store.login({
         sessionId: "session-profile",
@@ -472,10 +492,12 @@ await (async () => {
 
       const updated = store.updateProfile({
         sessionId: "session-profile",
+        displayName: "Nombre nuevo",
         avatarUrl: "https://cdn.example.com/new-avatar.jpg"
       });
 
       assert.equal(updated.viewer.type, "registered");
+      assert.equal(updated.viewer.displayName, "Nombre nuevo");
       assert.equal(updated.viewer.avatarUrl, "https://cdn.example.com/new-avatar.jpg");
       assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarUrl, "https://cdn.example.com/new-avatar.jpg");
 
@@ -2865,6 +2887,7 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-render\.js"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
     assert.match(controllerApp, /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/);
+    assert.match(controllerApp, /bindPageEvents\(dom, \{[\s\S]*state: actions\.state,[\s\S]*setAuthUiSync: actions\.setAuthUiSync,/);
     assert.doesNotMatch(controllerApp, /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);

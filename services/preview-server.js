@@ -211,6 +211,7 @@ async function handleApiRequest(store, authService, req, res, url) {
       const body = await readJsonBody(req);
       sendBackendPayload(res, req, authService, 200, store.updateProfile({
         ...context,
+        displayName: body.displayName,
         avatarUrl: body.avatarUrl,
         selectedTopicId: body.selectedTopicId ?? null
       }));

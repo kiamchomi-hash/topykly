@@ -70,6 +70,9 @@ async function hydrateInitialData(render, initialSelectedTopicId = null) {
   try {
     const payload = await api.fetchInitialData(initialSelectedTopicId ?? state.selectedTopicId);
     dispatch(state, reducers.hydrateFromBackend, payload);
+    if (payload.viewer?.profilePending) {
+      dispatch(state, reducers.setProfileModalOpen, true);
+    }
   } catch (error) {
     console.error(error);
   }
@@ -133,6 +136,8 @@ export function bootstrap() {
   });
 
   bindPageEvents(dom, {
+    state: actions.state,
+    setAuthUiSync: actions.setAuthUiSync,
     toggleTheme: actions.toggleTheme,
     setRankingScope: actions.setRankingScope,
     toggleRankingScope: actions.toggleRankingScope,
