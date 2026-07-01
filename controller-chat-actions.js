@@ -2,7 +2,7 @@ import { getSelectedTopic } from "./model.js";
 import { api, ApiError } from "./services/api.js";
 import { dispatch, reducers } from "./store-logic.js";
 
-export function createChatActions({ state, dom, render, refreshFeedbackMs = 750, apiClient = api }) {
+export function createChatActions({ state, dom, render, refreshFeedbackMs = 750, apiClient = api, showFeedback = null }) {
   let refreshFeedbackTimer = 0;
   let submitLockTimer = 0;
 
@@ -93,6 +93,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       await syncBackendPayload(() => apiClient.openTopic(topicId));
     } catch (error) {
       console.error(error);
+      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
     }
   }
 
@@ -133,12 +134,14 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     } catch (error) {
       if (error instanceof ApiError && error.code === "TOPIC_EXPELLED_OR_BLOCKED") {
         flashComposerLock(error.topicStatus || "blocked");
+        showFeedback?.(error.message || "Este tema ya no acepta comentarios.", { kind: "error" });
         await refreshSelectedTopicAfterLock(topic?.id || null);
         render();
         return;
       }
 
       console.error(error);
+      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
     } finally {
       setComposerBusy(false);
       render();
@@ -159,6 +162,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       render();
     } catch (error) {
       console.error(error);
+      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
     } finally {
       const remainingMs = Math.max(0, refreshFeedbackMs - (Date.now() - startedAt));
       refreshFeedbackTimer = setTimeout(() => {
@@ -204,6 +208,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       render();
     } catch (error) {
       console.error(error);
+      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
     } finally {
       setReportTriggerState(trigger, false);
       render();

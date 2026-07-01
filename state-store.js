@@ -3,6 +3,8 @@ export const state = {
   paletteId: "default",
   customPaletteHex: "#B25B33",
   isPaletteModalOpen: false,
+  isProfileModalOpen: false,
+  feedback: null,
   viewer: null,
   reportedTopicIds: [],
   reportedMessageIds: [],

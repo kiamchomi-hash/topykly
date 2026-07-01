@@ -23,16 +23,7 @@ const USER_STATUS_ACTIVE = "active";
 const USER_STATUS_EXPELLED = "expelled";
 const REPORT_STATUS_OPEN = "open";
 const REPORT_STATUS_RESOLVED = "resolved";
-const GUEST_NAMES = [
-  "*Anonimo",
-  "*Cafe",
-  "*Ronda",
-  "*Medianoche",
-  "*Tertulia",
-  "*Fogon",
-  "*Esquina",
-  "*Mostrador"
-];
+const GUEST_DISPLAY_NAME = "*topy";
 const EXTRA_TOPIC_SEEDS = [
   ["Guardia tardia", "Hilo tranquilo para quien entra despues de hora."],
   ["Objetivos cortos", "Lista rapida de pendientes y mini retos."],
@@ -99,6 +90,30 @@ function normalizeOptionalEmail(value) {
 function normalizeOptionalUrl(value) {
   const normalized = String(value || "").trim();
   return normalized || null;
+}
+
+function normalizeAvatarUrl(value) {
+  const normalized = normalizeOptionalUrl(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.length > 500) {
+    throw new ApiError(400, "VALIDATION_ERROR", "La URL del avatar excede el maximo permitido.");
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(normalized);
+  } catch {
+    throw new ApiError(400, "VALIDATION_ERROR", "La URL del avatar no es valida.");
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new ApiError(400, "VALIDATION_ERROR", "El avatar debe usar una URL http o https.");
+  }
+
+  return parsedUrl.toString();
 }
 
 function summarizeText(text, limit = 96) {
@@ -414,8 +429,7 @@ function mapViewerRow(row, sessionRow) {
 
 function createGuestName() {
   const suffix = Math.floor(Math.random() * 90) + 10;
-  const base = GUEST_NAMES[Math.floor(Math.random() * GUEST_NAMES.length)];
-  return `${base} ${suffix}`;
+  return `${GUEST_DISPLAY_NAME}${suffix}`;
 }
 
 function getOrCreateGuestUser(db) {
@@ -865,7 +879,7 @@ function getOrCreateAuthenticatedUser(db, {
   const normalizedProvider = String(authProvider || "").trim();
   const normalizedSubject = String(authSubject || "").trim();
   const normalizedEmail = normalizeOptionalEmail(email);
-  const normalizedAvatarUrl = normalizeOptionalUrl(avatarUrl);
+  const normalizedAvatarUrl = normalizeAvatarUrl(avatarUrl);
   const normalizedDisplayName = normalizeUserDisplayName(
     displayName,
     normalizedEmail ? normalizedEmail.split("@")[0] : "Usuario"
@@ -1181,6 +1195,30 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
         const context = createGuestSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow);
         return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },
+    updateProfile({ sessionId, authMode, avatarUrl = null, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertContextCanParticipate(db, context);
+        if (context.viewer.type !== "registered") {
+          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para editar el perfil.");
+        }
+
+        const normalizedAvatarUrl = normalizeAvatarUrl(avatarUrl);
+        const nowIso = new Date().toISOString();
+        db.prepare(`
+          UPDATE users
+          SET avatar_url = ?, updated_at = ?
+          WHERE id = ?
+        `).run(normalizedAvatarUrl, nowIso, context.viewer.id);
+
+        const refreshedContext = resolveViewer(db, {
+          sessionId: context.sessionId,
+          authMode,
+          ipAddress
+        });
+        return buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
     bootstrap({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {

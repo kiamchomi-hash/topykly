@@ -1,5 +1,7 @@
 import { renderChat } from "./ui/chat.js";
+import { renderFeedback } from "./ui/feedback.js";
 import { renderPaletteModal } from "./ui/palette-modal.js";
+import { renderProfileModal } from "./ui/profile-modal.js";
 import { renderRankings } from "./ui/rankings.js";
 import { renderTitles } from "./ui/titles.js";
 import { renderUsers } from "./ui/users.js";
@@ -21,6 +23,8 @@ export function createRenderers({ state, dom, actions, responsive, closeTimerRef
     renderRankings(state, dom);
     renderTitles(state, dom);
     renderPaletteModal(state, dom);
+    renderProfileModal(state, dom);
+    renderFeedback(state, dom);
     actions.syncAuthUi?.();
     responsive.updateLayoutMetrics();
   }

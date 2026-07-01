@@ -85,6 +85,16 @@ export const reducers = {
   setMobileView: (state, mobileView) => ({
     ...state,
     mobileView
+  }),
+
+  setProfileModalOpen: (state, isProfileModalOpen) => ({
+    ...state,
+    isProfileModalOpen
+  }),
+
+  setFeedback: (state, feedback) => ({
+    ...state,
+    feedback
   })
 };
 

@@ -6,7 +6,7 @@ Implementacion del frontend de chat social tipo Cafe/IRC.
 
 - Backend embebido en `Node + SQLite` implementado dentro del repo.
 - API same-origin implementada desde el servidor preview.
-- Frontend actual integrado al backend sin rediseÃ±o general.
+- Frontend actual integrado al backend sin rediseno general.
 - Reglas activas: `40` temas activos, `20` visibles, reordenamiento por ultima actividad y expulsion del tema `41`.
 - Cada tema conserva `1` mensaje raiz fijo y `29` respuestas rotativas.
 - Usuarios invitados y registrados con sesion persistente y rate limits iniciales.
@@ -282,11 +282,11 @@ Estado al cierre:
 - Se agrego QA automatizado: `npm run qa`, `tests/smoke.mjs` y GitHub Actions `.github/workflows/qa.yml`.
 
 Pendientes pedidos por Matias:
-- Estandarizar usuarios anonimos para que se llamen `*Topys`, con sufijo numerico si hace falta distinguir sesiones, por ejemplo `*Topys 24`.
+- Estandarizar usuarios anonimos para que se llamen `*topy`, con sufijo numerico pegado si hace falta distinguir sesiones, por ejemplo `*topy24`.
 - Revisar el flujo de registro/login de usuarios reales.
 - Permitir que usuarios logueados cambien su foto/avatar.
 - Agregar feedback rectangular en la zona inferior izquierda cuando una accion no se pueda realizar, por ejemplo rate limit, tema bloqueado, tema expulsado, falta de login o error de backend.
-- Mantener el feedback pequeño, visible y no invasivo; debe desaparecer solo tras unos segundos.
+- Mantener el feedback pequeno, visible y no invasivo; debe desaparecer solo tras unos segundos.
 - Antes de tocar produccion, cubrir estos flujos con tests automaticos.
 
 Orden recomendado:

@@ -91,6 +91,36 @@ export function bindTopbarActionEvents(dom, handlers) {
     document.documentElement.dataset.authState = isLoggedIn() ? "logged-in" : "logged-out";
   }
 
+  function syncProfileButtonAvatar() {
+    const avatar = dom.profileButton?.querySelector?.(".profile-button__avatar");
+    if (!(avatar instanceof HTMLElement)) {
+      return;
+    }
+
+    const avatarUrl = handlers.state?.viewer?.avatarUrl || "";
+    if (avatar.dataset.avatarUrl === avatarUrl) {
+      return;
+    }
+
+    avatar.dataset.avatarUrl = avatarUrl;
+    if (!avatarUrl) {
+      avatar.innerHTML = `
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="4" width="40" height="40" rx="10"></rect>
+          <circle cx="24" cy="18" r="7"></circle>
+          <path d="M11.5 38c2.6-6.2 7.7-9.3 12.5-9.3S33.9 31.8 36.5 38"></path>
+        </svg>`;
+      return;
+    }
+
+    avatar.textContent = "";
+    const image = document.createElement("img");
+    image.src = avatarUrl;
+    image.alt = "";
+    image.loading = "lazy";
+    avatar.append(image);
+  }
+
   function syncThemeTogglePlacement() {
     const themeToggle = dom.themeToggle;
     const targetSlot = isMobileViewport() ? dom.themeToggleMobileSlot : dom.themeToggleDesktopSlot;
@@ -418,7 +448,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   function openProfileShortcut() {
     setMobileDrawerPanel(null, { restoreFocus: false });
     handlers.closeDrawers?.();
-    handlers.flashTitle("Perfil listo para conectar");
+    handlers.openProfileModal?.();
   }
 
   async function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
@@ -466,6 +496,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     const privateDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-auth-private]") ?? [];
     applyDocumentAuthState();
     syncThemeTogglePlacement();
+    syncProfileButtonAvatar();
     const authLabel = loggedIn
       ? (isMobile ? "Cerrar sesión" : "Cerrar sesión")
       : "Iniciar sesión";
@@ -506,9 +537,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.themeToggle, "click", handlers.toggleTheme);
   addListener(dom.refreshButton, "click", handlers.refreshCurrentTopic);
   addListener(dom.messageForm, "submit", handlers.submitMessage);
-  addListener(dom.profileButton, "click", () => {
-    handlers.flashTitle("Perfil listo para conectar");
-  });
+  addListener(dom.profileButton, "click", handlers.openProfileModal);
   addListener(dom.backToTopics, "click", handlers.backToTopics);
   addListener(dom.openRightDrawer, "click", () => {
     lastMobilePanelTrigger = null;
@@ -603,6 +632,40 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
   addListener(dom.paletteButton, "click", handlers.openPaletteModal);
   addListener(dom.closePaletteModalButton, "click", dismissPaletteModal);
+  addListener(dom.closeProfileModalButton, "click", handlers.closeProfileModal);
+  addListener(dom.profileModalBackdrop, "click", (event) => {
+    if (event.target === dom.profileModalBackdrop) {
+      handlers.closeProfileModal?.();
+    }
+  });
+  function syncProfileAvatarPreview() {
+    if (!dom.profileAvatarPreview) {
+      return;
+    }
+
+    dom.profileAvatarPreview.textContent = "";
+    const avatarUrl = dom.profileAvatarInput?.value?.trim() || "";
+    if (avatarUrl) {
+      const image = document.createElement("img");
+      image.src = avatarUrl;
+      image.alt = "";
+      dom.profileAvatarPreview.append(image);
+      return;
+    }
+
+    const fallback = document.createElement("span");
+    fallback.textContent = "T";
+    dom.profileAvatarPreview.append(fallback);
+  }
+
+  addListener(dom.profileAvatarInput, "input", syncProfileAvatarPreview);
+  addListener(dom.profileAvatarClearButton, "click", () => {
+    if (dom.profileAvatarInput) {
+      dom.profileAvatarInput.value = "";
+    }
+    syncProfileAvatarPreview();
+  });
+  addListener(dom.profileModal?.querySelector?.("#profileForm") ?? null, "submit", handlers.saveProfile);
   addListener(dom.paletteModalBackdrop, "click", (event) => {
     if (event.target === dom.paletteModalBackdrop) {
       dismissPaletteModal();

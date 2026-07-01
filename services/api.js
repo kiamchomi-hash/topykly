@@ -182,6 +182,16 @@ export const api = {
     });
   },
 
+  async updateProfile({ avatarUrl = null, selectedTopicId = null } = {}) {
+    return request("/api/profile", {
+      method: "PATCH",
+      body: {
+        avatarUrl,
+        selectedTopicId
+      }
+    });
+  },
+
   async submitMessage(topicId, text) {
     return request(`/api/topics/${encodeURIComponent(topicId)}/messages`, {
       method: "POST",

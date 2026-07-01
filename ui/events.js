@@ -33,6 +33,15 @@ function getActiveFocusTrapContainer(dom) {
     return dom.paletteModal;
   }
 
+  if (
+    dom.profileModal instanceof HTMLElement &&
+    dom.profileModalBackdrop &&
+    !dom.profileModalBackdrop.hidden &&
+    dom.profileModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.profileModal;
+  }
+
   if (dom.rightDrawer instanceof HTMLElement && dom.rightDrawer.classList.contains("is-open")) {
     return dom.rightDrawer;
   }

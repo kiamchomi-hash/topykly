@@ -92,13 +92,39 @@ export function createActionHandlers({
   closeDrawers
 }) {
   let syncAuthUiRef = () => {};
+  let feedbackTimer = 0;
 
   function render() {
     renderRef.current();
   }
 
   function flashTitle(text) {
-    void text;
+    showFeedback(text, { kind: "info" });
+  }
+
+  function showFeedback(message, { kind = "info", durationMs = 3600 } = {}) {
+    const normalized = String(message || "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    if (feedbackTimer) {
+      clearTimeout(feedbackTimer);
+    }
+
+    dispatch(state, reducers.setFeedback, {
+      id: Date.now(),
+      message: normalized,
+      kind
+    });
+    render();
+
+    feedbackTimer = setTimeout(() => {
+      dispatch(state, reducers.setFeedback, null);
+      feedbackTimer = 0;
+      render();
+    }, durationMs);
+    feedbackTimer.unref?.();
   }
 
   async function login() {
@@ -117,6 +143,49 @@ export function createActionHandlers({
     dispatch(state, reducers.hydrateFromBackend, payload);
     render();
     return payload;
+  }
+
+  function openProfileModal() {
+    dispatch(state, reducers.setProfileModalOpen, true);
+    render();
+    setTimeout(() => dom.profileAvatarInput?.focus?.(), 0);
+  }
+
+  function closeProfileModal() {
+    dispatch(state, reducers.setProfileModalOpen, false);
+    render();
+    dom.profileButton?.focus?.();
+  }
+
+  async function saveProfile(event) {
+    event?.preventDefault?.();
+    const avatarUrl = dom.profileAvatarInput?.value?.trim() || null;
+
+    if (dom.saveProfileButton) {
+      dom.saveProfileButton.disabled = true;
+      dom.saveProfileButton.setAttribute("aria-busy", "true");
+    }
+
+    try {
+      const payload = await api.updateProfile({
+        avatarUrl,
+        selectedTopicId: state.selectedTopicId
+      });
+      dispatch(state, reducers.hydrateFromBackend, payload);
+      dispatch(state, reducers.setProfileModalOpen, false);
+      showFeedback("Perfil actualizado");
+      return payload;
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo actualizar el perfil.", { kind: "error" });
+      return null;
+    } finally {
+      if (dom.saveProfileButton) {
+        dom.saveProfileButton.disabled = false;
+        dom.saveProfileButton.setAttribute("aria-busy", "false");
+      }
+      render();
+    }
   }
 
   function applyPalette() {
@@ -307,6 +376,10 @@ export function createActionHandlers({
     login,
     logout,
     flashTitle,
+    showFeedback,
+    openProfileModal,
+    closeProfileModal,
+    saveProfile,
     toggleTheme,
     setRankingScope: rankingActions.setRankingScope,
     toggleRankingScope: rankingActions.toggleRankingScope,

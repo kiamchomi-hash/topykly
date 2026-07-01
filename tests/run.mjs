@@ -379,6 +379,7 @@ await (async () => {
       });
 
       assert.equal(payload.viewer.type, "guest");
+      assert.match(payload.viewer.displayName, /^\*topy\d{2}$/);
       assert.equal(payload.topics.length, TOPIC_ACTIVE_LIMIT);
       assert.equal(payload.topics.filter((topic) => topic.visible).length, TOPIC_VISIBLE_LIMIT);
       assert.equal(payload.users.some((user) => user.id === payload.viewer.id), true);
@@ -444,6 +445,7 @@ await (async () => {
       assert.notEqual(initialPayload.viewer.id, "u1");
       assert.equal(initialPayload.viewer.email, "test@example.com");
       assert.equal(initialPayload.viewer.authProvider, "https://accounts.example.com");
+      assert.equal(initialPayload.viewer.avatarUrl, "https://cdn.example.com/avatar.png");
 
       const secondPayload = store.loginWithIdentity({
         sessionId: "session-oidc-2",
@@ -456,6 +458,40 @@ await (async () => {
 
       assert.equal(secondPayload.viewer.id, initialPayload.viewer.id);
       assert.equal(secondPayload.viewer.displayName, "Test User Renamed");
+    });
+  });
+
+  await test("backend updateProfile lets registered users change or clear avatar only", async () => {
+    await withTempStore((store) => {
+      store.login({
+        sessionId: "session-profile",
+        selectedTopicId: null
+      });
+
+      const updated = store.updateProfile({
+        sessionId: "session-profile",
+        avatarUrl: "https://cdn.example.com/new-avatar.jpg"
+      });
+
+      assert.equal(updated.viewer.type, "registered");
+      assert.equal(updated.viewer.avatarUrl, "https://cdn.example.com/new-avatar.jpg");
+      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarUrl, "https://cdn.example.com/new-avatar.jpg");
+
+      const cleared = store.updateProfile({
+        sessionId: "session-profile",
+        avatarUrl: ""
+      });
+      assert.equal(cleared.viewer.avatarUrl, null);
+
+      assert.throws(() => store.updateProfile({
+        sessionId: "session-profile-guest",
+        avatarUrl: "https://cdn.example.com/guest.jpg"
+      }), /Hace falta iniciar sesion/);
+
+      assert.throws(() => store.updateProfile({
+        sessionId: "session-profile",
+        avatarUrl: "javascript:alert(1)"
+      }), /http o https/);
     });
   });
 
@@ -1537,7 +1573,8 @@ await (async () => {
     handlers.activateConnectedUser("u1");
 
     assert.equal(state.activeConnectedUserId, "u1");
-    assert.equal(renderCount, 1);
+    assert.equal(state.feedback.message, "Coco Mora seleccionado");
+    assert.equal(renderCount, 2);
   });
 
   await test("palette modal dismiss closes the active Coloris picker first", () => {
@@ -2059,6 +2096,7 @@ await (async () => {
     let closeDrawersCalls = 0;
     let toggleThemeCalls = 0;
     let openPaletteModalCalls = 0;
+    let openProfileModalCalls = 0;
     let syncResponsiveViewCalls = 0;
     const state = {
       mobileView: "chat",
@@ -2146,6 +2184,9 @@ await (async () => {
         openPaletteModal() {
           openPaletteModalCalls += 1;
         },
+        openProfileModal() {
+          openProfileModalCalls += 1;
+        },
         closePaletteModal() {},
         closeDrawers() {
           closeDrawersCalls += 1;
@@ -2226,10 +2267,11 @@ await (async () => {
       assert.equal(closeDrawersCalls, 4);
       assert.equal(toggleThemeCalls, 1);
       assert.equal(openPaletteModalCalls, 1);
+      assert.equal(openProfileModalCalls, 1);
       assert.equal(logoutCalls, 1);
       assert.equal(state.mobileView, "browse");
       assert.equal(syncResponsiveViewCalls, 1);
-      assert.equal(flashCalls.includes("Perfil listo para conectar"), true);
+      assert.equal(flashCalls.includes("Perfil listo para conectar"), false);
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
       assert.equal(authButton.hidden, false);
     } finally {

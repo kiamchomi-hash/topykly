@@ -202,6 +202,16 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (req.method === "PATCH" && url.pathname === "/api/profile") {
+      const body = await readJsonBody(req);
+      sendBackendPayload(res, req, authService, 200, store.updateProfile({
+        ...context,
+        avatarUrl: body.avatarUrl,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
+
     if (req.method === "GET" && url.pathname.startsWith("/api/topics/")) {
       const topicId = url.pathname.split("/").pop() || "";
       sendBackendPayload(res, req, authService, 200, store.openTopic(topicId, context));
