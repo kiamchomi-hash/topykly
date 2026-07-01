@@ -63,10 +63,12 @@ export function shouldScrollChatToBottom(previousState, nextState, wasNearBottom
 
 export function renderChat(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
-  const isMobileViewport = document.documentElement.classList.contains("is-mobile-viewport");
   const isLoading = state.topics.length === 0;
+  const reportedMessageIds = new Set(state.reportedMessageIds || []);
+  const isTopicReported = Boolean(topic && state.reportedTopicIds?.includes?.(topic.id));
 
   syncChatComposer(topic, dom, isLoading);
+  syncTopicReportButton(topic, dom, isLoading, isTopicReported);
 
   if (!dom.messageStream) {
     return;
@@ -79,19 +81,19 @@ export function renderChat(state, dom) {
 
   dom.messageStream.hidden = isLoading || !topic;
   if (!topic) {
-    if (dom.messageStream) {
-      dom.messageStream.innerHTML = "";
-      clearRenderedChatState(dom.messageStream);
-    }
+    dom.messageStream.innerHTML = "";
+    clearRenderedChatState(dom.messageStream);
     return;
   }
 
   const previousRenderState = readRenderedChatState(dom.messageStream);
   const wasNearBottom = previousRenderState.topicId ? isNearMessageStreamBottom(dom.messageStream) : true;
 
-  renderIntoTargets([dom.messageStream], "message-stream", () => {
-    return topic.messages.map((message) => createMessageItem(message, state.users));
-  });
+  renderIntoTargets([dom.messageStream], "message-stream", () =>
+    topic.messages.map((message) => createMessageItem(message, state.users, {
+      reported: reportedMessageIds.has(message.id)
+    }))
+  );
 
   const nextRenderState = createNextRenderedChatState(dom.messageStream, topic);
   // Reconciliation can replace cards when their inline height styles differ from fresh nodes,
@@ -101,6 +103,29 @@ export function renderChat(state, dom) {
     dom.messageStream.scrollTop = dom.messageStream.scrollHeight;
   }
   writeRenderedChatState(dom.messageStream, nextRenderState);
+}
+
+function syncTopicReportButton(topic, dom, isLoading, isReported) {
+  if (typeof HTMLButtonElement === "undefined") {
+    return;
+  }
+
+  if (!(dom.reportTopicButton instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const button = dom.reportTopicButton;
+  const label = button.querySelector(".button-label");
+  button.hidden = isLoading || !topic;
+  button.disabled = isLoading || !topic || isReported;
+  button.dataset.reportEntityType = "topic";
+  button.dataset.reportEntityId = topic?.id || "";
+  button.dataset.reported = String(isReported);
+  button.setAttribute("aria-label", isReported ? "Tema ya reportado" : "Reportar tema");
+
+  if (label) {
+    label.textContent = isReported ? "Reportado" : "Reportar";
+  }
 }
 
 function syncMessageCardHeights(messageStream) {
@@ -119,9 +144,12 @@ function syncMessageCardHeights(messageStream) {
 
 function syncChatComposer(topic, dom, isLoading) {
   const isCreatingTopic = !topic;
+  const isCommentableTopic = !topic || topic.status === "active" || topic.status === "pinned";
   const topicTitleField = dom.topicTitleInput?.closest(".composer__field");
   const chatHeader = dom.chatTitle?.closest(".panel__header--chat");
   const chatPanel = dom.messageForm?.closest(".panel--chat");
+  const submitButton = dom.composerSubmitButton;
+  const submitLabel = submitButton?.querySelector(".button-label");
 
   if (topicTitleField) {
     topicTitleField.hidden = isLoading || !isCreatingTopic;
@@ -135,9 +163,24 @@ function syncChatComposer(topic, dom, isLoading) {
   if (dom.messageForm) {
     dom.messageForm.hidden = isLoading;
     dom.messageForm.classList.toggle("composer--topic-create", isCreatingTopic);
+    dom.messageForm.dataset.topicStatus = topic?.status || "draft";
   }
   if (dom.messageInput) {
-    dom.messageInput.placeholder = isCreatingTopic ? "Mensaje" : "Escribe aquí...";
+    dom.messageInput.disabled = !isCreatingTopic && !isCommentableTopic;
+    dom.messageInput.placeholder = isCreatingTopic
+      ? "Mensaje"
+      : isCommentableTopic
+        ? "Escribe aqui..."
+        : "Tema cerrado para comentarios";
     dom.messageInput.rows = isCreatingTopic ? 4 : 2;
+  }
+  if (submitButton) {
+    submitButton.disabled = isLoading || (!isCreatingTopic && !isCommentableTopic);
+    submitButton.setAttribute("aria-disabled", String(submitButton.disabled));
+  }
+  if (submitLabel) {
+    submitLabel.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : "Enviar";
+  } else if (submitButton) {
+    submitButton.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : "Enviar";
   }
 }

@@ -1,10 +1,8 @@
 export function bindTopbarRankingEvents(dom, handlers) {
   addListener(dom.rankingScopeButton, "click", handlers.toggleRankingScope);
   addListener(dom.rankingPrev, "click", () => handlers.setRankingStep(-1));
-  addListener(dom.rankingCurrent, "click", () => handlers.setRankingStep(1));
   addListener(dom.rankingNext, "click", () => handlers.setRankingStep(1));
   addListener(dom.drawerRankingPrev, "click", () => handlers.setRankingStep(-1));
-  addListener(dom.drawerRankingCurrent, "click", () => handlers.setRankingStep(1));
   addListener(dom.drawerRankingNext, "click", () => handlers.setRankingStep(1));
 
   bindScopeTabs(dom.rankingScopeTabs, handlers.setRankingScope);

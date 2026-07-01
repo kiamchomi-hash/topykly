@@ -8,7 +8,16 @@ import {
 } from "./palettes.js";
 
 const DEFAULT_THEME = "dark";
-
+const STORAGE_KEYS = {
+  theme: "topykly-theme",
+  palette: "topykly-palette",
+  customPalette: "topykly-custom-palette-hex"
+};
+const LEGACY_STORAGE_KEYS = {
+  theme: "chetrend-theme",
+  palette: "chetrend-palette",
+  customPalette: "chetrend-custom-palette-hex"
+};
 export function applyStoredTheme(state) {
   const hasStorage = typeof localStorage !== "undefined";
   const hasDocument = typeof document !== "undefined";
@@ -17,9 +26,9 @@ export function applyStoredTheme(state) {
   let rootCustomPalette = null;
 
   if (hasStorage) {
-    rootTheme = localStorage.getItem("chetrend-theme");
-    rootPalette = localStorage.getItem("chetrend-palette");
-    rootCustomPalette = localStorage.getItem("chetrend-custom-palette-hex");
+    rootTheme = localStorage.getItem(STORAGE_KEYS.theme) || localStorage.getItem(LEGACY_STORAGE_KEYS.theme);
+    rootPalette = localStorage.getItem(STORAGE_KEYS.palette) || localStorage.getItem(LEGACY_STORAGE_KEYS.palette);
+    rootCustomPalette = localStorage.getItem(STORAGE_KEYS.customPalette) || localStorage.getItem(LEGACY_STORAGE_KEYS.customPalette);
   }
 
   state.theme = rootTheme === "dark" || rootTheme === "light" ? rootTheme : DEFAULT_THEME;

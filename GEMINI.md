@@ -1,7 +1,7 @@
-# Proyecto Chetrend - Arquitectura Frontend
+# Proyecto TOPYKLY - Arquitectura Frontend
 
 ## Descripción General
-Chetrend utiliza una arquitectura modular basada en **características (Features)**, **servicios** y una **gestión de estado centralizada e inmutable**, inspirada en estándares de industria como Mastodon y Zulip.
+TOPYKLY utiliza una arquitectura modular basada en **características (Features)**, **servicios** y una **gestión de estado centralizada e inmutable**, inspirada en estándares de industria como Mastodon y Zulip.
 
 ## Pilares de la Arquitectura
 

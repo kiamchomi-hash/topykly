@@ -41,10 +41,10 @@ export class PaletteService {
       return;
     }
 
-    localStorage.setItem("chetrend-theme", this.state.theme);
-    localStorage.setItem("chetrend-palette", this.state.paletteId);
+    localStorage.setItem("topykly-theme", this.state.theme);
+    localStorage.setItem("topykly-palette", this.state.paletteId);
     if (this.state.paletteId === CUSTOM_PALETTE_ID) {
-      localStorage.setItem("chetrend-custom-palette-hex", this.state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
+      localStorage.setItem("topykly-custom-palette-hex", this.state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
     }
   }
 

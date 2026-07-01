@@ -1,17 +1,21 @@
 export const TOPIC_VISIBLE_LIMIT = 20;
-export const TOPIC_ACTIVE_LIMIT = 60;
+export const TOPIC_ACTIVE_LIMIT = 40;
+export const TOPIC_REPLY_LIMIT = 29;
+export const TOPIC_TOTAL_MESSAGE_LIMIT = TOPIC_REPLY_LIMIT + 1;
 
 export function formatCommentCount(count) {
   return count === 1 ? "1 comentario" : `${count} comentarios`;
 }
 
-export function createMessage(authorId, text, minutesAgo, kind = "user", now = Date.now()) {
+export function createMessage(authorId, text, minutesAgo, kind = "user", now = Date.now(), isRoot = false) {
   return {
     id: crypto.randomUUID(),
     authorId,
     text,
     kind,
     likes: 0,
+    isRoot,
+    createdAt: new Date(now - minutesAgo * 60 * 1000).toISOString(),
     timestamp: new Date(now - minutesAgo * 60 * 1000)
   };
 }
@@ -34,8 +38,9 @@ export function createTopic(authorId, title, messageText, now = Date.now()) {
     title: normalizedTitle,
     subtitle: summarizeTopicMessage(normalizedMessage),
     authorId,
+    status: "active",
     visible: true,
-    messages: [createMessage(authorId, normalizedMessage, 0, "user", now)]
+    messages: [createMessage(authorId, normalizedMessage, 0, "user", now, true)]
   };
 }
 
@@ -92,7 +97,7 @@ export function buildTopics(topicSeedData, users, now = Date.now()) {
       const text = multilinePreviewMap.has(messageIndex)
         ? createMultilinePreviewMessage(title, index, multilinePreviewMap.get(messageIndex))
         : textFactory(title, subtitle, index);
-      const message = createMessage(authorId, text, minutesAgo[messageIndex] ?? 1, "user", now);
+      const message = createMessage(authorId, text, minutesAgo[messageIndex] ?? 1, "user", now, messageIndex === 0);
       const authorIndex = authorIndexById.get(message.authorId) ?? 0;
       message.likes = 1 + ((index * 3 + messageIndex + authorIndex) % 5);
       return message;
@@ -103,6 +108,7 @@ export function buildTopics(topicSeedData, users, now = Date.now()) {
       title,
       subtitle,
       authorId: topicAuthorId,
+      status: "active",
       visible: true,
       messages
     };
@@ -119,11 +125,21 @@ export function getSelectedTopic(topics, selectedTopicId) {
   return topics.find((topic) => topic.id === selectedTopicId) ?? null;
 }
 
-export function trimMessages(messages, limit = 30) {
-  return messages.length > limit ? messages.slice(-limit) : messages;
+export function trimMessages(messages, limit = TOPIC_TOTAL_MESSAGE_LIMIT) {
+  if (messages.length <= limit) {
+    return messages;
+  }
+
+  const [rootMessage, ...replyMessages] = messages;
+  if (!rootMessage) {
+    return messages.slice(-limit);
+  }
+
+  const keptReplies = replyMessages.slice(-Math.max(0, limit - 1));
+  return [rootMessage, ...keptReplies];
 }
 
-export function appendMessageToTopic(topic, message, limit = 30) {
+export function appendMessageToTopic(topic, message, limit = TOPIC_TOTAL_MESSAGE_LIMIT) {
   const messages = trimMessages([...topic.messages, message], limit);
   const subtitle = message.kind === "user"
     ? summarizeTopicMessage(message.text)
@@ -143,12 +159,24 @@ export function prepareTopicFeed(
 ) {
   return topics.slice(0, activeLimit).map((topic, index) => {
     const visible = index < visibleLimit;
-    return topic.visible === visible ? topic : { ...topic, visible };
+    const status = topic.status === "blocked" || topic.status === "pinned" || topic.status === "expelled"
+      ? topic.status
+      : "active";
+    const nextVisible = status === "expelled" ? false : visible;
+    return topic.visible === nextVisible && topic.status === status
+      ? topic
+      : { ...topic, visible: nextVisible, status };
   });
 }
 
+export function getActiveTopics(topics) {
+  return topics.filter((topic) => topic.status !== "expelled");
+}
+
 export function getVisibleTopics(topics, visibleLimit = TOPIC_VISIBLE_LIMIT) {
-  return topics.filter((topic) => topic.visible !== false).slice(0, visibleLimit);
+  return topics
+    .filter((topic) => topic.visible !== false && topic.status !== "expelled")
+    .slice(0, visibleLimit);
 }
 
 export function insertTopicAtTop(
@@ -172,7 +200,7 @@ export function reviveTopicWithMessage(
   visibleLimit = TOPIC_VISIBLE_LIMIT
 ) {
   const targetTopic = topics.find((topic) => topic.id === topicId);
-  if (!targetTopic) {
+  if (!targetTopic || targetTopic.status === "expelled" || targetTopic.status === "blocked") {
     return prepareTopicFeed(topics, activeLimit, visibleLimit);
   }
 

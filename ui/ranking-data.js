@@ -1,4 +1,4 @@
-import { getSelectedTopic, formatCommentCount } from "../model.js";
+import { formatCommentCount, getActiveTopics, getSelectedTopic } from "../model.js";
 
 function buildRankingEntries(counts, users, currentUserId, emptyTitle, emptyMeta, limit, formatMeta) {
   const entries = [...counts.entries()]
@@ -101,7 +101,7 @@ function buildTopicRankingEntries(topics, counts, emptyTitle, emptyMeta, limit, 
 
 function getScopedTopics(topics, selectedTopicId, scope) {
   if (scope !== "topic") {
-    return topics;
+    return getActiveTopics(topics);
   }
 
   const selectedTopic = getSelectedTopic(topics, selectedTopicId);

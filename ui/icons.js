@@ -1,5 +1,5 @@
 /**
- * Centralized Icon System for Chetrend.
+ * Centralized Icon System for TOPYKLY.
  * Returns SVG elements or pre-built icon nodes.
  */
 

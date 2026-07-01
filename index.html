@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TopicKly</title>
+    <title>TOPYKLY</title>
     <script>
       (function () {
-        const theme = localStorage.getItem("chetrend-theme") || "dark";
-        const palette = localStorage.getItem("chetrend-palette") || "default";
-        const authState = localStorage.getItem("chetrend-auth-demo") === "true" ? "logged-in" : "logged-out";
+        const theme = localStorage.getItem("topykly-theme") || localStorage.getItem("chetrend-theme") || "dark";
+        const palette = localStorage.getItem("topykly-palette") || localStorage.getItem("chetrend-palette") || "default";
+        const authState = "logged-out";
         const mobile = typeof window.matchMedia === "function"
           ? window.matchMedia("(max-width: 960px)").matches
           : window.innerWidth <= 960;
@@ -50,7 +50,7 @@
           <div class="theme-toggle-slot theme-toggle-slot--desktop" id="themeToggleDesktopSlot"></div>
         </div>
 
-        <div class="topbar__title" aria-label="TopicKly">
+        <div class="topbar__title" aria-label="TOPYKLY">
           <span class="brand-mark__icon" aria-hidden="true">
             <svg viewBox="0 0 64 64" fill="none">
               <rect class="brand-mark__icon-base" width="64" height="64" rx="16"></rect>
@@ -61,7 +61,7 @@
             </svg>
           </span>
           <span class="brand-mark" aria-hidden="true">
-            <span class="brand-mark__che">TOPIC</span>
+            <span class="brand-mark__che">TOPY</span>
             <span class="brand-mark__trend">KLY</span>
           </span>
         </div>
@@ -107,7 +107,7 @@
           <button class="text-button text-button--accent prominent-auth" id="authButton" type="button" aria-label="Iniciar sesión">
             <span class="button-label">Iniciar sesión</span>
           </button>
-          <button class="icon-button icon-button--drawer mobile-right-drawer" id="openRightDrawer" type="button" aria-label="Abrir menu" aria-controls="rightDrawer" aria-expanded="false">
+          <button class="icon-button icon-button--drawer mobile-right-drawer" id="openRightDrawer" type="button" aria-label="Abrir menú" aria-controls="rightDrawer" aria-expanded="false">
             <span class="icon-button__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 6h16M4 12h16M4 18h16"></path>
@@ -185,6 +185,9 @@
               <h2 id="chatTitle">Chat principal</h2>
             </div>
             <div class="chat-actions">
+              <button class="icon-button icon-button--compact chat-actions__report" id="reportTopicButton" type="button" aria-label="Reportar tema" hidden>
+                <span class="button-label">Reportar</span>
+              </button>
               <button class="icon-button icon-button--compact icon-button--refresh" id="refreshButton" type="button" aria-label="Actualizar contenido manualmente">
                 <span class="icon-button__icon" aria-hidden="true">
                   <svg class="refresh-button__wheel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -211,7 +214,7 @@
             <label class="composer__field">
               <textarea id="messageInput" rows="2" maxlength="240" placeholder="Escribe aquí..." required aria-label="Mensaje"></textarea>
             </label>
-            <button class="primary-button" type="submit">Enviar</button>
+            <button class="primary-button" type="submit"><span class="button-label">Enviar</span></button>
           </form>
         </section>
 
@@ -313,7 +316,7 @@
       <div class="scroll-list" id="leftDrawerTopics"></div>
     </aside>
 
-    <aside class="drawer drawer--right" id="rightDrawer" role="dialog" aria-modal="true" aria-label="Menu movil" aria-hidden="true" hidden>
+    <aside class="drawer drawer--right" id="rightDrawer" role="dialog" aria-modal="true" aria-label="Menú móvil" aria-hidden="true" hidden>
       <div class="drawer__header">
         <div class="drawer__brand" aria-hidden="true">
           <span class="brand-mark__icon drawer__brand-icon" aria-hidden="true">
@@ -326,10 +329,10 @@
             </svg>
           </span>
           <span class="brand-mark">
-            <span class="brand-mark__che">TOPIC</span><span class="brand-mark__trend">KLY</span>
+            <span class="brand-mark__che">TOPY</span><span class="brand-mark__trend">KLY</span>
           </span>
         </div>
-        <button class="icon-button icon-button--compact" data-close-drawer="right" type="button" aria-label="Cerrar menu">
+        <button class="icon-button icon-button--compact" data-close-drawer="right" type="button" aria-label="Cerrar menú">
           <span aria-hidden="true">×</span>
         </button>
       </div>
@@ -342,7 +345,7 @@
                   <path d="m16 16 4 4"></path>
                 </svg>
               </span>
-              <input class="drawer-search__input" id="mobileDrawerSearch" type="text" inputmode="search" enterkeyhint="search" placeholder="Buscar en menu" autocomplete="off" spellcheck="false" />
+              <input class="drawer-search__input" id="mobileDrawerSearch" type="text" inputmode="search" enterkeyhint="search" placeholder="Buscar en menú" autocomplete="off" spellcheck="false" />
             </label>
           </div>
           <div class="drawer-action-stack">
@@ -415,7 +418,7 @@
       <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerUsersSection" hidden>
         <h3>Usuarios activos</h3>
         <div class="drawer-mobile-panel__header">
-          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menu">
+          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menú">
             <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m15 18-6-6 6-6"></path>
@@ -428,7 +431,7 @@
       </section>
       <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerRankingsSection" hidden>
         <div class="drawer-ranking__header">
-          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menu">
+          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menú">
             <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m15 18-6-6 6-6"></path>

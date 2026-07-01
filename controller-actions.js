@@ -1,5 +1,6 @@
 import { createChatActions } from "./controller-chat-actions.js";
 import { createRankingActions } from "./controller-ranking-actions.js";
+import { api } from "./services/api.js";
 import { dispatch, reducers } from "./store-logic.js";
 import {
   applyPaletteToDocument,
@@ -90,12 +91,32 @@ export function createActionHandlers({
   isMobileViewport,
   closeDrawers
 }) {
+  let syncAuthUiRef = () => {};
+
   function render() {
     renderRef.current();
   }
 
   function flashTitle(text) {
     void text;
+  }
+
+  async function login() {
+    const result = await api.login(state.selectedTopicId);
+    if (result?.redirected) {
+      return result;
+    }
+
+    dispatch(state, reducers.hydrateFromBackend, result);
+    render();
+    return result;
+  }
+
+  async function logout() {
+    const payload = await api.logout(state.selectedTopicId);
+    dispatch(state, reducers.hydrateFromBackend, payload);
+    render();
+    return payload;
   }
 
   function applyPalette() {
@@ -122,9 +143,9 @@ export function createActionHandlers({
       return;
     }
 
-    localStorage.setItem("chetrend-palette", state.paletteId);
+    localStorage.setItem("topykly-palette", state.paletteId);
     if (state.paletteId === CUSTOM_PALETTE_ID) {
-      localStorage.setItem("chetrend-custom-palette-hex", state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
+      localStorage.setItem("topykly-custom-palette-hex", state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
     }
   }
 
@@ -163,7 +184,7 @@ export function createActionHandlers({
     dispatch(state, reducers.setTheme, state.theme === "light" ? "dark" : "light");
     applyPalette();
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("chetrend-theme", state.theme);
+      localStorage.setItem("topykly-theme", state.theme);
     }
     render();
   }
@@ -277,6 +298,14 @@ export function createActionHandlers({
   return {
     state,
     syncResponsiveView,
+    setAuthUiSync(fn) {
+      syncAuthUiRef = typeof fn === "function" ? fn : () => {};
+    },
+    syncAuthUi() {
+      syncAuthUiRef();
+    },
+    login,
+    logout,
     flashTitle,
     toggleTheme,
     setRankingScope: rankingActions.setRankingScope,
@@ -287,6 +316,7 @@ export function createActionHandlers({
     createNewTopic: chatActions.createNewTopic,
     submitMessage: chatActions.submitMessage,
     refreshCurrentTopic: chatActions.refreshCurrentTopic,
+    reportEntity: chatActions.reportEntity,
     openPaletteModal,
     closePaletteModal,
     selectPalette,

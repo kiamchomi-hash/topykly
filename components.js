@@ -86,7 +86,7 @@ export function createRankingSkeleton(index) {
   return node;
 }
 
-export function createMessageItem(message, users) {
+export function createMessageItem(message, users, { reported = false } = {}) {
   const node = el("article", `message${message.kind === "system" ? " message--system" : ""}`);
   node.dataset.id = message.id;
   const author = message.kind === "system" ? "Sistema" : getUserName(users, message.authorId);
@@ -98,6 +98,16 @@ export function createMessageItem(message, users) {
     el("span", "message__author", author),
     el("span", "message__time", message.timestamp.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }))
   );
+
+  if (message.kind !== "system") {
+    const reportButton = el("button", `message__report-button${reported ? " is-reported" : ""}`, reported ? "Reportado" : "Reportar");
+    reportButton.type = "button";
+    reportButton.dataset.reportEntityType = "message";
+    reportButton.dataset.reportEntityId = message.id;
+    reportButton.disabled = reported;
+    reportButton.setAttribute("aria-label", reported ? "Mensaje ya reportado" : "Reportar mensaje");
+    meta.append(reportButton);
+  }
 
   body.append(meta, el("p", "message__text", message.text));
   node.append(avatar, body);

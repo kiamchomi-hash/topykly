@@ -6,6 +6,27 @@ import { insertTopicAtTop, prepareTopicFeed, reviveTopicWithMessage } from "./mo
  */
 
 export const reducers = {
+  hydrateFromBackend: (state, payload) => {
+    const nextSelectedTopicId = payload.selectedTopicId && payload.topics.some((topic) => topic.id === payload.selectedTopicId)
+      ? payload.selectedTopicId
+      : null;
+    const nextActiveConnectedUserId = payload.users.some((user) => user.id === state.activeConnectedUserId)
+      ? state.activeConnectedUserId
+      : null;
+
+    return {
+      ...state,
+      viewer: payload.viewer ?? state.viewer,
+      currentUserId: payload.viewer?.id ?? state.currentUserId,
+      reportedTopicIds: payload.reportedTopicIds ?? state.reportedTopicIds ?? [],
+      reportedMessageIds: payload.reportedMessageIds ?? state.reportedMessageIds ?? [],
+      users: payload.users,
+      topics: payload.topics,
+      selectedTopicId: nextSelectedTopicId,
+      activeConnectedUserId: nextActiveConnectedUserId
+    };
+  },
+
   setTheme: (state, theme) => ({
     ...state,
     theme

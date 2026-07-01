@@ -1,5 +1,5 @@
 {
-  "name": "chetrend",
+  "name": "topykly",
   "version": "1.0.0",
   "description": "",
   "main": "app-store.js",
@@ -7,18 +7,18 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/run.mjs"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kiamchomi-hash/chetrend.git"
+    "url": "git+https://github.com/kiamchomi-hash/topykly.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/kiamchomi-hash/chetrend/issues"
+    "url": "https://github.com/kiamchomi-hash/topykly/issues"
   },
-  "homepage": "https://github.com/kiamchomi-hash/chetrend#readme"
+  "homepage": "https://github.com/kiamchomi-hash/topykly#readme"
 }

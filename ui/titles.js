@@ -2,7 +2,7 @@ import { getSelectedTopic } from "../model.js";
 import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel } from "./ranking-labels.js";
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
-const SITE_NAME = "TopicKly";
+const SITE_NAME = "TOPYKLY";
 
 export function renderTitles(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);

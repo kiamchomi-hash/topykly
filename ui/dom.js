@@ -66,7 +66,7 @@ const REQUIRED_DOM_KEYS = [
 ];
 
 const DOM_IDS = [
-  "themeToggle", "refreshButton", "chatTitle", "messageForm",
+  "themeToggle", "refreshButton", "reportTopicButton", "chatTitle", "messageForm",
   "rankingPrev", "rankingCurrent", "rankingNext",
   "drawerRankingPrev", "drawerRankingCurrent", "drawerRankingNext",
   "openRightDrawer", "drawerBackdrop", "profileButton", "backToTopics",
@@ -122,6 +122,7 @@ export function cacheDom() {
   domProxy.drawerRankingsSection = domProxy.drawerRankingList?.closest(".drawer__section") ?? null;
   domProxy.drawerUsersSection = domProxy.drawerUserList?.closest(".drawer__section") ?? null;
   domProxy.drawerRankingSwitch = domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
+  domProxy.composerSubmitButton = domProxy.messageForm?.querySelector('button[type="submit"]') ?? null;
 
   assertRequiredDom(domProxy);
   return domProxy;

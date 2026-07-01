@@ -1,5 +1,3 @@
-import { initialUsers, topicSeedData } from "./data.js";
-import { buildTopics, buildUsers } from "./model.js";
 import { openDrawer, closeDrawers } from "./ui/drawers.js";
 import { bindPageEvents } from "./ui/events.js";
 import { cacheDom } from "./ui/dom.js";
@@ -11,18 +9,48 @@ import { applyStoredTheme, createBackToTopicsHandler, createResizeHandler } from
 import { dispatch, reducers } from "./store-logic.js";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
+import { api } from "./services/api.js";
 
-function hydrateInitialData(render) {
-  const users = buildUsers(initialUsers);
-  dispatch(state, reducers.setLoadingData, {
-    users,
-    topics: buildTopics(topicSeedData, users)
-  });
+function readBootstrapLocationParams() {
+  if (typeof window === "undefined") {
+    return {
+      selectedTopicId: null,
+      authError: null
+    };
+  }
+
+  const url = new URL(window.location.href);
+  return {
+    selectedTopicId: url.searchParams.get("selectedTopicId") || null,
+    authError: url.searchParams.get("authError") || null
+  };
+}
+
+function clearBootstrapLocationParams() {
+  if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete("selectedTopicId");
+  url.searchParams.delete("authError");
+  window.history.replaceState({}, "", url.toString());
+}
+
+async function hydrateInitialData(render, initialSelectedTopicId = null) {
+  try {
+    const payload = await api.fetchInitialData(initialSelectedTopicId ?? state.selectedTopicId);
+    dispatch(state, reducers.hydrateFromBackend, payload);
+  } catch (error) {
+    console.error(error);
+  }
   render();
 }
 
-function scheduleInitialDataHydration(render) {
-  const applyData = () => hydrateInitialData(render);
+function scheduleInitialDataHydration(render, initialSelectedTopicId = null) {
+  const applyData = () => {
+    hydrateInitialData(render, initialSelectedTopicId);
+  };
 
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(() => requestAnimationFrame(applyData));
@@ -33,6 +61,7 @@ function scheduleInitialDataHydration(render) {
 }
 
 export function bootstrap() {
+  const bootstrapLocationParams = readBootstrapLocationParams();
   applyStoredTheme(state);
   Object.assign(dom, cacheDom());
 
@@ -79,6 +108,7 @@ export function bootstrap() {
     setRankingScope: actions.setRankingScope,
     toggleRankingScope: actions.toggleRankingScope,
     refreshCurrentTopic: actions.refreshCurrentTopic,
+    reportEntity: actions.reportEntity,
     createNewTopic: actions.createNewTopic,
     submitMessage: actions.submitMessage,
     setRankingStep: actions.setRankingStep,
@@ -97,5 +127,10 @@ export function bootstrap() {
     onWheel: responsive.handleScrollableWheel
   });
 
-  scheduleInitialDataHydration(renderers.render);
+  if (bootstrapLocationParams.authError) {
+    console.error(`Auth error: ${bootstrapLocationParams.authError}`);
+  }
+
+  clearBootstrapLocationParams();
+  scheduleInitialDataHydration(renderers.render, bootstrapLocationParams.selectedTopicId);
 }

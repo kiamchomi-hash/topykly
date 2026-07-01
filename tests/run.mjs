@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createBackendStore } from "../services/backend-store.js";
 import { createChatActions } from "../controller-chat-actions.js";
 import { initialUsers, topicSeedData } from "../data.js";
 import {
@@ -34,6 +36,7 @@ import { createResizeHandler } from "../controller-runtime.js";
 import { applyStoredTheme } from "../controller-theme.js";
 import { createActionHandlers } from "../controller-actions.js";
 import { reducers } from "../store-logic.js";
+import { api } from "../services/api.js";
 import {
   buildCustomPaletteOption,
   CUSTOM_PALETTE_ID,
@@ -168,6 +171,24 @@ function createClassList() {
   };
 }
 
+async function withTempStore(fn) {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-store-"));
+  const dbPath = path.join(tempDir, "topykly.sqlite");
+  const store = createBackendStore({ dbPath });
+
+  try {
+    return await fn(store);
+  } finally {
+    store.close();
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function flushAsyncEvents() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 await (async () => {
   await test("buildUsers decorates seed users", () => {
     const users = buildUsers(initialUsers);
@@ -201,42 +222,46 @@ await (async () => {
     assert.equal(getSelectedTopic(topics, null), null);
   });
 
-  await test("trimMessages keeps the latest 30 messages", () => {
-    const messages = Array.from({ length: 35 }, (_, index) => createMessage("u1", `m${index}`, index));
+  await test("trimMessages preserves the root message and keeps the latest 29 replies", () => {
+    const messages = Array.from({ length: 35 }, (_, index) => createMessage("u1", `m${index}`, index, "user", Date.now(), index === 0));
     const trimmed = trimMessages(messages, 30);
 
     assert.equal(trimmed.length, 30);
-    assert.equal(trimmed[0].text, "m5");
+    assert.equal(trimmed[0].text, "m0");
+    assert.equal(trimmed[1].text, "m6");
     assert.equal(trimmed[29].text, "m34");
   });
 
-  await test("appendMessageToTopic trims overflow and refreshes the subtitle preview", () => {
+  await test("appendMessageToTopic trims overflow replies, preserves the root and refreshes the subtitle preview", () => {
     const baseTopic = {
       id: "topic-1",
       title: "Tema",
       subtitle: "Anterior",
       authorId: "u1",
+      status: "active",
       visible: true,
-      messages: Array.from({ length: 30 }, (_, index) => createMessage("u1", `m${index}`, index))
+      messages: Array.from({ length: 30 }, (_, index) => createMessage("u1", `m${index}`, index, "user", Date.now(), index === 0))
     };
     const nextMessage = createMessage("u2", "Este es el nuevo mensaje que debe quedar visible en el preview.", 0);
 
     const updatedTopic = appendMessageToTopic(baseTopic, nextMessage);
 
     assert.equal(updatedTopic.messages.length, 30);
-    assert.equal(updatedTopic.messages[0].text, "m1");
+    assert.equal(updatedTopic.messages[0].text, "m0");
+    assert.equal(updatedTopic.messages[1].text, "m2");
     assert.equal(updatedTopic.messages[29].id, nextMessage.id);
     assert.equal(updatedTopic.subtitle, "Este es el nuevo mensaje que debe quedar visible en el preview.");
   });
 
-  await test("prepareTopicFeed keeps 20 visible topics and caps the active feed at 60", () => {
-    const topics = Array.from({ length: 65 }, (_, index) => ({
+  await test("prepareTopicFeed keeps 20 visible topics and caps the active feed at 40", () => {
+    const topics = Array.from({ length: 45 }, (_, index) => ({
       id: `topic-${index + 1}`,
       title: `Tema ${index + 1}`,
       subtitle: `Resumen ${index + 1}`,
       authorId: "u1",
+      status: "active",
       visible: true,
-      messages: [createMessage("u1", `m${index + 1}`, index)]
+      messages: [createMessage("u1", `m${index + 1}`, index, "user", Date.now(), true)]
     }));
 
     const preparedTopics = prepareTopicFeed(topics);
@@ -245,18 +270,19 @@ await (async () => {
     assert.equal(getVisibleTopics(preparedTopics).length, TOPIC_VISIBLE_LIMIT);
     assert.equal(preparedTopics[TOPIC_VISIBLE_LIMIT - 1].visible, true);
     assert.equal(preparedTopics[TOPIC_VISIBLE_LIMIT].visible, false);
-    assert.equal(preparedTopics[TOPIC_ACTIVE_LIMIT - 1].id, "topic-60");
+    assert.equal(preparedTopics[TOPIC_ACTIVE_LIMIT - 1].id, "topic-40");
   });
 
-  await test("insertTopicAtTop keeps new topics first and preserves the 60 active topic ceiling", () => {
+  await test("insertTopicAtTop keeps new topics first and preserves the 40 active topic ceiling", () => {
     const topics = prepareTopicFeed(
       Array.from({ length: TOPIC_ACTIVE_LIMIT }, (_, index) => ({
         id: `topic-${index + 1}`,
         title: `Tema ${index + 1}`,
         subtitle: `Resumen ${index + 1}`,
         authorId: "u1",
+        status: "active",
         visible: true,
-        messages: [createMessage("u1", `m${index + 1}`, index)]
+        messages: [createMessage("u1", `m${index + 1}`, index, "user", Date.now(), true)]
       }))
     );
     const newTopic = createTopic("u1", "Tema nuevo", "Primer mensaje", 1_700_000_000_000);
@@ -267,7 +293,7 @@ await (async () => {
     assert.equal(nextTopics[0].id, newTopic.id);
     assert.equal(nextTopics[TOPIC_VISIBLE_LIMIT - 1].visible, true);
     assert.equal(nextTopics[TOPIC_VISIBLE_LIMIT].visible, false);
-    assert.equal(nextTopics.some((topic) => topic.id === "topic-60"), false);
+    assert.equal(nextTopics.some((topic) => topic.id === "topic-40"), false);
   });
 
   await test("reviveTopicWithMessage brings hidden topics back to the top of the visible list", () => {
@@ -277,8 +303,9 @@ await (async () => {
         title: `Tema ${index + 1}`,
         subtitle: `Resumen ${index + 1}`,
         authorId: "u1",
+        status: "active",
         visible: true,
-        messages: [createMessage("u1", `m${index + 1}`, index)]
+        messages: [createMessage("u1", `m${index + 1}`, index, "user", Date.now(), true)]
       }))
     );
     const revivedTopicId = "topic-25";
@@ -301,10 +328,11 @@ await (async () => {
           title: `Tema ${index + 1}`,
           subtitle: `Resumen ${index + 1}`,
           authorId: "u1",
+          status: "active",
           visible: true,
           messages: Array.from(
             { length: index === 24 ? 30 : 1 },
-            (_, messageIndex) => createMessage("u1", `m${index + 1}-${messageIndex}`, messageIndex)
+            (_, messageIndex) => createMessage("u1", `m${index + 1}-${messageIndex}`, messageIndex, "user", Date.now(), messageIndex === 0)
           )
         }))
       )
@@ -319,7 +347,8 @@ await (async () => {
     assert.equal(nextState.topics[0].id, "topic-25");
     assert.equal(nextState.topics[0].visible, true);
     assert.equal(nextState.topics[0].messages.length, 30);
-    assert.equal(nextState.topics[0].messages[0].text, "m25-1");
+    assert.equal(nextState.topics[0].messages[0].text, "m25-0");
+    assert.equal(nextState.topics[0].messages[1].text, "m25-2");
     assert.equal(nextState.topics[0].messages[29].id, nextMessage.id);
     assert.equal(nextState.topics[0].subtitle, "Mensaje nuevo para sincronizar reducer y revivir el tema.");
     assert.equal(getVisibleTopics(nextState.topics).length, TOPIC_VISIBLE_LIMIT);
@@ -333,13 +362,494 @@ await (async () => {
     assert.equal(topic.subtitle, "Primer mensaje para abrir el hilo.");
     assert.equal(topic.authorId, "u1");
     assert.equal(topic.visible, true);
+    assert.equal(topic.status, "active");
     assert.equal(topic.messages.length, 1);
     assert.equal(topic.messages[0].authorId, "u1");
     assert.equal(topic.messages[0].text, "Primer mensaje para abrir el hilo.");
+    assert.equal(topic.messages[0].isRoot, true);
     assert.equal(summarizeTopicMessage("a".repeat(110)).endsWith("..."), true);
   });
 
-  await test("manual refresh only animates the button without adding system messages", async () => {
+  await test("backend bootstrap returns a guest viewer plus 40 active topics with 20 visible", async () => {
+    await withTempStore((store) => {
+      const payload = store.bootstrap({
+        sessionId: "session-bootstrap",
+        authMode: "guest"
+      });
+
+      assert.equal(payload.viewer.type, "guest");
+      assert.equal(payload.topics.length, TOPIC_ACTIVE_LIMIT);
+      assert.equal(payload.topics.filter((topic) => topic.visible).length, TOPIC_VISIBLE_LIMIT);
+      assert.equal(payload.users.some((user) => user.id === payload.viewer.id), true);
+    });
+  });
+
+  await test("backend login and logout persist the viewer mode for the same session", async () => {
+    await withTempStore((store) => {
+      const initialPayload = store.bootstrap({
+        sessionId: "session-auth-flow"
+      });
+      const selectedTopicId = initialPayload.topics[0].id;
+
+      assert.equal(initialPayload.viewer.type, "guest");
+
+      const loggedIn = store.login({
+        sessionId: "session-auth-flow",
+        selectedTopicId
+      });
+
+      assert.equal(loggedIn.viewer.type, "registered");
+      assert.equal(loggedIn.viewer.id, "u1");
+      assert.equal(loggedIn.selectedTopicId, selectedTopicId);
+
+      const refreshedRegistered = store.refresh({
+        sessionId: "session-auth-flow"
+      });
+
+      assert.equal(refreshedRegistered.viewer.type, "registered");
+      assert.equal(refreshedRegistered.viewer.id, "u1");
+
+      const loggedOut = store.logout({
+        sessionId: "session-auth-flow",
+        selectedTopicId
+      });
+
+      assert.equal(loggedOut.viewer.type, "guest");
+      assert.notEqual(loggedOut.viewer.id, "u1");
+      assert.equal(loggedOut.selectedTopicId, selectedTopicId);
+
+      const refreshedGuest = store.refresh({
+        sessionId: "session-auth-flow"
+      });
+
+      assert.equal(refreshedGuest.viewer.type, "guest");
+      assert.equal(refreshedGuest.viewer.id, loggedOut.viewer.id);
+    });
+  });
+
+  await test("backend loginWithIdentity creates and reuses a registered user from the provider identity", async () => {
+    await withTempStore((store) => {
+      const initialPayload = store.loginWithIdentity({
+        sessionId: "session-oidc-1",
+        sourceSessionId: "session-oidc-source",
+        authProvider: "https://accounts.example.com",
+        authSubject: "subject-123",
+        email: "test@example.com",
+        displayName: "Test User",
+        avatarUrl: "https://cdn.example.com/avatar.png"
+      });
+
+      assert.equal(initialPayload.viewer.type, "registered");
+      assert.notEqual(initialPayload.viewer.id, "u1");
+      assert.equal(initialPayload.viewer.email, "test@example.com");
+      assert.equal(initialPayload.viewer.authProvider, "https://accounts.example.com");
+
+      const secondPayload = store.loginWithIdentity({
+        sessionId: "session-oidc-2",
+        sourceSessionId: "session-oidc-source-2",
+        authProvider: "https://accounts.example.com",
+        authSubject: "subject-123",
+        email: "test@example.com",
+        displayName: "Test User Renamed"
+      });
+
+      assert.equal(secondPayload.viewer.id, initialPayload.viewer.id);
+      assert.equal(secondPayload.viewer.displayName, "Test User Renamed");
+    });
+  });
+
+  await test("backend reports persist per session and moderation can resolve topic and message reports", async () => {
+    await withTempStore((store) => {
+      const bootstrapPayload = store.bootstrap({
+        sessionId: "session-report-viewer",
+        authMode: "guest"
+      });
+      const topicId = bootstrapPayload.topics[0].id;
+      const reportableMessageId = bootstrapPayload.topics[0].messages.find((message) => !message.isRoot)?.id;
+
+      assert.ok(reportableMessageId);
+
+      const topicReportedPayload = store.reportEntity("topic", topicId, {
+        sessionId: "session-report-viewer",
+        reason: "Tema conflictivo",
+        selectedTopicId: topicId
+      });
+
+      assert.equal(topicReportedPayload.reportedTopicIds.includes(topicId), true);
+
+      const messageReportedPayload = store.reportEntity("message", reportableMessageId, {
+        sessionId: "session-report-viewer",
+        reason: "Mensaje conflictivo",
+        selectedTopicId: topicId
+      });
+
+      assert.equal(messageReportedPayload.reportedMessageIds.includes(reportableMessageId), true);
+
+      store.login({
+        sessionId: "session-moderator",
+        userId: "u2"
+      });
+
+      const openReports = store.listReports({
+        sessionId: "session-moderator"
+      });
+
+      assert.equal(openReports.reports.length, 2);
+
+      const blockedPayload = store.applyModerationAction("block_topic", {
+        sessionId: "session-moderator",
+        targetType: "topic",
+        targetId: topicId,
+        selectedTopicId: topicId
+      });
+      const blockedTopic = blockedPayload.topics.find((topic) => topic.id === topicId);
+
+      assert.ok(blockedTopic);
+      assert.equal(blockedTopic.status, "blocked");
+      assert.equal(store.listReports({ sessionId: "session-moderator" }).reports.some((report) => (
+        report.entityType === "topic" && report.entityId === topicId
+      )), false);
+
+      const afterDeletePayload = store.applyModerationAction("delete_message", {
+        sessionId: "session-moderator",
+        targetType: "message",
+        targetId: reportableMessageId,
+        selectedTopicId: topicId
+      });
+      const moderatedTopic = afterDeletePayload.topics.find((topic) => topic.id === topicId);
+
+      assert.ok(moderatedTopic);
+      assert.equal(moderatedTopic.messages.some((message) => message.id === reportableMessageId), false);
+      assert.equal(store.listReports({ sessionId: "session-moderator" }).reports.length, 0);
+    });
+  });
+
+  await test("backend supports user reports and moderator problematic flags", async () => {
+    await withTempStore((store) => {
+      const bootstrapPayload = store.bootstrap({
+        sessionId: "session-user-report",
+        authMode: "guest"
+      });
+      const topicId = bootstrapPayload.topics[0].id;
+      const messageId = bootstrapPayload.topics[0].messages.find((message) => !message.isRoot)?.id;
+
+      assert.ok(messageId);
+
+      store.reportEntity("user", "u3", {
+        sessionId: "session-user-report",
+        reason: "Escala mal con otros usuarios",
+        selectedTopicId: topicId
+      });
+
+      store.login({
+        sessionId: "session-moderator",
+        userId: "u2"
+      });
+
+      let openReports = store.listReports({
+        sessionId: "session-moderator"
+      });
+
+      assert.equal(openReports.reports.some((report) => (
+        report.entityType === "user" && report.entityId === "u3"
+      )), true);
+
+      store.applyModerationAction("expel_user", {
+        sessionId: "session-moderator",
+        targetType: "user",
+        targetId: "u3"
+      });
+
+      openReports = store.listReports({
+        sessionId: "session-moderator"
+      });
+      assert.equal(openReports.reports.some((report) => (
+        report.entityType === "user" && report.entityId === "u3"
+      )), false);
+
+      store.applyModerationAction("mark_problematic", {
+        sessionId: "session-moderator",
+        targetType: "message",
+        targetId: messageId,
+        reason: "Revision manual",
+        selectedTopicId: topicId
+      });
+
+      openReports = store.listReports({
+        sessionId: "session-moderator"
+      });
+      assert.equal(openReports.reports.some((report) => (
+        report.entityType === "message" && report.entityId === messageId.slice("message-".length)
+      )), true);
+    });
+  });
+
+  await test("backend expelled registered users cannot create topics, comment or report", async () => {
+    await withTempStore((store) => {
+      const topicId = store.bootstrap({
+        sessionId: "session-pre-expel"
+      }).topics[0].id;
+
+      store.login({
+        sessionId: "session-moderator",
+        userId: "u2"
+      });
+
+      store.applyModerationAction("expel_user", {
+        sessionId: "session-moderator",
+        targetType: "user",
+        targetId: "u1"
+      });
+
+      assert.throws(() => {
+        store.createTopic({
+          sessionId: "session-expelled-user",
+          authMode: "registered",
+          title: "No entra",
+          text: "No entra"
+        });
+      }, (error) => error.code === "USER_EXPELLED");
+
+      assert.throws(() => {
+        store.addMessage(topicId, {
+          sessionId: "session-expelled-user",
+          authMode: "registered",
+          text: "No comenta"
+        });
+      }, (error) => error.code === "USER_EXPELLED");
+
+      assert.throws(() => {
+        store.reportEntity("topic", topicId, {
+          sessionId: "session-expelled-user",
+          authMode: "registered",
+          reason: "No reporta"
+        });
+      }, (error) => error.code === "USER_EXPELLED");
+    });
+  });
+
+  await test("backend pin_topic promotes hidden active topics to the first visible slot", async () => {
+    await withTempStore((store) => {
+      const initialPayload = store.bootstrap({
+        sessionId: "session-pin-bootstrap",
+        authMode: "registered"
+      });
+      const hiddenTopic = initialPayload.topics.find((topic) => !topic.visible);
+
+      assert.ok(hiddenTopic);
+
+      store.login({
+        sessionId: "session-moderator",
+        userId: "u2"
+      });
+
+      const pinnedPayload = store.applyModerationAction("pin_topic", {
+        sessionId: "session-moderator",
+        targetType: "topic",
+        targetId: hiddenTopic.id,
+        selectedTopicId: hiddenTopic.id
+      });
+
+      assert.equal(pinnedPayload.topics[0].id, hiddenTopic.id);
+      assert.equal(pinnedPayload.topics[0].status, "pinned");
+      assert.equal(pinnedPayload.topics[0].visible, true);
+      assert.equal(pinnedPayload.selectedTopicId, hiddenTopic.id);
+    });
+  });
+
+  await test("backend createTopic inserts the new topic at rank 0 and keeps the active window capped at 40", async () => {
+    await withTempStore((store) => {
+      const created = store.createTopic({
+        sessionId: "session-create",
+        authMode: "registered",
+        title: "Tema backend",
+        text: "Primer mensaje persistido"
+      });
+
+      assert.equal(created.topics.length, TOPIC_ACTIVE_LIMIT);
+      assert.equal(created.topics[0].title, "Tema backend");
+      assert.equal(created.selectedTopicId, created.topics[0].id);
+      assert.equal(created.topics[0].messages[0].isRoot, true);
+    });
+  });
+
+  await test("backend comment revives hidden active topics to the top of the visible window", async () => {
+    await withTempStore((store) => {
+      const initialPayload = store.bootstrap({
+        sessionId: "session-revive-bootstrap",
+        authMode: "registered"
+      });
+      const hiddenTopic = initialPayload.topics.find((topic) => !topic.visible);
+
+      assert.ok(hiddenTopic);
+
+      const updated = store.addMessage(hiddenTopic.id, {
+        sessionId: "session-revive-comment",
+        authMode: "registered",
+        text: "Comentario que revive el tema oculto."
+      });
+
+      assert.equal(updated.topics[0].id, hiddenTopic.id);
+      assert.equal(updated.topics[0].visible, true);
+      assert.equal(updated.selectedTopicId, hiddenTopic.id);
+    });
+  });
+
+  await test("backend keeps the root message and only the latest 29 replies", async () => {
+    await withTempStore((store) => {
+      const created = store.createTopic({
+        sessionId: "session-root-topic",
+        authMode: "registered",
+        title: "Overflow",
+        text: "Raiz fija"
+      });
+      const topicId = created.selectedTopicId;
+
+      for (let index = 0; index < 31; index += 1) {
+        store.addMessage(topicId, {
+          sessionId: `session-root-reply-${index}`,
+          authMode: "guest",
+          text: `reply ${index}`
+        });
+      }
+
+      const updated = store.openTopic(topicId, {
+        sessionId: "session-root-open",
+        authMode: "registered"
+      });
+      const topic = updated.topics.find((entry) => entry.id === topicId);
+
+      assert.ok(topic);
+      assert.equal(topic.messages.length, 30);
+      assert.equal(topic.messages[0].text, "Raiz fija");
+      assert.equal(topic.messages[0].isRoot, true);
+      assert.equal(topic.messages[1].text, "reply 2");
+      assert.equal(topic.messages[29].text, "reply 30");
+    });
+  });
+
+  await test("backend rejects comments on expelled topics and enforces registered message rate limits across sessions", async () => {
+    await withTempStore((store) => {
+      const initialPayload = store.bootstrap({
+        sessionId: "session-expel-bootstrap",
+        authMode: "registered"
+      });
+      const expelledCandidateId = initialPayload.topics[TOPIC_ACTIVE_LIMIT - 1].id;
+
+      store.createTopic({
+        sessionId: "session-expel-create",
+        authMode: "registered",
+        title: "Tema que expulsa al ultimo",
+        text: "Empuja la ventana activa"
+      });
+
+      assert.throws(() => {
+        store.addMessage(expelledCandidateId, {
+          sessionId: "session-expel-comment",
+          authMode: "guest",
+          text: "No deberia entrar"
+        });
+      }, (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled");
+
+      const activeTopicId = store.bootstrap({
+        sessionId: "session-rate-bootstrap",
+        authMode: "registered"
+      }).topics[0].id;
+
+      store.addMessage(activeTopicId, {
+        sessionId: "session-rate-a",
+        authMode: "registered",
+        text: "Primer comentario"
+      });
+
+      assert.throws(() => {
+        store.addMessage(activeTopicId, {
+          sessionId: "session-rate-b",
+          authMode: "registered",
+          text: "Segundo comentario demasiado rapido"
+        });
+      }, (error) => error.code === "RATE_LIMITED" && Number.isInteger(error.retryAfterSeconds));
+    });
+  });
+
+  await test("backend session and ip blocks deny participation without breaking read access", async () => {
+    await withTempStore((store) => {
+      const blockedSessionPayload = store.bootstrap({
+        sessionId: "session-blocked-guest",
+        authMode: "guest",
+        ipAddress: "203.0.113.10"
+      });
+      const topicId = blockedSessionPayload.topics[0].id;
+
+      store.login({
+        sessionId: "session-moderator",
+        userId: "u2",
+        ipAddress: "198.51.100.20"
+      });
+
+      store.applyModerationAction("block_session", {
+        sessionId: "session-moderator",
+        targetType: "session",
+        targetId: "session-blocked-guest",
+        reason: "Spam reiterado"
+      });
+
+      assert.throws(() => {
+        store.addMessage(topicId, {
+          sessionId: "session-blocked-guest",
+          authMode: "guest",
+          text: "No deberia publicar",
+          ipAddress: "203.0.113.10"
+        });
+      }, (error) => error.code === "SESSION_BLOCKED");
+
+      const readOnlyPayload = store.openTopic(topicId, {
+        sessionId: "session-blocked-guest",
+        authMode: "guest",
+        ipAddress: "203.0.113.10"
+      });
+
+      assert.equal(readOnlyPayload.selectedTopicId, topicId);
+
+      store.applyModerationAction("block_ip", {
+        sessionId: "session-moderator",
+        targetType: "ip",
+        targetId: "203.0.113.99",
+        reason: "Reincidencia"
+      });
+
+      assert.throws(() => {
+        store.createTopic({
+          sessionId: "session-ip-blocked",
+          authMode: "guest",
+          title: "No entra",
+          text: "No entra",
+          ipAddress: "203.0.113.99"
+        });
+      }, (error) => error.code === "IP_BLOCKED");
+
+      assert.throws(() => {
+        store.login({
+          sessionId: "session-ip-login",
+          ipAddress: "203.0.113.99"
+        });
+      }, (error) => error.code === "IP_BLOCKED");
+
+      const diagnostics = store.getDiagnostics();
+
+      assert.deepEqual(diagnostics, {
+        dbPath: diagnostics.dbPath,
+        topics: diagnostics.topics,
+        messages: diagnostics.messages,
+        users: diagnostics.users,
+        reports: diagnostics.reports,
+        blockedSessions: 1,
+        blockedIps: 1
+      });
+    });
+  });
+
+  await test("manual refresh hydrates backend data while preserving the refresh feedback", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
     const buttonAttributes = new Map();
@@ -350,6 +860,7 @@ await (async () => {
       }
     };
     const state = {
+      viewer: { id: "u1", type: "registered" },
       topics,
       users,
       currentUserId: "u1",
@@ -366,21 +877,75 @@ await (async () => {
       render: () => {
         renderCalls += 1;
       },
-      refreshFeedbackMs: 5
+      refreshFeedbackMs: 5,
+      apiClient: {
+        async refreshTopics(selectedTopicId) {
+          return {
+            viewer: { id: "u1", type: "registered" },
+            users,
+            topics,
+            selectedTopicId
+          };
+        }
+      }
     });
 
-    actions.refreshCurrentTopic();
+    await actions.refreshCurrentTopic();
 
     assert.equal(topics[0].messages.length, initialMessages);
     assert.equal(state.refreshCount, 1);
     assert.equal(refreshButton.classList.contains("is-refreshing"), true);
     assert.equal(buttonAttributes.get("aria-busy"), "true");
-    assert.equal(renderCalls, 0);
+    assert.equal(renderCalls, 1);
 
     await new Promise((resolve) => setTimeout(resolve, 15));
 
     assert.equal(refreshButton.classList.contains("is-refreshing"), false);
     assert.equal(buttonAttributes.get("aria-busy"), "false");
+  });
+
+  await test("report action hydrates reported topic and message ids from backend payloads", async () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const topicId = topics[0].id;
+    const messageId = topics[0].messages[0].id;
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topicId,
+      refreshCount: 0
+    };
+    let renderCalls = 0;
+    const actions = createChatActions({
+      state,
+      dom: {},
+      render: () => {
+        renderCalls += 1;
+      },
+      apiClient: {
+        async reportEntity(entityType, entityId, reason, selectedTopicId) {
+          return {
+            viewer: { id: "u1", type: "registered" },
+            users,
+            topics,
+            selectedTopicId,
+            reportedTopicIds: entityType === "topic" ? [entityId] : [topicId],
+            reportedMessageIds: entityType === "message" ? [entityId] : []
+          };
+        }
+      }
+    });
+
+    await actions.reportEntity("topic", topicId, { reason: "Tema" });
+    assert.deepEqual(state.reportedTopicIds, [topicId]);
+
+    await actions.reportEntity("message", messageId, { reason: "Mensaje" });
+    assert.deepEqual(state.reportedMessageIds, [messageId]);
+    assert.equal(renderCalls >= 2, true);
   });
 
   await test("syncResponsiveView closes mobile drawers when returning to desktop", () => {
@@ -718,10 +1283,10 @@ await (async () => {
     try {
       globalThis.localStorage = {
         getItem(key) {
-          if (key === "chetrend-theme") {
+          if (key === "topykly-theme") {
             return "dark";
           }
-          if (key === "chetrend-palette") {
+          if (key === "topykly-palette") {
             return "coast";
           }
           return null;
@@ -790,13 +1355,13 @@ await (async () => {
     try {
       globalThis.localStorage = {
         getItem(key) {
-          if (key === "chetrend-theme") {
+          if (key === "topykly-theme") {
             return "dark";
           }
-          if (key === "chetrend-palette") {
+          if (key === "topykly-palette") {
             return CUSTOM_PALETTE_ID;
           }
-          if (key === "chetrend-custom-palette-hex") {
+          if (key === "topykly-custom-palette-hex") {
             return "#4A90E2";
           }
           return null;
@@ -1112,7 +1677,54 @@ await (async () => {
     assert.match(customIcon, /stroke="#fff7ef"/i);
   });
 
-  await test("auth button toggles demo login state and persists the UI mode", () => {
+  await test("api login redirects through the browser when external auth is configured", async () => {
+    const previousFetch = globalThis.fetch;
+    const previousWindow = globalThis.window;
+    const previousLocalStorage = globalThis.localStorage;
+
+    const storage = new Map();
+    let assignedUrl = "";
+
+    try {
+      globalThis.localStorage = {
+        getItem(key) {
+          return storage.has(key) ? storage.get(key) : null;
+        },
+        setItem(key, value) {
+          storage.set(key, value);
+        }
+      };
+      globalThis.window = {
+        location: {
+          origin: "http://127.0.0.1:4173",
+          assign(url) {
+            assignedUrl = url;
+          }
+        }
+      };
+      globalThis.fetch = async () => ({
+        ok: true,
+        async json() {
+          return {
+            mode: "redirect",
+            redirectUrl: "https://accounts.example.com/oauth/authorize"
+          };
+        }
+      });
+
+      const result = await api.login("topic-1");
+
+      assert.deepEqual(result, { redirected: true });
+      assert.equal(assignedUrl, "https://accounts.example.com/oauth/authorize");
+      assert.match(storage.get("topykly-session-id"), /^session-/);
+    } finally {
+      globalThis.fetch = previousFetch;
+      globalThis.window = previousWindow;
+      globalThis.localStorage = previousLocalStorage;
+    }
+  });
+
+  await test("auth button toggles backend login state and syncs the UI mode", async () => {
     const previousLocalStorage = globalThis.localStorage;
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
@@ -1193,8 +1805,12 @@ await (async () => {
     const themeToggle = new FakeElement();
     const themeToggleDesktopSlot = new FakeElement();
     const themeToggleMobileSlot = new FakeElement();
-    const storage = new Map();
     const flashCalls = [];
+    const state = {
+      viewer: { id: "guest-auth", type: "guest" }
+    };
+    let loginCalls = 0;
+    let logoutCalls = 0;
 
     const dom = {
       themeToggle,
@@ -1222,12 +1838,10 @@ await (async () => {
       globalThis.Element = FakeElement;
       globalThis.HTMLElement = FakeElement;
       globalThis.localStorage = {
-        getItem(key) {
-          return storage.has(key) ? storage.get(key) : null;
+        getItem() {
+          return null;
         },
-        setItem(key, value) {
-          storage.set(key, value);
-        }
+        setItem() {}
       };
       globalThis.document = {
         documentElement: { dataset: {} },
@@ -1243,6 +1857,15 @@ await (async () => {
         submitMessage() {},
         flashTitle(message) {
           flashCalls.push(message);
+        },
+        state,
+        async login() {
+          loginCalls += 1;
+          state.viewer = { id: "u1", type: "registered" };
+        },
+        async logout() {
+          logoutCalls += 1;
+          state.viewer = { id: "guest-after-logout", type: "guest" };
         },
         backToTopics() {},
         openPaletteModal() {},
@@ -1265,24 +1888,28 @@ await (async () => {
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
 
       authButton.dispatch("click");
+      await flushAsyncEvents();
 
       assert.equal(authTools.hidden, false);
       assert.equal(dom.profileButton.hidden, false);
       assert.equal(dom.storeButton.hidden, false);
       assert.equal(dom.openRightDrawer.hidden, false);
       assert.equal(authButton.label.textContent, "Cerrar sesión");
-      assert.equal(storage.get("chetrend-auth-demo"), "true");
+      assert.equal(loginCalls, 1);
+      assert.equal(state.viewer.type, "registered");
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
       assert.equal(flashCalls.at(-1), "Sesion iniciada");
 
       authButton.dispatch("click");
+      await flushAsyncEvents();
 
       assert.equal(authTools.hidden, true);
       assert.equal(dom.profileButton.hidden, true);
       assert.equal(dom.storeButton.hidden, true);
       assert.equal(dom.openRightDrawer.hidden, false);
       assert.equal(authButton.label.textContent, "Iniciar sesión");
-      assert.equal(storage.get("chetrend-auth-demo"), "false");
+      assert.equal(logoutCalls, 1);
+      assert.equal(state.viewer.type, "guest");
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
       assert.equal(flashCalls.at(-1), "Sesion cerrada");
     } finally {
@@ -1293,7 +1920,7 @@ await (async () => {
     }
   });
 
-  await test("mobile keeps private actions hidden until login and then routes drawer actions", () => {
+  await test("mobile keeps private actions hidden until login and then routes drawer actions", async () => {
     const previousLocalStorage = globalThis.localStorage;
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
@@ -1432,7 +2059,12 @@ await (async () => {
     let toggleThemeCalls = 0;
     let openPaletteModalCalls = 0;
     let syncResponsiveViewCalls = 0;
-    const state = { mobileView: "chat" };
+    const state = {
+      mobileView: "chat",
+      viewer: { id: "guest-mobile", type: "guest" }
+    };
+    let loginCalls = 0;
+    let logoutCalls = 0;
 
     const dom = {
       themeToggle,
@@ -1498,6 +2130,14 @@ await (async () => {
           flashCalls.push(message);
         },
         state,
+        async login() {
+          loginCalls += 1;
+          state.viewer = { id: "u1", type: "registered" };
+        },
+        async logout() {
+          logoutCalls += 1;
+          state.viewer = { id: "guest-mobile-after-logout", type: "guest" };
+        },
         syncResponsiveView() {
           syncResponsiveViewCalls += 1;
         },
@@ -1530,6 +2170,7 @@ await (async () => {
       assert.equal(themeToggle.dataset.themeTogglePlacement, "mobile");
 
       authButton.dispatch("click");
+      await flushAsyncEvents();
 
       assert.equal(authTools.hidden, false);
       assert.equal(dom.profileButton.hidden, false);
@@ -1537,6 +2178,7 @@ await (async () => {
       assert.equal(dom.openRightDrawer.hidden, false);
       assert.equal(menuProfileButton.hidden, false);
       assert.equal(menuAuthButton.hidden, false);
+      assert.equal(loginCalls, 1);
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
       assert.equal(flashCalls.at(-1), "Sesion iniciada");
       assert.equal(authButton.hidden, true);
@@ -1578,10 +2220,12 @@ await (async () => {
       mobileTopbarMenu.dispatch("click", { target: homeButton });
 
       mobileTopbarMenu.dispatch("click", { target: menuAuthButton });
+      await flushAsyncEvents();
 
       assert.equal(closeDrawersCalls, 4);
       assert.equal(toggleThemeCalls, 1);
       assert.equal(openPaletteModalCalls, 1);
+      assert.equal(logoutCalls, 1);
       assert.equal(state.mobileView, "browse");
       assert.equal(syncResponsiveViewCalls, 1);
       assert.equal(flashCalls.includes("Perfil listo para conectar"), true);
@@ -1594,6 +2238,155 @@ await (async () => {
       globalThis.document = previousDocument;
       globalThis.Element = previousElement;
       globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+
+  await test("topbar auth does not announce success before the OAuth redirect completes", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousWindow = globalThis.window;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.className = "";
+        this.parentElement = null;
+        this.textContent = "";
+        const classValues = new Set();
+        this.classList = {
+          add: (...tokens) => tokens.forEach((token) => classValues.add(token)),
+          remove: (...tokens) => tokens.forEach((token) => classValues.delete(token)),
+          toggle: (token, force) => {
+            if (force === undefined) {
+              if (classValues.has(token)) {
+                classValues.delete(token);
+                return false;
+              }
+              classValues.add(token);
+              return true;
+            }
+            if (force) {
+              classValues.add(token);
+              return true;
+            }
+            classValues.delete(token);
+            return false;
+          },
+          contains: (token) => classValues.has(token)
+        };
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        if (selector === ".button-label") {
+          return this.label;
+        }
+
+        return null;
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const flashCalls = [];
+    const state = {
+      viewer: { id: "guest-redirect", type: "guest" }
+    };
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.window = {
+        addEventListener() {},
+        matchMedia() {
+          return { matches: false };
+        }
+      };
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents({
+        themeToggle: new FakeElement(),
+        refreshButton: new FakeElement(),
+        messageForm: new FakeElement(),
+        profileButton: new FakeElement(),
+        openRightDrawer: new FakeElement(),
+        backToTopics: new FakeElement(),
+        storeButton: new FakeElement(),
+        paletteButton: new FakeElement(),
+        themeToggleDesktopSlot: new FakeElement(),
+        themeToggleMobileSlot: new FakeElement(),
+        closePaletteModalButton: new FakeElement(),
+        paletteModalBackdrop: new FakeElement(),
+        paletteOptionGrid: new FakeElement(),
+        createTopicButton: new FakeElement(),
+        friendRequestsButton: new FakeElement(),
+        notificationsButton: new FakeElement(),
+        messagesButton: new FakeElement(),
+        authButton,
+        authTools: new FakeElement()
+      }, {
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle(message) {
+          flashCalls.push(message);
+        },
+        state,
+        async login() {
+          return { redirected: true };
+        },
+        async logout() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {}
+      });
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+
+      assert.deepEqual(flashCalls, []);
+      assert.equal(state.viewer.type, "guest");
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
+    } finally {
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+      globalThis.window = previousWindow;
     }
   });
 
@@ -1622,7 +2415,7 @@ await (async () => {
       assert.equal(themeToggle["aria-checked"], "true");
       assert.equal(themeToggle["aria-label"], "Tema oscuro");
       assert.equal(themeToggle.title, "Cambiar a tema claro");
-      assert.equal(document.title, "TopicKly");
+      assert.equal(document.title, "TOPYKLY");
 
       state.theme = "light";
       state.topics = [{ id: "topic-1", title: "Tema alpha", subtitle: "Subtitulo", messages: [] }];
@@ -1630,7 +2423,7 @@ await (async () => {
       renderTitles(state, { themeToggle });
       assert.equal(themeToggle["aria-checked"], "false");
       assert.equal(themeToggle.title, "Cambiar a tema oscuro");
-      assert.equal(document.title, "TopicKly - Tema alpha");
+      assert.equal(document.title, "TOPYKLY - Tema alpha");
     } finally {
       globalThis.document = previousDocument;
     }
@@ -1687,15 +2480,16 @@ await (async () => {
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
 
-    assert.match(html, /<title>TopicKly<\/title>/);
-    assert.match(html, /class="topbar__title" aria-label="TopicKly"/);
-    assert.match(html, /class="brand-mark__che">TOPIC<\/span>/);
+    assert.match(html, /<title>TOPYKLY<\/title>/);
+    assert.match(html, /class="topbar__title" aria-label="TOPYKLY"/);
+    assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
     assert.match(html, /class="brand-mark__trend">KLY<\/span>/);
     assert.match(html, /id="topicList"/);
     assert.match(html, /id="createTopicButton"/);
     assert.match(html, /id="topicTitleInput"/);
     assert.match(html, /id="chatTitle"/);
     assert.match(html, /class="panel__header-title"[\s\S]*id="backToTopics"[\s\S]*aria-label="Volver a temas"[\s\S]*id="chatTitle"/);
+    assert.match(html, /id="reportTopicButton"/);
     assert.match(html, /icon-button--refresh/);
     assert.match(html, /id="leftDrawerTopics"/);
     assert.match(html, /refresh-button__wheel/);
@@ -1722,9 +2516,9 @@ await (async () => {
     assert.doesNotMatch(html, /id="paletteModalTitle"/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@latest\/dist\/coloris\.min\.css/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@latest\/dist\/coloris\.min\.js/);
-    assert.match(html, /localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/);
-    assert.match(html, /localStorage\.getItem\("chetrend-palette"\) \|\| "default"/);
-    assert.match(html, /localStorage\.getItem\("chetrend-auth-demo"\) === "true" \? "logged-in" : "logged-out"/);
+    assert.match(html, /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/);
+    assert.match(html, /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/);
+    assert.match(html, /const authState = "logged-out";/);
     assert.match(html, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(html, /document\.documentElement\.dataset\.authState = authState/);
     assert.match(html, /document\.documentElement\.classList\.toggle\("is-mobile-viewport", mobile\)/);
@@ -1882,9 +2676,9 @@ await (async () => {
     assert.match(styles, /\.theme-switch__icon--dark svg\s*\{[\s\S]*transform:\s*translateY\(-0\.35px\);/);
     assert.match(styles, /\.theme-switch__thumb\s*\{[\s\S]*left:\s*0;[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*transform:\s*translate\(34px,\s*-50%\);[\s\S]*z-index:\s*1;/);
     assert.match(styles, /html\[data-theme="light"\] \.theme-switch__thumb\s*\{[\s\S]*transform:\s*translate\(0,\s*-50%\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*2;[\s\S]*justify-content:\s*flex-end;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*38px minmax\(0,\s*1fr\) auto;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*3;[\s\S]*justify-content:\s*flex-end;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*grid-column:\s*2;[\s\S]*display:\s*inline-flex;[\s\S]*max-width:\s*100%;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat\s*\{[\s\S]*gap:\s*10px;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat \.chat-header__back\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;[\s\S]*min-width:\s*40px;[\s\S]*min-height:\s*40px;/);
     assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
@@ -1952,6 +2746,8 @@ await (async () => {
     assert.match(components, /message__avatar/);
     assert.match(components, /message__body/);
     assert.match(components, /message__time/);
+    assert.match(components, /message__report-button/);
+    assert.match(components, /dataset\.reportEntityType = "message"/);
     assert.match(components, /dataset\.connectedUserId/);
     assert.match(components, /dataset\.userAction/);
     assert.match(components, /user-item__trigger/);
@@ -1960,9 +2756,9 @@ await (async () => {
     assert.match(controller, /export \{ bootstrap \} from "\.\/controller-app\.js";/);
     assert.match(controllerApp, /from "\.\/ui\/transition-utils\.js"/);
     assert.match(controllerTheme, /export function applyStoredTheme/);
-    assert.match(controllerTheme, /chetrend-palette/);
+    assert.match(controllerTheme, /topykly-palette/);
     assert.match(controllerTheme, /applyPaletteToDocument/);
-    assert.match(controllerTheme, /chetrend-custom-palette-hex/);
+    assert.match(controllerTheme, /topykly-custom-palette-hex/);
     assert.match(controllerViewport, /export function createBackToTopicsHandler/);
     assert.match(controllerViewport, /export function createResizeHandler/);
     assert.match(controllerViewport, /syncRankingListHeights/);
@@ -1984,6 +2780,7 @@ await (async () => {
     assert.match(actions, /updateCustomPaletteHex/);
     assert.match(actions, /randomizeCustomPalette/);
     assert.match(actions, /activateConnectedUser/);
+    assert.match(actions, /reportEntity/);
     assert.match(rankingActions, /from "\.\/ranking-state\.js"/);
     assert.match(rankingState, /export function getActiveRankingStep/);
     assert.match(rankingState, /export function setStoredRankingIndex/);
@@ -2045,9 +2842,12 @@ await (async () => {
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
+    assert.match(chat, /syncTopicReportButton/);
     assert.match(chat, /chatHero\.hidden = true;/);
     assert.doesNotMatch(chat, /if \(shouldSyncChatLayout\(previousRenderState,\s*nextRenderState\)\)\s*\{[\s\S]*syncMessageCardHeights\(dom\.messageStream\);/);
     assert.match(eventsModule, /activateConnectedUser/);
+    assert.match(eventsModule, /reportEntity/);
+    assert.match(eventsModule, /data-report-entity-type/);
     assert.match(eventsModule, /data-connected-user-id/);
     assert.match(eventsModule, /data-user-action/);
     assert.match(renderUtils, /renderIntoTargets/);
@@ -2069,15 +2869,18 @@ await (async () => {
     assert.match(topbarActionEvents, /data-dismiss-custom-palette-picker/);
     assert.match(topbarActionEvents, /sanitizeHexDraft/);
     assert.match(topbarActionEvents, /syncAuthUi/);
-    assert.match(topbarActionEvents, /AUTH_STORAGE_KEY/);
+    assert.match(topbarActionEvents, /handlers\.setAuthUiSync\?\.\(syncAuthUi\)/);
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
-    assert.match(topbarActionEvents, /document\.documentElement\.dataset\.authState = isLoggedIn \? "logged-in" : "logged-out"/);
-    assert.match(topbarActionEvents, /dom\.authTools\.hidden = !isLoggedIn/);
+    assert.match(topbarActionEvents, /document\.documentElement\.dataset\.authState = isLoggedIn\(\) \? "logged-in" : "logged-out"/);
+    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\)/);
+    assert.match(topbarActionEvents, /await handlers\.logout\?\.\(\)/);
+    assert.match(topbarActionEvents, /dom\.authTools\.hidden = !loggedIn/);
     assert.match(topbarActionEvents, /setLoggedIn/);
     assert.match(topbarActionEvents, /addListener\(dom\.authButton,\s*"click"/);
-    assert.match(topbarActionEvents, /dom\.authButton\.hidden = isMobile && isLoggedIn/);
-    assert.match(topbarActionEvents, /authLabel = isLoggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/);
+    assert.match(topbarActionEvents, /dom\.authButton\.hidden = isMobile && loggedIn/);
+    assert.match(topbarActionEvents, /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/);
     assert.match(topbarActionEvents, /target\.dataset\.mobileTopbarAction === "auth"/);
+    assert.match(topbarActionEvents, /void setLoggedIn\(false\)/);
     assert.match(topbarActionEvents, /data-mobile-topbar-action/);
     assert.match(topbarActionEvents, /setMobileDrawerPanel/);
     assert.match(topbarActionEvents, /data-mobile-drawer-panel/);

@@ -81,6 +81,42 @@ export function bindPageEvents(dom, handlers) {
   bindConnectedUserListEvents(dom.userList);
   bindConnectedUserListEvents(dom.drawerUserList);
 
+  if (typeof HTMLElement !== "undefined" && dom.reportTopicButton instanceof HTMLElement) {
+    dom.reportTopicButton.addEventListener("click", (event) => {
+      const target = event.currentTarget;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const entityType = target.dataset.reportEntityType || "topic";
+      const entityId = target.dataset.reportEntityId || "";
+      if (!entityId) {
+        return;
+      }
+
+      handlers.reportEntity?.(entityType, entityId, { trigger: target });
+    });
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.messageStream instanceof HTMLElement) {
+    dom.messageStream.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const trigger = event.target.closest("[data-report-entity-type][data-report-entity-id]");
+      if (!(trigger instanceof HTMLElement)) {
+        return;
+      }
+
+      handlers.reportEntity?.(
+        trigger.dataset.reportEntityType || "message",
+        trigger.dataset.reportEntityId || "",
+        { trigger }
+      );
+    });
+  }
+
   document.addEventListener("keydown", (event) => {
     if (event.key === "Tab") {
       const focusTrapContainer = getActiveFocusTrapContainer(dom);

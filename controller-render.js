@@ -21,6 +21,7 @@ export function createRenderers({ state, dom, actions, responsive, closeTimerRef
     renderRankings(state, dom);
     renderTitles(state, dom);
     renderPaletteModal(state, dom);
+    actions.syncAuthUi?.();
     responsive.updateLayoutMetrics();
   }
 

@@ -1,7 +1,5 @@
 import { CUSTOM_PALETTE_ID } from "../palettes.js";
 import { dispatch, reducers } from "../store-logic.js";
-
-const AUTH_STORAGE_KEY = "chetrend-auth-demo";
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled]):not([tabindex='-1'])",
   "[href]:not([tabindex='-1'])",
@@ -11,30 +9,15 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])"
 ].join(", ");
 
-function readStoredAuthState() {
-  if (typeof localStorage === "undefined") {
-    return false;
-  }
-
-  return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
-}
-
-function persistAuthState(isLoggedIn) {
-  if (typeof localStorage === "undefined") {
-    return;
-  }
-
-  localStorage.setItem(AUTH_STORAGE_KEY, String(isLoggedIn));
-}
-
 export function bindTopbarActionEvents(dom, handlers) {
   let pickerReopenLockUntil = 0;
   let pickerTriggerUnlockTimer = 0;
-  let isLoggedIn = readStoredAuthState();
+  let authPending = false;
   let activeMobileDrawerPanel = null;
   let lastMobilePanelTrigger = null;
   syncAuthUi();
   setPickerOpenState(false);
+  handlers.setAuthUiSync?.(syncAuthUi);
 
   function addListener(node, type, listener, options) {
     node?.addEventListener?.(type, listener, options);
@@ -96,12 +79,16 @@ export function bindTopbarActionEvents(dom, handlers) {
       && window.matchMedia("(max-width: 960px)").matches;
   }
 
+  function isLoggedIn() {
+    return handlers.state?.viewer?.type === "registered";
+  }
+
   function applyDocumentAuthState() {
     if (typeof document === "undefined") {
       return;
     }
 
-    document.documentElement.dataset.authState = isLoggedIn ? "logged-in" : "logged-out";
+    document.documentElement.dataset.authState = isLoggedIn() ? "logged-in" : "logged-out";
   }
 
   function syncThemeTogglePlacement() {
@@ -434,34 +421,52 @@ export function bindTopbarActionEvents(dom, handlers) {
     handlers.flashTitle("Perfil listo para conectar");
   }
 
-  function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
-    if (isLoggedIn === nextLoggedIn) {
+  async function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
+    const currentLoggedIn = isLoggedIn();
+    if (currentLoggedIn === nextLoggedIn) {
       syncAuthUi();
       return;
     }
 
-    isLoggedIn = nextLoggedIn;
-    persistAuthState(isLoggedIn);
-
-    if (!isLoggedIn) {
+    if (!nextLoggedIn) {
       setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
     }
 
+    authPending = true;
     syncAuthUi();
 
-    if (announce) {
-      handlers.flashTitle(isLoggedIn ? "Sesion iniciada" : "Sesion cerrada");
+    try {
+      const authResult = nextLoggedIn
+        ? await handlers.login?.()
+        : await handlers.logout?.();
+
+      if (authResult?.redirected) {
+        return;
+      }
+
+      if (announce) {
+        handlers.flashTitle(nextLoggedIn ? "Sesion iniciada" : "Sesion cerrada");
+      }
+    } catch (error) {
+      console.error(error);
+      if (announce) {
+        handlers.flashTitle(nextLoggedIn ? "No se pudo iniciar sesion" : "No se pudo cerrar sesion");
+      }
+    } finally {
+      authPending = false;
+      syncAuthUi();
     }
   }
 
   function syncAuthUi() {
+    const loggedIn = isLoggedIn();
     const isMobile = isMobileViewport();
     const label = dom.authButton?.querySelector(".button-label");
     const privateDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-auth-private]") ?? [];
     applyDocumentAuthState();
     syncThemeTogglePlacement();
-    const authLabel = isLoggedIn
+    const authLabel = loggedIn
       ? (isMobile ? "Cerrar sesión" : "Cerrar sesión")
       : "Iniciar sesión";
 
@@ -470,26 +475,28 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (dom.authButton) {
-      dom.authButton.className = isLoggedIn
+      dom.authButton.className = loggedIn
         ? "text-button discreet-auth"
         : "text-button text-button--accent prominent-auth";
       dom.authButton.setAttribute("aria-label", authLabel);
-      dom.authButton.hidden = isMobile && isLoggedIn;
+      dom.authButton.hidden = isMobile && loggedIn;
+      dom.authButton.disabled = authPending;
+      dom.authButton.setAttribute("aria-busy", String(authPending));
     }
 
     if (dom.authTools) {
-      dom.authTools.hidden = !isLoggedIn;
+      dom.authTools.hidden = !loggedIn;
     }
 
     [dom.profileButton, dom.storeButton, dom.openRightDrawer].forEach((node) => {
       if (node) {
-        node.hidden = node === dom.openRightDrawer ? false : !isLoggedIn;
+        node.hidden = node === dom.openRightDrawer ? false : !loggedIn;
       }
     });
 
     privateDrawerActions.forEach((node) => {
       if (node) {
-        node.hidden = !isLoggedIn;
+        node.hidden = !loggedIn;
       }
     });
 
@@ -516,7 +523,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   syncAuthUi();
   addListener(dom.authButton, "click", () => {
-    setLoggedIn(!isLoggedIn);
+    void setLoggedIn(!isLoggedIn());
   });
 
   addListener(dom.friendRequestsButton, "click", () => {
@@ -574,7 +581,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     if (target.dataset.mobileTopbarAction === "auth") {
       setMobileDrawerPanel(null, { restoreFocus: false });
-      setLoggedIn(false);
+      void setLoggedIn(false);
       return;
     }
 
