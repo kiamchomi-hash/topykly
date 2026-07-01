@@ -51,6 +51,7 @@ import {
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
+import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
 import { renderTitles } from "../ui/titles.js";
 
@@ -2841,6 +2842,7 @@ await (async () => {
     assert.match(domModule, /Missing required DOM nodes/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
+    assert.match(eventsModule, /messageForm\.addEventListener\("submit", handlers\.submitMessage\)/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
     assert.match(chat, /syncTopicReportButton/);
     assert.match(chat, /chatHero\.hidden = true;/);

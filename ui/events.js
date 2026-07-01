@@ -81,6 +81,10 @@ export function bindPageEvents(dom, handlers) {
   bindConnectedUserListEvents(dom.userList);
   bindConnectedUserListEvents(dom.drawerUserList);
 
+  if (typeof HTMLFormElement !== "undefined" && dom.messageForm instanceof HTMLFormElement) {
+    dom.messageForm.addEventListener("submit", handlers.submitMessage);
+  }
+
   if (typeof HTMLElement !== "undefined" && dom.reportTopicButton instanceof HTMLElement) {
     dom.reportTopicButton.addEventListener("click", (event) => {
       const target = event.currentTarget;
