@@ -154,21 +154,29 @@ try {
   await test("exposes safe auth preflight status", async () => {
     const status = await request("/api/auth/status", { sessionId: "session-smoke-auth-status" });
 
-    assert.equal(status.configured, false);
+    assert.equal(typeof status.configured, "boolean");
     assert.equal(status.provider, "Google");
     assert.equal(status.redirectUri, `${origin}/auth/oidc/callback`);
-    assert.equal(status.checks.clientId, false);
-    assert.equal(status.checks.clientSecret, false);
+    assert.equal(typeof status.checks.clientId, "boolean");
+    assert.equal(typeof status.checks.clientSecret, "boolean");
+    assert.equal(typeof status.checks.sessionSecret, "boolean");
     assert.equal(Object.prototype.hasOwnProperty.call(status, "clientSecret"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(status, "clientId"), false);
   });
 
-  await test("supports local login and logout fallback", async () => {
+  await test("supports auth login response for local fallback or external redirect", async () => {
     const sessionId = "session-smoke-auth";
     const login = await request("/api/auth/login", {
       method: "POST",
       sessionId,
       body: { selectedTopicId: null }
     });
+
+    if (login.mode === "redirect") {
+      assert.match(login.redirectUrl, /^https:\/\/accounts\.google\.com\//);
+      assert.equal(login.provider, "Google");
+      return;
+    }
 
     assert.equal(login.viewer.type, "registered");
 

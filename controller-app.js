@@ -154,6 +154,8 @@ export function bootstrap() {
     openDrawer: (side, trigger) => openDrawer(side, dom, closeTimerRef, trigger),
     closeDrawers: actions.closeDrawers,
     flashTitle: actions.flashTitle,
+    login: actions.login,
+    logout: actions.logout,
     backToTopics,
     onResize: handleResize,
     onWheel: responsive.handleScrollableWheel
