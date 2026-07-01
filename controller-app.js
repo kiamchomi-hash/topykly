@@ -26,6 +26,35 @@ function readBootstrapLocationParams() {
   };
 }
 
+export function getAuthErrorFeedbackMessage(authError) {
+  const code = String(authError || "").trim().toLowerCase();
+  if (!code) {
+    return "No se pudo completar el inicio de sesion.";
+  }
+
+  if (code === "access_denied") {
+    return "Inicio de sesion cancelado.";
+  }
+
+  if (code === "auth_flow_expired") {
+    return "La solicitud de inicio de sesion expiro. Intentalo de nuevo.";
+  }
+
+  if (code === "auth_not_configured") {
+    return "El login externo todavia no esta configurado.";
+  }
+
+  if (code === "invalid_auth_callback" || code === "invalid_auth_flow") {
+    return "No se pudo validar el inicio de sesion. Intentalo de nuevo.";
+  }
+
+  if (code === "auth_provider_error" || code === "auth_provider_misconfigured") {
+    return "El proveedor de login no respondio correctamente.";
+  }
+
+  return "No se pudo completar el inicio de sesion.";
+}
+
 function clearBootstrapLocationParams() {
   if (typeof window === "undefined" || typeof window.history?.replaceState !== "function") {
     return;
@@ -131,7 +160,7 @@ export function bootstrap() {
   });
 
   if (bootstrapLocationParams.authError) {
-    console.error(`Auth error: ${bootstrapLocationParams.authError}`);
+    actions.showFeedback(getAuthErrorFeedbackMessage(bootstrapLocationParams.authError), { kind: "error" });
   }
 
   clearBootstrapLocationParams();

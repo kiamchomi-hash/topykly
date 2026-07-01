@@ -31,6 +31,7 @@ import {
   getActiveRankingStep,
   setStoredRankingIndex
 } from "../ranking-state.js";
+import { getAuthErrorFeedbackMessage } from "../controller-app.js";
 import { createResponsiveHelpers } from "../controller-responsive.js";
 import { createResizeHandler } from "../controller-runtime.js";
 import { applyStoredTheme } from "../controller-theme.js";
@@ -1713,6 +1714,13 @@ await (async () => {
     assert.match(lightEmberIcon, /stroke="#fff7ef"/i);
     assert.match(customIcon, new RegExp(`fill="${customAccent}"`, "i"));
     assert.match(customIcon, /stroke="#fff7ef"/i);
+  });
+
+  await test("auth callback errors resolve to visible feedback messages", () => {
+    assert.equal(getAuthErrorFeedbackMessage("access_denied"), "Inicio de sesion cancelado.");
+    assert.equal(getAuthErrorFeedbackMessage("AUTH_FLOW_EXPIRED"), "La solicitud de inicio de sesion expiro. Intentalo de nuevo.");
+    assert.equal(getAuthErrorFeedbackMessage("invalid_auth_callback"), "No se pudo validar el inicio de sesion. Intentalo de nuevo.");
+    assert.equal(getAuthErrorFeedbackMessage("unknown_error"), "No se pudo completar el inicio de sesion.");
   });
 
   await test("api login redirects through the browser when external auth is configured", async () => {
