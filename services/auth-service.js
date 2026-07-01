@@ -277,6 +277,24 @@ export function createAuthService({
     sessionCookieName: SESSION_COOKIE,
     createSessionCookie,
 
+    getStatus(req) {
+      return {
+        configured,
+        provider: providerLabel,
+        issuer: issuer || null,
+        redirectUri: getRedirectUri(req),
+        publicOrigin: publicOrigin || null,
+        cookieSecure: getCookieSecurity(req, env),
+        checks: {
+          issuer: Boolean(issuer),
+          clientId: Boolean(clientId),
+          clientSecret: Boolean(clientSecret),
+          sessionSecret: Boolean(sessionSecret),
+          fetch: Boolean(fetchImpl)
+        }
+      };
+    },
+
     async createLoginResponse({ req, sessionId, selectedTopicId = null }) {
       if (!configured) {
         return null;

@@ -151,6 +151,17 @@ try {
     assert.ok(reported.reportedTopicIds.includes(topic.id));
   });
 
+  await test("exposes safe auth preflight status", async () => {
+    const status = await request("/api/auth/status", { sessionId: "session-smoke-auth-status" });
+
+    assert.equal(status.configured, false);
+    assert.equal(status.provider, "Google");
+    assert.equal(status.redirectUri, `${origin}/auth/oidc/callback`);
+    assert.equal(status.checks.clientId, false);
+    assert.equal(status.checks.clientSecret, false);
+    assert.equal(Object.prototype.hasOwnProperty.call(status, "clientSecret"), false);
+  });
+
   await test("supports local login and logout fallback", async () => {
     const sessionId = "session-smoke-auth";
     const login = await request("/api/auth/login", {

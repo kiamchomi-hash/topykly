@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createAuthService } from "../services/auth-service.js";
 import { createBackendStore } from "../services/backend-store.js";
 import { createChatActions } from "../controller-chat-actions.js";
 import { initialUsers, topicSeedData } from "../data.js";
@@ -1714,6 +1715,48 @@ await (async () => {
     assert.match(lightEmberIcon, /stroke="#fff7ef"/i);
     assert.match(customIcon, new RegExp(`fill="${customAccent}"`, "i"));
     assert.match(customIcon, /stroke="#fff7ef"/i);
+  });
+
+  await test("auth status exposes safe OIDC preflight details", () => {
+    const req = {
+      headers: { host: "127.0.0.1:4173" },
+      socket: { encrypted: false }
+    };
+    const unconfigured = createAuthService({ env: {}, fetchImpl: null }).getStatus(req);
+
+    assert.equal(unconfigured.configured, false);
+    assert.equal(unconfigured.redirectUri, "http://127.0.0.1:4173/auth/oidc/callback");
+    assert.equal(unconfigured.checks.clientId, false);
+    assert.equal(unconfigured.checks.clientSecret, false);
+    assert.equal(unconfigured.checks.sessionSecret, false);
+
+    const configured = createAuthService({
+      env: {
+        TOPYKLY_AUTH_PROVIDER_NAME: "Google",
+        TOPYKLY_OIDC_ISSUER: "https://accounts.google.com",
+        TOPYKLY_OIDC_CLIENT_ID: "client-id",
+        TOPYKLY_OIDC_CLIENT_SECRET: "client-secret",
+        TOPYKLY_SESSION_SECRET: "session-secret",
+        TOPYKLY_PUBLIC_ORIGIN: "https://topykly.com",
+        TOPYKLY_COOKIE_SECURE: "true"
+      },
+      fetchImpl() {}
+    }).getStatus(req);
+
+    assert.equal(configured.configured, true);
+    assert.equal(configured.provider, "Google");
+    assert.equal(configured.issuer, "https://accounts.google.com");
+    assert.equal(configured.redirectUri, "https://topykly.com/auth/oidc/callback");
+    assert.equal(configured.cookieSecure, true);
+    assert.deepEqual(configured.checks, {
+      issuer: true,
+      clientId: true,
+      clientSecret: true,
+      sessionSecret: true,
+      fetch: true
+    });
+    assert.equal(Object.prototype.hasOwnProperty.call(configured, "clientSecret"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(configured, "clientId"), false);
   });
 
   await test("auth callback errors resolve to visible feedback messages", () => {

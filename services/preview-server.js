@@ -172,6 +172,11 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/auth/status") {
+      sendJson(res, 200, authService.getStatus(req));
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(req);
       const authLoginResponse = await authService.createLoginResponse({
