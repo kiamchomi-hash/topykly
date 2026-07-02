@@ -700,13 +700,30 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(typeof window !== "undefined" ? window : null, "resize", syncAuthUi, { passive: true });
 
   syncAuthUi();
-  addListener(dom.authButton, "click", () => {
+  function handleAuthButtonClick(event) {
+    if (event?.topyklyAuthHandled) {
+      return;
+    }
+
+    if (event) {
+      event.topyklyAuthHandled = true;
+      event.preventDefault?.();
+    }
+
     if (isLoggedIn()) {
       void setLoggedIn(false);
       return;
     }
 
     void openAuthModal();
+  }
+
+  addListener(dom.authButton, "click", handleAuthButtonClick);
+  addListener(typeof document !== "undefined" ? document : null, "click", (event) => {
+    const eventElement = resolveEventElement(event);
+    if (eventElement?.closest?.("#authButton")) {
+      handleAuthButtonClick(event);
+    }
   });
   addListener(dom.authGoogleButton, "click", () => {
     void setLoggedIn(true);
