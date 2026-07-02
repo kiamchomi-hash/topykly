@@ -51,12 +51,52 @@ const EXTRA_TOPIC_SEEDS = [
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const FALLBACK_DB_PATH = path.join(__dirname, "..", ".data", "topykly.sqlite");
 const DEFAULT_DB_PATH = process.env.TOPYKLY_DB_PATH
   || process.env.CHETREND_DB_PATH
-  || path.join(__dirname, "..", ".data", "topykly.sqlite");
+  || FALLBACK_DB_PATH;
 const DEFAULT_REGISTERED_ROLE = "Registrado";
 const ADMIN_ROLE = "Admin";
 const MODERATOR_ROLE = "Moderacion";
+
+function resolveDbConfig(explicitDbPath = null, env = process.env) {
+  const normalizedExplicitPath = String(explicitDbPath || "").trim();
+  if (normalizedExplicitPath) {
+    return {
+      dbPath: normalizedExplicitPath,
+      dbPathSource: "explicit",
+      storageConfigured: true,
+      storageWarning: null
+    };
+  }
+
+  const topyklyDbPath = String(env.TOPYKLY_DB_PATH || "").trim();
+  if (topyklyDbPath) {
+    return {
+      dbPath: topyklyDbPath,
+      dbPathSource: "TOPYKLY_DB_PATH",
+      storageConfigured: true,
+      storageWarning: null
+    };
+  }
+
+  const legacyDbPath = String(env.CHETREND_DB_PATH || "").trim();
+  if (legacyDbPath) {
+    return {
+      dbPath: legacyDbPath,
+      dbPathSource: "CHETREND_DB_PATH",
+      storageConfigured: true,
+      storageWarning: null
+    };
+  }
+
+  return {
+    dbPath: FALLBACK_DB_PATH,
+    dbPathSource: "default",
+    storageConfigured: false,
+    storageWarning: "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
+  };
+}
 
 function getConfiguredAdminEmails() {
   return String(process.env.TOPYKLY_ADMIN_EMAILS || process.env.CHETREND_ADMIN_EMAILS || "")
@@ -1235,15 +1275,17 @@ function assertCommentableTopic(row) {
   }
 }
 
-export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
-  mkdirSync(path.dirname(dbPath), { recursive: true });
-  const db = new DatabaseSync(dbPath);
+export function createBackendStore({ dbPath = null } = {}) {
+  const dbConfig = resolveDbConfig(dbPath);
+  const resolvedDbPath = dbConfig.dbPath;
+  mkdirSync(path.dirname(resolvedDbPath), { recursive: true });
+  const db = new DatabaseSync(resolvedDbPath);
 
   initSchema(db);
   seedDatabase(db);
 
   return {
-    dbPath,
+    dbPath: resolvedDbPath,
     close() {
       db.close();
     },
@@ -1780,7 +1822,10 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
       const blockedSessions = db.prepare("SELECT COUNT(*) AS count FROM blocked_sessions").get()?.count ?? 0;
       const blockedIps = db.prepare("SELECT COUNT(*) AS count FROM blocked_ips").get()?.count ?? 0;
       return {
-        dbPath,
+        dbPath: resolvedDbPath,
+        dbPathSource: dbConfig.dbPathSource,
+        storageConfigured: dbConfig.storageConfigured,
+        storageWarning: dbConfig.storageWarning,
         topics,
         messages,
         users,
@@ -1792,4 +1837,4 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
   };
 }
 
-export { ApiError, DEFAULT_DB_PATH };
+export { ApiError, DEFAULT_DB_PATH, resolveDbConfig };

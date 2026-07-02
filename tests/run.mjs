@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "../services/auth-service.js";
-import { createBackendStore } from "../services/backend-store.js";
+import { createBackendStore, resolveDbConfig } from "../services/backend-store.js";
 import { createChatActions } from "../controller-chat-actions.js";
 import { initialUsers, topicSeedData } from "../data.js";
 import {
@@ -388,6 +388,29 @@ await (async () => {
     });
   });
 
+  await test("backend diagnostics report whether SQLite storage was explicitly configured", async () => {
+    assert.deepEqual(resolveDbConfig(null, {}), {
+      dbPath: path.join(rootDir, ".data", "topykly.sqlite"),
+      dbPathSource: "default",
+      storageConfigured: false,
+      storageWarning: "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
+    });
+
+    assert.deepEqual(resolveDbConfig(null, { TOPYKLY_DB_PATH: "/var/data/topykly.sqlite" }), {
+      dbPath: "/var/data/topykly.sqlite",
+      dbPathSource: "TOPYKLY_DB_PATH",
+      storageConfigured: true,
+      storageWarning: null
+    });
+
+    await withTempStore((store) => {
+      const diagnostics = store.getDiagnostics();
+
+      assert.equal(diagnostics.dbPathSource, "explicit");
+      assert.equal(diagnostics.storageConfigured, true);
+      assert.equal(diagnostics.storageWarning, null);
+    });
+  });
   await test("backend login and logout persist the viewer mode for the same session", async () => {
     await withTempStore((store) => {
       const initialPayload = store.bootstrap({
@@ -485,6 +508,55 @@ await (async () => {
     });
   });
 
+  await test("backend persists registered users and topics across store reopen", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-persist-"));
+    const dbPath = path.join(tempDir, "topykly.sqlite");
+    let store = createBackendStore({ dbPath });
+
+    try {
+      const firstLogin = store.loginWithIdentity({
+        sessionId: "session-persist-1",
+        authProvider: "https://accounts.example.com",
+        authSubject: "persist-subject",
+        email: "persist@example.com",
+        displayName: "Persist User"
+      });
+      const userId = firstLogin.viewer.id;
+
+      store.updateProfile({
+        sessionId: "session-persist-1",
+        displayName: "Persist Alias"
+      });
+      const created = store.createTopic({
+        sessionId: "session-persist-1",
+        title: "Tema persistente",
+        text: "Mensaje persistente"
+      });
+      const topicId = created.selectedTopicId;
+
+      store.close();
+      store = createBackendStore({ dbPath });
+
+      const secondLogin = store.loginWithIdentity({
+        sessionId: "session-persist-2",
+        authProvider: "https://accounts.example.com",
+        authSubject: "persist-subject",
+        email: "persist@example.com",
+        displayName: "Persist User Renamed"
+      });
+      const persistedTopic = secondLogin.topics.find((topic) => topic.id === topicId);
+
+      assert.equal(secondLogin.viewer.id, userId);
+      assert.equal(secondLogin.viewer.displayName, "Persist Alias");
+      assert.equal(secondLogin.viewer.profilePending, false);
+      assert.ok(persistedTopic);
+      assert.equal(persistedTopic.title, "Tema persistente");
+      assert.equal(persistedTopic.messages[0].text, "Mensaje persistente");
+    } finally {
+      store.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
   await test("backend updateProfile lets registered users change display name and request avatar review", async () => {
     await withTempStore((store) => {
       store.login({
@@ -819,8 +891,14 @@ await (async () => {
     });
   });
 
-  await test("backend createTopic inserts the new topic at rank 0 and keeps the active window capped at 40", async () => {
+  await test("backend createTopic inserts the new topic at rank 0 and pushes the last topic out of the active window", async () => {
     await withTempStore((store) => {
+      const initialPayload = store.bootstrap({
+        sessionId: "session-create-bootstrap",
+        authMode: "registered"
+      });
+      const displacedTopicId = initialPayload.topics.at(-1).id;
+
       const created = store.createTopic({
         sessionId: "session-create",
         authMode: "registered",
@@ -832,6 +910,7 @@ await (async () => {
       assert.equal(created.topics[0].title, "Tema backend");
       assert.equal(created.selectedTopicId, created.topics[0].id);
       assert.equal(created.topics[0].messages[0].isRoot, true);
+      assert.equal(created.topics.some((topic) => topic.id === displacedTopicId), false);
     });
   });
 
@@ -1001,6 +1080,9 @@ await (async () => {
 
       assert.deepEqual(diagnostics, {
         dbPath: diagnostics.dbPath,
+        dbPathSource: "explicit",
+        storageConfigured: true,
+        storageWarning: null,
         topics: diagnostics.topics,
         messages: diagnostics.messages,
         users: diagnostics.users,
