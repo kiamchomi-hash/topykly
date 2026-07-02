@@ -179,6 +179,10 @@ async function handleApiRequest(store, authService, req, res, url) {
 
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(req);
+      await authService.validateTurnstile({
+        req,
+        token: body.turnstileToken
+      });
       const authLoginResponse = await authService.createLoginResponse({
         req,
         sessionId: context.sessionId,

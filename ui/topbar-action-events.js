@@ -16,6 +16,10 @@ export function bindTopbarActionEvents(dom, handlers) {
   let pickerReopenLockUntil = 0;
   let pickerTriggerUnlockTimer = 0;
   let authPending = false;
+  let authStatus = null;
+  let authStatusPromise = null;
+  let turnstileWidgetId = null;
+  let turnstileRequired = false;
   let activeMobileDrawerPanel = null;
   let lastMobilePanelTrigger = null;
   syncAuthUi();
@@ -458,6 +462,74 @@ export function bindTopbarActionEvents(dom, handlers) {
     handlers.openProfileModal?.();
   }
 
+  async function loadAuthStatus() {
+    if (authStatus) {
+      return authStatus;
+    }
+
+    if (!authStatusPromise) {
+      authStatusPromise = Promise.resolve(handlers.getAuthStatus?.())
+        .then((status) => {
+          authStatus = status || {};
+          return authStatus;
+        })
+        .catch((error) => {
+          console.error(error);
+          authStatus = { turnstile: { configured: false, siteKey: null } };
+          return authStatus;
+        });
+    }
+
+    return authStatusPromise;
+  }
+
+  function resetTurnstileToken() {
+    if (dom.authTurnstileToken) {
+      dom.authTurnstileToken.value = "";
+    }
+  }
+
+  async function syncTurnstile() {
+    const status = await loadAuthStatus();
+    const siteKey = status?.turnstile?.siteKey || "";
+    turnstileRequired = Boolean(status?.turnstile?.configured && siteKey);
+
+    if (!dom.authTurnstile) {
+      return;
+    }
+
+    dom.authTurnstile.hidden = !turnstileRequired;
+    if (!turnstileRequired) {
+      resetTurnstileToken();
+      return;
+    }
+
+    if (!globalThis.turnstile?.render) {
+      handlers.flashTitle?.("Verificacion anti-bots cargando");
+      return;
+    }
+
+    if (turnstileWidgetId !== null) {
+      globalThis.turnstile.reset?.(turnstileWidgetId);
+      resetTurnstileToken();
+      return;
+    }
+
+    turnstileWidgetId = globalThis.turnstile.render(dom.authTurnstile, {
+      sitekey: siteKey,
+      callback(token) {
+        if (dom.authTurnstileToken) {
+          dom.authTurnstileToken.value = token || "";
+        }
+      },
+      "expired-callback"() {
+        resetTurnstileToken();
+      },
+      "error-callback"() {
+        resetTurnstileToken();
+      }
+    });
+  }
   function setAuthModalOpen(isOpen) {
     if (dom.authModalBackdrop) {
       dom.authModalBackdrop.hidden = !isOpen;
@@ -481,9 +553,11 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     setAuthModalOpen(true);
+    void syncTurnstile();
   }
 
   function closeAuthModal() {
+    resetTurnstileToken();
     setAuthModalOpen(false);
   }
   async function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
@@ -502,8 +576,13 @@ export function bindTopbarActionEvents(dom, handlers) {
     syncAuthUi();
 
     try {
+      if (nextLoggedIn && turnstileRequired && !dom.authTurnstileToken?.value) {
+        handlers.flashTitle?.("Completa la verificacion anti-bots");
+        return;
+      }
+
       const authResult = nextLoggedIn
-        ? await handlers.login?.()
+        ? await handlers.login?.({ turnstileToken: dom.authTurnstileToken?.value || "" })
         : await handlers.logout?.();
 
       if (authResult?.redirected) {

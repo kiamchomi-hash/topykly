@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="es">
   <head>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TOPYKLY</title>
@@ -335,6 +336,8 @@
           </button>
         </div>
         <div class="auth-modal__body">
+          <input id="authTurnstileToken" type="hidden" value="" />
+          <div class="auth-turnstile" id="authTurnstile" hidden></div>
           <button class="auth-provider-button" id="authGoogleButton" type="button" data-auth-provider="google">
             <span class="auth-provider-button__mark" aria-hidden="true">G</span>
             <span>Continuar con Google</span>

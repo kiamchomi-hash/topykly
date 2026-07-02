@@ -5060,6 +5060,16 @@ html.is-mobile-viewport .ranking-mode-list__label {
   padding: 16px;
 }
 
+.auth-turnstile {
+  min-height: 65px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.auth-turnstile[hidden] {
+  display: none;
+}
 .auth-provider-button {
   width: 100%;
   min-height: 46px;

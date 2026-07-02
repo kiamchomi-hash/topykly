@@ -127,8 +127,12 @@ export function createActionHandlers({
     feedbackTimer.unref?.();
   }
 
-  async function login() {
-    const result = await api.login(state.selectedTopicId);
+  async function getAuthStatus() {
+    return api.getAuthStatus();
+  }
+
+  async function login({ turnstileToken = "" } = {}) {
+    const result = await api.login(state.selectedTopicId, { turnstileToken });
     if (result?.redirected) {
       return result;
     }
@@ -409,6 +413,7 @@ export function createActionHandlers({
     syncAuthUi() {
       syncAuthUiRef();
     },
+    getAuthStatus,
     login,
     logout,
     flashTitle,

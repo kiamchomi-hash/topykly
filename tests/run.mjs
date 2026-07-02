@@ -1978,6 +1978,7 @@ await (async () => {
     assert.equal(unconfigured.checks.clientId, false);
     assert.equal(unconfigured.checks.clientSecret, false);
     assert.equal(unconfigured.checks.sessionSecret, false);
+    assert.deepEqual(unconfigured.turnstile, { configured: false, siteKey: null });
 
     const configured = createAuthService({
       env: {
@@ -1987,7 +1988,9 @@ await (async () => {
         TOPYKLY_OIDC_CLIENT_SECRET: "client-secret",
         TOPYKLY_SESSION_SECRET: "session-secret",
         TOPYKLY_PUBLIC_ORIGIN: "https://topykly.com",
-        TOPYKLY_COOKIE_SECURE: "true"
+        TOPYKLY_COOKIE_SECURE: "true",
+        TOPYKLY_TURNSTILE_SITE_KEY: "site-key",
+        TOPYKLY_TURNSTILE_SECRET_KEY: "secret-key"
       },
       fetchImpl() {}
     }).getStatus(req);
@@ -1997,6 +2000,7 @@ await (async () => {
     assert.equal(configured.issuer, "https://accounts.google.com");
     assert.equal(configured.redirectUri, "https://topykly.com/auth/oidc/callback");
     assert.equal(configured.cookieSecure, true);
+    assert.deepEqual(configured.turnstile, { configured: true, siteKey: "site-key" });
     assert.deepEqual(configured.checks, {
       issuer: true,
       clientId: true,
@@ -2008,6 +2012,41 @@ await (async () => {
     assert.equal(Object.prototype.hasOwnProperty.call(configured, "clientId"), false);
   });
 
+  await test("auth service validates Turnstile tokens server-side when configured", async () => {
+    const req = {
+      headers: { host: "127.0.0.1:4173", "cf-connecting-ip": "203.0.113.8" },
+      socket: { encrypted: false }
+    };
+    const calls = [];
+    const authService = createAuthService({
+      env: {
+        TOPYKLY_TURNSTILE_SITE_KEY: "site-key",
+        TOPYKLY_TURNSTILE_SECRET_KEY: "secret-key"
+      },
+      async fetchImpl(url, options) {
+        calls.push({ url, body: options.body.toString() });
+        return {
+          ok: true,
+          async text() {
+            return JSON.stringify({ success: true });
+          }
+        };
+      }
+    });
+
+    await assert.rejects(
+      () => authService.validateTurnstile({ req, token: "" }),
+      (error) => error.code === "TURNSTILE_REQUIRED"
+    );
+
+    await authService.validateTurnstile({ req, token: "token-123" });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://challenges.cloudflare.com/turnstile/v0/siteverify");
+    assert.match(calls[0].body, /secret=secret-key/);
+    assert.match(calls[0].body, /response=token-123/);
+    assert.match(calls[0].body, /remoteip=203\.0\.113\.8/);
+  });
   await test("auth callback errors resolve to visible feedback messages", () => {
     assert.equal(getAuthErrorFeedbackMessage("access_denied"), "Inicio de sesion cancelado.");
     assert.equal(getAuthErrorFeedbackMessage("AUTH_FLOW_EXPIRED"), "La solicitud de inicio de sesion expiro. Intentalo de nuevo.");
@@ -2173,6 +2212,8 @@ await (async () => {
       authModalBackdrop: new FakeElement(),
       authModal: new FakeElement(),
       authGoogleButton: new FakeElement(),
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
       authEmailForm: new FakeElement(),
       closeAuthModalButton: new FakeElement()
     };
@@ -2445,6 +2486,8 @@ await (async () => {
       authModalBackdrop: new FakeElement(),
       authModal: new FakeElement(),
       authGoogleButton: new FakeElement(),
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
       authEmailForm: new FakeElement(),
       closeAuthModalButton: new FakeElement()
     };
@@ -2680,6 +2723,7 @@ await (async () => {
 
     const authButton = new FakeElement();
     authButton.label = { textContent: "" };
+    const authGoogleButton = new FakeElement();
     const flashCalls = [];
     const state = {
       viewer: { id: "guest-redirect", type: "guest" }
@@ -2721,7 +2765,14 @@ await (async () => {
         notificationsButton: new FakeElement(),
         messagesButton: new FakeElement(),
         authButton,
-        authTools: new FakeElement()
+        authTools: new FakeElement(),
+        authModalBackdrop: new FakeElement(),
+        authModal: new FakeElement(),
+        authGoogleButton,
+        authTurnstile: new FakeElement(),
+        authTurnstileToken: { value: "" },
+        authEmailForm: new FakeElement(),
+        closeAuthModalButton: new FakeElement()
       }, {
         toggleTheme() {},
         refreshCurrentTopic() {},
@@ -2746,6 +2797,8 @@ await (async () => {
       });
 
       authButton.dispatch("click");
+      await flushAsyncEvents();
+      authGoogleButton.dispatch("click");
       await flushAsyncEvents();
 
       assert.deepEqual(flashCalls, []);
@@ -3248,7 +3301,7 @@ await (async () => {
     assert.match(topbarActionEvents, /handlers\.setAuthUiSync\?\.\(syncAuthUi\)/);
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(topbarActionEvents, /document\.documentElement\.dataset\.authState = isLoggedIn\(\) \? "logged-in" : "logged-out"/);
-    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\)/);
+    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\{ turnstileToken:/);
     assert.match(topbarActionEvents, /await handlers\.logout\?\.\(\)/);
     assert.match(topbarActionEvents, /dom\.authTools\.hidden = !loggedIn/);
     assert.match(topbarActionEvents, /setLoggedIn/);

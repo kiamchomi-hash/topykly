@@ -156,10 +156,14 @@ export const api = {
     return request(`/api/topics/${encodeURIComponent(topicId)}`);
   },
 
-  async login(selectedTopicId = null) {
+  async getAuthStatus() {
+    return readApiPayload("/api/auth/status");
+  },
+
+  async login(selectedTopicId = null, { turnstileToken = "" } = {}) {
     const payload = await readApiPayload("/api/auth/login", {
       method: "POST",
-      body: { selectedTopicId }
+      body: { selectedTopicId, turnstileToken }
     });
 
     if (payload.mode === "redirect" && payload.redirectUrl) {

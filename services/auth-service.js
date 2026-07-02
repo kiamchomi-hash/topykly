@@ -8,6 +8,7 @@ const SESSION_COOKIE = "topykly_sid";
 const AUTH_FLOW_TTL_MS = 10 * 60_000;
 const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DISCOVERY_CACHE_TTL_MS = 10 * 60_000;
+const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 function base64UrlEncode(value) {
   return Buffer.from(value)
@@ -213,6 +214,9 @@ export function createAuthService({
   const providerLabel = String(env.TOPYKLY_AUTH_PROVIDER_NAME || env.CHETREND_AUTH_PROVIDER_NAME || "Google").trim() || "Google";
   const scopes = String(env.TOPYKLY_OIDC_SCOPE || env.CHETREND_OIDC_SCOPE || "openid profile email").trim() || "openid profile email";
   const publicOrigin = normalizeOrigin(env.TOPYKLY_PUBLIC_ORIGIN || env.CHETREND_PUBLIC_ORIGIN || "");
+  const turnstileSiteKey = String(env.TOPYKLY_TURNSTILE_SITE_KEY || env.CHETREND_TURNSTILE_SITE_KEY || "").trim();
+  const turnstileSecretKey = String(env.TOPYKLY_TURNSTILE_SECRET_KEY || env.CHETREND_TURNSTILE_SECRET_KEY || "").trim();
+  const turnstileConfigured = Boolean(fetchImpl && turnstileSiteKey && turnstileSecretKey);
 
   const configured = Boolean(fetchImpl && issuer && clientId && clientSecret && sessionSecret);
   const discoveryCache = {
@@ -271,6 +275,44 @@ export function createAuthService({
     });
   }
 
+  async function validateTurnstile({ req, token = "" } = {}) {
+    if (!turnstileConfigured) {
+      return { success: true, skipped: true };
+    }
+
+    const normalizedToken = String(token || "").trim();
+    if (!normalizedToken) {
+      throw new ApiError(403, "TURNSTILE_REQUIRED", "Completa la verificacion antes de iniciar sesion.");
+    }
+
+    const remoteip = String(req?.headers?.["cf-connecting-ip"] || req?.headers?.["x-forwarded-for"] || req?.socket?.remoteAddress || "")
+      .split(",")[0]
+      .trim();
+    const body = new URLSearchParams({
+      secret: turnstileSecretKey,
+      response: normalizedToken
+    });
+    if (remoteip) {
+      body.set("remoteip", remoteip);
+    }
+
+    const response = await fetchImpl(TURNSTILE_VERIFY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body
+    });
+    const payload = await readResponsePayload(response);
+
+    if (!payload.success) {
+      throw new ApiError(403, "TURNSTILE_FAILED", "No se pudo validar la verificacion anti-bots.", {
+        turnstileErrors: Array.isArray(payload["error-codes"]) ? payload["error-codes"] : []
+      });
+    }
+
+    return { success: true, skipped: false };
+  }
   return {
     configured,
     providerLabel,
@@ -291,9 +333,15 @@ export function createAuthService({
           clientSecret: Boolean(clientSecret),
           sessionSecret: Boolean(sessionSecret),
           fetch: Boolean(fetchImpl)
+        },
+        turnstile: {
+          configured: turnstileConfigured,
+          siteKey: turnstileSiteKey || null
         }
       };
     },
+
+    validateTurnstile,
 
     async createLoginResponse({ req, sessionId, selectedTopicId = null }) {
       if (!configured) {
