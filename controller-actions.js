@@ -160,7 +160,7 @@ export function createActionHandlers({
   async function saveProfile(event) {
     event?.preventDefault?.();
     const displayName = dom.profileNameInput?.value?.trim() || null;
-    const avatarUrl = dom.profileAvatarInput?.value?.trim() || null;
+    const avatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || null;
 
     if (dom.saveProfileButton) {
       dom.saveProfileButton.disabled = true;
@@ -170,12 +170,12 @@ export function createActionHandlers({
     try {
       const payload = await api.updateProfile({
         displayName,
-        avatarUrl,
+        avatarDataUrl,
         selectedTopicId: state.selectedTopicId
       });
       dispatch(state, reducers.hydrateFromBackend, payload);
       dispatch(state, reducers.setProfileModalOpen, false);
-      showFeedback("Perfil actualizado");
+      showFeedback(avatarDataUrl ? "Perfil actualizado. La foto queda pendiente de revision." : "Perfil actualizado");
       return payload;
     } catch (error) {
       console.error(error);

@@ -24,9 +24,7 @@ export function renderProfileModal(state, dom) {
   const displayName = viewer.profilePending
     ? viewer.profileSuggestedName || viewer.displayName || "Usuario"
     : viewer.displayName || "Usuario";
-  const avatarUrl = viewer.profilePending
-    ? viewer.profileSuggestedAvatarUrl || viewer.avatarUrl || ""
-    : viewer.avatarUrl || "";
+  const avatarUrl = viewer.avatarPendingUrl || viewer.avatarUrl || "";
 
   if (dom.profileModalBackdrop) {
     dom.profileModalBackdrop.hidden = !isOpen;
@@ -46,9 +44,12 @@ export function renderProfileModal(state, dom) {
   }
 
   if (dom.profileAvatarInput && dom.profileAvatarInput.dataset.renderedAvatarUrl !== avatarUrl) {
-    dom.profileAvatarInput.value = avatarUrl;
     dom.profileAvatarInput.dataset.renderedAvatarUrl = avatarUrl;
+    dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
+    if (typeof dom.profileAvatarInput.value === "string") {
+      dom.profileAvatarInput.value = "";
+    }
   }
 
-  setPreviewImage(dom.profileAvatarPreview, dom.profileAvatarInput?.value?.trim() || avatarUrl);
+  setPreviewImage(dom.profileAvatarPreview, dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || avatarUrl);
 }

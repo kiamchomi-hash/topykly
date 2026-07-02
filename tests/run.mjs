@@ -461,11 +461,13 @@ await (async () => {
       const completedPayload = store.updateProfile({
         sessionId: "session-oidc-1",
         displayName: "Alias elegido",
-        avatarUrl: "https://cdn.example.com/chosen.png"
+        avatarDataUrl: "data:image/png;base64,aGVsbG8="
       });
       assert.equal(completedPayload.viewer.profilePending, false);
       assert.equal(completedPayload.viewer.displayName, "Alias elegido");
-      assert.equal(completedPayload.viewer.avatarUrl, "https://cdn.example.com/chosen.png");
+      assert.equal(completedPayload.viewer.avatarUrl, null);
+      assert.equal(completedPayload.viewer.avatarPendingUrl, "data:image/png;base64,aGVsbG8=");
+      assert.equal(completedPayload.viewer.avatarReviewStatus, "pending");
 
       const secondPayload = store.loginWithIdentity({
         sessionId: "session-oidc-2",
@@ -483,7 +485,7 @@ await (async () => {
     });
   });
 
-  await test("backend updateProfile lets registered users change display name and avatar only", async () => {
+  await test("backend updateProfile lets registered users change display name and request avatar review", async () => {
     await withTempStore((store) => {
       store.login({
         sessionId: "session-profile",
@@ -493,29 +495,38 @@ await (async () => {
       const updated = store.updateProfile({
         sessionId: "session-profile",
         displayName: "Nombre nuevo",
-        avatarUrl: "https://cdn.example.com/new-avatar.jpg"
+        avatarDataUrl: "data:image/jpeg;base64,aW1hZ2U="
       });
 
       assert.equal(updated.viewer.type, "registered");
       assert.equal(updated.viewer.displayName, "Nombre nuevo");
-      assert.equal(updated.viewer.avatarUrl, "https://cdn.example.com/new-avatar.jpg");
-      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarUrl, "https://cdn.example.com/new-avatar.jpg");
+      assert.equal(updated.viewer.avatarUrl, null);
+      assert.equal(updated.viewer.avatarPendingUrl, "data:image/jpeg;base64,aW1hZ2U=");
+      assert.equal(updated.viewer.avatarReviewStatus, "pending");
+      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarPendingUrl, "data:image/jpeg;base64,aW1hZ2U=");
 
-      const cleared = store.updateProfile({
-        sessionId: "session-profile",
-        avatarUrl: ""
+      store.login({
+        sessionId: "session-profile-moderator",
+        userId: "u2"
       });
-      assert.equal(cleared.viewer.avatarUrl, null);
+      const approved = store.applyModerationAction("approve_avatar", {
+        sessionId: "session-profile-moderator",
+        targetType: "user",
+        targetId: updated.viewer.id
+      });
+      const approvedUser = approved.users.find((user) => user.id === updated.viewer.id);
+      assert.equal(approvedUser.avatarUrl, "data:image/jpeg;base64,aW1hZ2U=");
+      assert.equal(approvedUser.avatarPendingUrl, null);
 
       assert.throws(() => store.updateProfile({
         sessionId: "session-profile-guest",
-        avatarUrl: "https://cdn.example.com/guest.jpg"
+        avatarDataUrl: "data:image/png;base64,aGVsbG8="
       }), /Hace falta iniciar sesion/);
 
       assert.throws(() => store.updateProfile({
         sessionId: "session-profile",
-        avatarUrl: "javascript:alert(1)"
-      }), /http o https/);
+        avatarDataUrl: "data:text/html;base64,PHNjcmlwdD4="
+      }), /PNG, JPG, WebP o GIF/);
     });
   });
 

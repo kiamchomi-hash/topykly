@@ -212,7 +212,7 @@ async function handleApiRequest(store, authService, req, res, url) {
       sendBackendPayload(res, req, authService, 200, store.updateProfile({
         ...context,
         displayName: body.displayName,
-        avatarUrl: body.avatarUrl,
+        avatarDataUrl: body.avatarDataUrl,
         selectedTopicId: body.selectedTopicId ?? null
       }));
       return;

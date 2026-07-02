@@ -15,6 +15,8 @@ const DEFAULT_MODERATOR_USER_ID = "u2";
 const TOPIC_TITLE_MAX_LENGTH = 80;
 const MESSAGE_TEXT_MAX_LENGTH = 240;
 const REPORT_REASON_MAX_LENGTH = 240;
+const AVATAR_UPLOAD_MAX_BYTES = 256 * 1024;
+const AVATAR_UPLOAD_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const TOPIC_STATUS_ACTIVE = "active";
 const TOPIC_STATUS_BLOCKED = "blocked";
 const TOPIC_STATUS_EXPELLED = "expelled";
@@ -116,6 +118,31 @@ function normalizeAvatarUrl(value) {
   return parsedUrl.toString();
 }
 
+function normalizeAvatarDataUrl(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    throw new ApiError(400, "VALIDATION_ERROR", "La foto debe ser una imagen PNG, JPG, WebP o GIF valida.");
+  }
+
+  const mimeType = match[1];
+  const payload = match[2];
+  if (!AVATAR_UPLOAD_MIME_TYPES.has(mimeType)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "El tipo de imagen no esta permitido.");
+  }
+
+  const byteLength = Buffer.byteLength(payload, "base64");
+  if (byteLength > AVATAR_UPLOAD_MAX_BYTES) {
+    throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 256 KB.");
+  }
+
+  return `data:${mimeType};base64,${payload}`;
+}
+
 function summarizeText(text, limit = 96) {
   const normalized = normalizeMessageText(text).replace(/\s+/g, " ");
   if (normalized.length <= limit) {
@@ -189,6 +216,8 @@ function initSchema(db) {
       auth_subject TEXT,
       email TEXT,
       avatar_url TEXT,
+      avatar_pending_url TEXT,
+      avatar_review_status TEXT,
       profile_pending INTEGER NOT NULL DEFAULT 0,
       profile_suggested_name TEXT,
       profile_suggested_avatar_url TEXT,
@@ -282,6 +311,8 @@ function initSchema(db) {
   ensureColumn(db, "users", "auth_subject", "TEXT");
   ensureColumn(db, "users", "email", "TEXT");
   ensureColumn(db, "users", "avatar_url", "TEXT");
+  ensureColumn(db, "users", "avatar_pending_url", "TEXT");
+  ensureColumn(db, "users", "avatar_review_status", "TEXT");
   ensureColumn(db, "users", "profile_pending", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "profile_suggested_name", "TEXT");
   ensureColumn(db, "users", "profile_suggested_avatar_url", "TEXT");
@@ -423,6 +454,8 @@ function mapViewerRow(row, sessionRow) {
     role: row.role || "",
     email: row.email ?? null,
     avatarUrl: row.avatar_url ?? null,
+    avatarPendingUrl: row.avatar_pending_url ?? null,
+    avatarReviewStatus: row.avatar_review_status ?? null,
     profilePending: Boolean(row.profile_pending),
     profileSuggestedName: row.profile_suggested_name ?? null,
     profileSuggestedAvatarUrl: row.profile_suggested_avatar_url ?? null,
@@ -582,7 +615,7 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "" }) {
 
 function getFrontendUsers(db, viewerId) {
   return db.prepare(`
-    SELECT id, name, type, role, score, email, avatar_url AS avatarUrl, profile_pending AS profilePending
+    SELECT id, name, type, role, score, email, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
     FROM users
     WHERE status = 'active' AND (type = 'registered' OR id = ?)
     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, score DESC, created_at ASC
@@ -1222,7 +1255,7 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({ sessionId, authMode, displayName = null, avatarUrl = null, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateProfile({ sessionId, authMode, displayName = null, avatarDataUrl = null, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -1232,13 +1265,19 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
         }
 
         const normalizedDisplayName = normalizeUserDisplayName(displayName, context.viewer.displayName || "Usuario");
-        const normalizedAvatarUrl = normalizeAvatarUrl(avatarUrl);
+        const normalizedAvatarDataUrl = normalizeAvatarDataUrl(avatarDataUrl);
         const nowIso = new Date().toISOString();
+        const nextPendingUrl = normalizedAvatarDataUrl ?? context.viewer.avatarPendingUrl ?? null;
+        const nextReviewStatus = normalizedAvatarDataUrl
+          ? "pending"
+          : context.viewer.avatarReviewStatus ?? null;
+
         db.prepare(`
           UPDATE users
-          SET name = ?, avatar_url = ?, profile_pending = 0, profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
+          SET name = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
+              profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
-        `).run(normalizedDisplayName, normalizedAvatarUrl, nowIso, context.viewer.id);
+        `).run(normalizedDisplayName, nextPendingUrl, nextReviewStatus, nowIso, context.viewer.id);
 
         const refreshedContext = resolveViewer(db, {
           sessionId: context.sessionId,
@@ -1529,6 +1568,51 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
           return buildFrontendPayload(db, context, selectedTopicId);
         }
 
+        if (normalizedActionType === "approve_avatar") {
+          const userRow = assertExistingUser(db, targetId);
+          if (userRow.type !== "registered" || !userRow.avatar_pending_url) {
+            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario no tiene una foto pendiente.");
+          }
+
+          db.prepare(`
+            UPDATE users
+            SET avatar_url = ?, avatar_pending_url = NULL, avatar_review_status = 'approved', updated_at = ?
+            WHERE id = ?
+          `).run(userRow.avatar_pending_url, nowIso, userRow.id);
+          recordModerationAction(db, {
+            actionType: normalizedActionType,
+            targetType: "user",
+            targetId: userRow.id,
+            actorUserId: context.viewer.id,
+            reason: normalizedReason,
+            createdAt: nowIso
+          });
+
+          return buildFrontendPayload(db, context, selectedTopicId);
+        }
+
+        if (normalizedActionType === "reject_avatar") {
+          const userRow = assertExistingUser(db, targetId);
+          if (userRow.type !== "registered" || !userRow.avatar_pending_url) {
+            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario no tiene una foto pendiente.");
+          }
+
+          db.prepare(`
+            UPDATE users
+            SET avatar_pending_url = NULL, avatar_review_status = 'rejected', updated_at = ?
+            WHERE id = ?
+          `).run(nowIso, userRow.id);
+          recordModerationAction(db, {
+            actionType: normalizedActionType,
+            targetType: "user",
+            targetId: userRow.id,
+            actorUserId: context.viewer.id,
+            reason: normalizedReason,
+            createdAt: nowIso
+          });
+
+          return buildFrontendPayload(db, context, selectedTopicId);
+        }
         if (normalizedActionType === "block_session") {
           const normalizedSessionId = String(targetId || "").trim();
           if (!normalizedSessionId) {
