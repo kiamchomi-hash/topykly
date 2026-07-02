@@ -17,20 +17,40 @@ const app = startPreviewServer({
   log() {}
 });
 
+const cookieJars = new Map();
+
+function readCookieHeader(response) {
+  const setCookie = response.headers.get("set-cookie") || "";
+  return setCookie
+    .split(/,(?=\s*[^;,=]+=[^;,]+)/)
+    .map((entry) => entry.split(";")[0].trim())
+    .filter(Boolean)
+    .join("; ");
+}
+
 async function request(pathname, {
   method = "GET",
   sessionId = "session-smoke-guest",
   body = undefined,
   expectedStatus = 200
 } = {}) {
+  const headers = {
+    "Content-Type": "application/json"
+  };
+  const cookie = cookieJars.get(sessionId);
+  if (cookie) {
+    headers.Cookie = cookie;
+  }
+
   const response = await fetch(`${origin}${pathname}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      "x-topykly-session-id": sessionId
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined
   });
+  const nextCookie = readCookieHeader(response);
+  if (nextCookie) {
+    cookieJars.set(sessionId, nextCookie);
+  }
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
 
@@ -84,7 +104,8 @@ try {
   await test("bootstraps guest session with active and visible topics", async () => {
     const payload = await request("/api/bootstrap", { sessionId: "session-smoke-bootstrap" });
 
-    assert.match(payload.sessionId, /^session-smoke-bootstrap$/);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload, "sessionId"), false);
+    assert.match(cookieJars.get("session-smoke-bootstrap") || "", /topykly_sid=/);
     assert.equal(payload.topics.length, 40);
     assert.equal(payload.topics.filter((topic) => topic.visible).length, 20);
     assert.equal(payload.viewer.type, "guest");
@@ -183,7 +204,7 @@ try {
 
     const logout = await request("/api/auth/logout", {
       method: "POST",
-      sessionId: login.sessionId,
+      sessionId,
       body: { selectedTopicId: null }
     });
 

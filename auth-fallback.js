@@ -1,20 +1,13 @@
-const SESSION_STORAGE_KEY = "topykly-session-id";
-const LEGACY_SESSION_STORAGE_KEY = "chetrend-session-id";
-
 let authStatusPromise = null;
 let turnstileWidgetId = null;
 
-function ensureClientSessionId() {
-  const existing = localStorage.getItem(SESSION_STORAGE_KEY)
-    || localStorage.getItem(LEGACY_SESSION_STORAGE_KEY);
-  if (existing) {
-    localStorage.setItem(SESSION_STORAGE_KEY, existing);
-    return existing;
+function clearLegacyClientSessionId() {
+  try {
+    localStorage.removeItem("topykly-session-id");
+    localStorage.removeItem("chetrend-session-id");
+  } catch {
+    // Ignore storage failures; auth relies on HttpOnly cookies.
   }
-
-  const created = `session-${crypto.randomUUID()}`;
-  localStorage.setItem(SESSION_STORAGE_KEY, created);
-  return created;
 }
 
 function flash(message) {
@@ -41,9 +34,7 @@ function setAuthModalOpen(isOpen) {
 async function getAuthStatus() {
   if (!authStatusPromise) {
     authStatusPromise = fetch("/api/auth/status", {
-      headers: {
-        "x-topykly-session-id": ensureClientSessionId()
-      }
+      credentials: "same-origin"
     }).then((response) => response.json());
   }
 
@@ -134,9 +125,9 @@ async function continueWithGoogle(event) {
 
   const response = await fetch("/api/auth/login", {
     method: "POST",
+    credentials: "same-origin",
     headers: {
-      "Content-Type": "application/json",
-      "x-topykly-session-id": ensureClientSessionId()
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
       selectedTopicId: null,

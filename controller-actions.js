@@ -1,6 +1,6 @@
 import { createChatActions } from "./controller-chat-actions.js";
 import { createRankingActions } from "./controller-ranking-actions.js";
-import { api } from "./services/api.js";
+import { api } from "./services/api.js?v=20260702-sessioncookie";
 import { dispatch, reducers } from "./store-logic.js";
 import {
   applyPaletteToDocument,

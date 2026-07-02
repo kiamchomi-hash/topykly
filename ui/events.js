@@ -1,4 +1,4 @@
-import { bindTopbarEvents } from "./topbar.js?v=20260702-authfix";
+import { bindTopbarEvents } from "./topbar.js?v=20260702-sessioncookie";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled]):not([tabindex='-1'])",

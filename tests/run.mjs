@@ -2069,6 +2069,9 @@ await (async () => {
         },
         setItem(key, value) {
           storage.set(key, value);
+        },
+        removeItem(key) {
+          storage.delete(key);
         }
       };
       globalThis.window = {
@@ -2093,7 +2096,8 @@ await (async () => {
 
       assert.deepEqual(result, { redirected: true });
       assert.equal(assignedUrl, "https://accounts.example.com/oauth/authorize");
-      assert.match(storage.get("topykly-session-id"), /^session-/);
+      assert.equal(storage.has("topykly-session-id"), false);
+      assert.equal(storage.has("chetrend-session-id"), false);
     } finally {
       globalThis.fetch = previousFetch;
       globalThis.window = previousWindow;
@@ -3166,7 +3170,7 @@ await (async () => {
     assert.match(styles, /html\[data-theme="light"\] \.composer--topic-create input,\s*html\[data-theme="light"\] \.composer--topic-create textarea\s*\{[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /html\[data-theme="light"\] \.message \+ \.message::before\s*\{[\s\S]*height:\s*1px;/);
     assert.match(styles, /html\[data-theme="light"\] \.rankings-section\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top:\s*1px solid/);
-    assert.match(app, /from "\.\/controller\.js\?v=20260702-authfix"/);
+    assert.match(app, /from "\.\/controller\.js\?v=20260702-sessioncookie"/);
     assert.match(components, /createProfileAvatar/);
     assert.match(components, /message__avatar/);
     assert.match(components, /message__body/);
@@ -3178,7 +3182,7 @@ await (async () => {
     assert.match(components, /user-item__trigger/);
     assert.match(components, /aria-pressed/);
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
-    assert.match(controller, /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260702-authfix";/);
+    assert.match(controller, /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260702-sessioncookie";/);
     assert.match(controllerApp, /from "\.\/ui\/transition-utils\.js"/);
     assert.match(controllerTheme, /export function applyStoredTheme/);
     assert.match(controllerTheme, /topykly-palette/);
@@ -3189,8 +3193,8 @@ await (async () => {
     assert.match(controllerViewport, /syncRankingListHeights/);
     assert.match(controllerApp, /from "\.\/app-store\.js"/);
     assert.match(controllerApp, /from "\.\/ui\/dom\.js"/);
-    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260702-authfix"/);
-    assert.match(controllerApp, /from "\.\/controller-actions\.js"/);
+    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260702-sessioncookie"/);
+    assert.match(controllerApp, /from "\.\/controller-actions\.js\?v=20260702-sessioncookie"/);
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
     assert.match(controllerApp, /from "\.\/controller-render\.js"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
@@ -3198,6 +3202,7 @@ await (async () => {
     assert.match(controllerApp, /bindPageEvents\(dom, \{[\s\S]*state: actions\.state,[\s\S]*setAuthUiSync: actions\.setAuthUiSync,/);
     assert.match(controllerApp, /openAdminPanel: actions\.openAdminPanel,[\s\S]*closeAdminPanel: actions\.closeAdminPanel,[\s\S]*applyAdminAction: actions\.applyAdminAction,/);
     assert.doesNotMatch(controllerApp, /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/);
+    assert.match(actions, /from "\.\/services\/api\.js\?v=20260702-sessioncookie"/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
     assert.match(actions, /openPaletteModal/);
@@ -3266,7 +3271,7 @@ await (async () => {
     assert.match(domModule, /paletteOptionGrid/);
     assert.match(domModule, /assertRequiredDom/);
     assert.match(domModule, /Missing required DOM nodes/);
-    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260702-authfix"/);
+    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260702-sessioncookie"/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
     assert.match(eventsModule, /messageForm\.addEventListener\("submit", handlers\.submitMessage\)/);
@@ -3282,7 +3287,7 @@ await (async () => {
     assert.match(eventsModule, /data-user-action/);
     assert.match(renderUtils, /renderIntoTargets/);
     assert.match(drawers, /getTransitionDurationMs/);
-    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260702-authfix"/);
+    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260702-sessioncookie"/);
     assert.match(topbar, /bindTopbarEvents/);
     assert.match(topbarActionEvents, /openPaletteModal/);
     assert.match(topbarActionEvents, /closePaletteModal/);

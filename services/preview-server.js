@@ -119,8 +119,6 @@ function getRequestContext(req) {
   return {
     sessionId: cookies.topykly_sid
       || cookies.chetrend_sid
-      || req.headers["x-topykly-session-id"]
-      || req.headers["x-chetrend-session-id"]
       || "",
     ipAddress: forwardedFor || req.socket.remoteAddress || "",
     cookies
@@ -144,8 +142,17 @@ function safeFilePathFromUrl(urlPathname) {
   return absolutePath;
 }
 
+function stripPrivateSessionPayload(payload) {
+  if (!payload || typeof payload !== "object" || !("sessionId" in payload)) {
+    return payload;
+  }
+
+  const { sessionId, ...publicPayload } = payload;
+  return publicPayload;
+}
+
 function sendBackendPayload(res, req, authService, statusCode, payload) {
-  sendJson(res, statusCode, payload, {
+  sendJson(res, statusCode, stripPrivateSessionPayload(payload), {
     cookies: payload?.sessionId
       ? [authService.createSessionCookie(req, payload.sessionId)]
       : []

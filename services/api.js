@@ -1,8 +1,5 @@
 import { buildUsers } from "../model.js";
 
-const SESSION_STORAGE_KEY = "topykly-session-id";
-const LEGACY_SESSION_STORAGE_KEY = "chetrend-session-id";
-
 export class ApiError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -14,40 +11,23 @@ export class ApiError extends Error {
   }
 }
 
-function ensureClientSessionId() {
+function clearLegacyClientSessionId() {
   if (typeof localStorage === "undefined") {
-    return `session-${crypto.randomUUID()}`;
+    return;
   }
 
-  const existing = localStorage.getItem(SESSION_STORAGE_KEY)
-    || localStorage.getItem(LEGACY_SESSION_STORAGE_KEY);
-  if (existing) {
-    localStorage.setItem(SESSION_STORAGE_KEY, existing);
-    return existing;
+  try {
+    localStorage.removeItem("topykly-session-id");
+    localStorage.removeItem("chetrend-session-id");
+  } catch {
+    // Ignore storage failures; auth relies on HttpOnly cookies.
   }
-
-  const created = `session-${crypto.randomUUID()}`;
-  localStorage.setItem(SESSION_STORAGE_KEY, created);
-  return created;
-}
-
-function persistClientSessionId(sessionId) {
-  const normalized = String(sessionId || "").trim();
-  if (!normalized) {
-    return ensureClientSessionId();
-  }
-
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem(SESSION_STORAGE_KEY, normalized);
-  }
-
-  return normalized;
 }
 
 function createHeaders(extraHeaders = {}) {
+  clearLegacyClientSessionId();
   return {
     "Content-Type": "application/json",
-    "x-topykly-session-id": ensureClientSessionId(),
     ...extraHeaders
   };
 }
@@ -66,6 +46,7 @@ function createUrl(pathname, searchParams = {}) {
 async function request(pathname, { method = "GET", body, searchParams } = {}) {
   const response = await fetch(createUrl(pathname, searchParams), {
     method,
+    credentials: "same-origin",
     headers: createHeaders(),
     body: body ? JSON.stringify(body) : undefined
   });
@@ -87,6 +68,7 @@ async function request(pathname, { method = "GET", body, searchParams } = {}) {
 async function readApiPayload(pathname, { method = "GET", body, searchParams } = {}) {
   const response = await fetch(createUrl(pathname, searchParams), {
     method,
+    credentials: "same-origin",
     headers: createHeaders(),
     body: body ? JSON.stringify(body) : undefined
   });
@@ -123,9 +105,8 @@ function normalizeTopic(topic) {
 }
 
 function normalizeBackendPayload(payload) {
-  const sessionId = persistClientSessionId(payload.sessionId || ensureClientSessionId());
+  clearLegacyClientSessionId();
   return {
-    sessionId,
     viewer: payload.viewer || null,
     selectedTopicId: payload.selectedTopicId ?? null,
     reportedTopicIds: Array.isArray(payload.reportedTopicIds) ? payload.reportedTopicIds : [],
@@ -230,6 +211,7 @@ export const api = {
   async listReports() {
     const response = await fetch(createUrl("/api/moderation/reports"), {
       method: "GET",
+      credentials: "same-origin",
       headers: createHeaders()
     });
     const payload = await response.json().catch(() => ({}));

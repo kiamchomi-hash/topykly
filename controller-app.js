@@ -1,7 +1,7 @@
 import { openDrawer, closeDrawers } from "./ui/drawers.js";
-import { bindPageEvents } from "./ui/events.js?v=20260702-authfix";
+import { bindPageEvents } from "./ui/events.js?v=20260702-sessioncookie";
 import { cacheDom } from "./ui/dom.js";
-import { createActionHandlers } from "./controller-actions.js";
+import { createActionHandlers } from "./controller-actions.js?v=20260702-sessioncookie";
 import { createResponsiveHelpers } from "./controller-responsive.js";
 import { createRenderers } from "./controller-render.js";
 import { closeTimerRef, dom, state } from "./app-store.js";
@@ -9,7 +9,7 @@ import { applyStoredTheme, createBackToTopicsHandler, createResizeHandler } from
 import { dispatch, reducers } from "./store-logic.js";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
-import { api } from "./services/api.js";
+import { api } from "./services/api.js?v=20260702-sessioncookie";
 
 function readBootstrapLocationParams() {
   if (typeof window === "undefined") {
