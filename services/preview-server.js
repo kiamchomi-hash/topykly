@@ -9,6 +9,10 @@ import { ApiError, createBackendStore } from "./backend-store.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.join(__dirname, "..");
+const DEFAULT_GUEST_CLEANUP_INTERVAL_MS = 60 * 60_000;
+const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
+const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
+const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -18,7 +22,9 @@ const mime = {
   ".md": "text/markdown; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg"
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif"
 };
 
 function loadEnvFile(envPath) {
@@ -112,15 +118,21 @@ function readCookies(req) {
     }, {});
 }
 
+function getRequestIp(req) {
+  return String(req.headers["cf-connecting-ip"] || "").trim()
+    || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim()
+    || req.socket.remoteAddress
+    || "";
+}
+
 function getRequestContext(req) {
   const cookies = readCookies(req);
-  const forwardedFor = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
 
   return {
     sessionId: cookies.topykly_sid
       || cookies.chetrend_sid
       || "",
-    ipAddress: forwardedFor || req.socket.remoteAddress || "",
+    ipAddress: getRequestIp(req),
     cookies
   };
 }
@@ -224,6 +236,7 @@ async function handleApiRequest(store, authService, req, res, url) {
         ...context,
         displayName: body.displayName,
         avatarDataUrl: body.avatarDataUrl,
+        removeAvatar: body.removeAvatar === true,
         selectedTopicId: body.selectedTopicId ?? null
       }));
       return;
@@ -350,7 +363,134 @@ async function handleAuthCallback(store, authService, req, res, url) {
   }
 }
 
-function handleStaticRequest(req, res, url) {
+function handleAvatarRequest(res, url, avatarStorageDir) {
+  const fileName = path.basename(decodeURIComponent(url.pathname));
+  if (!fileName || url.pathname !== `/avatars/${fileName}`) {
+    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Invalid path");
+    return;
+  }
+
+  const resolvedFilePath = path.join(avatarStorageDir, fileName);
+  fs.readFile(resolvedFilePath, (error, data) => {
+    if (error) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Not found");
+      return;
+    }
+
+    res.writeHead(200, {
+      "Content-Type": mime[path.extname(resolvedFilePath)] || "application/octet-stream",
+      "Cache-Control": "public, max-age=31536000, immutable"
+    });
+    res.end(data);
+  });
+}
+
+function readPositiveNumber(value, fallback) {
+  const parsed = Number(String(value || "").trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function resolveHttpRateLimitConfig(env = process.env) {
+  return {
+    windowMs: readPositiveNumber(env.TOPYKLY_HTTP_RATE_LIMIT_WINDOW_MS || env.CHETREND_HTTP_RATE_LIMIT_WINDOW_MS, DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS),
+    max: readPositiveNumber(env.TOPYKLY_HTTP_RATE_LIMIT_MAX || env.CHETREND_HTTP_RATE_LIMIT_MAX, DEFAULT_HTTP_RATE_LIMIT_MAX),
+    authMax: readPositiveNumber(env.TOPYKLY_HTTP_AUTH_RATE_LIMIT_MAX || env.CHETREND_HTTP_AUTH_RATE_LIMIT_MAX, DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX)
+  };
+}
+
+function getHttpRateLimitScope(url) {
+  if (url.pathname === "/auth/oidc/callback" || url.pathname === "/api/auth/login") {
+    return "auth";
+  }
+
+  return "api";
+}
+
+function checkHttpRateLimit(buckets, req, url, config, nowMs = Date.now()) {
+  if (!config.windowMs || (!config.max && !config.authMax)) {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  const scope = getHttpRateLimitScope(url);
+  const limit = scope === "auth" ? config.authMax : config.max;
+  if (!limit) {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  const ipAddress = getRequestIp(req) || "unknown";
+  const key = `${scope}:${ipAddress}`;
+  const existing = buckets.get(key);
+  const resetAt = existing?.resetAt && existing.resetAt > nowMs
+    ? existing.resetAt
+    : nowMs + config.windowMs;
+  const count = existing?.resetAt && existing.resetAt > nowMs
+    ? existing.count + 1
+    : 1;
+
+  buckets.set(key, { count, resetAt });
+
+  for (const [bucketKey, bucket] of buckets) {
+    if (bucket.resetAt <= nowMs) {
+      buckets.delete(bucketKey);
+    }
+  }
+
+  if (count <= limit) {
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  return {
+    allowed: false,
+    retryAfterSeconds: Math.max(1, Math.ceil((resetAt - nowMs) / 1000))
+  };
+}
+
+function enforceHttpRateLimit(res, buckets, req, url, config) {
+  const result = checkHttpRateLimit(buckets, req, url, config);
+  if (result.allowed) {
+    return true;
+  }
+
+  sendJson(res, 429, {
+    error: {
+      code: "RATE_LIMITED",
+      message: "Demasiadas solicitudes. Intenta nuevamente en unos segundos.",
+      retryAfterSeconds: result.retryAfterSeconds
+    }
+  }, {
+    headers: {
+      "Retry-After": String(result.retryAfterSeconds)
+    }
+  });
+  return false;
+}
+function resolveGuestCleanupIntervalMs(env = process.env) {
+  const rawValue = String(env.TOPYKLY_GUEST_CLEANUP_INTERVAL_MS || env.CHETREND_GUEST_CLEANUP_INTERVAL_MS || "").trim();
+  if (!rawValue) {
+    return DEFAULT_GUEST_CLEANUP_INTERVAL_MS;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function runGuestCleanup(store, log) {
+  try {
+    const result = store.cleanupInactiveGuests();
+    if (result.deletedSessions || result.deletedGuestIpRateLimits) {
+      log(`guest cleanup removed ${result.deletedSessions} sessions and ${result.deletedGuestIpRateLimits} rate-limit rows`);
+    }
+  } catch (error) {
+    log(`guest cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+function handleStaticRequest(req, res, url, store) {
+  if (url.pathname.startsWith("/avatars/")) {
+    handleAvatarRequest(res, url, store.avatarStorageDir);
+    return;
+  }
   const filePath = safeFilePathFromUrl(url.pathname);
   if (!filePath) {
     res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
@@ -391,21 +531,35 @@ export function startPreviewServer({
   loadEnvFile(path.join(root, ".env"));
   const store = createBackendStore({ dbPath });
   const authService = createAuthService();
+  const httpRateLimitConfig = resolveHttpRateLimitConfig();
+  const httpRateLimitBuckets = new Map();
+  const guestCleanupIntervalMs = resolveGuestCleanupIntervalMs();
+  const guestCleanupTimer = guestCleanupIntervalMs > 0
+    ? setInterval(() => runGuestCleanup(store, log), guestCleanupIntervalMs)
+    : null;
+  guestCleanupTimer?.unref?.();
+  runGuestCleanup(store, log);
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
 
       if (url.pathname === "/auth/oidc/callback") {
+        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
+          return;
+        }
         await handleAuthCallback(store, authService, req, res, url);
         return;
       }
 
       if (url.pathname.startsWith("/api/")) {
+        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
+          return;
+        }
         await handleApiRequest(store, authService, req, res, url);
         return;
       }
 
-      handleStaticRequest(req, res, url);
+      handleStaticRequest(req, res, url, store);
     } catch (error) {
       sendJson(res, 500, {
         error: {
@@ -424,6 +578,9 @@ export function startPreviewServer({
     server,
     store,
     close() {
+      if (guestCleanupTimer) {
+        clearInterval(guestCleanupTimer);
+      }
       server.close();
       store.close();
     }

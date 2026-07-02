@@ -167,12 +167,13 @@ export const api = {
     });
   },
 
-  async updateProfile({ displayName = null, avatarDataUrl = null, selectedTopicId = null } = {}) {
+  async updateProfile({ displayName = null, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null } = {}) {
     return request("/api/profile", {
       method: "PATCH",
       body: {
         displayName,
         avatarDataUrl,
+        removeAvatar,
         selectedTopicId
       }
     });

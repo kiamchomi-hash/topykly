@@ -424,6 +424,55 @@ await (async () => {
       assert.equal(diagnostics.sessions, 1);
     });
   });
+
+  await test("backend caps materialized guest storage for rotating sessions", async () => {
+    await withTempStore((store) => {
+      const topicId = store.createTopic({
+        sessionId: "session-guest-cap-topic",
+        authMode: "registered",
+        title: "Tema para invitados",
+        text: "Raiz para probar sesiones invitadas."
+      }).selectedTopicId;
+
+      for (let index = 0; index < 40; index += 1) {
+        store.reportEntity("topic", topicId, {
+          sessionId: `session-rotating-guest-${index}`,
+          authMode: "guest",
+          ipAddress: "203.0.113.77",
+          reason: `Reporte invitado ${index}`
+        });
+      }
+
+      const diagnostics = store.getDiagnostics();
+
+      assert.equal(diagnostics.users, initialUsers.length + 1);
+      assert.equal(diagnostics.sessions <= 1 + 25, true);
+    });
+  });
+  await test("backend scheduled cleanup removes inactive guest state", async () => {
+    await withTempStore((store) => {
+      store.login({
+        sessionId: "session-cleanup-registered"
+      });
+      store.createTopic({
+        sessionId: "session-cleanup-guest",
+        authMode: "guest",
+        title: "Tema temporal invitado",
+        text: "Mensaje temporal para crear estado guest.",
+        ipAddress: "203.0.113.88"
+      });
+
+      assert.equal(store.getDiagnostics().sessions, 2);
+
+      const result = store.cleanupInactiveGuests({
+        nowMs: Date.now() + (8 * 24 * 60 * 60_000)
+      });
+
+      assert.equal(result.deletedSessions, 1);
+      assert.equal(result.deletedGuestIpRateLimits, 1);
+      assert.equal(store.getDiagnostics().sessions, 1);
+    });
+  });
   await test("backend diagnostics report whether SQLite storage was explicitly configured", async () => {
     assert.deepEqual(resolveDbConfig(null, {}), {
       dbPath: path.join(rootDir, ".data", "topykly.sqlite"),
@@ -525,7 +574,8 @@ await (async () => {
       assert.equal(completedPayload.viewer.profilePending, false);
       assert.equal(completedPayload.viewer.displayName, "Alias elegido");
       assert.equal(completedPayload.viewer.avatarUrl, null);
-      assert.equal(completedPayload.viewer.avatarPendingUrl, "data:image/png;base64,aGVsbG8=");
+      assert.match(completedPayload.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
+      assert.doesNotMatch(completedPayload.viewer.avatarPendingUrl, /^data:/);
       assert.equal(completedPayload.viewer.avatarReviewStatus, "pending");
 
       const secondPayload = store.loginWithIdentity({
@@ -544,6 +594,39 @@ await (async () => {
     });
   });
 
+  await test("backend loginWithIdentity ignores invalid provider avatar urls", async () => {
+    await withTempStore((store) => {
+      const longAvatarUrl = `https://cdn.example.com/avatar.png?signature=${"a".repeat(520)}`;
+
+      const longAvatarPayload = store.loginWithIdentity({
+        sessionId: "session-oidc-long-avatar",
+        sourceSessionId: "session-oidc-long-avatar-source",
+        authProvider: "https://accounts.example.com",
+        authSubject: "subject-long-avatar",
+        email: "long-avatar@example.com",
+        displayName: "Long Avatar User",
+        avatarUrl: longAvatarUrl
+      });
+
+      assert.equal(longAvatarPayload.viewer.type, "registered");
+      assert.equal(longAvatarPayload.viewer.profileSuggestedName, "Long Avatar User");
+      assert.equal(longAvatarPayload.viewer.profileSuggestedAvatarUrl, null);
+
+      const invalidAvatarPayload = store.loginWithIdentity({
+        sessionId: "session-oidc-invalid-avatar",
+        sourceSessionId: "session-oidc-invalid-avatar-source",
+        authProvider: "https://accounts.example.com",
+        authSubject: "subject-invalid-avatar",
+        email: "invalid-avatar@example.com",
+        displayName: "Invalid Avatar User",
+        avatarUrl: "javascript:alert(1)"
+      });
+
+      assert.equal(invalidAvatarPayload.viewer.type, "registered");
+      assert.equal(invalidAvatarPayload.viewer.profileSuggestedName, "Invalid Avatar User");
+      assert.equal(invalidAvatarPayload.viewer.profileSuggestedAvatarUrl, null);
+    });
+  });
   await test("backend persists registered users and topics across store reopen", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-persist-"));
     const dbPath = path.join(tempDir, "topykly.sqlite");
@@ -594,7 +677,7 @@ await (async () => {
     }
   });
   await test("backend updateProfile lets registered users change display name and request avatar review", async () => {
-    await withTempStore((store) => {
+    await withTempStore(async (store) => {
       store.login({
         sessionId: "session-profile",
         selectedTopicId: null
@@ -609,9 +692,12 @@ await (async () => {
       assert.equal(updated.viewer.type, "registered");
       assert.equal(updated.viewer.displayName, "Nombre nuevo");
       assert.equal(updated.viewer.avatarUrl, null);
-      assert.equal(updated.viewer.avatarPendingUrl, "data:image/jpeg;base64,aW1hZ2U=");
+      assert.match(updated.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.jpg$/);
+      assert.doesNotMatch(updated.viewer.avatarPendingUrl, /^data:/);
       assert.equal(updated.viewer.avatarReviewStatus, "pending");
-      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarPendingUrl, "data:image/jpeg;base64,aW1hZ2U=");
+      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarPendingUrl, updated.viewer.avatarPendingUrl);
+      const storedAvatar = await readFile(path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl)));
+      assert.equal(storedAvatar.toString("utf8"), "image");
 
       store.login({
         sessionId: "session-profile-moderator",
@@ -623,9 +709,19 @@ await (async () => {
         targetId: updated.viewer.id
       });
       const approvedUser = approved.users.find((user) => user.id === updated.viewer.id);
-      assert.equal(approvedUser.avatarUrl, "data:image/jpeg;base64,aW1hZ2U=");
+      assert.equal(approvedUser.avatarUrl, updated.viewer.avatarPendingUrl);
+      assert.doesNotMatch(approvedUser.avatarUrl, /^data:/);
       assert.equal(approvedUser.avatarPendingUrl, null);
 
+      const removedAvatar = store.updateProfile({
+        sessionId: "session-profile",
+        displayName: "Nombre nuevo",
+        removeAvatar: true
+      });
+      assert.equal(removedAvatar.viewer.avatarUrl, null);
+      assert.equal(removedAvatar.viewer.avatarPendingUrl, null);
+      assert.equal(removedAvatar.viewer.avatarReviewStatus, null);
+      assert.equal(removedAvatar.users.find((user) => user.id === updated.viewer.id)?.avatarUrl, null);
       assert.throws(() => store.updateProfile({
         sessionId: "session-profile-guest",
         avatarDataUrl: "data:image/png;base64,aGVsbG8="
@@ -706,6 +802,7 @@ await (async () => {
         });
 
         assert.equal(pendingPayload.viewer.avatarReviewStatus, "pending");
+        assert.match(pendingPayload.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
 
         const dashboard = store.getAdminDashboard({ sessionId: "session-admin-oauth" });
         assert.equal(dashboard.pendingAvatars.some((item) => item.userId === userPayload.viewer.id), true);
@@ -716,7 +813,9 @@ await (async () => {
           targetId: userPayload.viewer.id
         });
         const approvedUser = approved.users.find((user) => user.id === userPayload.viewer.id);
-        assert.equal(approvedUser.avatarUrl, "data:image/png;base64,aGVsbG8=");
+        assert.equal(approvedUser.avatarUrl, pendingPayload.viewer.avatarPendingUrl);
+        assert.match(approvedUser.avatarUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
+        assert.doesNotMatch(approvedUser.avatarUrl, /^data:/);
         assert.equal(approvedUser.avatarPendingUrl, null);
         assert.equal(store.getAdminDashboard({ sessionId: "session-admin-oauth" }).pendingAvatars.length, 0);
       });
@@ -1049,6 +1148,56 @@ await (async () => {
     });
   });
 
+  await test("backend enforces guest rate limits across rotated sessions by ip", async () => {
+    await withTempStore((store) => {
+      const activeTopicId = store.bootstrap({
+        sessionId: "session-guest-ip-bootstrap",
+        authMode: "guest",
+        ipAddress: "203.0.113.50"
+      }).topics[0].id;
+
+      store.addMessage(activeTopicId, {
+        sessionId: "session-guest-ip-a",
+        authMode: "guest",
+        text: "Primer comentario guest por ip",
+        ipAddress: "203.0.113.50"
+      });
+
+      assert.throws(() => {
+        store.addMessage(activeTopicId, {
+          sessionId: "session-guest-ip-b",
+          authMode: "guest",
+          text: "Segundo comentario con sesion rotada",
+          ipAddress: "203.0.113.50"
+        });
+      }, (error) => error.code === "RATE_LIMITED" && Number.isInteger(error.retryAfterSeconds));
+
+      store.addMessage(activeTopicId, {
+        sessionId: "session-guest-ip-c",
+        authMode: "guest",
+        text: "Comentario desde otra ip",
+        ipAddress: "203.0.113.51"
+      });
+
+      store.createTopic({
+        sessionId: "session-guest-topic-ip-a",
+        authMode: "guest",
+        title: "Tema guest por ip",
+        text: "Primer tema desde esta ip",
+        ipAddress: "203.0.113.52"
+      });
+
+      assert.throws(() => {
+        store.createTopic({
+          sessionId: "session-guest-topic-ip-b",
+          authMode: "guest",
+          title: "Tema guest rotado",
+          text: "Segundo tema demasiado rapido",
+          ipAddress: "203.0.113.52"
+        });
+      }, (error) => error.code === "RATE_LIMITED" && Number.isInteger(error.retryAfterSeconds));
+    });
+  });
   await test("backend session and ip blocks deny participation without breaking read access", async () => {
     await withTempStore((store) => {
       const blockedSessionPayload = store.bootstrap({
@@ -2902,7 +3051,18 @@ await (async () => {
     const topics = await read("ui/topics.js");
     const users = await read("ui/users.js");
     const renderUtils = await read("ui/render-utils.js");
+    assert.doesNotMatch(renderUtils, /outerHTML/);
+    assert.match(renderUtils, /function patchElement\(existing, incoming\)/);
+    assert.match(renderUtils, /function patchChildren\(existing, incoming\)/);
     const previewServer = await read("services/preview-server.js");
+    assert.match(previewServer, /DEFAULT_GUEST_CLEANUP_INTERVAL_MS/);
+    assert.match(previewServer, /DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS/);
+    assert.match(previewServer, /function enforceHttpRateLimit\(res, buckets, req, url, config\)/);
+    assert.match(previewServer, /sendJson\(res, 429/);
+    assert.match(previewServer, /"Retry-After": String\(result.retryAfterSeconds\)/);
+    assert.match(previewServer, /if \(!enforceHttpRateLimit\(res, httpRateLimitBuckets, req, url, httpRateLimitConfig\)\)/);
+    assert.match(previewServer, /setInterval\(\(\) => runGuestCleanup\(store, log\), guestCleanupIntervalMs\)/);
+    assert.match(previewServer, /clearInterval\(guestCleanupTimer\)/);
     const drawers = await read("ui/drawers.js");
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
@@ -2941,8 +3101,11 @@ await (async () => {
     assert.match(html, /class="palette-modal__body"/);
     assert.match(html, /id="paletteOptionGrid"/);
     assert.doesNotMatch(html, /id="paletteModalTitle"/);
-    assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@latest\/dist\/coloris\.min\.css/);
-    assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@latest\/dist\/coloris\.min\.js/);
+    assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/);
+    assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/);
+    assert.match(html, /integrity="sha384-DY3umZptOgjUNshBFbvu1\+3RVFPoD1\/CgGcc1yyJ77\/aFOJ7jtN4BORnz\/D\/xF0n"/);
+    assert.match(html, /integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmHnRTutomMnUySX9hqDgVQVcvMdc"/);
+    assert.match(html, /crossorigin="anonymous"/);
     assert.match(html, /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/);
     assert.match(html, /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/);
     assert.match(html, /const authState = "logged-out";/);
@@ -2951,6 +3114,8 @@ await (async () => {
     assert.match(html, /document\.documentElement\.classList\.toggle\("is-mobile-viewport", mobile\)/);
     assert.match(html, /document\.documentElement\.classList\.toggle\("is-desktop-viewport", !mobile\)/);
     assert.match(styles, /html\[data-auth-state="logged-out"\] \[data-auth-private\]\s*\{[\s\S]*display:\s*none !important;/);
+    assert.match(html, /id="authGoogleButton"[\s\S]*id="authTurnstile"/);
+    assert.doesNotMatch(html, /Resend|Google ya esta disponible|auth-modal__note/);
     assert.match(html, /id="authTools"[\s\S]*hidden/);
     assert.match(html, /data-auth-private/);
     assert.match(html, /id="mobileTopbarMenu"/);

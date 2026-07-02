@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -11,12 +11,20 @@ export const TOPIC_REPLY_LIMIT = 29;
 export const TOPIC_TOTAL_MESSAGE_LIMIT = TOPIC_REPLY_LIMIT + 1;
 
 const REGISTERED_USER_ID = "u1";
+const SHARED_GUEST_USER_ID = "guest-anonymous";
 const DEFAULT_MODERATOR_USER_ID = "u2";
 const TOPIC_TITLE_MAX_LENGTH = 80;
 const MESSAGE_TEXT_MAX_LENGTH = 240;
 const REPORT_REASON_MAX_LENGTH = 240;
 const AVATAR_UPLOAD_MAX_BYTES = 256 * 1024;
 const AVATAR_UPLOAD_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const AVATAR_UPLOAD_EXTENSIONS = new Map([
+  ["image/png", "png"],
+  ["image/jpeg", "jpg"],
+  ["image/webp", "webp"],
+  ["image/gif", "gif"]
+]);
+const AVATAR_PUBLIC_PATH = "/avatars";
 const TOPIC_STATUS_ACTIVE = "active";
 const TOPIC_STATUS_BLOCKED = "blocked";
 const TOPIC_STATUS_EXPELLED = "expelled";
@@ -26,6 +34,9 @@ const USER_STATUS_EXPELLED = "expelled";
 const REPORT_STATUS_OPEN = "open";
 const REPORT_STATUS_RESOLVED = "resolved";
 const GUEST_DISPLAY_NAME = "*topy";
+const GUEST_SESSION_TTL_MS = 7 * 24 * 60 * 60_000;
+const GUEST_SESSION_MAX_PER_IP = 25;
+const GUEST_SESSION_MAX_TOTAL = 1000;
 const EXTRA_TOPIC_SEEDS = [
   ["Guardia tardia", "Hilo tranquilo para quien entra despues de hora."],
   ["Objetivos cortos", "Lista rapida de pendientes y mini retos."],
@@ -162,13 +173,16 @@ function normalizeOptionalUrl(value) {
   return normalized || null;
 }
 
-function normalizeAvatarUrl(value) {
+function normalizeAvatarUrl(value, { discardInvalid = false } = {}) {
   const normalized = normalizeOptionalUrl(value);
   if (!normalized) {
     return null;
   }
 
   if (normalized.length > 500) {
+    if (discardInvalid) {
+      return null;
+    }
     throw new ApiError(400, "VALIDATION_ERROR", "La URL del avatar excede el maximo permitido.");
   }
 
@@ -176,17 +190,23 @@ function normalizeAvatarUrl(value) {
   try {
     parsedUrl = new URL(normalized);
   } catch {
+    if (discardInvalid) {
+      return null;
+    }
     throw new ApiError(400, "VALIDATION_ERROR", "La URL del avatar no es valida.");
   }
 
   if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    if (discardInvalid) {
+      return null;
+    }
     throw new ApiError(400, "VALIDATION_ERROR", "El avatar debe usar una URL http o https.");
   }
 
   return parsedUrl.toString();
 }
 
-function normalizeAvatarDataUrl(value) {
+function storeAvatarDataUrl(value, avatarStorageDir) {
   const normalized = String(value || "").trim();
   if (!normalized) {
     return null;
@@ -203,12 +223,17 @@ function normalizeAvatarDataUrl(value) {
     throw new ApiError(400, "VALIDATION_ERROR", "El tipo de imagen no esta permitido.");
   }
 
-  const byteLength = Buffer.byteLength(payload, "base64");
-  if (byteLength > AVATAR_UPLOAD_MAX_BYTES) {
+  const avatarBuffer = Buffer.from(payload, "base64");
+  if (avatarBuffer.byteLength > AVATAR_UPLOAD_MAX_BYTES) {
     throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 256 KB.");
   }
 
-  return `data:${mimeType};base64,${payload}`;
+  const extension = AVATAR_UPLOAD_EXTENSIONS.get(mimeType);
+  const fileName = `${crypto.randomUUID()}.${extension}`;
+  mkdirSync(avatarStorageDir, { recursive: true });
+  writeFileSync(path.join(avatarStorageDir, fileName), avatarBuffer, { flag: "wx" });
+
+  return `${AVATAR_PUBLIC_PATH}/${fileName}`;
 }
 
 function summarizeText(text, limit = 96) {
@@ -371,6 +396,14 @@ function initSchema(db) {
       reason TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS guest_ip_rate_limits (
+      ip_address TEXT PRIMARY KEY,
+      last_topic_at TEXT,
+      last_message_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   ensureColumn(db, "users", "last_topic_at", "TEXT");
@@ -515,10 +548,13 @@ function mapViewerRow(row, sessionRow) {
   const lastMessageAt = viewerType === "registered"
     ? row?.last_message_at ?? null
     : sessionRow?.last_message_at ?? null;
+  const displayName = viewerType === "guest"
+    ? sessionRow?.guest_label || row.name
+    : row.name;
   return {
     id: row.id,
     type: viewerType,
-    displayName: row.name,
+    displayName,
     role: getEffectiveViewerRole(row),
     isAdmin: row.type === "registered" && canModerate(row),
     email: row.email ?? null,
@@ -574,16 +610,63 @@ function createTransientGuestContext(sessionId, ipAddress = "") {
 }
 
 function getOrCreateGuestUser(db) {
-  const userId = `guest-${crypto.randomUUID()}`;
-  const name = createGuestName();
   const nowIso = new Date().toISOString();
 
   db.prepare(`
     INSERT INTO users (id, name, type, role, score, status, created_at, updated_at)
     VALUES (?, ?, 'guest', 'Invitado', 0, 'active', ?, ?)
-  `).run(userId, name, nowIso, nowIso);
+    ON CONFLICT(id) DO UPDATE SET
+      updated_at = excluded.updated_at
+  `).run(SHARED_GUEST_USER_ID, GUEST_DISPLAY_NAME, nowIso, nowIso);
 
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  return db.prepare("SELECT * FROM users WHERE id = ?").get(SHARED_GUEST_USER_ID);
+}
+
+function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionId = "") {
+  const expiresBeforeIso = new Date(nowMs - GUEST_SESSION_TTL_MS).toISOString();
+  const perIpOffset = keepSessionId ? Math.max(0, GUEST_SESSION_MAX_PER_IP - 1) : GUEST_SESSION_MAX_PER_IP;
+  const totalOffset = keepSessionId ? Math.max(0, GUEST_SESSION_MAX_TOTAL - 1) : GUEST_SESSION_MAX_TOTAL;
+  let deletedSessions = 0;
+
+  deletedSessions += db.prepare(`
+    DELETE FROM sessions
+    WHERE auth_mode = 'guest' AND updated_at < ? AND id <> ?
+  `).run(expiresBeforeIso, keepSessionId).changes ?? 0;
+
+  const normalizedIpAddress = normalizeIpAddress(ipAddress);
+  if (normalizedIpAddress) {
+    deletedSessions += db.prepare(`
+      DELETE FROM sessions
+      WHERE id IN (
+        SELECT id
+        FROM sessions
+        WHERE auth_mode = 'guest' AND last_ip = ? AND id <> ?
+        ORDER BY updated_at DESC, created_at DESC, id DESC
+        LIMIT -1 OFFSET ?
+      )
+    `).run(normalizedIpAddress, keepSessionId, perIpOffset).changes ?? 0;
+  }
+
+  deletedSessions += db.prepare(`
+    DELETE FROM sessions
+    WHERE id IN (
+      SELECT id
+      FROM sessions
+      WHERE auth_mode = 'guest' AND id <> ?
+      ORDER BY updated_at DESC, created_at DESC, id DESC
+      LIMIT -1 OFFSET ?
+    )
+  `).run(keepSessionId, totalOffset).changes ?? 0;
+
+  const deletedGuestIpRateLimits = db.prepare(`
+    DELETE FROM guest_ip_rate_limits
+    WHERE updated_at < ?
+  `).run(expiresBeforeIso).changes ?? 0;
+
+  return {
+    deletedSessions,
+    deletedGuestIpRateLimits
+  };
 }
 
 function getRegisteredViewerRow(db, userId = REGISTERED_USER_ID) {
@@ -603,23 +686,27 @@ function readSessionRow(db, sessionId) {
 }
 
 function createGuestSession(db, sessionId, ipAddress, nowIso, existingSessionRow = null) {
-  const guestRow = getOrCreateGuestUser(db);
   const resolvedIpAddress = normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "");
+  const guestRow = getOrCreateGuestUser(db);
+  const guestLabel = existingSessionRow?.auth_mode === "guest" && existingSessionRow.guest_label
+    ? existingSessionRow.guest_label
+    : createGuestName();
 
   if (existingSessionRow) {
     db.prepare(`
       UPDATE sessions
       SET user_id = ?, auth_mode = 'guest', guest_label = ?, last_ip = ?, last_topic_at = NULL, last_message_at = NULL, updated_at = ?
       WHERE id = ?
-    `).run(guestRow.id, guestRow.name, resolvedIpAddress, nowIso, sessionId);
+    `).run(guestRow.id, guestLabel, resolvedIpAddress, nowIso, sessionId);
   } else {
     db.prepare(`
       INSERT INTO sessions (
         id, user_id, auth_mode, guest_label, last_ip, last_topic_at, last_message_at, created_at, updated_at
       ) VALUES (?, ?, 'guest', ?, ?, NULL, NULL, ?, ?)
-    `).run(sessionId, guestRow.id, guestRow.name, resolvedIpAddress, nowIso, nowIso);
+    `).run(sessionId, guestRow.id, guestLabel, resolvedIpAddress, nowIso, nowIso);
   }
 
+  pruneGuestSessions(db, resolvedIpAddress, new Date(nowIso).getTime(), sessionId);
   const sessionRow = readSessionRow(db, sessionId);
   return {
     sessionId,
@@ -861,6 +948,30 @@ function assertRateLimit(lastAtIso, viewerType, fieldName) {
   }
 }
 
+function getGuestIpActivityAt(db, context, fieldName) {
+  const ipAddress = getEffectiveContextIpAddress(context);
+  if (!ipAddress) {
+    return null;
+  }
+
+  const row = db.prepare(`
+    SELECT ${fieldName} AS last_at
+    FROM guest_ip_rate_limits
+    WHERE ip_address = ?
+    LIMIT 1
+  `).get(ipAddress);
+
+  return row?.last_at ?? null;
+}
+
+function getContextActivityAt(db, context, fieldName) {
+  if (context.viewer.type === "registered") {
+    return context.viewerRow[fieldName];
+  }
+
+  return getGuestIpActivityAt(db, context, fieldName) || context.sessionRow[fieldName];
+}
+
 function updateViewerActivity(db, context, fieldName) {
   const nowIso = new Date().toISOString();
   db.prepare(`
@@ -875,6 +986,18 @@ function updateViewerActivity(db, context, fieldName) {
       SET ${fieldName} = ?, updated_at = ?
       WHERE id = ?
     `).run(nowIso, nowIso, context.viewer.id);
+    return;
+  }
+
+  const ipAddress = getEffectiveContextIpAddress(context);
+  if (ipAddress) {
+    db.prepare(`
+      INSERT INTO guest_ip_rate_limits (ip_address, ${fieldName}, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(ip_address) DO UPDATE SET
+        ${fieldName} = excluded.${fieldName},
+        updated_at = excluded.updated_at
+    `).run(ipAddress, nowIso, nowIso, nowIso);
   }
 }
 
@@ -1033,7 +1156,7 @@ function getOrCreateAuthenticatedUser(db, {
   const normalizedProvider = String(authProvider || "").trim();
   const normalizedSubject = String(authSubject || "").trim();
   const normalizedEmail = normalizeOptionalEmail(email);
-  const normalizedSuggestedAvatarUrl = normalizeAvatarUrl(avatarUrl);
+  const normalizedSuggestedAvatarUrl = normalizeAvatarUrl(avatarUrl, { discardInvalid: true });
   const normalizedSuggestedDisplayName = normalizeUserDisplayName(
     displayName,
     normalizedEmail ? normalizedEmail.split("@")[0] : "Usuario"
@@ -1312,7 +1435,10 @@ function assertCommentableTopic(row) {
 export function createBackendStore({ dbPath = null } = {}) {
   const dbConfig = resolveDbConfig(dbPath);
   const resolvedDbPath = dbConfig.dbPath;
-  mkdirSync(path.dirname(resolvedDbPath), { recursive: true });
+  const storageDir = path.dirname(resolvedDbPath);
+  const avatarStorageDir = path.join(storageDir, "avatars");
+  mkdirSync(storageDir, { recursive: true });
+  mkdirSync(avatarStorageDir, { recursive: true });
   const db = new DatabaseSync(resolvedDbPath);
 
   initSchema(db);
@@ -1320,8 +1446,12 @@ export function createBackendStore({ dbPath = null } = {}) {
 
   return {
     dbPath: resolvedDbPath,
+    avatarStorageDir,
     close() {
       db.close();
+    },
+    cleanupInactiveGuests({ nowMs = Date.now() } = {}) {
+      return withTransaction(db, () => pruneGuestSessions(db, "", nowMs, ""));
     },
     login({ sessionId, selectedTopicId = null, ipAddress = "", userId = REGISTERED_USER_ID } = {}) {
       return withTransaction(db, () => {
@@ -1381,7 +1511,7 @@ export function createBackendStore({ dbPath = null } = {}) {
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({ sessionId, authMode, displayName = null, avatarDataUrl = null, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateProfile({ sessionId, authMode, displayName = null, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -1391,19 +1521,24 @@ export function createBackendStore({ dbPath = null } = {}) {
         }
 
         const normalizedDisplayName = normalizeUserDisplayName(displayName, context.viewer.displayName || "Usuario");
-        const normalizedAvatarDataUrl = normalizeAvatarDataUrl(avatarDataUrl);
+        const normalizedAvatarDataUrl = removeAvatar ? null : storeAvatarDataUrl(avatarDataUrl, avatarStorageDir);
         const nowIso = new Date().toISOString();
-        const nextPendingUrl = normalizedAvatarDataUrl ?? context.viewer.avatarPendingUrl ?? null;
-        const nextReviewStatus = normalizedAvatarDataUrl
-          ? "pending"
-          : context.viewer.avatarReviewStatus ?? null;
+        const nextAvatarUrl = removeAvatar ? null : context.viewer.avatarUrl ?? null;
+        const nextPendingUrl = removeAvatar
+          ? null
+          : normalizedAvatarDataUrl ?? context.viewer.avatarPendingUrl ?? null;
+        const nextReviewStatus = removeAvatar
+          ? null
+          : normalizedAvatarDataUrl
+            ? "pending"
+            : context.viewer.avatarReviewStatus ?? null;
 
         db.prepare(`
           UPDATE users
-          SET name = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
+          SET name = ?, avatar_url = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
-        `).run(normalizedDisplayName, nextPendingUrl, nextReviewStatus, nowIso, context.viewer.id);
+        `).run(normalizedDisplayName, nextAvatarUrl, nextPendingUrl, nextReviewStatus, nowIso, context.viewer.id);
 
         const refreshedContext = resolveViewer(db, {
           sessionId: context.sessionId,
@@ -1439,9 +1574,7 @@ export function createBackendStore({ dbPath = null } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);
-        const lastTopicAt = context.viewer.type === "registered"
-          ? context.viewerRow.last_topic_at
-          : context.sessionRow.last_topic_at;
+        const lastTopicAt = getContextActivityAt(db, context, "last_topic_at");
         assertRateLimit(lastTopicAt, context.viewer.type, "last_topic_at");
         const { normalizedTitle, normalizedText } = validateTopicInput(title, text);
         const topicId = `topic-${crypto.randomUUID()}`;
@@ -1488,9 +1621,7 @@ export function createBackendStore({ dbPath = null } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);
-        const lastMessageAt = context.viewer.type === "registered"
-          ? context.viewerRow.last_message_at
-          : context.sessionRow.last_message_at;
+        const lastMessageAt = getContextActivityAt(db, context, "last_message_at");
         assertRateLimit(lastMessageAt, context.viewer.type, "last_message_at");
         const normalizedText = validateMessageInput(text);
         const topicRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(topicId);

@@ -895,6 +895,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (!file) {
       if (dom.profileAvatarInput) {
         dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
+        dom.profileAvatarInput.dataset.removeAvatar = "false";
       }
       renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
       return;
@@ -904,12 +905,14 @@ export function bindTopbarActionEvents(dom, handlers) {
       const dataUrl = await readProfileAvatarFile(file);
       if (dom.profileAvatarInput) {
         dom.profileAvatarInput.dataset.selectedAvatarDataUrl = dataUrl;
+        dom.profileAvatarInput.dataset.removeAvatar = "false";
       }
       renderProfileAvatarPreview(dataUrl);
     } catch (error) {
       if (dom.profileAvatarInput) {
         dom.profileAvatarInput.value = "";
         dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
+        dom.profileAvatarInput.dataset.removeAvatar = "false";
       }
       renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
       handlers.flashTitle(error?.message || "No se pudo cargar la foto");
@@ -920,11 +923,16 @@ export function bindTopbarActionEvents(dom, handlers) {
     void syncProfileAvatarPreview();
   });
   addListener(dom.profileAvatarClearButton, "click", () => {
+    const selectedAvatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || "";
+    const renderedAvatarUrl = dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "";
+
     if (dom.profileAvatarInput) {
       dom.profileAvatarInput.value = "";
       dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
+      dom.profileAvatarInput.dataset.removeAvatar = selectedAvatarDataUrl ? "false" : String(Boolean(renderedAvatarUrl));
     }
-    renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
+
+    renderProfileAvatarPreview(selectedAvatarDataUrl ? renderedAvatarUrl : "");
   });
   addListener(dom.profileModal?.querySelector?.("#profileForm") ?? null, "submit", handlers.saveProfile);
   addListener(dom.paletteModalBackdrop, "click", (event) => {

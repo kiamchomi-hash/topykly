@@ -46,10 +46,12 @@ export function renderProfileModal(state, dom) {
   if (dom.profileAvatarInput && dom.profileAvatarInput.dataset.renderedAvatarUrl !== avatarUrl) {
     dom.profileAvatarInput.dataset.renderedAvatarUrl = avatarUrl;
     dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
+    dom.profileAvatarInput.dataset.removeAvatar = "false";
     if (typeof dom.profileAvatarInput.value === "string") {
       dom.profileAvatarInput.value = "";
     }
   }
 
-  setPreviewImage(dom.profileAvatarPreview, dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || avatarUrl);
+  const avatarRemoved = dom.profileAvatarInput?.dataset?.removeAvatar === "true";
+  setPreviewImage(dom.profileAvatarPreview, avatarRemoved ? "" : dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || avatarUrl);
 }

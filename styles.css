@@ -206,10 +206,7 @@ html {
 body {
   margin: 0;
   height: 100dvh;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
-    radial-gradient(circle at top right, color-mix(in srgb, var(--accent-strong) 14%, transparent), transparent 30%),
-    linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
+  background: var(--bg);
   color: var(--text);
   font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
   overflow-x: hidden;
@@ -1548,9 +1545,21 @@ html[data-theme="light"].is-desktop-viewport .panel--topics .topics-panel__list-
   background: var(--surface-strong);
   box-shadow: none;
 }
+html[data-theme="dark"].is-desktop-viewport .panel--topics .topics-panel__list-frame {
+  border: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
+  background: var(--surface-strong);
+  box-shadow: none;
+}
 
 html[data-theme="light"] .panel--chat,
 html[data-theme="light"] .panel--users-rankings {
+  border: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
+  background: var(--surface-strong);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+html[data-theme="dark"] .panel--chat,
+html[data-theme="dark"] .panel--users-rankings {
   border: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
   background: var(--surface-strong);
   box-shadow: none;
@@ -1563,12 +1572,26 @@ html[data-theme="light"] .panel--chat {
   border-top-right-radius: 0;
   background: var(--surface-strong);
 }
+html[data-theme="dark"] .panel--chat {
+  border-top: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  background: var(--surface-strong);
+}
 
 html[data-theme="light"] .panel--chat.panel--topic-create {
   border-top: 0;
 }
+html[data-theme="dark"] .panel--chat.panel--topic-create {
+  border-top: 0;
+}
 
 html[data-theme="light"] .panel--chat .panel__header {
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
+  background: var(--surface-strong);
+  backdrop-filter: none;
+}
+html[data-theme="dark"] .panel--chat .panel__header {
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
   background: var(--surface-strong);
   backdrop-filter: none;
@@ -1580,13 +1603,26 @@ html[data-theme="light"] .ranking-item {
   border-color: color-mix(in srgb, var(--accent) 62%, var(--line-strong));
   background: color-mix(in srgb, var(--surface-strong) 94%, var(--accent-soft) 6%);
 }
+html[data-theme="dark"] .topic-item,
+html[data-theme="dark"] .user-item,
+html[data-theme="dark"] .ranking-item {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line-strong));
+  background: color-mix(in srgb, var(--surface-strong) 94%, var(--accent-soft) 6%);
+}
 
 html[data-theme="light"] .topic-item__avatar {
+  border-right: 1px solid color-mix(in srgb, var(--accent) 58%, var(--line-strong));
+}
+html[data-theme="dark"] .topic-item__avatar {
   border-right: 1px solid color-mix(in srgb, var(--accent) 58%, var(--line-strong));
 }
 
 html[data-theme="light"] .ranking-carousel,
 html[data-theme="light"] .drawer-ranking__switch {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--line-strong));
+}
+html[data-theme="dark"] .ranking-carousel,
+html[data-theme="dark"] .drawer-ranking__switch {
   border-color: color-mix(in srgb, var(--accent) 62%, var(--line-strong));
 }
 
@@ -2182,7 +2218,7 @@ input,
 textarea {
   width: 100%;
   color: var(--text);
-  background: color-mix(in srgb, var(--surface-strong) 85%, transparent);
+  background: var(--surface-strong);
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 0.92rem 1rem;
@@ -2213,14 +2249,27 @@ html[data-theme="light"] .composer textarea {
   border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--line-strong));
   background: var(--surface-strong);
 }
+html[data-theme="dark"] .composer input,
+html[data-theme="dark"] .composer textarea {
+  border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--line-strong));
+  background: var(--surface-strong);
+}
 
 html[data-theme="light"] .composer--topic-create input,
 html[data-theme="light"] .composer--topic-create textarea {
   border-radius: 0;
 }
+html[data-theme="dark"] .composer--topic-create input,
+html[data-theme="dark"] .composer--topic-create textarea {
+  border-radius: 0;
+}
 
 html[data-theme="light"] .composer input:focus,
 html[data-theme="light"] .composer textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line-strong));
+}
+html[data-theme="dark"] .composer input:focus,
+html[data-theme="dark"] .composer textarea:focus {
   border-color: color-mix(in srgb, var(--accent) 72%, var(--line-strong));
 }
 
@@ -2317,7 +2366,7 @@ html[data-theme="light"] .composer textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 10px 16px 16px 0;
+  padding: 0 16px 16px 0;
   overflow: auto;
   min-height: 0;
   flex: 1;
@@ -2531,10 +2580,14 @@ html[data-theme="light"] .message__avatar {
 
 .composer {
   border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface-strong) 52%, transparent);
+  background: var(--surface-strong);
 }
 
 html[data-theme="light"] .composer {
+  border-top: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
+  background: var(--surface-strong);
+}
+html[data-theme="dark"] .composer {
   border-top: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
   background: var(--surface-strong);
 }
@@ -3725,6 +3778,15 @@ html.is-mobile-viewport .topbar__auth-tools {
 
 html[data-theme="light"] .theme-switch__thumb {
   transform: translate(0, -50%);
+}
+
+/* Specificity overrides to unify and center theme-switch dark/moon icon and thumb perfectly */
+.theme-switch .theme-switch__icon--dark {
+  right: 10px;
+}
+
+.theme-switch .theme-switch__thumb {
+  transform: translate(36px, -50%);
 }
 
 html.is-mobile-viewport #storeButton {
@@ -5182,13 +5244,6 @@ html.is-mobile-viewport .ranking-mode-list__label {
   display: block;
 }
 
-.auth-modal__note {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 0.76rem;
-  line-height: 1.4;
-}
-
 @keyframes authBackdropIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -5505,3 +5560,84 @@ html.is-mobile-viewport .ranking-mode-list__label {
     flex: 1;
   }
 }
+
+@media (max-width: 1140px) {
+  html.is-desktop-viewport #profileButton .button-label,
+  html.is-desktop-viewport #paletteButton .theme-toggle__label,
+  html.is-desktop-viewport #storeButton .button-label {
+    display: none;
+  }
+
+  html.is-desktop-viewport #profileButton {
+    padding: 0;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  html.is-desktop-viewport #profileButton .profile-button__avatar {
+    border-right: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    flex: 1;
+  }
+
+  html.is-desktop-viewport #paletteButton,
+  html.is-desktop-viewport #storeButton {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* Specificity and border overrides to center the ranking carousel arrows on the Y axis and prevent duplicated borders */
+.ranking-carousel .ranking-carousel__nav,
+.ranking-carousel .ranking-carousel__current,
+.drawer-ranking__switch .ranking-carousel__nav,
+.drawer-ranking__switch .ranking-carousel__current {
+  min-height: 0;
+  height: 100%;
+}
+
+.ranking-carousel .ranking-carousel__nav,
+.drawer-ranking__switch .ranking-carousel__nav {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+}
+
+.ranking-carousel #rankingPrev,
+.drawer-ranking__switch #drawerRankingPrev {
+  border-left: 0 !important;
+  border-right: 0 !important;
+}
+
+.ranking-carousel #rankingNext,
+.drawer-ranking__switch #drawerRankingNext {
+  border-right: 0 !important;
+}
+
+.ranking-carousel .ranking-carousel__current,
+.drawer-ranking__switch .ranking-carousel__current {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  border-right: 0 !important;
+}
+
+/* Collapse the shared border between scope-tabs and carousel to prevent double border */
+.ranking-scope-tabs + .ranking-mode-list + .ranking-carousel,
+.ranking-scope-tabs + .ranking-carousel,
+.ranking-controls + .ranking-carousel,
+.ranking-controls + .drawer-ranking__switch {
+  border-top: 0 !important;
+}
+
+.ranking-controls .ranking-scope-tabs {
+  border-bottom: 0;
+}
+

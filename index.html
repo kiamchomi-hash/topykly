@@ -21,7 +21,12 @@
       })();
     </script>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@v0.25.0/dist/coloris.min.css"
+      integrity="sha384-DY3umZptOgjUNshBFbvu1+3RVFPoD1/CgGcc1yyJ77/aFOJ7jtN4BORnz/D/xF0n"
+      crossorigin="anonymous"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -346,7 +351,6 @@
               <span>Enviar codigo de 6 digitos</span>
             </button>
           </form>
-          <div class="auth-turnstile" id="authTurnstile" hidden></div>
           <div class="auth-modal__divider" aria-hidden="true"><span>o</span></div>
           <button class="auth-google-button" id="authGoogleButton" type="button" data-auth-provider="google">
             <span class="auth-google-button__logo" aria-hidden="true">
@@ -359,7 +363,7 @@
             </span>
             <span>Continuar con Google</span>
           </button>
-          <p class="auth-modal__note">El codigo por email se habilitara con Resend. Google ya esta disponible.</p>
+          <div class="auth-turnstile" id="authTurnstile" hidden></div>
         </div>
       </section>
     </div>
@@ -580,7 +584,11 @@
 
     <div class="action-feedback" id="actionFeedback" role="status" aria-live="polite" hidden></div>
 
-    <script src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@v0.25.0/dist/coloris.min.js"
+      integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmHnRTutomMnUySX9hqDgVQVcvMdc"
+      crossorigin="anonymous"
+    ></script>
     <script type="module" src="./app.js?v=20260702-sessioncookie"></script>
     <script type="module" src="./auth-fallback.js?v=20260702-sessioncookie"></script>
   </body>

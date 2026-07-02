@@ -199,6 +199,7 @@ export function createActionHandlers({
     event?.preventDefault?.();
     const displayName = dom.profileNameInput?.value?.trim() || null;
     const avatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || null;
+    const removeAvatar = dom.profileAvatarInput?.dataset?.removeAvatar === "true";
 
     if (dom.saveProfileButton) {
       dom.saveProfileButton.disabled = true;
@@ -209,11 +210,12 @@ export function createActionHandlers({
       const payload = await api.updateProfile({
         displayName,
         avatarDataUrl,
+        removeAvatar,
         selectedTopicId: state.selectedTopicId
       });
       dispatch(state, reducers.hydrateFromBackend, payload);
       dispatch(state, reducers.setProfileModalOpen, false);
-      showFeedback(avatarDataUrl ? "Perfil actualizado. La foto queda pendiente de revision." : "Perfil actualizado");
+      showFeedback(avatarDataUrl ? "Perfil actualizado. La foto queda pendiente de revision." : removeAvatar ? "Perfil actualizado. Foto eliminada." : "Perfil actualizado");
       return payload;
     } catch (error) {
       console.error(error);
