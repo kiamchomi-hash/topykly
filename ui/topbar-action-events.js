@@ -489,7 +489,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   }
 
-  async function syncTurnstile() {
+  async function syncTurnstile({ resetExisting = false } = {}) {
     const status = await loadAuthStatus();
     const siteKey = status?.turnstile?.siteKey || "";
     turnstileRequired = Boolean(status?.turnstile?.configured && siteKey);
@@ -510,6 +510,10 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (turnstileWidgetId !== null) {
+      if (!resetExisting) {
+        return;
+      }
+
       globalThis.turnstile.reset?.(turnstileWidgetId);
       resetTurnstileToken();
       return;
@@ -547,13 +551,25 @@ export function bindTopbarActionEvents(dom, handlers) {
     dom.authButton?.focus?.();
   }
 
-  function openAuthModal() {
+  async function openAuthModal() {
     if (authPending || isLoggedIn()) {
       return;
     }
 
     setAuthModalOpen(true);
-    void syncTurnstile();
+    if (dom.authGoogleButton) {
+      dom.authGoogleButton.disabled = true;
+      dom.authGoogleButton.setAttribute("aria-busy", "true");
+    }
+
+    try {
+      await syncTurnstile({ resetExisting: true });
+    } finally {
+      if (dom.authGoogleButton) {
+        dom.authGoogleButton.disabled = false;
+        dom.authGoogleButton.setAttribute("aria-busy", "false");
+      }
+    }
   }
 
   function closeAuthModal() {
@@ -576,6 +592,10 @@ export function bindTopbarActionEvents(dom, handlers) {
     syncAuthUi();
 
     try {
+      if (nextLoggedIn) {
+        await syncTurnstile();
+      }
+
       if (nextLoggedIn && turnstileRequired && !dom.authTurnstileToken?.value) {
         handlers.flashTitle?.("Completa la verificacion anti-bots");
         return;
@@ -598,7 +618,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     } catch (error) {
       console.error(error);
       if (announce) {
-        handlers.flashTitle(nextLoggedIn ? "No se pudo iniciar sesion" : "No se pudo cerrar sesion");
+        handlers.flashTitle(error?.message || (nextLoggedIn ? "No se pudo iniciar sesion" : "No se pudo cerrar sesion"));
       }
     } finally {
       authPending = false;
@@ -686,7 +706,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    openAuthModal();
+    void openAuthModal();
   });
   addListener(dom.authGoogleButton, "click", () => {
     void setLoggedIn(true);
