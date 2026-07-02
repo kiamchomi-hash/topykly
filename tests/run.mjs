@@ -3166,7 +3166,7 @@ await (async () => {
     assert.match(styles, /html\[data-theme="light"\] \.composer--topic-create input,\s*html\[data-theme="light"\] \.composer--topic-create textarea\s*\{[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /html\[data-theme="light"\] \.message \+ \.message::before\s*\{[\s\S]*height:\s*1px;/);
     assert.match(styles, /html\[data-theme="light"\] \.rankings-section\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top:\s*1px solid/);
-    assert.match(app, /from "\.\/controller\.js"/);
+    assert.match(app, /from "\.\/controller\.js\?v=20260702-turnstile"/);
     assert.match(components, /createProfileAvatar/);
     assert.match(components, /message__avatar/);
     assert.match(components, /message__body/);
@@ -3178,7 +3178,7 @@ await (async () => {
     assert.match(components, /user-item__trigger/);
     assert.match(components, /aria-pressed/);
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
-    assert.match(controller, /export \{ bootstrap \} from "\.\/controller-app\.js";/);
+    assert.match(controller, /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260702-turnstile";/);
     assert.match(controllerApp, /from "\.\/ui\/transition-utils\.js"/);
     assert.match(controllerTheme, /export function applyStoredTheme/);
     assert.match(controllerTheme, /topykly-palette/);
@@ -3189,7 +3189,7 @@ await (async () => {
     assert.match(controllerViewport, /syncRankingListHeights/);
     assert.match(controllerApp, /from "\.\/app-store\.js"/);
     assert.match(controllerApp, /from "\.\/ui\/dom\.js"/);
-    assert.match(controllerApp, /from "\.\/ui\/events\.js"/);
+    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260702-turnstile"/);
     assert.match(controllerApp, /from "\.\/controller-actions\.js"/);
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
     assert.match(controllerApp, /from "\.\/controller-render\.js"/);
@@ -3266,6 +3266,7 @@ await (async () => {
     assert.match(domModule, /paletteOptionGrid/);
     assert.match(domModule, /assertRequiredDom/);
     assert.match(domModule, /Missing required DOM nodes/);
+    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260702-turnstile"/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
     assert.match(eventsModule, /messageForm\.addEventListener\("submit", handlers\.submitMessage\)/);
@@ -3281,6 +3282,7 @@ await (async () => {
     assert.match(eventsModule, /data-user-action/);
     assert.match(renderUtils, /renderIntoTargets/);
     assert.match(drawers, /getTransitionDurationMs/);
+    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260702-turnstile"/);
     assert.match(topbar, /bindTopbarEvents/);
     assert.match(topbarActionEvents, /openPaletteModal/);
     assert.match(topbarActionEvents, /closePaletteModal/);

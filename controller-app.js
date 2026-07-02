@@ -1,5 +1,5 @@
 import { openDrawer, closeDrawers } from "./ui/drawers.js";
-import { bindPageEvents } from "./ui/events.js";
+import { bindPageEvents } from "./ui/events.js?v=20260702-turnstile";
 import { cacheDom } from "./ui/dom.js";
 import { createActionHandlers } from "./controller-actions.js";
 import { createResponsiveHelpers } from "./controller-responsive.js";
