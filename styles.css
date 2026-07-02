@@ -5023,6 +5023,7 @@ html.is-mobile-viewport .ranking-mode-list__label {
   padding: 20px;
   background: color-mix(in srgb, var(--bg) 72%, transparent);
   backdrop-filter: blur(10px);
+  animation: authBackdropIn 150ms ease-out both;
 }
 
 .auth-modal-backdrop[hidden] {
@@ -5037,6 +5038,7 @@ html.is-mobile-viewport .ranking-mode-list__label {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: 0 24px 80px color-mix(in srgb, #000 36%, transparent);
+  animation: authModalIn 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .auth-modal__header {
@@ -5056,8 +5058,57 @@ html.is-mobile-viewport .ranking-mode-list__label {
 
 .auth-modal__body {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   padding: 16px;
+}
+
+.auth-email-form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-email-form__field {
+  display: grid;
+  gap: 7px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-soft);
+}
+
+.auth-email-form__field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--surface-strong) 84%, var(--bg) 16%);
+  color: var(--text);
+  font: inherit;
+}
+
+.auth-email-form__field input:focus {
+  border-color: color-mix(in srgb, var(--text) 34%, var(--line));
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.auth-email-submit {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, var(--line));
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.auth-email-submit:hover,
+.auth-email-submit:focus-visible {
+  filter: brightness(1.04);
+  outline: none;
 }
 
 .auth-turnstile {
@@ -5070,83 +5121,65 @@ html.is-mobile-viewport .ranking-mode-list__label {
 .auth-turnstile[hidden] {
   display: none;
 }
-.auth-provider-button {
+
+.auth-modal__divider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.auth-modal__divider::before,
+.auth-modal__divider::after {
+  content: "";
+  height: 1px;
+  background: var(--line);
+}
+
+.auth-google-button {
   width: 100%;
   min-height: 46px;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid #dadce0;
   border-radius: 8px;
   padding: 0 14px;
-  background: color-mix(in srgb, var(--surface-strong) 88%, var(--bg) 12%);
-  color: var(--text);
+  background: #ffffff;
+  color: #202124;
   font: inherit;
   font-size: 0.88rem;
   font-weight: 800;
-  text-align: left;
   cursor: pointer;
 }
 
-.auth-provider-button:hover,
-.auth-provider-button:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 56%, var(--line-strong));
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong) 88%);
+.auth-google-button::after {
+  content: "";
+}
+
+.auth-google-button:hover,
+.auth-google-button:focus-visible {
+  border-color: #c7c9cc;
+  background: #f8fafd;
   outline: none;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.22);
 }
 
-.auth-provider-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
-}
-
-.auth-provider-button__mark {
-  width: 28px;
-  height: 28px;
+.auth-google-button__logo {
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--button-fill-text);
-  font-size: 0.82rem;
-  font-weight: 950;
 }
 
-.auth-email-form {
-  display: grid;
-  gap: 8px;
-}
-
-.auth-email-form__field {
-  display: grid;
-  gap: 6px;
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: var(--text-soft);
-}
-
-.auth-email-form__field input {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 12px;
-  background: color-mix(in srgb, var(--surface-strong) 84%, var(--bg) 16%);
-  color: var(--text);
-  font: inherit;
-}
-
-.auth-modal__provider-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.auth-provider-button--compact {
-  min-height: 42px;
-  padding-inline: 10px;
-  font-size: 0.8rem;
+.auth-google-button__logo svg {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
 .auth-modal__note {
@@ -5154,6 +5187,29 @@ html.is-mobile-viewport .ranking-mode-list__label {
   color: var(--text-soft);
   font-size: 0.76rem;
   line-height: 1.4;
+}
+
+@keyframes authBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes authModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-modal-backdrop,
+  .auth-modal {
+    animation: none;
+  }
 }
 .profile-modal-backdrop {
   position: fixed;

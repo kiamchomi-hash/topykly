@@ -699,7 +699,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
   addListener(dom.authEmailForm, "submit", (event) => {
     event.preventDefault();
-    handlers.flashTitle("Login por email pendiente de configuracion");
+    handlers.flashTitle("Envio por email pendiente de Resend");
   });
   addListener(typeof window !== "undefined" ? window : null, "keydown", (event) => {
     if (event.key === "Escape" && dom.authModalBackdrop && !dom.authModalBackdrop.hidden) {
