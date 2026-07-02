@@ -543,6 +543,36 @@ function createGuestName() {
   return `${GUEST_DISPLAY_NAME}${suffix}`;
 }
 
+function createTransientGuestName(sessionId) {
+  const sum = String(sessionId || "")
+    .split("")
+    .reduce((total, character) => total + character.charCodeAt(0), 0);
+  return `${GUEST_DISPLAY_NAME}${(sum % 90) + 10}`;
+}
+
+function createTransientGuestContext(sessionId, ipAddress = "") {
+  const name = createTransientGuestName(sessionId);
+  const safeSessionLabel = String(sessionId || "")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, 48) || "anon";
+  const viewerRow = {
+    id: `guest-preview-${safeSessionLabel}`,
+    name,
+    type: "guest",
+    role: "Invitado",
+    score: 0,
+    status: "active"
+  };
+
+  return {
+    sessionId,
+    sessionRow: null,
+    viewerRow,
+    viewer: mapViewerRow(viewerRow, null),
+    ipAddress: normalizeIpAddress(ipAddress)
+  };
+}
+
 function getOrCreateGuestUser(db) {
   const userId = `guest-${crypto.randomUUID()}`;
   const name = createGuestName();
@@ -643,16 +673,20 @@ function createRegisteredSession(db, sessionId, ipAddress, nowIso, existingSessi
   };
 }
 
-function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "" }) {
+function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", persistGuest = false }) {
   const normalizedSessionId = ensureViewerSessionId(sessionId);
   const fallbackAuthMode = authMode === "registered" ? "registered" : "guest";
   const nowIso = new Date().toISOString();
   const sessionRow = readSessionRow(db, normalizedSessionId);
 
   if (!sessionRow) {
-    return fallbackAuthMode === "registered"
-      ? createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso)
-      : createGuestSession(db, normalizedSessionId, ipAddress, nowIso);
+    if (fallbackAuthMode === "registered") {
+      return createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso);
+    }
+
+    return persistGuest
+      ? createGuestSession(db, normalizedSessionId, ipAddress, nowIso)
+      : createTransientGuestContext(normalizedSessionId, ipAddress);
   }
 
   const resolvedIpAddress = normalizeIpAddress(ipAddress || sessionRow.last_ip || "");
@@ -1403,7 +1437,7 @@ export function createBackendStore({ dbPath = null } = {}) {
     },
     createTopic({ sessionId, authMode, title, text, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);
         const lastTopicAt = context.viewer.type === "registered"
           ? context.viewerRow.last_topic_at
@@ -1452,7 +1486,7 @@ export function createBackendStore({ dbPath = null } = {}) {
     },
     addMessage(topicId, { sessionId, authMode, text, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);
         const lastMessageAt = context.viewer.type === "registered"
           ? context.viewerRow.last_message_at
@@ -1494,7 +1528,7 @@ export function createBackendStore({ dbPath = null } = {}) {
     },
     reportEntity(entityType, entityId, { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);
         const normalizedEntityType = entityType === "message"
           ? "message"
@@ -1818,6 +1852,7 @@ export function createBackendStore({ dbPath = null } = {}) {
       const topics = db.prepare("SELECT COUNT(*) AS count FROM topics").get()?.count ?? 0;
       const messages = db.prepare("SELECT COUNT(*) AS count FROM messages").get()?.count ?? 0;
       const users = db.prepare("SELECT COUNT(*) AS count FROM users").get()?.count ?? 0;
+      const sessions = db.prepare("SELECT COUNT(*) AS count FROM sessions").get()?.count ?? 0;
       const reports = db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = ?").get(REPORT_STATUS_OPEN)?.count ?? 0;
       const blockedSessions = db.prepare("SELECT COUNT(*) AS count FROM blocked_sessions").get()?.count ?? 0;
       const blockedIps = db.prepare("SELECT COUNT(*) AS count FROM blocked_ips").get()?.count ?? 0;
@@ -1829,6 +1864,7 @@ export function createBackendStore({ dbPath = null } = {}) {
         topics,
         messages,
         users,
+        sessions,
         reports,
         blockedSessions,
         blockedIps

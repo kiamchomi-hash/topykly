@@ -384,10 +384,46 @@ await (async () => {
       assert.match(payload.viewer.displayName, /^\*topy\d{2}$/);
       assert.equal(payload.topics.length, TOPIC_ACTIVE_LIMIT);
       assert.equal(payload.topics.filter((topic) => topic.visible).length, TOPIC_VISIBLE_LIMIT);
-      assert.equal(payload.users.some((user) => user.id === payload.viewer.id), true);
+      assert.equal(payload.users.some((user) => user.id === payload.viewer.id), false);
     });
   });
 
+  await test("backend anonymous reads do not persist guest users or sessions", async () => {
+    await withTempStore((store) => {
+      for (let index = 0; index < 25; index += 1) {
+        store.bootstrap({
+          sessionId: `session-bot-read-${index}`,
+          authMode: "guest",
+          ipAddress: "203.0.113.44"
+        });
+      }
+
+      const diagnostics = store.getDiagnostics();
+
+      assert.equal(diagnostics.users, initialUsers.length);
+      assert.equal(diagnostics.sessions, 0);
+    });
+  });
+
+  await test("backend materializes guest users only when they participate", async () => {
+    await withTempStore((store) => {
+      const initial = store.bootstrap({
+        sessionId: "session-guest-participates",
+        authMode: "guest"
+      });
+      const topicId = initial.topics[0].id;
+
+      store.addMessage(topicId, {
+        sessionId: "session-guest-participates",
+        authMode: "guest",
+        text: "Comentario invitado persistido"
+      });
+      const diagnostics = store.getDiagnostics();
+
+      assert.equal(diagnostics.users, initialUsers.length + 1);
+      assert.equal(diagnostics.sessions, 1);
+    });
+  });
   await test("backend diagnostics report whether SQLite storage was explicitly configured", async () => {
     assert.deepEqual(resolveDbConfig(null, {}), {
       dbPath: path.join(rootDir, ".data", "topykly.sqlite"),
@@ -1022,6 +1058,13 @@ await (async () => {
       });
       const topicId = blockedSessionPayload.topics[0].id;
 
+      store.addMessage(topicId, {
+        sessionId: "session-blocked-guest",
+        authMode: "guest",
+        text: "Mensaje antes del bloqueo",
+        ipAddress: "203.0.113.10"
+      });
+
       store.login({
         sessionId: "session-moderator",
         userId: "u2",
@@ -1086,6 +1129,7 @@ await (async () => {
         topics: diagnostics.topics,
         messages: diagnostics.messages,
         users: diagnostics.users,
+        sessions: diagnostics.sessions,
         reports: diagnostics.reports,
         blockedSessions: 1,
         blockedIps: 1
