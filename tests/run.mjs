@@ -2894,9 +2894,11 @@ await (async () => {
     assert.match(styles, /\.theme-switch__icon--dark svg\s*\{[\s\S]*transform:\s*translateY\(-0\.35px\);/);
     assert.match(styles, /\.theme-switch__thumb\s*\{[\s\S]*left:\s*0;[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*transform:\s*translate\(34px,\s*-50%\);[\s\S]*z-index:\s*1;/);
     assert.match(styles, /html\[data-theme="light"\] \.theme-switch__thumb\s*\{[\s\S]*transform:\s*translate\(0,\s*-50%\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*38px minmax\(0,\s*1fr\) auto;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*3;[\s\S]*justify-content:\s*flex-end;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*grid-column:\s*2;[\s\S]*display:\s*inline-flex;[\s\S]*max-width:\s*100%;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*2;[\s\S]*justify-content:\s*flex-end;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*grid-column:\s*1;[\s\S]*display:\s*inline-flex;[\s\S]*max-width:\s*100%;/);
+    assert.match(styles, /html\.is-mobile-viewport\[data-auth-state="logged-in"\] #authButton\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__auth-tools\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat\s*\{[\s\S]*gap:\s*10px;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat \.chat-header__back\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;[\s\S]*min-width:\s*40px;[\s\S]*min-height:\s*40px;/);
     assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
