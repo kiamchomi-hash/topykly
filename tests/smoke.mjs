@@ -76,6 +76,7 @@ try {
     const html = await response.text();
 
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store, max-age=0");
     assert.match(html, /<title>TOPYKLY<\/title>/);
     assert.match(html, /id="messageForm"/);
   });

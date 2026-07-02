@@ -363,7 +363,14 @@ function handleStaticRequest(req, res, url) {
     }
 
     const contentType = mime[path.extname(resolvedFilePath)] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": contentType });
+    const extension = path.extname(resolvedFilePath);
+    const cacheControl = [".html", ".js", ".css"].includes(extension)
+      ? "no-store, max-age=0"
+      : "public, max-age=3600";
+    res.writeHead(200, {
+      "Content-Type": contentType,
+      "Cache-Control": cacheControl
+    });
     res.end(data);
   });
 }
