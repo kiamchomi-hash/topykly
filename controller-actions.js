@@ -151,6 +151,40 @@ export function createActionHandlers({
     setTimeout(() => dom.profileNameInput?.focus?.(), 0);
   }
 
+  async function openAdminPanel() {
+    dispatch(state, reducers.setAdminPanelOpen, true);
+    dispatch(state, reducers.setAdminDashboard, { loaded: false, reports: [], pendingAvatars: [] });
+    render();
+
+    try {
+      const dashboard = await api.getAdminDashboard();
+      dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo cargar administracion.", { kind: "error" });
+      dispatch(state, reducers.setAdminDashboard, { loaded: true, reports: [], pendingAvatars: [] });
+    }
+    render();
+  }
+
+  function closeAdminPanel() {
+    dispatch(state, reducers.setAdminPanelOpen, false);
+    render();
+    dom.adminPanelButton?.focus?.();
+  }
+
+  async function applyAdminAction(actionType, targetType, targetId) {
+    try {
+      await api.applyModerationAction(actionType, targetType, targetId, "", state.selectedTopicId);
+      const dashboard = await api.getAdminDashboard();
+      dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
+      showFeedback(actionType === "approve_avatar" ? "Foto aprobada" : "Foto rechazada");
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo aplicar la accion.", { kind: "error" });
+    }
+    render();
+  }
   function closeProfileModal() {
     dispatch(state, reducers.setProfileModalOpen, false);
     render();
@@ -381,6 +415,9 @@ export function createActionHandlers({
     showFeedback,
     openProfileModal,
     closeProfileModal,
+    openAdminPanel,
+    closeAdminPanel,
+    applyAdminAction,
     saveProfile,
     toggleTheme,
     setRankingScope: rankingActions.setRankingScope,

@@ -255,6 +255,11 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
+      sendJson(res, 200, store.getAdminDashboard(context));
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/moderation/reports") {
       sendJson(res, 200, store.listReports(context));
       return;

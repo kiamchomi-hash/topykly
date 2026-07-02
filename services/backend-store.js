@@ -55,7 +55,24 @@ const DEFAULT_DB_PATH = process.env.TOPYKLY_DB_PATH
   || process.env.CHETREND_DB_PATH
   || path.join(__dirname, "..", ".data", "topykly.sqlite");
 const DEFAULT_REGISTERED_ROLE = "Registrado";
+const ADMIN_ROLE = "Admin";
+const MODERATOR_ROLE = "Moderacion";
 
+function getConfiguredAdminEmails() {
+  return String(process.env.TOPYKLY_ADMIN_EMAILS || process.env.CHETREND_ADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => normalizeOptionalEmail(email))
+    .filter(Boolean);
+}
+
+function isAdminEmail(email) {
+  const normalizedEmail = normalizeOptionalEmail(email);
+  return Boolean(normalizedEmail && getConfiguredAdminEmails().includes(normalizedEmail));
+}
+
+function isModeratorRole(role) {
+  return role === ADMIN_ROLE || role === MODERATOR_ROLE || role === "Moderacion";
+}
 class ApiError extends Error {
   constructor(status, code, message, details = {}) {
     super(message);
@@ -452,6 +469,7 @@ function mapViewerRow(row, sessionRow) {
     type: viewerType,
     displayName: row.name,
     role: row.role || "",
+    isAdmin: row.type === "registered" && isModeratorRole(row.role || ""),
     email: row.email ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarPendingUrl: row.avatar_pending_url ?? null,
@@ -935,6 +953,7 @@ function getOrCreateAuthenticatedUser(db, {
     displayName,
     normalizedEmail ? normalizedEmail.split("@")[0] : "Usuario"
   );
+  const resolvedRole = isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE;
 
   if (!normalizedProvider || !normalizedSubject) {
     throw new ApiError(400, "INVALID_AUTH_IDENTITY", "La identidad autenticada no es valida.");
@@ -948,11 +967,15 @@ function getOrCreateAuthenticatedUser(db, {
   `).get(normalizedProvider, normalizedSubject);
 
   if (existingUser) {
+    const nextRole = resolvedRole === ADMIN_ROLE || isModeratorRole(existingUser.role || "")
+      ? (resolvedRole === ADMIN_ROLE ? ADMIN_ROLE : existingUser.role)
+      : DEFAULT_REGISTERED_ROLE;
     db.prepare(`
       UPDATE users
-      SET email = ?, profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
+      SET role = ?, email = ?, profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
       WHERE id = ?
     `).run(
+      nextRole,
       normalizedEmail,
       normalizedSuggestedDisplayName,
       normalizedSuggestedAvatarUrl,
@@ -970,7 +993,7 @@ function getOrCreateAuthenticatedUser(db, {
     ) VALUES (?, 'Usuario', 'registered', ?, 0, 'active', ?, ?, ?, NULL, 1, ?, ?, ?, ?)
   `).run(
     userId,
-    DEFAULT_REGISTERED_ROLE,
+    resolvedRole,
     normalizedProvider,
     normalizedSubject,
     normalizedEmail,
@@ -1045,7 +1068,7 @@ function insertOrUpdateBlockedIp(db, { ipAddress, actorUserId, reason, createdAt
 }
 
 function assertModerator(viewerRow) {
-  if (!viewerRow || viewerRow.id !== DEFAULT_MODERATOR_USER_ID) {
+  if (!viewerRow || (viewerRow.id !== DEFAULT_MODERATOR_USER_ID && !isModeratorRole(viewerRow.role || ""))) {
     throw new ApiError(403, "MODERATOR_REQUIRED", "Hace falta un moderador.");
   }
 }
@@ -1127,6 +1150,22 @@ function recalculateTopicActivity(db, topicId, updatedAt) {
   );
 }
 
+function listPendingAvatars(db) {
+  return db.prepare(`
+    SELECT id, name, email, avatar_pending_url, avatar_review_status, updated_at
+    FROM users
+    WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
+    ORDER BY updated_at DESC, created_at DESC
+    LIMIT 50
+  `).all().map((row) => ({
+    userId: row.id,
+    name: row.name,
+    email: row.email ?? null,
+    avatarPendingUrl: row.avatar_pending_url,
+    avatarReviewStatus: row.avatar_review_status || "pending",
+    updatedAt: row.updated_at
+  }));
+}
 function listOpenReports(db) {
   return db.prepare(`
     SELECT
@@ -1449,6 +1488,16 @@ export function createBackendStore({ dbPath = DEFAULT_DB_PATH } = {}) {
         assertModerator(context.viewerRow);
         return {
           reports: listOpenReports(db)
+        };
+      });
+    },    getAdminDashboard({ sessionId, authMode, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertModerator(context.viewerRow);
+        return {
+          viewer: context.viewer,
+          reports: listOpenReports(db),
+          pendingAvatars: listPendingAvatars(db)
         };
       });
     },

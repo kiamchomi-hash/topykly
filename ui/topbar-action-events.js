@@ -86,6 +86,10 @@ export function bindTopbarActionEvents(dom, handlers) {
     return handlers.state?.viewer?.type === "registered";
   }
 
+  function isAdmin() {
+    return Boolean(handlers.state?.viewer?.isAdmin);
+  }
+
   function applyDocumentAuthState() {
     if (typeof document === "undefined") {
       return;
@@ -497,6 +501,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     const isMobile = isMobileViewport();
     const label = dom.authButton?.querySelector(".button-label");
     const privateDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-auth-private]") ?? [];
+    const adminDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-admin-private]") ?? [];
     applyDocumentAuthState();
     syncThemeTogglePlacement();
     syncProfileButtonAvatar();
@@ -534,6 +539,16 @@ export function bindTopbarActionEvents(dom, handlers) {
       }
     });
 
+    if (dom.adminPanelButton) {
+      dom.adminPanelButton.hidden = !isAdmin();
+    }
+
+    adminDrawerActions.forEach((node) => {
+      if (node) {
+        node.hidden = !isAdmin();
+      }
+    });
+
     syncMobileMenuSearch();
   }
 
@@ -541,6 +556,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.refreshButton, "click", handlers.refreshCurrentTopic);
   addListener(dom.messageForm, "submit", handlers.submitMessage);
   addListener(dom.profileButton, "click", handlers.openProfileModal);
+  addListener(dom.adminPanelButton, "click", handlers.openAdminPanel);
   addListener(dom.backToTopics, "click", handlers.backToTopics);
   addListener(dom.openRightDrawer, "click", () => {
     lastMobilePanelTrigger = null;
@@ -604,6 +620,13 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
+    if (target.dataset.mobileTopbarAction === "admin") {
+      setMobileDrawerPanel(null, { restoreFocus: false });
+      handlers.closeDrawers?.();
+      scheduleOpen(() => handlers.openAdminPanel?.());
+      return;
+    }
+
     if (target.dataset.mobileTopbarAction === "store") {
       setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
@@ -636,10 +659,23 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.paletteButton, "click", handlers.openPaletteModal);
   addListener(dom.closePaletteModalButton, "click", dismissPaletteModal);
   addListener(dom.closeProfileModalButton, "click", handlers.closeProfileModal);
+  addListener(dom.closeAdminModalButton, "click", handlers.closeAdminPanel);
   addListener(dom.profileModalBackdrop, "click", (event) => {
     if (event.target === dom.profileModalBackdrop) {
       handlers.closeProfileModal?.();
     }
+  });
+  addListener(dom.adminModalBackdrop, "click", (event) => {
+    if (event.target === dom.adminModalBackdrop) {
+      handlers.closeAdminPanel?.();
+    }
+  });
+  addListener(dom.adminPanelBody, "click", (event) => {
+    const target = resolveEventElement(event)?.closest?.("[data-admin-action]") ?? null;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    void handlers.applyAdminAction?.(target.dataset.adminAction, target.dataset.targetType, target.dataset.targetId);
   });
   function renderProfileAvatarPreview(avatarUrl = "") {
     if (!dom.profileAvatarPreview) {

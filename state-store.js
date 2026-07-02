@@ -4,6 +4,8 @@ export const state = {
   customPaletteHex: "#B25B33",
   isPaletteModalOpen: false,
   isProfileModalOpen: false,
+  isAdminPanelOpen: false,
+  adminDashboard: null,
   feedback: null,
   viewer: null,
   reportedTopicIds: [],

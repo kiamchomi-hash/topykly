@@ -34,6 +34,15 @@ function getActiveFocusTrapContainer(dom) {
   }
 
   if (
+    dom.adminModal instanceof HTMLElement &&
+    dom.adminModalBackdrop &&
+    !dom.adminModalBackdrop.hidden &&
+    dom.adminModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.adminModal;
+  }
+
+  if (
     dom.profileModal instanceof HTMLElement &&
     dom.profileModalBackdrop &&
     !dom.profileModalBackdrop.hidden &&

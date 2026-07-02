@@ -530,6 +530,61 @@ await (async () => {
     });
   });
 
+  await test("backend promotes configured OAuth emails to admin dashboard access", async () => {
+    const previousAdminEmails = process.env.TOPYKLY_ADMIN_EMAILS;
+    process.env.TOPYKLY_ADMIN_EMAILS = "admin@example.com";
+
+    try {
+      await withTempStore((store) => {
+        const adminPayload = store.loginWithIdentity({
+          sessionId: "session-admin-oauth",
+          sourceSessionId: "session-admin-source",
+          authProvider: "https://accounts.example.com",
+          authSubject: "admin-subject",
+          email: "admin@example.com",
+          displayName: "Admin User"
+        });
+
+        assert.equal(adminPayload.viewer.role, "Admin");
+        assert.equal(adminPayload.viewer.isAdmin, true);
+
+        const userPayload = store.loginWithIdentity({
+          sessionId: "session-avatar-review-user",
+          sourceSessionId: "session-avatar-review-source",
+          authProvider: "https://accounts.example.com",
+          authSubject: "review-user-subject",
+          email: "review@example.com",
+          displayName: "Review User"
+        });
+        const pendingPayload = store.updateProfile({
+          sessionId: "session-avatar-review-user",
+          displayName: "Review User",
+          avatarDataUrl: "data:image/png;base64,aGVsbG8="
+        });
+
+        assert.equal(pendingPayload.viewer.avatarReviewStatus, "pending");
+
+        const dashboard = store.getAdminDashboard({ sessionId: "session-admin-oauth" });
+        assert.equal(dashboard.pendingAvatars.some((item) => item.userId === userPayload.viewer.id), true);
+
+        const approved = store.applyModerationAction("approve_avatar", {
+          sessionId: "session-admin-oauth",
+          targetType: "user",
+          targetId: userPayload.viewer.id
+        });
+        const approvedUser = approved.users.find((user) => user.id === userPayload.viewer.id);
+        assert.equal(approvedUser.avatarUrl, "data:image/png;base64,aGVsbG8=");
+        assert.equal(approvedUser.avatarPendingUrl, null);
+        assert.equal(store.getAdminDashboard({ sessionId: "session-admin-oauth" }).pendingAvatars.length, 0);
+      });
+    } finally {
+      if (previousAdminEmails === undefined) {
+        delete process.env.TOPYKLY_ADMIN_EMAILS;
+      } else {
+        process.env.TOPYKLY_ADMIN_EMAILS = previousAdminEmails;
+      }
+    }
+  });
   await test("backend reports persist per session and moderation can resolve topic and message reports", async () => {
     await withTempStore((store) => {
       const bootstrapPayload = store.bootstrap({

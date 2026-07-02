@@ -1,3 +1,4 @@
+import { renderAdminPanel } from "./ui/admin-panel.js";
 import { renderChat } from "./ui/chat.js";
 import { renderFeedback } from "./ui/feedback.js";
 import { renderPaletteModal } from "./ui/palette-modal.js";
@@ -24,6 +25,7 @@ export function createRenderers({ state, dom, actions, responsive, closeTimerRef
     renderTitles(state, dom);
     renderPaletteModal(state, dom);
     renderProfileModal(state, dom);
+    renderAdminPanel(state, dom);
     renderFeedback(state, dom);
     actions.syncAuthUi?.();
     responsive.updateLayoutMetrics();

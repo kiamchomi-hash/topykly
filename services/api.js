@@ -219,6 +219,10 @@ export const api = {
     });
   },
 
+  async getAdminDashboard() {
+    return readApiPayload("/api/admin/dashboard");
+  },
+
   async listReports() {
     const response = await fetch(createUrl("/api/moderation/reports"), {
       method: "GET",

@@ -92,6 +92,16 @@ export const reducers = {
     isProfileModalOpen
   }),
 
+  setAdminPanelOpen: (state, isAdminPanelOpen) => ({
+    ...state,
+    isAdminPanelOpen
+  }),
+
+  setAdminDashboard: (state, adminDashboard) => ({
+    ...state,
+    adminDashboard
+  }),
+
   setFeedback: (state, feedback) => ({
     ...state,
     feedback
