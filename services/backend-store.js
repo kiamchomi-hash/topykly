@@ -73,6 +73,17 @@ function isAdminEmail(email) {
 function isModeratorRole(role) {
   return role === ADMIN_ROLE || role === MODERATOR_ROLE || role === "Moderacion";
 }
+
+function getEffectiveViewerRole(row) {
+  if (row?.type === "registered" && isAdminEmail(row.email)) {
+    return ADMIN_ROLE;
+  }
+  return row?.role || "";
+}
+
+function canModerate(row) {
+  return row?.id === DEFAULT_MODERATOR_USER_ID || isModeratorRole(getEffectiveViewerRole(row));
+}
 class ApiError extends Error {
   constructor(status, code, message, details = {}) {
     super(message);
@@ -468,8 +479,8 @@ function mapViewerRow(row, sessionRow) {
     id: row.id,
     type: viewerType,
     displayName: row.name,
-    role: row.role || "",
-    isAdmin: row.type === "registered" && isModeratorRole(row.role || ""),
+    role: getEffectiveViewerRole(row),
+    isAdmin: row.type === "registered" && canModerate(row),
     email: row.email ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarPendingUrl: row.avatar_pending_url ?? null,
@@ -1068,7 +1079,7 @@ function insertOrUpdateBlockedIp(db, { ipAddress, actorUserId, reason, createdAt
 }
 
 function assertModerator(viewerRow) {
-  if (!viewerRow || (viewerRow.id !== DEFAULT_MODERATOR_USER_ID && !isModeratorRole(viewerRow.role || ""))) {
+  if (!viewerRow || !canModerate(viewerRow)) {
     throw new ApiError(403, "MODERATOR_REQUIRED", "Hace falta un moderador.");
   }
 }

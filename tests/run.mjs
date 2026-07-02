@@ -530,6 +530,41 @@ await (async () => {
     });
   });
 
+  await test("backend grants admin access to existing sessions when email becomes configured", async () => {
+    const previousAdminEmails = process.env.TOPYKLY_ADMIN_EMAILS;
+    delete process.env.TOPYKLY_ADMIN_EMAILS;
+
+    try {
+      await withTempStore((store) => {
+        const userPayload = store.loginWithIdentity({
+          sessionId: "session-existing-admin-email",
+          sourceSessionId: "session-existing-admin-source",
+          authProvider: "https://accounts.example.com",
+          authSubject: "existing-admin-subject",
+          email: "existing-admin@example.com",
+          displayName: "Existing Admin"
+        });
+
+        assert.equal(userPayload.viewer.role, "Registrado");
+        assert.equal(userPayload.viewer.isAdmin, false);
+
+        process.env.TOPYKLY_ADMIN_EMAILS = "existing-admin@example.com";
+
+        const bootstrapPayload = store.bootstrap({ sessionId: "session-existing-admin-email" });
+        assert.equal(bootstrapPayload.viewer.role, "Admin");
+        assert.equal(bootstrapPayload.viewer.isAdmin, true);
+
+        const dashboard = store.getAdminDashboard({ sessionId: "session-existing-admin-email" });
+        assert.equal(dashboard.viewer.isAdmin, true);
+      });
+    } finally {
+      if (previousAdminEmails === undefined) {
+        delete process.env.TOPYKLY_ADMIN_EMAILS;
+      } else {
+        process.env.TOPYKLY_ADMIN_EMAILS = previousAdminEmails;
+      }
+    }
+  });
   await test("backend promotes configured OAuth emails to admin dashboard access", async () => {
     const previousAdminEmails = process.env.TOPYKLY_ADMIN_EMAILS;
     process.env.TOPYKLY_ADMIN_EMAILS = "admin@example.com";
@@ -2954,6 +2989,7 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
     assert.match(controllerApp, /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/);
     assert.match(controllerApp, /bindPageEvents\(dom, \{[\s\S]*state: actions\.state,[\s\S]*setAuthUiSync: actions\.setAuthUiSync,/);
+    assert.match(controllerApp, /openAdminPanel: actions\.openAdminPanel,[\s\S]*closeAdminPanel: actions\.closeAdminPanel,[\s\S]*applyAdminAction: actions\.applyAdminAction,/);
     assert.doesNotMatch(controllerApp, /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
