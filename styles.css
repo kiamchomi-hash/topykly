@@ -5014,6 +5014,137 @@ html.is-mobile-viewport .ranking-mode-list__label {
   font-size: 0.7rem;
 }
 
+.auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 82;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.auth-modal-backdrop[hidden] {
+  display: none;
+}
+
+.auth-modal {
+  width: min(420px, 100%);
+  max-height: min(620px, calc(100vh - 40px));
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 24px 80px color-mix(in srgb, #000 36%, transparent);
+}
+
+.auth-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.auth-modal__header h2 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.auth-modal__body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.auth-provider-button {
+  width: 100%;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--surface-strong) 88%, var(--bg) 12%);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.auth-provider-button:hover,
+.auth-provider-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-strong) 88%);
+  outline: none;
+}
+
+.auth-provider-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.auth-provider-button__mark {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--button-fill-text);
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.auth-email-form {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-email-form__field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-soft);
+}
+
+.auth-email-form__field input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--surface-strong) 84%, var(--bg) 16%);
+  color: var(--text);
+  font: inherit;
+}
+
+.auth-modal__provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.auth-provider-button--compact {
+  min-height: 42px;
+  padding-inline: 10px;
+  font-size: 0.8rem;
+}
+
+.auth-modal__note {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
 .profile-modal-backdrop {
   position: fixed;
   inset: 0;

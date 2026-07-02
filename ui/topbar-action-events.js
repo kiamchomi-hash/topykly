@@ -458,6 +458,34 @@ export function bindTopbarActionEvents(dom, handlers) {
     handlers.openProfileModal?.();
   }
 
+  function setAuthModalOpen(isOpen) {
+    if (dom.authModalBackdrop) {
+      dom.authModalBackdrop.hidden = !isOpen;
+    }
+
+    if (dom.authModal) {
+      dom.authModal.setAttribute("aria-hidden", String(!isOpen));
+    }
+
+    if (isOpen) {
+      dom.authGoogleButton?.focus?.();
+      return;
+    }
+
+    dom.authButton?.focus?.();
+  }
+
+  function openAuthModal() {
+    if (authPending || isLoggedIn()) {
+      return;
+    }
+
+    setAuthModalOpen(true);
+  }
+
+  function closeAuthModal() {
+    setAuthModalOpen(false);
+  }
   async function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
     const currentLoggedIn = isLoggedIn();
     if (currentLoggedIn === nextLoggedIn) {
@@ -479,8 +507,11 @@ export function bindTopbarActionEvents(dom, handlers) {
         : await handlers.logout?.();
 
       if (authResult?.redirected) {
+        closeAuthModal();
         return;
       }
+
+      closeAuthModal();
 
       if (announce) {
         handlers.flashTitle(nextLoggedIn ? "Sesion iniciada" : "Sesion cerrada");
@@ -571,7 +602,30 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   syncAuthUi();
   addListener(dom.authButton, "click", () => {
-    void setLoggedIn(!isLoggedIn());
+    if (isLoggedIn()) {
+      void setLoggedIn(false);
+      return;
+    }
+
+    openAuthModal();
+  });
+  addListener(dom.authGoogleButton, "click", () => {
+    void setLoggedIn(true);
+  });
+  addListener(dom.closeAuthModalButton, "click", closeAuthModal);
+  addListener(dom.authModalBackdrop, "click", (event) => {
+    if (event.target === dom.authModalBackdrop) {
+      closeAuthModal();
+    }
+  });
+  addListener(dom.authEmailForm, "submit", (event) => {
+    event.preventDefault();
+    handlers.flashTitle("Login por email pendiente de configuracion");
+  });
+  addListener(typeof window !== "undefined" ? window : null, "keydown", (event) => {
+    if (event.key === "Escape" && dom.authModalBackdrop && !dom.authModalBackdrop.hidden) {
+      closeAuthModal();
+    }
   });
 
   addListener(dom.friendRequestsButton, "click", () => {

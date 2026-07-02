@@ -323,6 +323,46 @@
         <div class="admin-modal__body" id="adminPanelBody"></div>
       </section>
     </div>
+    <div class="auth-modal-backdrop" id="authModalBackdrop" hidden>
+      <section class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Iniciar sesion" tabindex="-1">
+        <div class="auth-modal__header">
+          <div>
+            <p class="panel__kicker">Sesion</p>
+            <h2>Iniciar sesion</h2>
+          </div>
+          <button class="icon-button icon-button--compact auth-modal__close" id="closeAuthModalButton" type="button" aria-label="Cerrar inicio de sesion">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="auth-modal__body">
+          <button class="auth-provider-button" id="authGoogleButton" type="button" data-auth-provider="google">
+            <span class="auth-provider-button__mark" aria-hidden="true">G</span>
+            <span>Continuar con Google</span>
+          </button>
+          <form class="auth-email-form" id="authEmailForm">
+            <label class="auth-email-form__field" for="authEmailInput">
+              <span>Email</span>
+              <input id="authEmailInput" type="email" autocomplete="email" placeholder="tu@email.com" disabled />
+            </label>
+            <button class="auth-provider-button" id="authEmailButton" type="submit" disabled>
+              <span class="auth-provider-button__mark" aria-hidden="true">@</span>
+              <span>Enviar codigo por email</span>
+            </button>
+          </form>
+          <div class="auth-modal__provider-grid" aria-label="Mas opciones">
+            <button class="auth-provider-button auth-provider-button--compact" type="button" disabled data-auth-provider="facebook">
+              <span class="auth-provider-button__mark" aria-hidden="true">f</span>
+              <span>Facebook</span>
+            </button>
+            <button class="auth-provider-button auth-provider-button--compact" type="button" disabled data-auth-provider="x">
+              <span class="auth-provider-button__mark" aria-hidden="true">X</span>
+              <span>X</span>
+            </button>
+          </div>
+          <p class="auth-modal__note">Email, Facebook y X quedan disponibles cuando se configuren sus proveedores.</p>
+        </div>
+      </section>
+    </div>
     <div class="profile-modal-backdrop" id="profileModalBackdrop" hidden>
       <section class="profile-modal" id="profileModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Perfil" tabindex="-1">
         <div class="profile-modal__header">

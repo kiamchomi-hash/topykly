@@ -2169,7 +2169,12 @@ await (async () => {
       notificationsButton: new FakeElement(),
       messagesButton: new FakeElement(),
       authButton,
-      authTools
+      authTools,
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authEmailForm: new FakeElement(),
+      closeAuthModalButton: new FakeElement()
     };
 
     try {
@@ -2228,6 +2233,14 @@ await (async () => {
       authButton.dispatch("click");
       await flushAsyncEvents();
 
+      assert.equal(dom.authModalBackdrop.hidden, false);
+      assert.equal(dom.authModal["aria-hidden"], "false");
+      assert.equal(loginCalls, 0);
+
+      dom.authGoogleButton.dispatch("click");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authModalBackdrop.hidden, true);
       assert.equal(authTools.hidden, false);
       assert.equal(dom.profileButton.hidden, false);
       assert.equal(dom.storeButton.hidden, false);
@@ -2428,7 +2441,12 @@ await (async () => {
       notificationsButton: new FakeElement(),
       messagesButton: new FakeElement(),
       authButton,
-      authTools
+      authTools,
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authEmailForm: new FakeElement(),
+      closeAuthModalButton: new FakeElement()
     };
 
     try {
@@ -2514,6 +2532,14 @@ await (async () => {
       authButton.dispatch("click");
       await flushAsyncEvents();
 
+      assert.equal(dom.authModalBackdrop.hidden, false);
+      assert.equal(dom.authModal["aria-hidden"], "false");
+      assert.equal(loginCalls, 0);
+
+      dom.authGoogleButton.dispatch("click");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authModalBackdrop.hidden, true);
       assert.equal(authTools.hidden, false);
       assert.equal(dom.profileButton.hidden, false);
       assert.equal(dom.storeButton.hidden, false);

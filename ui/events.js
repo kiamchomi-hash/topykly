@@ -25,6 +25,22 @@ function getFocusableElements(container) {
 
 function getActiveFocusTrapContainer(dom) {
   if (
+    dom.authModal instanceof HTMLElement &&
+    dom.authModalBackdrop &&
+    !dom.authModalBackdrop.hidden &&
+    dom.authModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.authModal;
+  }
+  if (
+    dom.authModal instanceof HTMLElement &&
+    dom.authModalBackdrop &&
+    !dom.authModalBackdrop.hidden &&
+    dom.authModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.authModal;
+  }
+  if (
     dom.paletteModal instanceof HTMLElement &&
     dom.paletteModalBackdrop &&
     !dom.paletteModalBackdrop.hidden &&
