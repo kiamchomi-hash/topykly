@@ -563,7 +563,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     try {
-      await syncTurnstile({ resetExisting: true });
+      await syncTurnstile();
     } finally {
       if (dom.authGoogleButton) {
         dom.authGoogleButton.disabled = false;

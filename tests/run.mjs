@@ -2465,6 +2465,161 @@ await (async () => {
     }
   });
 
+  await test("auth modal reuses existing Turnstile widget before Google login", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousWindow = globalThis.window;
+    const previousTurnstile = globalThis.turnstile;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.className = "";
+        this.textContent = "";
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        return selector === ".button-label" ? this.label : null;
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {}
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const authGoogleButton = new FakeElement();
+    const authTurnstile = new FakeElement();
+    const authTurnstileToken = { value: "" };
+    const state = {
+      viewer: { id: "guest-turnstile", type: "guest" }
+    };
+    let renderCalls = 0;
+    let resetCalls = 0;
+    let loginCalls = 0;
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.window = {
+        addEventListener() {},
+        matchMedia() {
+          return { matches: false };
+        }
+      };
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+      globalThis.turnstile = {
+        render(_target, options) {
+          renderCalls += 1;
+          options.callback("turnstile-token");
+          return "widget-1";
+        },
+        reset() {
+          resetCalls += 1;
+        }
+      };
+
+      bindTopbarActionEvents({
+        themeToggle: new FakeElement(),
+        refreshButton: new FakeElement(),
+        messageForm: new FakeElement(),
+        profileButton: new FakeElement(),
+        openRightDrawer: new FakeElement(),
+        backToTopics: new FakeElement(),
+        storeButton: new FakeElement(),
+        paletteButton: new FakeElement(),
+        themeToggleDesktopSlot: new FakeElement(),
+        themeToggleMobileSlot: new FakeElement(),
+        closePaletteModalButton: new FakeElement(),
+        paletteModalBackdrop: new FakeElement(),
+        paletteOptionGrid: new FakeElement(),
+        createTopicButton: new FakeElement(),
+        friendRequestsButton: new FakeElement(),
+        notificationsButton: new FakeElement(),
+        messagesButton: new FakeElement(),
+        authButton,
+        authTools: new FakeElement(),
+        authModalBackdrop: new FakeElement(),
+        authModal: new FakeElement(),
+        authGoogleButton,
+        authTurnstile,
+        authTurnstileToken,
+        authEmailForm: new FakeElement(),
+        closeAuthModalButton: new FakeElement()
+      }, {
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        state,
+        async getAuthStatus() {
+          return { turnstile: { configured: true, siteKey: "site-key" } };
+        },
+        async login() {
+          loginCalls += 1;
+          state.viewer = { id: "u1", type: "registered" };
+          return { viewer: state.viewer };
+        },
+        async logout() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {}
+      });
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+      authGoogleButton.dispatch("click");
+      await flushAsyncEvents();
+
+      assert.equal(renderCalls, 1);
+      assert.equal(resetCalls, 0);
+      assert.equal(loginCalls, 1);
+      assert.equal(authTurnstileToken.value, "");
+    } finally {
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+      globalThis.window = previousWindow;
+      globalThis.turnstile = previousTurnstile;
+    }
+  });
   await test("mobile keeps private actions hidden until login and then routes drawer actions", async () => {
     const previousLocalStorage = globalThis.localStorage;
     const previousDocument = globalThis.document;
