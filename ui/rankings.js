@@ -50,7 +50,8 @@ export function renderRankings(state, dom) {
     return;
   }
 
-  const rankings =
+  const backendRankings = state.rankings?.[state.rankingScope]?.[activeRankingStep.type]?.[activeRankingStep.metric] ?? null;
+  const rankings = backendRankings ?? (
     state.rankingScope === "topic" || activeRankingStep.type === "users"
       ? buildUserRankingEntries(
           state.topics,
@@ -67,7 +68,8 @@ export function renderRankings(state, dom) {
           activeRankingStep.metric,
           state.selectedTopicId,
           state.rankingScope
-        );
+        )
+  );
 
   showRankingList(dom);
 

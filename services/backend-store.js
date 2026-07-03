@@ -45,6 +45,8 @@ const GUEST_DISPLAY_NAME = "*topy";
 const GUEST_SESSION_TTL_MS = 7 * 24 * 60 * 60_000;
 const GUEST_SESSION_MAX_PER_IP = 25;
 const GUEST_SESSION_MAX_TOTAL = 1000;
+const MESSAGE_REACTION_RESET_TIME_ZONE = "America/New_York";
+const MESSAGE_REACTION_RESET_META_KEY = "message_reactions_reset_day";
 const EXTRA_TOPIC_SEEDS = [
   ["Guardia tardia", "Hilo tranquilo para quien entra despues de hora."],
   ["Objetivos cortos", "Lista rapida de pendientes y mini retos."],
@@ -364,6 +366,47 @@ function createIsoTimestamp(offsetMinutes = 0, baseMs = Date.now()) {
   return new Date(baseMs + offsetMinutes * 60_000).toISOString();
 }
 
+function getMessageReactionResetDay(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MESSAGE_REACTION_RESET_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now instanceof Date ? now : new Date(now));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function resetDailyMessageReactionsIfNeeded(db, now = new Date()) {
+  const resetDay = getMessageReactionResetDay(now);
+  const nowIso = (now instanceof Date ? now : new Date(now)).toISOString();
+  const row = db.prepare("SELECT value FROM app_metadata WHERE key = ?").get(MESSAGE_REACTION_RESET_META_KEY);
+
+  if (!row) {
+    db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
+      MESSAGE_REACTION_RESET_META_KEY,
+      resetDay,
+      nowIso
+    );
+    return { reset: false, resetDay, deletedLikes: 0, deletedDislikes: 0 };
+  }
+
+  if (row.value === resetDay) {
+    return { reset: false, resetDay, deletedLikes: 0, deletedDislikes: 0 };
+  }
+
+  const deletedLikes = db.prepare("DELETE FROM message_likes").run().changes ?? 0;
+  const deletedDislikes = db.prepare("DELETE FROM message_dislikes").run().changes ?? 0;
+  db.prepare("UPDATE messages SET likes = 0, dislikes = 0 WHERE likes <> 0 OR dislikes <> 0").run();
+  db.prepare("UPDATE app_metadata SET value = ?, updated_at = ? WHERE key = ?").run(
+    resetDay,
+    nowIso,
+    MESSAGE_REACTION_RESET_META_KEY
+  );
+
+  return { reset: true, resetDay, deletedLikes, deletedDislikes };
+}
+
 function computeRetryAfterSeconds(nextAllowedAt, now = Date.now()) {
   const deltaMs = Math.max(0, nextAllowedAt - now);
   return Math.ceil(deltaMs / 1000);
@@ -512,6 +555,24 @@ function initSchema(db) {
       FOREIGN KEY (author_id) REFERENCES users(id)
     );
 
+    CREATE TABLE IF NOT EXISTS message_likes (
+      message_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (message_id, user_id),
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS message_dislikes (
+      message_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (message_id, user_id),
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       entity_type TEXT NOT NULL,
@@ -556,6 +617,12 @@ function initSchema(db) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS app_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   ensureColumn(db, "users", "last_topic_at", "TEXT");
@@ -572,6 +639,7 @@ function initSchema(db) {
   ensureColumn(db, "users", "profile_pending", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "profile_suggested_name", "TEXT");
   ensureColumn(db, "users", "profile_suggested_avatar_url", "TEXT");
+  ensureColumn(db, "messages", "dislikes", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "reports", "reporter_session_id", "TEXT");
   ensureColumn(db, "reports", "reporter_user_id", "TEXT");
   ensureColumn(db, "reports", "status", `TEXT NOT NULL DEFAULT '${REPORT_STATUS_OPEN}'`);
@@ -625,6 +693,11 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS messages_topic_reply_trim_idx
     ON messages(topic_id, is_root, id DESC);
+    CREATE INDEX IF NOT EXISTS message_likes_user_idx
+    ON message_likes(user_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS message_dislikes_user_idx
+    ON message_dislikes(user_id, created_at DESC);
 
     CREATE INDEX IF NOT EXISTS reports_session_open_idx
     ON reports(reporter_session_id, status, id DESC);
@@ -760,6 +833,55 @@ function shouldSeedDemoData(env = process.env, fallback = true) {
 function seedDatabase(db) {
   seedUsers(db);
   seedTopics(db);
+}
+
+function purgeDemoData(db) {
+  const demoUserIds = initialUsers.map((user) => user.id);
+  const demoTopicIds = getSeedTopicEntries().map((_, index) => `topic-${index + 1}`);
+  const demoMessageIds = demoTopicIds.length
+    ? db.prepare(`
+      SELECT id
+      FROM messages
+      WHERE topic_id IN (${demoTopicIds.map(() => "?").join(", ")})
+    `).all(...demoTopicIds).map((row) => String(row.id))
+    : [];
+
+  if (demoTopicIds.length) {
+    db.prepare(`
+      DELETE FROM reports
+      WHERE entity_type = 'topic' AND entity_id IN (${demoTopicIds.map(() => "?").join(", ")})
+    `).run(...demoTopicIds);
+    db.prepare(`
+      DELETE FROM topics
+      WHERE id IN (${demoTopicIds.map(() => "?").join(", ")})
+    `).run(...demoTopicIds);
+  }
+
+  if (demoMessageIds.length) {
+    db.prepare(`
+      DELETE FROM reports
+      WHERE entity_type = 'message' AND entity_id IN (${demoMessageIds.map(() => "?").join(", ")})
+    `).run(...demoMessageIds);
+  }
+
+  if (demoUserIds.length) {
+    db.prepare(`
+      DELETE FROM reports
+      WHERE entity_type = 'user' AND entity_id IN (${demoUserIds.map(() => "?").join(", ")})
+    `).run(...demoUserIds);
+    db.prepare(`
+      DELETE FROM sessions
+      WHERE user_id IN (${demoUserIds.map(() => "?").join(", ")})
+    `).run(...demoUserIds);
+    db.prepare(`
+      DELETE FROM users
+      WHERE id IN (${demoUserIds.map(() => "?").join(", ")})
+        AND NOT EXISTS (SELECT 1 FROM topics WHERE topics.author_id = users.id)
+        AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.author_id = users.id)
+    `).run(...demoUserIds);
+  }
+
+  rebuildActiveTopicRanks(db);
 }
 
 function mapViewerRow(row, sessionRow) {
@@ -1037,26 +1159,165 @@ function getFrontendUsers(db, viewerId) {
   `).all(viewerId, viewerId);
 }
 
-function hydrateTopicMessages(db, topicId) {
+function hydrateTopicMessages(db, topicId, viewerId = null) {
   return db.prepare(`
-    SELECT id, topic_id, author_id, text, kind, likes, is_root, created_at
+    SELECT
+      messages.id,
+      messages.topic_id,
+      messages.author_id,
+      messages.text,
+      messages.kind,
+      messages.likes,
+      messages.dislikes,
+      messages.is_root,
+      messages.created_at,
+      CASE WHEN message_likes.user_id IS NULL THEN 0 ELSE 1 END AS liked_by_viewer,
+      CASE WHEN message_dislikes.user_id IS NULL THEN 0 ELSE 1 END AS disliked_by_viewer
     FROM messages
-    WHERE topic_id = ?
-    ORDER BY id ASC
-  `).all(topicId).map((row) => ({
+    LEFT JOIN message_likes ON message_likes.message_id = messages.id AND message_likes.user_id = ?
+    LEFT JOIN message_dislikes ON message_dislikes.message_id = messages.id AND message_dislikes.user_id = ?
+    WHERE messages.topic_id = ?
+    ORDER BY messages.id ASC
+  `).all(viewerId || "", viewerId || "", topicId).map((row) => ({
     id: `message-${row.id}`,
     topicId: row.topic_id,
     authorId: row.author_id,
     text: row.text,
     kind: row.kind,
     likes: row.likes,
+    dislikes: row.dislikes,
     isRoot: Boolean(row.is_root),
+    likedByViewer: Boolean(row.liked_by_viewer),
+    dislikedByViewer: Boolean(row.disliked_by_viewer),
     createdAt: row.created_at,
     timestamp: row.created_at
   }));
 }
 
-function hydrateTopic(db, row, { forceVisible = null } = {}) {
+function formatBackendCommentCount(count) {
+  return count === 1 ? "1 comentario" : `${count} comentarios`;
+}
+
+function formatBackendLikeCount(count) {
+  return count === 1 ? "1 like" : `${count} likes`;
+}
+
+function emptyRankingEntry(title, meta) {
+  return [{ id: "empty", title, count: 0, meta, active: false }];
+}
+
+function mapRankingRows(rows, { emptyTitle, emptyMeta, formatMeta, currentUserId = null }) {
+  if (!rows.length) {
+    return emptyRankingEntry(emptyTitle, emptyMeta);
+  }
+
+  return rows.map((row) => ({
+    id: String(row.id),
+    title: row.title,
+    count: Number(row.count ?? 0),
+    meta: formatMeta(Number(row.count ?? 0)),
+    active: currentUserId ? row.id === currentUserId : false
+  }));
+}
+
+function getBackendPostRankingEntries(db, metric = "comments") {
+  const rows = metric === "likes"
+    ? db.prepare(`
+      SELECT topics.id, topics.title, COALESCE(SUM(messages.likes), 0) AS count
+      FROM topics
+      JOIN messages ON messages.topic_id = topics.id AND messages.kind = 'user'
+      WHERE topics.status != ?
+      GROUP BY topics.id
+      HAVING count > 0
+      ORDER BY count DESC, topics.last_activity_at DESC, topics.created_at DESC
+      LIMIT 10
+    `).all(TOPIC_STATUS_EXPELLED)
+    : db.prepare(`
+      SELECT topics.id, topics.title, COUNT(messages.id) AS count
+      FROM topics
+      JOIN messages ON messages.topic_id = topics.id AND messages.kind = 'user'
+      WHERE topics.status != ?
+      GROUP BY topics.id
+      HAVING count > 0
+      ORDER BY count DESC, topics.last_activity_at DESC, topics.created_at DESC
+      LIMIT 10
+    `).all(TOPIC_STATUS_EXPELLED);
+
+  return mapRankingRows(rows, {
+    emptyTitle: metric === "likes" ? "Sin likes" : "Sin comentarios",
+    emptyMeta: metric === "likes" ? "Todavia no hay likes para clasificar." : "Todavia no hay comentarios para clasificar.",
+    formatMeta: metric === "likes" ? formatBackendLikeCount : formatBackendCommentCount
+  });
+}
+
+function getBackendUserRankingEntries(db, { metric = "comments", selectedTopicId = null, currentUserId = null } = {}) {
+  const topicFilter = selectedTopicId ? "AND messages.topic_id = ?" : "";
+  const params = selectedTopicId ? [selectedTopicId] : [];
+  const rows = metric === "likes"
+    ? db.prepare(`
+      SELECT users.id, users.name AS title, COALESCE(SUM(messages.likes), 0) AS count
+      FROM messages
+      JOIN users ON users.id = messages.author_id
+      JOIN topics ON topics.id = messages.topic_id
+      WHERE messages.kind = 'user'
+        AND users.status = 'active'
+        AND users.type = 'registered'
+        AND topics.status != '${TOPIC_STATUS_EXPELLED}'
+        ${topicFilter}
+      GROUP BY users.id
+      HAVING count > 0
+      ORDER BY count DESC, users.created_at ASC
+      LIMIT 10
+    `).all(...params)
+    : db.prepare(`
+      SELECT users.id, users.name AS title, COUNT(messages.id) AS count
+      FROM messages
+      JOIN users ON users.id = messages.author_id
+      JOIN topics ON topics.id = messages.topic_id
+      WHERE messages.kind = 'user'
+        AND users.status = 'active'
+        AND users.type = 'registered'
+        AND topics.status != '${TOPIC_STATUS_EXPELLED}'
+        ${topicFilter}
+      GROUP BY users.id
+      HAVING count > 0
+      ORDER BY count DESC, users.created_at ASC
+      LIMIT 10
+    `).all(...params);
+
+  return mapRankingRows(rows, {
+    emptyTitle: metric === "likes" ? "Sin likes" : "Sin comentarios",
+    emptyMeta: metric === "likes" ? "Todavia no hay likes para clasificar." : "Todavia no hay comentarios para clasificar.",
+    formatMeta: metric === "likes" ? formatBackendLikeCount : formatBackendCommentCount,
+    currentUserId
+  });
+}
+
+function buildBackendRankings(db, context, selectedTopicId = null) {
+  return {
+    global: {
+      posts: {
+        comments: getBackendPostRankingEntries(db, "comments"),
+        likes: getBackendPostRankingEntries(db, "likes")
+      },
+      users: {
+        comments: getBackendUserRankingEntries(db, { metric: "comments", currentUserId: context.viewer.id }),
+        likes: getBackendUserRankingEntries(db, { metric: "likes", currentUserId: context.viewer.id })
+      }
+    },
+    topic: {
+      users: {
+        comments: selectedTopicId
+          ? getBackendUserRankingEntries(db, { metric: "comments", selectedTopicId, currentUserId: context.viewer.id })
+          : emptyRankingEntry("Sin tema", "Selecciona un tema para ver las estadisticas."),
+        likes: selectedTopicId
+          ? getBackendUserRankingEntries(db, { metric: "likes", selectedTopicId, currentUserId: context.viewer.id })
+          : emptyRankingEntry("Sin tema", "Selecciona un tema para ver las estadisticas.")
+      }
+    }
+  };
+}
+function hydrateTopic(db, row, { forceVisible = null, viewerId = null } = {}) {
   const isVisible = forceVisible ?? (row.status !== TOPIC_STATUS_EXPELLED && row.active_rank !== null && row.active_rank < VISIBLE_TOPIC_LIMIT);
 
   return {
@@ -1071,7 +1332,7 @@ function hydrateTopic(db, row, { forceVisible = null } = {}) {
     messageCount: db.prepare("SELECT COUNT(*) AS count FROM messages WHERE topic_id = ?").get(row.id)?.count ?? 0,
     lastActivityAt: row.last_activity_at,
     createdAt: row.created_at,
-    messages: hydrateTopicMessages(db, row.id)
+    messages: hydrateTopicMessages(db, row.id, viewerId)
   };
 }
 
@@ -1130,14 +1391,14 @@ function buildFrontendPayload(db, context, selectedTopicId = null) {
 
   const activeTopicRows = getActiveTopicsForFrontend(db);
   const topicIds = new Set(activeTopicRows.map((row) => row.id));
-  const topics = activeTopicRows.map((row) => hydrateTopic(db, row));
+  const topics = activeTopicRows.map((row) => hydrateTopic(db, row, { viewerId: context.viewer.id }));
   const reportSnapshot = getReportSnapshot(db, context.sessionId);
   let resolvedSelectedTopicId = selectedTopicId && topicIds.has(selectedTopicId) ? selectedTopicId : null;
 
   if (selectedTopicId && !topicIds.has(selectedTopicId)) {
     const selectedRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(selectedTopicId);
     if (selectedRow) {
-      topics.push(hydrateTopic(db, selectedRow, { forceVisible: false }));
+      topics.push(hydrateTopic(db, selectedRow, { forceVisible: false, viewerId: context.viewer.id }));
       resolvedSelectedTopicId = selectedTopicId;
     }
   }
@@ -1149,7 +1410,8 @@ function buildFrontendPayload(db, context, selectedTopicId = null) {
     topics,
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,
-    reportedMessageIds: reportSnapshot.reportedMessageIds
+    reportedMessageIds: reportSnapshot.reportedMessageIds,
+    rankings: buildBackendRankings(db, context, resolvedSelectedTopicId)
   };
 }
 
@@ -1341,6 +1603,13 @@ function assertContextCanParticipate(db, context) {
   assertProfileReady(context);
 }
 
+function assertRegisteredContextCanPost(db, context) {
+  assertContextCanParticipate(db, context);
+  if (context.viewer.type !== "registered") {
+    throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para crear temas o comentar.");
+  }
+}
+
 function assertExistingTopic(db, topicId) {
   const normalizedTopicId = String(topicId || "").trim();
   if (!normalizedTopicId) {
@@ -1355,6 +1624,61 @@ function assertExistingTopic(db, topicId) {
   return topicRow;
 }
 
+function normalizeMessageLikeId(messageId) {
+  const normalized = normalizeMessageEntityId(messageId);
+  return Number(normalized);
+}
+
+function assertLikeableMessage(db, messageId) {
+  const normalizedMessageId = normalizeMessageLikeId(messageId);
+  const messageRow = db.prepare(`
+    SELECT messages.id, messages.topic_id, messages.kind, topics.status AS topic_status
+    FROM messages
+    JOIN topics ON topics.id = messages.topic_id
+    WHERE messages.id = ?
+    LIMIT 1
+  `).get(normalizedMessageId);
+  if (!messageRow) {
+    throw new ApiError(404, "NOT_FOUND", "Mensaje no encontrado.");
+  }
+  if (messageRow.kind === "system") {
+    throw new ApiError(409, "INVALID_LIKE_TARGET", "Este mensaje no acepta likes.");
+  }
+
+  return messageRow;
+}
+
+function refreshMessageReactionCounts(db, messageId) {
+  const likes = db.prepare("SELECT COUNT(*) AS count FROM message_likes WHERE message_id = ?").get(messageId)?.count ?? 0;
+  const dislikes = db.prepare("SELECT COUNT(*) AS count FROM message_dislikes WHERE message_id = ?").get(messageId)?.count ?? 0;
+  db.prepare("UPDATE messages SET likes = ?, dislikes = ? WHERE id = ?").run(likes, dislikes, messageId);
+  return { likes, dislikes };
+}
+
+function recordMessageReaction(db, messageRow, userId, reactionType) {
+  const tableName = reactionType === "dislike" ? "message_dislikes" : "message_likes";
+  const existingReaction = db.prepare(`
+    SELECT 'like' AS reaction_type
+    FROM message_likes
+    WHERE message_id = ? AND user_id = ?
+    UNION ALL
+    SELECT 'dislike' AS reaction_type
+    FROM message_dislikes
+    WHERE message_id = ? AND user_id = ?
+    LIMIT 1
+  `).get(messageRow.id, userId, messageRow.id, userId);
+
+  if (existingReaction) {
+    throw new ApiError(409, "MESSAGE_REACTION_LOCKED", "Ya reaccionaste a este comentario. Podras votar de nuevo despues del reinicio diario.");
+  }
+
+  db.prepare(`
+    INSERT INTO ${tableName} (message_id, user_id, created_at)
+    VALUES (?, ?, ?)
+  `).run(messageRow.id, userId, new Date().toISOString());
+
+  refreshMessageReactionCounts(db, messageRow.id);
+}
 function assertExistingUser(db, userId) {
   const normalizedUserId = String(userId || "").trim();
   if (!normalizedUserId) {
@@ -1753,6 +2077,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
   initSchema(db);
   if (seedDemoData) {
     seedDatabase(db);
+  } else {
+    purgeDemoData(db);
   }
 
   return {
@@ -1763,6 +2089,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
     },
     cleanupInactiveGuests({ nowMs = Date.now() } = {}) {
       return withTransaction(db, () => pruneGuestSessions(db, "", nowMs, ""));
+    },
+    resetDailyMessageReactions({ now = new Date() } = {}) {
+      return withTransaction(db, () => resetDailyMessageReactionsIfNeeded(db, now));
     },
     registerWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, nickname } = {}) {
       return withTransaction(db, () => {
@@ -1921,8 +2250,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
     },
     createTopic({ sessionId, authMode, title, text, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
-        assertContextCanParticipate(db, context);
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredContextCanPost(db, context);
         const lastTopicAt = getContextActivityAt(db, context, "last_topic_at");
         assertRateLimit(lastTopicAt, context.viewer.type, "last_topic_at");
         const { normalizedTitle, normalizedText } = validateTopicInput(title, text);
@@ -1968,8 +2297,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
     },
     addMessage(topicId, { sessionId, authMode, text, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
-        assertContextCanParticipate(db, context);
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredContextCanPost(db, context);
         const lastMessageAt = getContextActivityAt(db, context, "last_message_at");
         assertRateLimit(lastMessageAt, context.viewer.type, "last_message_at");
         const normalizedText = validateMessageInput(text);
@@ -2004,6 +2333,34 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           ipAddress
         });
         return buildFrontendPayload(db, refreshedContext, topicId);
+      });
+    },
+    toggleMessageLike(messageId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertContextCanParticipate(db, context);
+        if (context.viewer.type !== "registered") {
+          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para dar likes.");
+        }
+
+        resetDailyMessageReactionsIfNeeded(db);
+        const messageRow = assertLikeableMessage(db, messageId);
+        recordMessageReaction(db, messageRow, context.viewer.id, "like");
+        return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
+      });
+    },
+    toggleMessageDislike(messageId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertContextCanParticipate(db, context);
+        if (context.viewer.type !== "registered") {
+          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para dar dislikes.");
+        }
+
+        resetDailyMessageReactionsIfNeeded(db);
+        const messageRow = assertLikeableMessage(db, messageId);
+        recordMessageReaction(db, messageRow, context.viewer.id, "dislike");
+        return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
       });
     },
     reportEntity(entityType, entityId, { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}) {

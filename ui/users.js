@@ -1,8 +1,8 @@
-import { createUserItem, createUserSkeleton } from "../components.js";
+import { createEmptyState, createUserItem, createUserSkeleton } from "../components.js";
 import { renderIntoTargets } from "./render-utils.js";
 
 export function renderUsers(state, dom) {
-  const isLoading = state.users.length === 0;
+  const isLoading = !state.viewer;
   const ordered = [...state.users]
     .filter((user) => user.online)
     .sort((a, b) => {
@@ -16,6 +16,11 @@ export function renderUsers(state, dom) {
     if (isLoading) {
       return Array.from({ length: 10 }, (_, i) => createUserSkeleton(i));
     }
+
+    if (!ordered.length) {
+      return [createEmptyState("Sin usuarios todavia", "Los perfiles reales apareceran cuando la gente se registre.")];
+    }
+
     return ordered.map((user) => createUserItem(user, state.currentUserId, state.activeConnectedUserId));
   });
 }

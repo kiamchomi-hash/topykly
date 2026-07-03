@@ -385,6 +385,41 @@ await (async () => {
     assert.equal(shouldSeedDemoData({ TOPYKLY_SEED_DEMO_DATA: "false" }), false);
     assert.equal(shouldSeedDemoData({ TOPYKLY_SEED_DEMO_DATA: "true" }, false), true);
   });
+  await test("backend purges existing demo seed data when demo seeding is disabled", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-demo-purge-"));
+    const dbPath = path.join(tempDir, "topykly.sqlite");
+    let store = createBackendStore({ dbPath, seedDemoData: true });
+
+    try {
+      store.registerWithPassword({
+        sessionId: "session-real-user",
+        email: "real-user@example.com",
+        password: "password-segura",
+        nickname: "real_user"
+      });
+      const created = store.createTopic({
+        sessionId: "session-real-user",
+        title: "Tema real persistente",
+        text: "Contenido creado por una cuenta real"
+      });
+      const realTopicId = created.selectedTopicId;
+      store.close();
+
+      store = createBackendStore({ dbPath, seedDemoData: false });
+      const payload = store.bootstrap({
+        sessionId: "session-real-user",
+        authMode: "registered"
+      });
+
+      assert.equal(payload.topics.some((topic) => topic.id === "topic-1"), false);
+      assert.equal(payload.users.some((user) => user.id === "u1"), false);
+      assert.equal(payload.topics.some((topic) => topic.id === realTopicId), true);
+      assert.equal(payload.viewer.nickname, "real_user");
+    } finally {
+      store.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
   await test("backend bootstrap returns a guest viewer plus 40 active topics with 20 visible", async () => {
     await withTempStore((store) => {
       const payload = store.bootstrap({
@@ -417,7 +452,7 @@ await (async () => {
     });
   });
 
-  await test("backend materializes guest users only when they participate", async () => {
+  await test("backend requires registered users to create topics and comments", async () => {
     await withTempStore((store) => {
       const initial = store.bootstrap({
         sessionId: "session-guest-participates",
@@ -425,24 +460,57 @@ await (async () => {
       });
       const topicId = initial.topics[0].id;
 
-      store.addMessage(topicId, {
+      assert.throws(() => store.createTopic({
         sessionId: "session-guest-participates",
         authMode: "guest",
-        text: "Comentario invitado persistido"
-      });
-      const diagnostics = store.getDiagnostics();
+        title: "Tema invitado",
+        text: "No deberia publicarse."
+      }), (error) => error?.code === "LOGIN_REQUIRED");
+      assert.throws(() => store.addMessage(topicId, {
+        sessionId: "session-guest-participates",
+        authMode: "guest",
+        text: "Comentario invitado bloqueado"
+      }), (error) => error?.code === "LOGIN_REQUIRED");
 
-      assert.equal(diagnostics.users, initialUsers.length + 1);
-      assert.equal(diagnostics.sessions, 1);
+      const diagnostics = store.getDiagnostics();
+      assert.equal(diagnostics.users, initialUsers.length);
+      assert.equal(diagnostics.sessions, 0);
     });
   });
 
-  await test("backend caps materialized guest storage for rotating sessions", async () => {
+  await test("backend lets the first real user create the first topic without seeds", async () => {
+    await withTempStore((store) => {
+      const registered = store.registerWithPassword({
+        sessionId: "session-first-real-user",
+        email: "first-real@example.com",
+        password: "password-segura",
+        nickname: "first_real"
+      });
+      assert.equal(registered.topics.length, 0);
+      assert.equal(registered.users.some((user) => user.nickname === "first_real"), true);
+
+      const created = store.createTopic({
+        sessionId: "session-first-real-user",
+        title: "Primer tema real",
+        text: "Primer posteo creado por una cuenta real."
+      });
+      const topic = created.topics.find((entry) => entry.id === created.selectedTopicId);
+
+      assert.ok(topic);
+      assert.equal(topic.title, "Primer tema real");
+      assert.equal(topic.messages.length, 1);
+      assert.equal(topic.messages[0].authorId, created.viewer.id);
+      assert.equal(created.rankings.global.posts.comments[0].id, topic.id);
+      assert.equal(created.rankings.global.users.comments[0].title, "first_real");
+    }, { seedDemoData: false });
+  });
+
+  await test("backend caps materialized guest storage for rotating report sessions", async () => {
     await withTempStore((store) => {
       const topicId = store.createTopic({
         sessionId: "session-guest-cap-topic",
         authMode: "registered",
-        title: "Tema para invitados",
+        title: "Tema para reportes invitados",
         text: "Raiz para probar sesiones invitadas."
       }).selectedTopicId;
 
@@ -463,14 +531,13 @@ await (async () => {
   });
   await test("backend scheduled cleanup removes inactive guest state", async () => {
     await withTempStore((store) => {
-      store.login({
+      const topicId = store.login({
         sessionId: "session-cleanup-registered"
-      });
-      store.createTopic({
+      }).topics[0].id;
+      store.reportEntity("topic", topicId, {
         sessionId: "session-cleanup-guest",
         authMode: "guest",
-        title: "Tema temporal invitado",
-        text: "Mensaje temporal para crear estado guest.",
+        reason: "Reporte temporal invitado",
         ipAddress: "203.0.113.88"
       });
 
@@ -481,7 +548,7 @@ await (async () => {
       });
 
       assert.equal(result.deletedSessions, 1);
-      assert.equal(result.deletedGuestIpRateLimits, 1);
+      assert.equal(result.deletedGuestIpRateLimits, 0);
       assert.equal(store.getDiagnostics().sessions, 1);
     });
   });
@@ -507,6 +574,8 @@ await (async () => {
         "topics_status_activity_idx",
         "messages_topic_id_idx",
         "messages_topic_reply_trim_idx",
+        "message_likes_user_idx",
+        "message_dislikes_user_idx",
         "reports_session_open_idx",
         "reports_user_open_idx",
         "reports_entity_open_idx",
@@ -963,6 +1032,121 @@ await (async () => {
       }
     }
   });
+  await test("backend locks one message reaction per registered user until daily reset", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-likes-"));
+    const dbPath = path.join(tempDir, "topykly.sqlite");
+    let store = createBackendStore({ dbPath });
+
+    function findMessage(payload, topicId, messageId) {
+      return payload.topics.find((entry) => entry.id === topicId).messages.find((entry) => entry.id === messageId);
+    }
+
+    try {
+      store.registerWithPassword({
+        sessionId: "session-like-user",
+        email: "like@example.com",
+        password: "password-segura",
+        nickname: "like_user"
+      });
+      const created = store.createTopic({
+        sessionId: "session-like-user",
+        title: "Tema con likes reales",
+        text: "Mensaje con likes reales"
+      });
+      const topic = created.topics[0];
+      const message = topic.messages[0];
+
+      const liked = store.toggleMessageLike(message.id, {
+        sessionId: "session-like-user",
+        selectedTopicId: topic.id
+      });
+      const likedMessage = findMessage(liked, topic.id, message.id);
+      assert.equal(likedMessage.likes, 1);
+      assert.equal(likedMessage.dislikes, 0);
+      assert.equal(likedMessage.likedByViewer, true);
+      assert.equal(likedMessage.dislikedByViewer, false);
+
+      assert.throws(() => store.toggleMessageLike(message.id, {
+        sessionId: "session-like-user",
+        selectedTopicId: topic.id
+      }), (error) => error?.code === "MESSAGE_REACTION_LOCKED");
+      assert.throws(() => store.toggleMessageDislike(message.id, {
+        sessionId: "session-like-user",
+        selectedTopicId: topic.id
+      }), (error) => error?.code === "MESSAGE_REACTION_LOCKED");
+
+      const reset = store.resetDailyMessageReactions({
+        now: new Date(Date.now() + 36 * 60 * 60_000)
+      });
+      assert.equal(reset.reset, true);
+      assert.equal(reset.deletedLikes, 1);
+      assert.equal(reset.deletedDislikes, 0);
+
+      const disliked = store.toggleMessageDislike(message.id, {
+        sessionId: "session-like-user",
+        selectedTopicId: topic.id
+      });
+      const dislikedMessage = findMessage(disliked, topic.id, message.id);
+      assert.equal(dislikedMessage.likes, 0);
+      assert.equal(dislikedMessage.dislikes, 1);
+      assert.equal(dislikedMessage.likedByViewer, false);
+      assert.equal(dislikedMessage.dislikedByViewer, true);
+
+      store.close();
+      store = createBackendStore({ dbPath });
+      const reopened = store.openTopic(topic.id, {
+        sessionId: "session-like-user",
+        authMode: "registered"
+      });
+      const reopenedMessage = findMessage(reopened, topic.id, message.id);
+      assert.equal(reopenedMessage.likes, 0);
+      assert.equal(reopenedMessage.dislikes, 1);
+      assert.equal(reopenedMessage.likedByViewer, false);
+      assert.equal(reopenedMessage.dislikedByViewer, true);
+    } finally {
+      store.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+  await test("backend hydrates persistent rankings from SQLite", async () => {
+    await withTempStore((store) => {
+      store.registerWithPassword({
+        sessionId: "session-ranking-author",
+        email: "ranking-author@example.com",
+        password: "password-segura",
+        nickname: "ranking_author"
+      });
+      store.registerWithPassword({
+        sessionId: "session-ranking-voter",
+        email: "ranking-voter@example.com",
+        password: "password-segura",
+        nickname: "ranking_voter"
+      });
+      const created = store.createTopic({
+        sessionId: "session-ranking-author",
+        title: "Tema para ranking real",
+        text: "Primer comentario puntuable"
+      });
+      const topic = created.topics[0];
+      const message = topic.messages[0];
+
+      const liked = store.toggleMessageLike(message.id, {
+        sessionId: "session-ranking-voter",
+        selectedTopicId: topic.id
+      });
+
+      assert.equal(liked.rankings.global.posts.comments[0].id, topic.id);
+      assert.equal(liked.rankings.global.posts.comments[0].count, 1);
+      assert.equal(liked.rankings.global.posts.likes[0].id, topic.id);
+      assert.equal(liked.rankings.global.posts.likes[0].count, 1);
+      assert.equal(liked.rankings.global.users.comments[0].title, "ranking_author");
+      assert.equal(liked.rankings.global.users.comments[0].count, 1);
+      assert.equal(liked.rankings.global.users.likes[0].title, "ranking_author");
+      assert.equal(liked.rankings.global.users.likes[0].count, 1);
+      assert.equal(liked.rankings.topic.users.comments[0].title, "ranking_author");
+      assert.equal(liked.rankings.topic.users.likes[0].title, "ranking_author");
+    }, { seedDemoData: false });
+  });
   await test("backend reports persist per session and moderation can resolve topic and message reports", async () => {
     await withTempStore((store) => {
       const bootstrapPayload = store.bootstrap({
@@ -1276,9 +1460,15 @@ await (async () => {
       const topicId = created.selectedTopicId;
 
       for (let index = 0; index < 31; index += 1) {
+        const sessionId = `session-root-reply-${index}`;
+        store.registerWithPassword({
+          sessionId,
+          email: `root-reply-${index}@example.com`,
+          password: "password-segura",
+          nickname: `root_reply_${index}`
+        });
         store.addMessage(topicId, {
-          sessionId: `session-root-reply-${index}`,
-          authMode: "guest",
+          sessionId,
           text: `reply ${index}`
         });
       }
@@ -1316,7 +1506,7 @@ await (async () => {
       assert.throws(() => {
         store.addMessage(expelledCandidateId, {
           sessionId: "session-expel-comment",
-          authMode: "guest",
+          authMode: "registered",
           text: "No deberia entrar"
         });
       }, (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled");
@@ -1342,7 +1532,7 @@ await (async () => {
     });
   });
 
-  await test("backend enforces guest rate limits across rotated sessions by ip", async () => {
+  await test("backend rejects guest publishing without materializing guest state", async () => {
     await withTempStore((store) => {
       const activeTopicId = store.bootstrap({
         sessionId: "session-guest-ip-bootstrap",
@@ -1350,60 +1540,38 @@ await (async () => {
         ipAddress: "203.0.113.50"
       }).topics[0].id;
 
-      store.addMessage(activeTopicId, {
-        sessionId: "session-guest-ip-a",
-        authMode: "guest",
-        text: "Primer comentario guest por ip",
-        ipAddress: "203.0.113.50"
-      });
-
       assert.throws(() => {
         store.addMessage(activeTopicId, {
-          sessionId: "session-guest-ip-b",
+          sessionId: "session-guest-ip-a",
           authMode: "guest",
-          text: "Segundo comentario con sesion rotada",
+          text: "Comentario guest bloqueado",
           ipAddress: "203.0.113.50"
         });
-      }, (error) => error.code === "RATE_LIMITED" && Number.isInteger(error.retryAfterSeconds));
-
-      store.addMessage(activeTopicId, {
-        sessionId: "session-guest-ip-c",
-        authMode: "guest",
-        text: "Comentario desde otra ip",
-        ipAddress: "203.0.113.51"
-      });
-
-      store.createTopic({
-        sessionId: "session-guest-topic-ip-a",
-        authMode: "guest",
-        title: "Tema guest por ip",
-        text: "Primer tema desde esta ip",
-        ipAddress: "203.0.113.52"
-      });
-
+      }, (error) => error.code === "LOGIN_REQUIRED");
       assert.throws(() => {
         store.createTopic({
-          sessionId: "session-guest-topic-ip-b",
+          sessionId: "session-guest-topic-ip-a",
           authMode: "guest",
-          title: "Tema guest rotado",
-          text: "Segundo tema demasiado rapido",
+          title: "Tema guest bloqueado",
+          text: "No deberia publicarse",
           ipAddress: "203.0.113.52"
         });
-      }, (error) => error.code === "RATE_LIMITED" && Number.isInteger(error.retryAfterSeconds));
+      }, (error) => error.code === "LOGIN_REQUIRED");
+      assert.equal(store.getDiagnostics().sessions, 0);
     });
   });
   await test("backend session and ip blocks deny participation without breaking read access", async () => {
     await withTempStore((store) => {
-      const blockedSessionPayload = store.bootstrap({
-        sessionId: "session-blocked-guest",
-        authMode: "guest",
+      const blockedSessionPayload = store.login({
+        sessionId: "session-blocked-registered",
+        authMode: "registered",
         ipAddress: "203.0.113.10"
       });
       const topicId = blockedSessionPayload.topics[0].id;
 
       store.addMessage(topicId, {
-        sessionId: "session-blocked-guest",
-        authMode: "guest",
+        sessionId: "session-blocked-registered",
+        authMode: "registered",
         text: "Mensaje antes del bloqueo",
         ipAddress: "203.0.113.10"
       });
@@ -1417,22 +1585,22 @@ await (async () => {
       store.applyModerationAction("block_session", {
         sessionId: "session-moderator",
         targetType: "session",
-        targetId: "session-blocked-guest",
+        targetId: "session-blocked-registered",
         reason: "Spam reiterado"
       });
 
       assert.throws(() => {
         store.addMessage(topicId, {
-          sessionId: "session-blocked-guest",
-          authMode: "guest",
+          sessionId: "session-blocked-registered",
+        authMode: "registered",
           text: "No deberia publicar",
           ipAddress: "203.0.113.10"
         });
       }, (error) => error.code === "SESSION_BLOCKED");
 
       const readOnlyPayload = store.openTopic(topicId, {
-        sessionId: "session-blocked-guest",
-        authMode: "guest",
+        sessionId: "session-blocked-registered",
+        authMode: "registered",
         ipAddress: "203.0.113.10"
       });
 
@@ -3725,6 +3893,12 @@ await (async () => {
     assert.match(components, /message__avatar/);
     assert.match(components, /message__body/);
     assert.match(components, /message__time/);
+    assert.match(components, /message__like-button/);
+    assert.match(components, /message__action-menu/);
+    assert.match(components, /dataset\.messageMenuTrigger/);
+    assert.match(components, /dataset\.messageProfileAuthorId/);
+    assert.match(components, /dataset\.likeMessageId/);
+    assert.match(components, /dataset\.dislikeMessageId/);
     assert.match(components, /message__report-button/);
     assert.match(components, /dataset\.reportEntityType = "message"/);
     assert.match(components, /dataset\.connectedUserId/);
@@ -3806,7 +3980,12 @@ await (async () => {
     assert.doesNotMatch(paletteModal, /palette-option__description/);
     assert.match(titles, /renderTitles/);
     assert.match(topics, /renderTopics/);
+    assert.match(topics, /const isLoading = !state\.viewer/);
+    assert.match(topics, /createEmptyState\("Todavia no hay temas"/);
     assert.match(users, /renderUsers/);
+    assert.match(users, /const isLoading = !state\.viewer/);
+    assert.match(users, /createEmptyState\("Sin usuarios todavia"/);
+    assert.match(chat, /const isLoading = !state\.viewer/);
     assert.match(domModule, /export function cacheDom/);
     assert.match(domModule, /chatTitle/);
     assert.match(domModule, /topicTitleInput/);

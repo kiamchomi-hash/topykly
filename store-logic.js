@@ -20,6 +20,7 @@ export const reducers = {
       currentUserId: payload.viewer?.id ?? state.currentUserId,
       reportedTopicIds: payload.reportedTopicIds ?? state.reportedTopicIds ?? [],
       reportedMessageIds: payload.reportedMessageIds ?? state.reportedMessageIds ?? [],
+      rankings: payload.rankings ?? state.rankings ?? null,
       users: payload.users,
       topics: payload.topics,
       selectedTopicId: nextSelectedTopicId,

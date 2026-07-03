@@ -131,6 +131,16 @@ try {
   await test("opens a topic and posts a comment through the HTTP route", async () => {
     const sessionId = "session-smoke-comment";
     const initial = await request("/api/bootstrap", { sessionId });
+    await request("/api/auth/password/register", {
+      method: "POST",
+      sessionId,
+      expectedStatus: 201,
+      body: {
+        email: `smoke-comment-${Date.now()}@example.com`,
+        password: "password-segura",
+        nickname: `smoke_c_${Date.now() % 100000}`
+      }
+    });
     const topic = initial.topics.find((entry) => entry.visible);
     const messageText = `Smoke comment ${Date.now()}`;
 
@@ -157,6 +167,16 @@ try {
     const title = `Smoke topic ${Date.now()}`;
     const text = "Smoke topic root message";
 
+    await request("/api/auth/password/register", {
+      method: "POST",
+      sessionId,
+      expectedStatus: 201,
+      body: {
+        email: `smoke-topic-${Date.now()}@example.com`,
+        password: "password-segura",
+        nickname: `smoke_t_${Date.now() % 100000}`
+      }
+    });
     const created = await request("/api/topics", {
       method: "POST",
       sessionId,
@@ -174,6 +194,16 @@ try {
   await test("reports a topic and hydrates reported ids", async () => {
     const sessionId = "session-smoke-report";
     const initial = await request("/api/bootstrap", { sessionId });
+    await request("/api/auth/password/register", {
+      method: "POST",
+      sessionId,
+      expectedStatus: 201,
+      body: {
+        email: `smoke-comment-${Date.now()}@example.com`,
+        password: "password-segura",
+        nickname: `smoke_c_${Date.now() % 100000}`
+      }
+    });
     const topic = initial.topics.find((entry) => entry.visible);
 
     const reported = await request("/api/reports", {

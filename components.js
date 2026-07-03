@@ -37,6 +37,15 @@ export function createTopicItem(topic, users, selected = false) {
   return button;
 }
 
+export function createEmptyState(title, copy = "") {
+  const node = el("article", "empty-state");
+  node.dataset.id = `empty-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "state"}`;
+  node.append(el("p", "empty-state__title", title));
+  if (copy) {
+    node.append(el("p", "empty-state__copy", copy));
+  }
+  return node;
+}
 export function createTopicSkeleton(index) {
   const button = el("button", "topic-item topic-item--skeleton");
   button.type = "button";
@@ -91,8 +100,11 @@ export function createMessageItem(message, users, { reported = false } = {}) {
   node.dataset.id = message.id;
   const author = message.kind === "system" ? "Sistema" : getUserName(users, message.authorId);
   const avatar = createProfileAvatar("message__avatar");
-  const body = el("div", "message__body");
+  const avatarButton = el("button", "message__avatar-button");
+  avatarButton.type = "button";
+  avatarButton.append(avatar);
 
+  const body = el("div", "message__body");
   const meta = el("div", "message__meta");
   meta.append(
     el("span", "message__author", author),
@@ -100,20 +112,59 @@ export function createMessageItem(message, users, { reported = false } = {}) {
   );
 
   if (message.kind !== "system") {
+    avatarButton.dataset.messageMenuTrigger = message.id;
+    avatarButton.dataset.messageAuthorId = message.authorId;
+    avatarButton.setAttribute("aria-label", `Abrir opciones de ${author}`);
+    avatarButton.setAttribute("aria-expanded", "false");
+
+    const hasViewerReaction = Boolean(message.likedByViewer || message.dislikedByViewer);
+    const likeButton = el("button", `message__like-button${message.likedByViewer ? " is-liked" : ""}`, `${message.likedByViewer ? "Te gusta" : "Like"} ${message.likes ?? 0}`);
+    likeButton.type = "button";
+    likeButton.dataset.likeMessageId = message.id;
+    likeButton.disabled = hasViewerReaction;
+    likeButton.setAttribute("aria-pressed", String(Boolean(message.likedByViewer)));
+    likeButton.setAttribute("aria-label", `${message.likedByViewer ? "Quitar like" : "Dar like"} al mensaje`);
+
     const reportButton = el("button", `message__report-button${reported ? " is-reported" : ""}`, reported ? "Reportado" : "Reportar");
     reportButton.type = "button";
     reportButton.dataset.reportEntityType = "message";
     reportButton.dataset.reportEntityId = message.id;
     reportButton.disabled = reported;
     reportButton.setAttribute("aria-label", reported ? "Mensaje ya reportado" : "Reportar mensaje");
-    meta.append(reportButton);
+    meta.append(likeButton, reportButton);
+
+    const actionMenu = el("div", "message__action-menu");
+    actionMenu.hidden = true;
+    actionMenu.dataset.messageMenu = message.id;
+    actionMenu.append(
+      el("button", "message__action-menu-button", "PERFIL"),
+      el("button", `message__action-menu-button${message.likedByViewer ? " is-active" : ""}`, "LIKE"),
+      el("button", `message__action-menu-button${message.dislikedByViewer ? " is-active" : ""}`, "DISLIKE"),
+      el("button", `message__action-menu-button${reported ? " is-active" : ""}`, "REPORTAR")
+    );
+    const [profileAction, likeAction, dislikeAction, reportAction] = actionMenu.querySelectorAll("button");
+    profileAction.type = "button";
+    profileAction.dataset.messageProfileAuthorId = message.authorId;
+    likeAction.type = "button";
+    likeAction.dataset.likeMessageId = message.id;
+    dislikeAction.type = "button";
+    dislikeAction.dataset.dislikeMessageId = message.id;
+    likeAction.disabled = hasViewerReaction;
+    dislikeAction.disabled = hasViewerReaction;
+    reportAction.type = "button";
+    reportAction.dataset.reportEntityType = "message";
+    reportAction.dataset.reportEntityId = message.id;
+    reportAction.disabled = reported;
+    body.append(actionMenu);
+  } else {
+    avatarButton.disabled = true;
+    avatarButton.setAttribute("aria-hidden", "true");
   }
 
   body.append(meta, el("p", "message__text", message.text));
-  node.append(avatar, body);
+  node.append(avatarButton, body);
   return node;
 }
-
 export function createUserItem(user, currentUserId, activeConnectedUserId = null) {
   const isCurrentUser = user.id === currentUserId;
   const isActive = user.id === activeConnectedUserId;

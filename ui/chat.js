@@ -63,7 +63,7 @@ export function shouldScrollChatToBottom(previousState, nextState, wasNearBottom
 
 export function renderChat(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
-  const isLoading = state.topics.length === 0;
+  const isLoading = !state.viewer;
   const reportedMessageIds = new Set(state.reportedMessageIds || []);
   const isTopicReported = Boolean(topic && state.reportedTopicIds?.includes?.(topic.id));
 

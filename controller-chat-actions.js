@@ -191,6 +191,42 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     }
   }
 
+  async function toggleMessageLike(messageId, { trigger = null } = {}) {
+    if (!messageId) {
+      return;
+    }
+
+    setReportTriggerState(trigger, true);
+    try {
+      await syncBackendPayload(() => apiClient.toggleMessageLike(messageId, state.selectedTopicId));
+      render();
+    } catch (error) {
+      console.error(error);
+      showFeedback?.(error?.message || "No se pudo actualizar el like.", { kind: "error" });
+    } finally {
+      setReportTriggerState(trigger, false);
+      render();
+    }
+  }
+
+  async function toggleMessageDislike(messageId, { trigger = null } = {}) {
+    if (!messageId) {
+      return;
+    }
+
+    setReportTriggerState(trigger, true);
+    try {
+      await syncBackendPayload(() => apiClient.toggleMessageDislike(messageId, state.selectedTopicId));
+      render();
+    } catch (error) {
+      console.error(error);
+      showFeedback?.(error?.message || "No se pudo actualizar el dislike.", { kind: "error" });
+    } finally {
+      setReportTriggerState(trigger, false);
+      render();
+    }
+  }
+
   async function reportEntity(entityType, entityId, { trigger = null, reason = undefined } = {}) {
     const requestedReason = reason ?? requestReportReason(entityType);
     if (requestedReason === null) {
@@ -219,6 +255,8 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     createNewTopic,
     submitMessage,
     refreshCurrentTopic,
+    toggleMessageLike,
+    toggleMessageDislike,
     reportEntity
   };
 }

@@ -206,6 +206,18 @@ export const api = {
     });
   },
 
+  async toggleMessageLike(messageId, selectedTopicId = null) {
+    return request(`/api/messages/${encodeURIComponent(messageId)}/like`, {
+      method: "POST",
+      body: { selectedTopicId }
+    });
+  },
+  async toggleMessageDislike(messageId, selectedTopicId = null) {
+    return request(`/api/messages/${encodeURIComponent(messageId)}/dislike`, {
+      method: "POST",
+      body: { selectedTopicId }
+    });
+  },
   async reportEntity(entityType, entityId, reason = "", selectedTopicId = null) {
     return request("/api/reports", {
       method: "POST",

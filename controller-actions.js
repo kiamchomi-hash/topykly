@@ -427,7 +427,8 @@ export function createActionHandlers({
   const chatActions = createChatActions({
     state,
     dom,
-    render
+    render,
+    showFeedback
   });
 
   return {

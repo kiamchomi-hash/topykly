@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.join(__dirname, "..");
 const DEFAULT_GUEST_CLEANUP_INTERVAL_MS = 60 * 60_000;
+const DEFAULT_REACTION_RESET_CHECK_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
@@ -348,6 +349,17 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (req.method === "POST" && url.pathname.startsWith("/api/messages/") && (url.pathname.endsWith("/like") || url.pathname.endsWith("/dislike"))) {
+      const segments = url.pathname.split("/").filter(Boolean);
+      const messageId = segments[2] || "";
+      const body = await readJsonBody(req);
+      const action = url.pathname.endsWith("/dislike") ? "toggleMessageDislike" : "toggleMessageLike";
+      sendBackendPayload(res, req, authService, 200, store[action](messageId, {
+        ...context,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/reports") {
       const body = await readJsonBody(req);
       sendBackendPayload(res, req, authService, 200, store.reportEntity(body.entityType, body.entityId, {
@@ -574,6 +586,27 @@ function runGuestCleanup(store, log) {
     log(`guest cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
+function resolveReactionResetCheckIntervalMs(env = process.env) {
+  const rawValue = String(env.TOPYKLY_REACTION_RESET_CHECK_INTERVAL_MS || "").trim();
+  if (!rawValue) {
+    return DEFAULT_REACTION_RESET_CHECK_INTERVAL_MS;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function runMessageReactionReset(store, log) {
+  try {
+    const result = store.resetDailyMessageReactions();
+    if (result.reset) {
+      log(`message reactions reset for ${result.resetDay}: ${result.deletedLikes} likes and ${result.deletedDislikes} dislikes removed`);
+    }
+  } catch (error) {
+    log(`message reaction reset failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 function handleStaticRequest(req, res, url, store) {
   if (url.pathname.startsWith("/avatars/")) {
     handleAvatarRequest(res, url, store.avatarStorageDir);
@@ -624,11 +657,17 @@ export function startPreviewServer({
   const httpRateLimitConfig = resolveHttpRateLimitConfig();
   const httpRateLimitBuckets = new Map();
   const guestCleanupIntervalMs = resolveGuestCleanupIntervalMs();
+  const reactionResetCheckIntervalMs = resolveReactionResetCheckIntervalMs();
   const guestCleanupTimer = guestCleanupIntervalMs > 0
     ? setInterval(() => runGuestCleanup(store, log), guestCleanupIntervalMs)
     : null;
   guestCleanupTimer?.unref?.();
+  const reactionResetTimer = reactionResetCheckIntervalMs > 0
+    ? setInterval(() => runMessageReactionReset(store, log), reactionResetCheckIntervalMs)
+    : null;
+  reactionResetTimer?.unref?.();
   runGuestCleanup(store, log);
+  runMessageReactionReset(store, log);
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
@@ -670,6 +709,9 @@ export function startPreviewServer({
     close() {
       if (guestCleanupTimer) {
         clearInterval(guestCleanupTimer);
+      }
+      if (reactionResetTimer) {
+        clearInterval(reactionResetTimer);
       }
       server.close();
       store.close();

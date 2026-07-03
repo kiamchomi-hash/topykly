@@ -136,17 +136,70 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
+  function closeMessageActionMenus(exceptMenu = null) {
+    if (!(dom.messageStream instanceof HTMLElement)) {
+      return;
+    }
+
+    dom.messageStream.querySelectorAll("[data-message-menu]").forEach((menu) => {
+      if (!(menu instanceof HTMLElement) || menu === exceptMenu) {
+        return;
+      }
+      menu.hidden = true;
+      const trigger = dom.messageStream.querySelector(`[data-message-menu-trigger="${menu.dataset.messageMenu}"]`);
+      if (trigger instanceof HTMLElement) {
+        trigger.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
   if (typeof HTMLElement !== "undefined" && dom.messageStream instanceof HTMLElement) {
     dom.messageStream.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) {
         return;
       }
 
-      const trigger = event.target.closest("[data-report-entity-type][data-report-entity-id]");
-      if (!(trigger instanceof HTMLElement)) {
+      const menuTrigger = event.target.closest("[data-message-menu-trigger]");
+      if (menuTrigger instanceof HTMLElement) {
+        const menuId = menuTrigger.dataset.messageMenuTrigger || "";
+        const menu = dom.messageStream.querySelector(`[data-message-menu="${menuId}"]`);
+        if (menu instanceof HTMLElement) {
+          const willOpen = menu.hidden;
+          closeMessageActionMenus(menu);
+          menu.hidden = !willOpen;
+          menuTrigger.setAttribute("aria-expanded", String(willOpen));
+        }
         return;
       }
 
+      const profileTrigger = event.target.closest("[data-message-profile-author-id]");
+      if (profileTrigger instanceof HTMLElement) {
+        closeMessageActionMenus();
+        handlers.activateConnectedUser?.(profileTrigger.dataset.messageProfileAuthorId || "", "profile");
+        return;
+      }
+
+      const likeTrigger = event.target.closest("[data-like-message-id]");
+      if (likeTrigger instanceof HTMLElement) {
+        closeMessageActionMenus();
+        handlers.toggleMessageLike?.(likeTrigger.dataset.likeMessageId || "", { trigger: likeTrigger });
+        return;
+      }
+
+      const dislikeTrigger = event.target.closest("[data-dislike-message-id]");
+      if (dislikeTrigger instanceof HTMLElement) {
+        closeMessageActionMenus();
+        handlers.toggleMessageDislike?.(dislikeTrigger.dataset.dislikeMessageId || "", { trigger: dislikeTrigger });
+        return;
+      }
+
+      const trigger = event.target.closest("[data-report-entity-type][data-report-entity-id]");
+      if (!(trigger instanceof HTMLElement)) {
+        closeMessageActionMenus();
+        return;
+      }
+
+      closeMessageActionMenus();
       handlers.reportEntity?.(
         trigger.dataset.reportEntityType || "message",
         trigger.dataset.reportEntityId || "",
