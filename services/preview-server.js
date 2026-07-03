@@ -364,7 +364,8 @@ async function handleApiRequest(store, authService, req, res, url) {
       });
       sendBackendPayload(res, req, authService, 200, store.login({
         ...context,
-        selectedTopicId: body.selectedTopicId ?? null
+        selectedTopicId: body.selectedTopicId ?? null,
+        rotateSession: true
       }));
       return;
     }
@@ -379,7 +380,8 @@ async function handleApiRequest(store, authService, req, res, url) {
         ...context,
         email: body.email,
         password: body.password,
-        selectedTopicId: body.selectedTopicId ?? null
+        selectedTopicId: body.selectedTopicId ?? null,
+        rotateSession: true
       }));
       return;
     }
@@ -395,7 +397,8 @@ async function handleApiRequest(store, authService, req, res, url) {
         email: body.email,
         password: body.password,
         nickname: body.nickname,
-        selectedTopicId: body.selectedTopicId ?? null
+        selectedTopicId: body.selectedTopicId ?? null,
+        rotateSession: true
       }));
       return;
     }
@@ -599,7 +602,11 @@ function resolveHttpRateLimitConfig(env = process.env) {
 }
 
 function getHttpRateLimitScope(url) {
-  if (url.pathname === "/auth/oidc/callback" || url.pathname === "/api/auth/login") {
+  if (
+    url.pathname === "/auth/oidc/callback"
+    || url.pathname === "/api/auth/login"
+    || url.pathname.startsWith("/api/auth/password/")
+  ) {
     return "auth";
   }
 
