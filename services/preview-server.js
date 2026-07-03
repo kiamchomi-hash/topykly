@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "./auth-service.js";
-import { ApiError, createBackendStore } from "./backend-store.js";
+import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -270,6 +270,36 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/api/auth/password/login") {
+      const body = await readJsonBody(req);
+      await authService.validateTurnstile({
+        req,
+        token: body.turnstileToken
+      });
+      sendBackendPayload(res, req, authService, 200, store.loginWithPassword({
+        ...context,
+        email: body.email,
+        password: body.password,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/password/register") {
+      const body = await readJsonBody(req);
+      await authService.validateTurnstile({
+        req,
+        token: body.turnstileToken
+      });
+      sendBackendPayload(res, req, authService, 201, store.registerWithPassword({
+        ...context,
+        email: body.email,
+        password: body.password,
+        nickname: body.nickname,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
       const body = await readJsonBody(req);
       sendBackendPayload(res, req, authService, 200, store.logout({
@@ -329,12 +359,22 @@ async function handleApiRequest(store, authService, req, res, url) {
     }
 
     if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
-      sendJson(res, 200, store.getAdminDashboard(context));
+      sendJson(res, 200, store.getAdminDashboard({
+        ...context,
+        reportPage: url.searchParams.get("reportPage"),
+        reportLimit: url.searchParams.get("reportLimit"),
+        avatarPage: url.searchParams.get("avatarPage"),
+        avatarLimit: url.searchParams.get("avatarLimit")
+      }));
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/api/moderation/reports") {
-      sendJson(res, 200, store.listReports(context));
+      sendJson(res, 200, store.listReports({
+        ...context,
+        reportPage: url.searchParams.get("reportPage"),
+        reportLimit: url.searchParams.get("reportLimit")
+      }));
       return;
     }
 
@@ -576,7 +616,10 @@ export function startPreviewServer({
   dbPath
 }) {
   loadEnvFile(path.join(root, ".env"));
-  const store = createBackendStore({ dbPath });
+  const store = createBackendStore({
+    dbPath,
+    seedDemoData: shouldSeedDemoData(process.env, false)
+  });
   const authService = createAuthService();
   const httpRateLimitConfig = resolveHttpRateLimitConfig();
   const httpRateLimitBuckets = new Map();

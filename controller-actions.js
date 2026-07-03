@@ -142,6 +142,30 @@ export function createActionHandlers({
     return result;
   }
 
+  async function loginWithPassword({ email, password, turnstileToken = "" } = {}) {
+    const result = await api.loginWithPassword({
+      email,
+      password,
+      turnstileToken,
+      selectedTopicId: state.selectedTopicId
+    });
+    dispatch(state, reducers.hydrateFromBackend, result);
+    render();
+    return result;
+  }
+
+  async function registerWithPassword({ email, password, nickname, turnstileToken = "" } = {}) {
+    const result = await api.registerWithPassword({
+      email,
+      password,
+      nickname,
+      turnstileToken,
+      selectedTopicId: state.selectedTopicId
+    });
+    dispatch(state, reducers.hydrateFromBackend, result);
+    render();
+    return result;
+  }
   async function logout() {
     const payload = await api.logout(state.selectedTopicId);
     dispatch(state, reducers.hydrateFromBackend, payload);

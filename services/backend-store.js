@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -16,6 +17,9 @@ const DEFAULT_MODERATOR_USER_ID = "u2";
 const TOPIC_TITLE_MAX_LENGTH = 80;
 const MESSAGE_TEXT_MAX_LENGTH = 240;
 const REPORT_REASON_MAX_LENGTH = 240;
+const NICKNAME_MIN_LENGTH = 3;
+const NICKNAME_MAX_LENGTH = 24;
+const PASSWORD_MIN_LENGTH = 8;
 const AVATAR_UPLOAD_MAX_BYTES = 256 * 1024;
 const AVATAR_UPLOAD_MAX_BASE64_BYTES = Math.ceil(AVATAR_UPLOAD_MAX_BYTES / 3) * 4;
 const AVATAR_UPLOAD_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -171,6 +175,61 @@ function normalizeOptionalEmail(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return normalized || null;
 }
+
+function normalizeRequiredEmail(value) {
+  const normalized = normalizeOptionalEmail(value);
+  if (!normalized || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Ingresa un email valido.");
+  }
+
+  return normalized;
+}
+
+function normalizeNickname(value) {
+  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  if (normalized.length < NICKNAME_MIN_LENGTH || normalized.length > NICKNAME_MAX_LENGTH) {
+    throw new ApiError(400, "VALIDATION_ERROR", `El nickname debe tener entre ${NICKNAME_MIN_LENGTH} y ${NICKNAME_MAX_LENGTH} caracteres.`);
+  }
+  if (!/^[A-Za-z0-9_.-]+$/.test(normalized)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "El nickname solo puede usar letras, numeros, punto, guion y guion bajo.");
+  }
+
+  return normalized;
+}
+
+function normalizeNicknameKey(value) {
+  return normalizeNickname(value).toLowerCase();
+}
+
+function validatePassword(value) {
+  const password = String(value || "");
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    throw new ApiError(400, "VALIDATION_ERROR", `La contrasena debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`);
+  }
+  if (password.length > 256) {
+    throw new ApiError(400, "VALIDATION_ERROR", "La contrasena excede el maximo permitido.");
+  }
+
+  return password;
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("base64url");
+  const hash = crypto.scryptSync(password, salt, 64).toString("base64url");
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const [, salt = "", expected = ""] = String(storedHash || "").split(":");
+  if (!salt || !expected) {
+    return false;
+  }
+
+  const expectedBuffer = Buffer.from(expected, "base64url");
+  const actualBuffer = crypto.scryptSync(String(password || ""), salt, expectedBuffer.length);
+  return expectedBuffer.length === actualBuffer.length && crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
 
 function normalizeOptionalUrl(value) {
   const normalized = String(value || "").trim();
@@ -504,6 +563,9 @@ function initSchema(db) {
   ensureColumn(db, "users", "auth_provider", "TEXT");
   ensureColumn(db, "users", "auth_subject", "TEXT");
   ensureColumn(db, "users", "email", "TEXT");
+  ensureColumn(db, "users", "nickname", "TEXT");
+  ensureColumn(db, "users", "nickname_norm", "TEXT");
+  ensureColumn(db, "users", "password_hash", "TEXT");
   ensureColumn(db, "users", "avatar_url", "TEXT");
   ensureColumn(db, "users", "avatar_pending_url", "TEXT");
   ensureColumn(db, "users", "avatar_review_status", "TEXT");
@@ -524,6 +586,63 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS users_email_idx
     ON users(email)
     WHERE email IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_nickname_norm_idx
+    ON users(nickname_norm)
+    WHERE nickname_norm IS NOT NULL;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS users_password_email_idx
+    ON users(email)
+    WHERE email IS NOT NULL AND password_hash IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS users_frontend_active_idx
+    ON users(status, type, score DESC, created_at ASC);
+
+    CREATE INDEX IF NOT EXISTS users_pending_avatar_idx
+    ON users(type, updated_at DESC, created_at DESC)
+    WHERE avatar_pending_url IS NOT NULL AND avatar_pending_url <> '';
+
+    CREATE INDEX IF NOT EXISTS users_avatar_url_idx
+    ON users(avatar_url)
+    WHERE avatar_url IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS users_avatar_pending_url_idx
+    ON users(avatar_pending_url)
+    WHERE avatar_pending_url IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS sessions_guest_cleanup_idx
+    ON sessions(auth_mode, updated_at, id);
+
+    CREATE INDEX IF NOT EXISTS sessions_guest_ip_idx
+    ON sessions(auth_mode, last_ip, updated_at DESC, created_at DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS topics_status_rank_idx
+    ON topics(status, active_rank ASC);
+
+    CREATE INDEX IF NOT EXISTS topics_status_activity_idx
+    ON topics(status, last_message_id DESC, created_at DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS messages_topic_id_idx
+    ON messages(topic_id, id ASC);
+
+    CREATE INDEX IF NOT EXISTS messages_topic_reply_trim_idx
+    ON messages(topic_id, is_root, id DESC);
+
+    CREATE INDEX IF NOT EXISTS reports_session_open_idx
+    ON reports(reporter_session_id, status, id DESC);
+
+    CREATE INDEX IF NOT EXISTS reports_user_open_idx
+    ON reports(reporter_user_id, entity_type, entity_id, status);
+
+    CREATE INDEX IF NOT EXISTS reports_entity_open_idx
+    ON reports(entity_type, entity_id, status);
+
+    CREATE INDEX IF NOT EXISTS reports_status_created_idx
+    ON reports(status, created_at DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS guest_ip_rate_limits_updated_idx
+    ON guest_ip_rate_limits(updated_at);
+
+    CREATE INDEX IF NOT EXISTS moderation_actions_target_idx
+    ON moderation_actions(target_type, target_id, created_at DESC);
   `);
 }
 
@@ -627,6 +746,17 @@ function seedTopics(db) {
   rebuildActiveTopicRanks(db);
 }
 
+function shouldSeedDemoData(env = process.env, fallback = true) {
+  const rawValue = String(env.TOPYKLY_SEED_DEMO_DATA || env.CHETREND_SEED_DEMO_DATA || "").trim().toLowerCase();
+  if (["1", "true", "yes", "demo"].includes(rawValue)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(rawValue)) {
+    return false;
+  }
+
+  return fallback;
+}
 function seedDatabase(db) {
   seedUsers(db);
   seedTopics(db);
@@ -648,6 +778,7 @@ function mapViewerRow(row, sessionRow) {
     id: row.id,
     type: viewerType,
     displayName,
+    nickname: row.nickname ?? null,
     role: getEffectiveViewerRole(row),
     isAdmin: row.type === "registered" && canModerate(row),
     email: row.email ?? null,
@@ -898,7 +1029,7 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", pers
 
 function getFrontendUsers(db, viewerId) {
   return db.prepare(`
-    SELECT id, name, type, role, score, email, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
+    SELECT id, name, nickname, type, role, score, email, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
     FROM users
     WHERE status = 'active' AND (type = 'registered' OR id = ?)
     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, score DESC, created_at ASC
@@ -1238,6 +1369,67 @@ function assertExistingUser(db, userId) {
   return userRow;
 }
 
+function assertNicknameAvailable(db, nicknameKey, userId = null) {
+  const existing = db.prepare(`
+    SELECT id
+    FROM users
+    WHERE nickname_norm = ?
+    LIMIT 1
+  `).get(nicknameKey);
+  if (existing && existing.id !== userId) {
+    throw new ApiError(409, "NICKNAME_TAKEN", "Ese nickname ya esta en uso.");
+  }
+}
+
+function getPasswordUserByEmail(db, email) {
+  return db.prepare(`
+    SELECT *
+    FROM users
+    WHERE email = ? AND password_hash IS NOT NULL
+    LIMIT 1
+  `).get(email);
+}
+
+function createPasswordUser(db, { email, password, nickname, nowIso }) {
+  const normalizedEmail = normalizeRequiredEmail(email);
+  const normalizedNickname = normalizeNickname(nickname);
+  const nicknameKey = normalizeNicknameKey(normalizedNickname);
+  const existingEmail = getPasswordUserByEmail(db, normalizedEmail);
+  if (existingEmail) {
+    throw new ApiError(409, "EMAIL_TAKEN", "Ese email ya tiene una cuenta.");
+  }
+  assertNicknameAvailable(db, nicknameKey);
+
+  const userId = `user-${crypto.randomUUID()}`;
+  db.prepare(`
+    INSERT INTO users (
+      id, name, nickname, nickname_norm, type, role, score, status, email, password_hash,
+      profile_pending, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'registered', ?, 0, 'active', ?, ?, 0, ?, ?)
+  `).run(
+    userId,
+    normalizedNickname,
+    normalizedNickname,
+    nicknameKey,
+    isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE,
+    normalizedEmail,
+    hashPassword(validatePassword(password)),
+    nowIso,
+    nowIso
+  );
+
+  return db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+}
+
+function getAuthenticatedPasswordUser(db, { email, password }) {
+  const normalizedEmail = normalizeRequiredEmail(email);
+  const userRow = getPasswordUserByEmail(db, normalizedEmail);
+  if (!userRow || !verifyPassword(password, userRow.password_hash)) {
+    throw new ApiError(401, "INVALID_CREDENTIALS", "Email o contrasena incorrectos.");
+  }
+
+  return userRow;
+}
 function getOrCreateAuthenticatedUser(db, {
   authProvider,
   authSubject,
@@ -1549,7 +1741,7 @@ function assertCommentableTopic(row) {
   }
 }
 
-export function createBackendStore({ dbPath = null } = {}) {
+export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) {
   const dbConfig = resolveDbConfig(dbPath);
   const resolvedDbPath = dbConfig.dbPath;
   const storageDir = path.dirname(resolvedDbPath);
@@ -1559,7 +1751,9 @@ export function createBackendStore({ dbPath = null } = {}) {
   const db = new DatabaseSync(resolvedDbPath);
 
   initSchema(db);
-  seedDatabase(db);
+  if (seedDemoData) {
+    seedDatabase(db);
+  }
 
   return {
     dbPath: resolvedDbPath,
@@ -1570,7 +1764,36 @@ export function createBackendStore({ dbPath = null } = {}) {
     cleanupInactiveGuests({ nowMs = Date.now() } = {}) {
       return withTransaction(db, () => pruneGuestSessions(db, "", nowMs, ""));
     },
-    login({ sessionId, selectedTopicId = null, ipAddress = "", userId = REGISTERED_USER_ID } = {}) {
+    registerWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, nickname } = {}) {
+      return withTransaction(db, () => {
+        const normalizedSessionId = ensureViewerSessionId(sessionId);
+        const nowIso = new Date().toISOString();
+        const existingSessionRow = readSessionRow(db, normalizedSessionId);
+        assertContextNotBlocked(db, {
+          sessionId: normalizedSessionId,
+          sessionRow: existingSessionRow,
+          ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
+        });
+        const viewerRow = createPasswordUser(db, { email, password, nickname, nowIso });
+        const context = createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },
+    loginWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password } = {}) {
+      return withTransaction(db, () => {
+        const normalizedSessionId = ensureViewerSessionId(sessionId);
+        const nowIso = new Date().toISOString();
+        const existingSessionRow = readSessionRow(db, normalizedSessionId);
+        assertContextNotBlocked(db, {
+          sessionId: normalizedSessionId,
+          sessionRow: existingSessionRow,
+          ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
+        });
+        const viewerRow = getAuthenticatedPasswordUser(db, { email, password });
+        const context = createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },    login({ sessionId, selectedTopicId = null, ipAddress = "", userId = REGISTERED_USER_ID } = {}) {
       return withTransaction(db, () => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
@@ -2152,4 +2375,4 @@ export function createBackendStore({ dbPath = null } = {}) {
   };
 }
 
-export { ApiError, DEFAULT_DB_PATH, resolveDbConfig };
+export { ApiError, DEFAULT_DB_PATH, resolveDbConfig, shouldSeedDemoData };

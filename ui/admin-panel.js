@@ -71,6 +71,12 @@ export function renderAdminPanel(state, dom) {
   const dashboard = state.adminDashboard || {};
   const pendingAvatars = Array.isArray(dashboard.pendingAvatars) ? dashboard.pendingAvatars : [];
   const reports = Array.isArray(dashboard.reports) ? dashboard.reports : [];
+  const avatarCount = Number.isFinite(dashboard.avatarPagination?.total)
+    ? dashboard.avatarPagination.total
+    : pendingAvatars.length;
+  const reportCount = Number.isFinite(dashboard.reportPagination?.total)
+    ? dashboard.reportPagination.total
+    : reports.length;
 
   if (dom.adminModalBackdrop) {
     dom.adminModalBackdrop.hidden = !isOpen;
@@ -93,12 +99,12 @@ export function renderAdminPanel(state, dom) {
   dom.adminPanelBody.append(
     renderSection(
       "Fotos pendientes",
-      pendingAvatars.length,
+      avatarCount,
       pendingAvatars.length ? pendingAvatars.map(renderAvatarItem) : [renderEmpty("No hay fotos para revisar.")]
     ),
     renderSection(
       "Reportes abiertos",
-      reports.length,
+      reportCount,
       reports.length ? reports.map(renderReportItem) : [renderEmpty("No hay reportes abiertos.")]
     )
   );

@@ -5128,6 +5128,34 @@ html.is-mobile-viewport .ranking-mode-list__label {
   display: grid;
   gap: 10px;
 }
+.auth-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 74%, var(--bg) 26%);
+}
+
+.auth-mode-tabs__button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.auth-mode-tabs__button.is-active,
+.auth-mode-tabs__button:focus-visible {
+  background: var(--text);
+  color: var(--bg);
+  outline: none;
+}
 
 .auth-email-form__field {
   display: grid;

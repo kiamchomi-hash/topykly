@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "../services/auth-service.js";
-import { createBackendStore, resolveDbConfig } from "../services/backend-store.js";
+import { createBackendStore, resolveDbConfig, shouldSeedDemoData } from "../services/backend-store.js";
 import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
 import { initialUsers, topicSeedData } from "../data.js";
@@ -175,10 +176,10 @@ function createClassList() {
   };
 }
 
-async function withTempStore(fn) {
+async function withTempStore(fn, options = {}) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-store-"));
   const dbPath = path.join(tempDir, "topykly.sqlite");
-  const store = createBackendStore({ dbPath });
+  const store = createBackendStore({ dbPath, ...options });
 
   try {
     return await fn(store);
@@ -374,6 +375,16 @@ await (async () => {
     assert.equal(summarizeTopicMessage("a".repeat(110)).endsWith("..."), true);
   });
 
+  await test("backend can start without demo topics for real users", async () => {
+    await withTempStore((store) => {
+      const payload = store.bootstrap({ sessionId: "session-empty-demo" });
+      assert.equal(payload.topics.length, 0);
+      assert.equal(payload.users.length, 0);
+      assert.equal(payload.viewer.type, "guest");
+    }, { seedDemoData: false });
+    assert.equal(shouldSeedDemoData({ TOPYKLY_SEED_DEMO_DATA: "false" }), false);
+    assert.equal(shouldSeedDemoData({ TOPYKLY_SEED_DEMO_DATA: "true" }, false), true);
+  });
   await test("backend bootstrap returns a guest viewer plus 40 active topics with 20 visible", async () => {
     await withTempStore((store) => {
       const payload = store.bootstrap({
@@ -474,6 +485,39 @@ await (async () => {
       assert.equal(store.getDiagnostics().sessions, 1);
     });
   });
+  await test("backend initializes SQLite indexes for operational queries", async () => {
+    await withTempStore((store) => {
+      const db = new DatabaseSync(store.dbPath);
+      const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all();
+      db.close();
+      const indexNames = new Set(rows.map((row) => row.name));
+
+      [
+        "users_auth_identity_idx",
+        "users_email_idx",
+        "users_nickname_norm_idx",
+        "users_password_email_idx",
+        "users_frontend_active_idx",
+        "users_pending_avatar_idx",
+        "users_avatar_url_idx",
+        "users_avatar_pending_url_idx",
+        "sessions_guest_cleanup_idx",
+        "sessions_guest_ip_idx",
+        "topics_status_rank_idx",
+        "topics_status_activity_idx",
+        "messages_topic_id_idx",
+        "messages_topic_reply_trim_idx",
+        "reports_session_open_idx",
+        "reports_user_open_idx",
+        "reports_entity_open_idx",
+        "reports_status_created_idx",
+        "guest_ip_rate_limits_updated_idx",
+        "moderation_actions_target_idx"
+      ].forEach((indexName) => {
+        assert.equal(indexNames.has(indexName), true, indexName);
+      });
+    });
+  });
   await test("backend diagnostics report whether SQLite storage was explicitly configured", async () => {
     assert.deepEqual(resolveDbConfig(null, {}), {
       dbPath: path.join(rootDir, ".data", "topykly.sqlite"),
@@ -522,6 +566,47 @@ await (async () => {
         backupStore.close();
       }
     });
+  });
+  await test("backend registers and logs in password users with nickname", async () => {
+    await withTempStore((store) => {
+      const registered = store.registerWithPassword({
+        sessionId: "session-password-register",
+        email: "Clave@Example.com",
+        password: "password-segura",
+        nickname: "clave_user"
+      });
+
+      assert.equal(registered.viewer.type, "registered");
+      assert.equal(registered.viewer.email, "clave@example.com");
+      assert.equal(registered.viewer.nickname, "clave_user");
+      assert.equal(registered.viewer.displayName, "clave_user");
+      assert.equal(registered.viewer.profilePending, false);
+      assert.throws(() => store.registerWithPassword({
+        sessionId: "session-password-register-duplicate-email",
+        email: "clave@example.com",
+        password: "password-segura",
+        nickname: "otro_user"
+      }), (error) => error.code === "EMAIL_TAKEN");
+      assert.throws(() => store.registerWithPassword({
+        sessionId: "session-password-register-duplicate-nickname",
+        email: "otro@example.com",
+        password: "password-segura",
+        nickname: "CLAVE_USER"
+      }), (error) => error.code === "NICKNAME_TAKEN");
+      assert.throws(() => store.loginWithPassword({
+        sessionId: "session-password-wrong",
+        email: "clave@example.com",
+        password: "incorrecta"
+      }), (error) => error.code === "INVALID_CREDENTIALS");
+
+      const loggedIn = store.loginWithPassword({
+        sessionId: "session-password-login",
+        email: "clave@example.com",
+        password: "password-segura"
+      });
+      assert.equal(loggedIn.viewer.id, registered.viewer.id);
+      assert.equal(loggedIn.viewer.nickname, "clave_user");
+    }, { seedDemoData: false });
   });
   await test("backend login and logout persist the viewer mode for the same session", async () => {
     await withTempStore((store) => {
@@ -2476,7 +2561,13 @@ await (async () => {
       authGoogleButton: new FakeElement(),
       authTurnstile: new FakeElement(),
       authTurnstileToken: { value: "" },
-      authEmailForm: new FakeElement(),
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
       closeAuthModalButton: new FakeElement()
     };
 
@@ -2682,7 +2773,13 @@ await (async () => {
         authGoogleButton,
         authTurnstile,
         authTurnstileToken,
-        authEmailForm: new FakeElement(),
+        authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
         closeAuthModalButton: new FakeElement()
       }, {
         toggleTheme() {},
@@ -2906,7 +3003,13 @@ await (async () => {
       authGoogleButton: new FakeElement(),
       authTurnstile: new FakeElement(),
       authTurnstileToken: { value: "" },
-      authEmailForm: new FakeElement(),
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
       closeAuthModalButton: new FakeElement()
     };
 
@@ -3189,7 +3292,13 @@ await (async () => {
         authGoogleButton,
         authTurnstile: new FakeElement(),
         authTurnstileToken: { value: "" },
-        authEmailForm: new FakeElement(),
+        authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
         closeAuthModalButton: new FakeElement()
       }, {
         toggleTheme() {},

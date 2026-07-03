@@ -160,6 +160,19 @@ export const api = {
     return normalizeBackendPayload(payload);
   },
 
+  async loginWithPassword({ email, password, selectedTopicId = null, turnstileToken = "" } = {}) {
+    return normalizeBackendPayload(await readApiPayload("/api/auth/password/login", {
+      method: "POST",
+      body: { email, password, selectedTopicId, turnstileToken }
+    }));
+  },
+
+  async registerWithPassword({ email, password, nickname, selectedTopicId = null, turnstileToken = "" } = {}) {
+    return normalizeBackendPayload(await readApiPayload("/api/auth/password/register", {
+      method: "POST",
+      body: { email, password, nickname, selectedTopicId, turnstileToken }
+    }));
+  },
   async logout(selectedTopicId = null) {
     return request("/api/auth/logout", {
       method: "POST",
@@ -205,12 +218,12 @@ export const api = {
     });
   },
 
-  async getAdminDashboard() {
-    return readApiPayload("/api/admin/dashboard");
+  async getAdminDashboard(searchParams = {}) {
+    return readApiPayload("/api/admin/dashboard", { searchParams });
   },
 
-  async listReports() {
-    const response = await fetch(createUrl("/api/moderation/reports"), {
+  async listReports(searchParams = {}) {
+    const response = await fetch(createUrl("/api/moderation/reports", searchParams), {
       method: "GET",
       credentials: "same-origin",
       headers: createHeaders()
@@ -226,7 +239,8 @@ export const api = {
     }
 
     return {
-      reports: Array.isArray(payload.reports) ? payload.reports : []
+      reports: Array.isArray(payload.reports) ? payload.reports : [],
+      reportPagination: payload.reportPagination || null
     };
   },
 

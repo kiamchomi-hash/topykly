@@ -10,6 +10,8 @@ const port = 4300 + Math.floor(Math.random() * 1000);
 const origin = `http://${host}:${port}`;
 const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-smoke-"));
 const dbPath = path.join(tempDir, "topykly.sqlite");
+const previousSeedDemoData = process.env.TOPYKLY_SEED_DEMO_DATA;
+process.env.TOPYKLY_SEED_DEMO_DATA = "true";
 const app = startPreviewServer({
   port,
   host,

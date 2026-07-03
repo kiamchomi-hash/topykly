@@ -19,6 +19,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   let authStatus = null;
   let authStatusPromise = null;
   let turnstileWidgetId = null;
+  let authPasswordMode = "login";
   let turnstileRequired = false;
   let activeMobileDrawerPanel = null;
   let lastMobilePanelTrigger = null;
@@ -534,6 +535,39 @@ export function bindTopbarActionEvents(dom, handlers) {
       }
     });
   }
+  function syncAuthPasswordMode() {
+    const isRegister = authPasswordMode === "register";
+    [dom.authLoginModeButton, dom.authRegisterModeButton].forEach((button) => {
+      if (!button) {
+        return;
+      }
+
+      const active = button.dataset.authMode === authPasswordMode;
+      button.classList?.toggle?.("is-active", active);
+      button.setAttribute?.("aria-pressed", String(active));
+    });
+
+    dom.authModal?.querySelectorAll?.(".auth-register-only")?.forEach((node) => {
+      node.hidden = !isRegister;
+    });
+    if (dom.authNicknameInput) {
+      dom.authNicknameInput.required = isRegister;
+      dom.authNicknameInput.disabled = !isRegister;
+    }
+    if (dom.authPasswordInput) {
+      dom.authPasswordInput.autocomplete = isRegister ? "new-password" : "current-password";
+    }
+    const label = dom.authPasswordButton?.querySelector?.("span") ?? dom.authPasswordButton;
+    if (label) {
+      label.textContent = isRegister ? "Crear cuenta" : "Entrar con email";
+    }
+  }
+
+  function setAuthPasswordMode(nextMode) {
+    authPasswordMode = nextMode === "register" ? "register" : "login";
+    resetTurnstileToken();
+    syncAuthPasswordMode();
+  }
   function setAuthModalOpen(isOpen) {
     if (dom.authModalBackdrop) {
       dom.authModalBackdrop.hidden = !isOpen;
@@ -544,7 +578,8 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (isOpen) {
-      dom.authGoogleButton?.focus?.();
+      syncAuthPasswordMode();
+      dom.authEmailInput?.focus?.();
       return;
     }
 
@@ -734,9 +769,52 @@ export function bindTopbarActionEvents(dom, handlers) {
       closeAuthModal();
     }
   });
-  addListener(dom.authEmailForm, "submit", (event) => {
+  addListener(dom.authLoginModeButton, "click", () => setAuthPasswordMode("login"));
+  addListener(dom.authRegisterModeButton, "click", () => setAuthPasswordMode("register"));
+  addListener(dom.authPasswordForm, "submit", async (event) => {
     event.preventDefault();
-    handlers.flashTitle("Envio por email pendiente de Resend");
+    if (authPending || isLoggedIn()) {
+      return;
+    }
+
+    authPending = true;
+    syncAuthUi();
+    if (dom.authPasswordButton) {
+      dom.authPasswordButton.disabled = true;
+      dom.authPasswordButton.setAttribute("aria-busy", "true");
+    }
+
+    try {
+      await syncTurnstile();
+      if (turnstileRequired && !dom.authTurnstileToken?.value) {
+        handlers.flashTitle?.("Completa la verificacion anti-bots");
+        return;
+      }
+
+      const payload = {
+        email: dom.authEmailInput?.value || "",
+        password: dom.authPasswordInput?.value || "",
+        turnstileToken: dom.authTurnstileToken?.value || ""
+      };
+      const authResult = authPasswordMode === "register"
+        ? await handlers.registerWithPassword?.({ ...payload, nickname: dom.authNicknameInput?.value || "" })
+        : await handlers.loginWithPassword?.(payload);
+
+      if (authResult) {
+        closeAuthModal();
+        handlers.flashTitle(authPasswordMode === "register" ? "Cuenta creada" : "Sesion iniciada");
+      }
+    } catch (error) {
+      console.error(error);
+      handlers.flashTitle(error?.message || "No se pudo completar el acceso");
+    } finally {
+      authPending = false;
+      if (dom.authPasswordButton) {
+        dom.authPasswordButton.disabled = false;
+        dom.authPasswordButton.setAttribute("aria-busy", "false");
+      }
+      syncAuthUi();
+    }
   });
   addListener(typeof window !== "undefined" ? window : null, "keydown", (event) => {
     if (event.key === "Escape" && dom.authModalBackdrop && !dom.authModalBackdrop.hidden) {

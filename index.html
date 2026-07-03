@@ -342,13 +342,25 @@
         </div>
         <div class="auth-modal__body">
           <input id="authTurnstileToken" type="hidden" value="" />
-          <form class="auth-email-form" id="authEmailForm">
+                    <form class="auth-email-form" id="authPasswordForm">
+            <div class="auth-mode-tabs" role="group" aria-label="Modo de acceso">
+              <button class="auth-mode-tabs__button is-active" id="authLoginModeButton" type="button" data-auth-mode="login">Entrar</button>
+              <button class="auth-mode-tabs__button" id="authRegisterModeButton" type="button" data-auth-mode="register">Registrarse</button>
+            </div>
+            <label class="auth-email-form__field auth-register-only" for="authNicknameInput" hidden>
+              <span>Nickname</span>
+              <input id="authNicknameInput" type="text" autocomplete="nickname" maxlength="24" placeholder="tu_nick" />
+            </label>
             <label class="auth-email-form__field" for="authEmailInput">
               <span>Email</span>
               <input id="authEmailInput" type="email" autocomplete="email" placeholder="tu@email.com" />
             </label>
-            <button class="auth-email-submit" id="authEmailButton" type="submit">
-              <span>Enviar codigo de 6 digitos</span>
+            <label class="auth-email-form__field" for="authPasswordInput">
+              <span>Contrasena</span>
+              <input id="authPasswordInput" type="password" autocomplete="current-password" minlength="8" placeholder="Minimo 8 caracteres" />
+            </label>
+            <button class="auth-email-submit" id="authPasswordButton" type="submit">
+              <span>Entrar con email</span>
             </button>
           </form>
           <div class="auth-modal__divider" aria-hidden="true"><span>o</span></div>
