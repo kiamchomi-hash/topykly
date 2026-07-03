@@ -1495,10 +1495,12 @@ html.is-desktop-viewport .panel--topics #topicList {
 }
 
 html.is-desktop-viewport .panel--topics .topic-list {
+  grid-auto-rows: 76px;
   gap: 12px;
 }
 
 html.is-desktop-viewport .panel--topics .topic-item {
+  height: 76px;
   min-height: 76px;
 }
 
@@ -1783,7 +1785,12 @@ html.is-desktop-viewport .message-stream::-webkit-scrollbar-thumb {
 .user-list,
 .ranking-list {
   display: grid;
+  align-content: start;
   gap: var(--ranking-list-gap);
+}
+
+.topic-list {
+  grid-auto-rows: 84px;
 }
 
 .ranking-list {
@@ -1946,6 +1953,7 @@ html.is-desktop-viewport .message-stream::-webkit-scrollbar-thumb {
   display: flex;
   align-items: stretch;
   text-align: left;
+  height: 84px;
   min-height: 84px;
   width: 100%;
   min-width: 0;
@@ -5477,6 +5485,41 @@ html.is-mobile-viewport .ranking-mode-list__label {
 .profile-modal__actions .primary-button,
 .profile-modal__actions .text-button {
   min-height: 42px;
+}
+
+
+
+.public-profile-modal-backdrop {
+  background: var(--bg);
+  backdrop-filter: none;
+}
+
+.public-profile-modal {
+  background: var(--surface);
+}
+
+.public-profile-modal__body {
+  align-items: start;
+}
+
+.public-profile-modal__avatar {
+  margin: 0;
+}
+
+.public-profile-modal__meta {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.public-profile-modal__actions {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.public-profile-modal__actions .text-button[hidden] {
+  display: none;
 }
 
 .action-feedback {

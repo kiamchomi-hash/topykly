@@ -19,6 +19,7 @@ export const state = {
   mobileView: "browse",
   currentUserId: "u1",
   activeConnectedUserId: null,
+  publicProfileUserId: null,
   topics: [],
   users: []
 };

@@ -201,6 +201,11 @@ export function createActionHandlers({
     dom.adminPanelButton?.focus?.();
   }
 
+  function closePublicProfileModal() {
+    dispatch(state, reducers.setPublicProfileUser, null);
+    render();
+  }
+
   async function applyAdminAction(actionType, targetType, targetId) {
     try {
       await api.applyModerationAction(actionType, targetType, targetId, "", state.selectedTopicId);
@@ -402,12 +407,15 @@ export function createActionHandlers({
     }
 
     dispatch(state, reducers.setActiveUser, userId);
-    render();
 
     if (action === "profile") {
-      flashTitle(`Perfil de ${targetUser.name} listo para conectar`);
+      dispatch(state, reducers.setPublicProfileUser, userId);
+      render();
+      setTimeout(() => dom.publicProfileModal?.focus?.(), 0);
       return;
     }
+
+    render();
 
     if (action === "message") {
       flashTitle(`Mensaje directo con ${targetUser.name} listo para conectar`);
@@ -447,6 +455,7 @@ export function createActionHandlers({
     showFeedback,
     openProfileModal,
     closeProfileModal,
+    closePublicProfileModal,
     openAdminPanel,
     closeAdminPanel,
     applyAdminAction,

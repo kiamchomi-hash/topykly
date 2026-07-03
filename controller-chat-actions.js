@@ -70,7 +70,9 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
 
     const promptLabel = entityType === "message"
       ? "Motivo del reporte del mensaje:"
-      : "Motivo del reporte del tema:";
+      : entityType === "user"
+        ? "Motivo del reporte del usuario:"
+        : "Motivo del reporte del tema:";
     const response = window.prompt(promptLabel, "");
     if (response === null) {
       return null;
@@ -84,6 +86,13 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     dispatch(state, reducers.hydrateFromBackend, payload);
   }
 
+  function getActionErrorMessage(error, fallback) {
+    if (error instanceof ApiError && error.code === "LOGIN_REQUIRED") {
+      return "Inicia sesion o crea una cuenta para participar.";
+    }
+    return error?.message || fallback;
+  }
+
   async function refreshSelectedTopicAfterLock(topicId) {
     if (!topicId) {
       return;
@@ -93,7 +102,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       await syncBackendPayload(() => apiClient.openTopic(topicId));
     } catch (error) {
       console.error(error);
-      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
     }
   }
 
@@ -141,7 +150,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       }
 
       console.error(error);
-      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
     } finally {
       setComposerBusy(false);
       render();
@@ -162,7 +171,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       render();
     } catch (error) {
       console.error(error);
-      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
     } finally {
       const remainingMs = Math.max(0, refreshFeedbackMs - (Date.now() - startedAt));
       refreshFeedbackTimer = setTimeout(() => {
@@ -202,7 +211,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       render();
     } catch (error) {
       console.error(error);
-      showFeedback?.(error?.message || "No se pudo actualizar el like.", { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo actualizar el like."), { kind: "error" });
     } finally {
       setReportTriggerState(trigger, false);
       render();
@@ -220,7 +229,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       render();
     } catch (error) {
       console.error(error);
-      showFeedback?.(error?.message || "No se pudo actualizar el dislike.", { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo actualizar el dislike."), { kind: "error" });
     } finally {
       setReportTriggerState(trigger, false);
       render();
@@ -244,7 +253,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       render();
     } catch (error) {
       console.error(error);
-      showFeedback?.(error?.message || "No se pudo completar la accion.", { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
     } finally {
       setReportTriggerState(trigger, false);
       render();

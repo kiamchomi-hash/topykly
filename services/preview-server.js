@@ -14,6 +14,7 @@ const DEFAULT_REACTION_RESET_CHECK_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
+const MAX_JSON_BODY_BYTES = 1024 * 1024;
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -27,6 +28,19 @@ const mime = {
   ".webp": "image/webp",
   ".gif": "image/gif"
 };
+const PUBLIC_SERVICE_MODULES = new Set([
+  "api.js",
+  "drawer-service.js",
+  "palette-service.js"
+]);
+const PROTECTED_STATIC_DIRECTORIES = new Set([
+  "scripts",
+  "tests"
+]);
+const PROTECTED_STATIC_ROOT_FILES = new Set([
+  "package.json",
+  "package-lock.json"
+]);
 
 function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) {
@@ -118,11 +132,53 @@ function sendRedirect(res, statusCode, location, { cookies = [] } = {}) {
   res.end();
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, { maxBytes = MAX_JSON_BODY_BYTES } = {}) {
   return new Promise((resolve, reject) => {
+    const contentLength = Number(req.headers["content-length"] || 0);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      req.resume();
+      reject(new ApiError(413, "PAYLOAD_TOO_LARGE", "El cuerpo JSON supera el limite permitido."));
+      return;
+    }
+
     const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
-    req.on("end", () => {
+    let receivedBytes = 0;
+    let settled = false;
+
+    function cleanup() {
+      req.off("data", onData);
+      req.off("end", onEnd);
+      req.off("error", onError);
+    }
+
+    function fail(error) {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(error);
+    }
+
+    function onData(chunk) {
+      receivedBytes += chunk.length;
+      if (receivedBytes > maxBytes) {
+        fail(new ApiError(413, "PAYLOAD_TOO_LARGE", "El cuerpo JSON supera el limite permitido."));
+        req.destroy();
+        return;
+      }
+
+      chunks.push(chunk);
+    }
+
+    function onEnd() {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
       if (!chunks.length) {
         resolve({});
         return;
@@ -133,8 +189,15 @@ function readJsonBody(req) {
       } catch {
         reject(new ApiError(400, "INVALID_JSON", "El cuerpo JSON es invalido."));
       }
-    });
-    req.on("error", reject);
+    }
+
+    function onError(error) {
+      fail(error);
+    }
+
+    req.on("data", onData);
+    req.on("end", onEnd);
+    req.on("error", onError);
   });
 }
 
@@ -156,11 +219,24 @@ function readCookies(req) {
     }, {});
 }
 
-function getRequestIp(req) {
+export function shouldTrustProxy(env = process.env) {
+  return [env.TOPYKLY_TRUST_PROXY, env.CHETREND_TRUST_PROXY]
+    .some((value) => ["1", "true", "yes"].includes(String(value || "").trim().toLowerCase()));
+}
+
+function getForwardedRequestIp(req) {
   return String(req.headers["cf-connecting-ip"] || "").trim()
-    || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim()
-    || req.socket.remoteAddress
-    || "";
+    || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+}
+
+export function getRequestIp(req, env = process.env) {
+  if (shouldTrustProxy(env)) {
+    return getForwardedRequestIp(req)
+      || req.socket.remoteAddress
+      || "";
+  }
+
+  return req.socket.remoteAddress || "";
 }
 
 function getRequestContext(req) {
@@ -179,6 +255,16 @@ function normalizeSelectedTopicId(url) {
   return url.searchParams.get("selectedTopicId") || null;
 }
 
+export function isLocalDevLoginAllowed(env = process.env) {
+  const nodeEnv = String(env.NODE_ENV || "").trim().toLowerCase();
+  const explicitFlag = String(env.TOPYKLY_ALLOW_LOCAL_LOGIN || env.CHETREND_ALLOW_LOCAL_LOGIN || "").trim().toLowerCase();
+  if (["0", "false", "no"].includes(explicitFlag)) {
+    return false;
+  }
+
+  return nodeEnv !== "production";
+}
+
 function safeFilePathFromUrl(urlPathname) {
   let decoded;
   try {
@@ -192,7 +278,15 @@ function safeFilePathFromUrl(urlPathname) {
   if (segments.some((segment) => segment.startsWith("."))) {
     return null;
   }
-
+  if (segments[0] === "services" && !PUBLIC_SERVICE_MODULES.has(segments[1] || "")) {
+    return null;
+  }
+  if (PROTECTED_STATIC_DIRECTORIES.has(segments[0] || "")) {
+    return null;
+  }
+  if (segments.length === 1 && PROTECTED_STATIC_ROOT_FILES.has(segments[0] || "")) {
+    return null;
+  }
   const normalized = path.normalize(requestedPath).replace(/^(\.\.[/\\])+/, "");
   const absolutePath = path.join(root, normalized);
   const relativePath = path.relative(root, absolutePath);
@@ -258,6 +352,10 @@ async function handleApiRequest(store, authService, req, res, url) {
           cookies: authLoginResponse.cookies
         });
         return;
+      }
+
+      if (!isLocalDevLoginAllowed()) {
+        throw new ApiError(503, "AUTH_NOT_CONFIGURED", "La autenticacion externa no esta configurada.");
       }
 
       await authService.validateTurnstile({

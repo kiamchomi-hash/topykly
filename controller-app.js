@@ -151,6 +151,7 @@ export function bootstrap() {
     closePaletteModal: actions.closePaletteModal,
     openProfileModal: actions.openProfileModal,
     closeProfileModal: actions.closeProfileModal,
+    closePublicProfileModal: actions.closePublicProfileModal,
     openAdminPanel: actions.openAdminPanel,
     closeAdminPanel: actions.closeAdminPanel,
     applyAdminAction: actions.applyAdminAction,

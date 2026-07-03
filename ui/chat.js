@@ -168,9 +168,9 @@ function syncChatComposer(topic, dom, isLoading) {
   if (dom.messageInput) {
     dom.messageInput.disabled = !isCreatingTopic && !isCommentableTopic;
     dom.messageInput.placeholder = isCreatingTopic
-      ? "Mensaje"
+      ? "Primer posteo del tema"
       : isCommentableTopic
-        ? "Escribe aqui..."
+        ? "Escribe un comentario..."
         : "Tema cerrado para comentarios";
     dom.messageInput.rows = isCreatingTopic ? 4 : 2;
   }
@@ -179,8 +179,8 @@ function syncChatComposer(topic, dom, isLoading) {
     submitButton.setAttribute("aria-disabled", String(submitButton.disabled));
   }
   if (submitLabel) {
-    submitLabel.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : "Enviar";
+    submitLabel.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : isCreatingTopic ? "Crear tema" : "Enviar";
   } else if (submitButton) {
-    submitButton.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : "Enviar";
+    submitButton.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : isCreatingTopic ? "Crear tema" : "Enviar";
   }
 }

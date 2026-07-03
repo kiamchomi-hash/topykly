@@ -42,7 +42,7 @@ export function renderRankings(state, dom) {
       dom,
       `
     <div class="ranking-empty">
-      <div class="ranking-empty__text">Selecciona un tema para ver las estadísticas</div>
+      <div class="ranking-empty__text">Selecciona un tema para ver su actividad real</div>
     </div>
   `
     );

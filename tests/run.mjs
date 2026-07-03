@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "../services/auth-service.js";
+import { getRequestIp, isLocalDevLoginAllowed, shouldTrustProxy } from "../services/preview-server.js";
 import { createBackendStore, resolveDbConfig, shouldSeedDemoData } from "../services/backend-store.js";
 import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
@@ -2501,7 +2502,8 @@ await (async () => {
         TOPYKLY_PUBLIC_ORIGIN: "https://topykly.com",
         TOPYKLY_COOKIE_SECURE: "true",
         TOPYKLY_TURNSTILE_SITE_KEY: "site-key",
-        TOPYKLY_TURNSTILE_SECRET_KEY: "secret-key"
+        TOPYKLY_TURNSTILE_SECRET_KEY: "secret-key",
+        TOPYKLY_TRUST_PROXY: "true"
       },
       fetchImpl() {}
     }).getStatus(req);
@@ -2523,6 +2525,31 @@ await (async () => {
     assert.equal(Object.prototype.hasOwnProperty.call(configured, "clientId"), false);
   });
 
+  await test("preview server disables local dev login in production", () => {
+    assert.equal(isLocalDevLoginAllowed({}), true);
+    assert.equal(isLocalDevLoginAllowed({ NODE_ENV: "development" }), true);
+    assert.equal(isLocalDevLoginAllowed({ NODE_ENV: "production" }), false);
+    assert.equal(isLocalDevLoginAllowed({ TOPYKLY_ALLOW_LOCAL_LOGIN: "false" }), false);
+  });
+
+  await test("preview server ignores spoofed IP headers unless proxy trust is enabled", () => {
+    const req = {
+      headers: {
+        "cf-connecting-ip": "203.0.113.8",
+        "x-forwarded-for": "198.51.100.7, 198.51.100.8"
+      },
+      socket: { remoteAddress: "127.0.0.1" }
+    };
+
+    assert.equal(shouldTrustProxy({}), false);
+    assert.equal(shouldTrustProxy({ TOPYKLY_TRUST_PROXY: "true" }), true);
+    assert.equal(shouldTrustProxy({ CHETREND_TRUST_PROXY: "1" }), true);
+    assert.equal(getRequestIp(req, {}), "127.0.0.1");
+    assert.equal(getRequestIp(req, { TOPYKLY_TRUST_PROXY: "false" }), "127.0.0.1");
+    assert.equal(getRequestIp(req, { TOPYKLY_TRUST_PROXY: "true" }), "203.0.113.8");
+    assert.equal(getRequestIp({ ...req, headers: { "x-forwarded-for": "198.51.100.7, 198.51.100.8" } }, { TOPYKLY_TRUST_PROXY: "yes" }), "198.51.100.7");
+  });
+
   await test("auth service validates Turnstile tokens server-side when configured", async () => {
     const req = {
       headers: { host: "127.0.0.1:4173", "cf-connecting-ip": "203.0.113.8" },
@@ -2532,7 +2559,8 @@ await (async () => {
     const authService = createAuthService({
       env: {
         TOPYKLY_TURNSTILE_SITE_KEY: "site-key",
-        TOPYKLY_TURNSTILE_SECRET_KEY: "secret-key"
+        TOPYKLY_TURNSTILE_SECRET_KEY: "secret-key",
+        TOPYKLY_TRUST_PROXY: "true"
       },
       async fetchImpl(url, options) {
         calls.push({ url, body: options.body.toString() });
@@ -3570,6 +3598,7 @@ await (async () => {
     const controllerTheme = await read("controller-theme.js");
     const controllerViewport = await read("controller-viewport.js");
     const actions = await read("controller-actions.js");
+    const chatActions = await read("controller-chat-actions.js");
     const rankingActions = await read("controller-ranking-actions.js");
     const rankingState = await read("ranking-state.js");
     const palettes = await read("palettes.js");
@@ -3589,6 +3618,7 @@ await (async () => {
     const rankingLabels = await read("ui/ranking-labels.js");
     const rankingIcons = await read("ui/ranking-icons.js");
     const paletteModal = await read("ui/palette-modal.js");
+    const publicProfileModal = await read("ui/public-profile-modal.js");
     const titles = await read("ui/titles.js");
     const topics = await read("ui/topics.js");
     const users = await read("ui/users.js");
@@ -3597,9 +3627,15 @@ await (async () => {
     assert.match(renderUtils, /function patchElement\(existing, incoming\)/);
     assert.match(renderUtils, /function patchChildren\(existing, incoming\)/);
     const previewServer = await read("services/preview-server.js");
+    const backendStore = await read("services/backend-store.js");
     assert.match(previewServer, /const authLoginResponse = await authService\.createLoginResponse[\s\S]*await authService\.validateTurnstile/);
     assert.match(previewServer, /if \(authLoginResponse\) \{[\s\S]*sendJson\(res, 200, authLoginResponse\.payload/);
     assert.match(previewServer, /segments\.some\(\(segment\) => segment\.startsWith\("\."\)\)/);
+    assert.match(previewServer, /PUBLIC_SERVICE_MODULES/);
+    assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES/);
+    assert.match(previewServer, /PROTECTED_STATIC_ROOT_FILES/);
+    assert.match(previewServer, /segments\[0\] === "services"/);
+    assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES\.has\(segments\[0\] \|\| ""\)/);
     assert.match(previewServer, /path\.relative\(root, absolutePath\)/);
     assert.match(previewServer, /relativePath\.startsWith\("\.\."\) \|\| path\.isAbsolute\(relativePath\)/);
     assert.match(previewServer, /"X-Content-Type-Options": "nosniff"/);
@@ -3610,8 +3646,20 @@ await (async () => {
     assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: extension === "\.html" \}\)/);
     assert.match(previewServer, /DEFAULT_GUEST_CLEANUP_INTERVAL_MS/);
     assert.match(previewServer, /DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS/);
+    assert.match(previewServer, /MAX_JSON_BODY_BYTES = 1024 \* 1024/);
+    assert.match(previewServer, /content-length/);
+    assert.match(previewServer, /PAYLOAD_TOO_LARGE/);
+    assert.match(previewServer, /receivedBytes > maxBytes/);
+    assert.match(previewServer, /req\.destroy\(\)/);
+    assert.match(previewServer, /isLocalDevLoginAllowed/);
+    assert.match(previewServer, /NODE_ENV/);
+    assert.match(previewServer, /TOPYKLY_ALLOW_LOCAL_LOGIN/);
+    assert.match(previewServer, /AUTH_NOT_CONFIGURED/);
     assert.match(previewServer, /function enforceHttpRateLimit\(res, buckets, req, url, config\)/);
     assert.match(previewServer, /sendJson\(res, 429/);
+    assert.match(backendStore, /created_at AS createdAt/);
+    assert.match(backendStore, /function getFrontendUsers\(db, viewerId, profileUserIds = \[\]\)/);
+    assert.match(backendStore, /users: getFrontendUsers\(db, context\.viewer\.id, profileUserIds\)/);
     assert.match(previewServer, /"Retry-After": String\(result.retryAfterSeconds\)/);
     assert.match(previewServer, /if \(!enforceHttpRateLimit\(res, httpRateLimitBuckets, req, url, httpRateLimitConfig\)\)/);
     assert.match(previewServer, /setInterval\(\(\) => runGuestCleanup\(store, log\), guestCleanupIntervalMs\)/);
@@ -3634,7 +3682,7 @@ await (async () => {
     assert.match(html, /id="leftDrawerTopics"/);
     assert.match(html, /refresh-button__wheel/);
     assert.match(html, /id="backToTopics"/);
-    assert.match(html, /placeholder="Escribe aquí\.\.\."/);
+    assert.match(html, /placeholder="Escribe aqui\.\.\."/);
     assert.match(html, /<p class="panel__kicker">Menú<\/p>/);
     assert.match(html, /id="rankingPrev"/);
     assert.match(html, /id="rankingCurrent"/);
@@ -3683,6 +3731,8 @@ await (async () => {
     assert.match(html, /id="paletteButton"[\s\S]*id="themeToggleDesktopSlot"/);
     assert.match(html, /id="storeButton"[\s\S]*id="themeToggleMobileSlot"/);
     assert.match(html, /id="profileButton"[\s\S]*class="profile-button__avatar"/);
+    assert.match(html, /id="publicProfileModalBackdrop"/);
+    assert.match(html, /id="publicProfileReportButton"[\s\S]*Reportar usuario/);
     assert.match(html, /class="theme-switch"/);
     assert.match(html, /role="switch"/);
     assert.match(html, /aria-checked="true"/);
@@ -3759,6 +3809,7 @@ await (async () => {
     assert.match(styles, /#profileButton\s*\{[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*0 14px 0 0;[\s\S]*gap:\s*0;[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/);
     assert.match(styles, /\.profile-button__avatar\s*\{[\s\S]*width:\s*42px;[\s\S]*height:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/);
+    assert.match(styles, /\.public-profile-modal-backdrop\s*\{[\s\S]*background:\s*var\(--bg\);[\s\S]*backdrop-filter:\s*none;/);
     assert.match(styles, /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/);
     assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-item__avatar\s*\{[\s\S]*width:\s*76px;[\s\S]*height:\s*76px;/);
     assert.match(styles, /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/);
@@ -3872,6 +3923,8 @@ await (async () => {
     assert.match(styles, /\.user-item\[data-connected-user-id\]:hover,\s*\.user-item\[data-connected-user-id\]:focus-within\s*\{/);
     assert.match(styles, /\.user-item\[data-connected-user-id\]:active\s*\{/);
     assert.match(styles, /\.user-item\.is-active\s*\{/);
+    assert.match(styles, /\.topic-list\s*\{[\s\S]*grid-auto-rows:\s*84px;/);
+    assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-list\s*\{[\s\S]*grid-auto-rows:\s*76px;/);
     assert.match(styles, /\.topic-item\.is-active \.topic-item__avatar\s*\{[\s\S]*border-color:\s*inherit;/);
     assert.match(styles, /\.user-item__trigger\s*\{/);
     assert.match(styles, /\.user-item__trigger:focus-visible,\s*\.user-item__action:focus-visible\s*\{/);
@@ -3925,6 +3978,7 @@ await (async () => {
     assert.match(controllerApp, /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/);
     assert.match(controllerApp, /bindPageEvents\(dom, \{[\s\S]*state: actions\.state,[\s\S]*setAuthUiSync: actions\.setAuthUiSync,/);
     assert.match(controllerApp, /openAdminPanel: actions\.openAdminPanel,[\s\S]*closeAdminPanel: actions\.closeAdminPanel,[\s\S]*applyAdminAction: actions\.applyAdminAction,/);
+    assert.match(controllerApp, /closePublicProfileModal: actions\.closePublicProfileModal/);
     assert.doesNotMatch(controllerApp, /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/);
     assert.match(actions, /from "\.\/services\/api\.js\?v=20260702-sessioncookie"/);
     assert.match(actions, /export function createActionHandlers/);
@@ -3949,9 +4003,15 @@ await (async () => {
     assert.match(responsiveController, /export function createResponsiveHelpers/);
     assert.match(renderController, /export function createRenderers/);
     assert.match(renderController, /renderPaletteModal/);
+    assert.match(renderController, /renderPublicProfileModal/);
     assert.match(chat, /renderChat/);
     assert.match(chat, /panel--topic-create/);
+    assert.match(chat, /Primer posteo del tema/);
+    assert.match(chat, /Crear tema/);
+    assert.match(chatActions, /Inicia sesion o crea una cuenta para participar/);
+    assert.match(chatActions, /Motivo del reporte del usuario/);
     assert.match(rankings, /renderRankings/);
+    assert.match(rankings, /Selecciona un tema para ver su actividad real/);
     assert.match(rankings, /getActiveRankingStep/);
     assert.match(rankings, /syncRankingListHeights/);
     assert.match(rankings, /syncRankingSkeletonHeights/);
@@ -3978,6 +4038,10 @@ await (async () => {
     assert.match(paletteModal, /closeLabel:\s*"Aceptar"/);
     assert.match(paletteModal, /syncCustomPalettePicker/);
     assert.doesNotMatch(paletteModal, /palette-option__description/);
+    assert.match(publicProfileModal, /export function renderPublicProfileModal/);
+    assert.match(publicProfileModal, /createdAt/);
+    assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isCurrentUser/);
+    assert.doesNotMatch(publicProfileModal, /comment|comentario|likes received|likesRecibidos|online|estado/i);
     assert.match(titles, /renderTitles/);
     assert.match(topics, /renderTopics/);
     assert.match(topics, /const isLoading = !state\.viewer/);
@@ -3997,6 +4061,7 @@ await (async () => {
     assert.match(domModule, /mobileDrawerPanels/);
     assert.match(domModule, /drawerUsersSection/);
     assert.match(domModule, /paletteModalBackdrop/);
+    assert.match(domModule, /publicProfileModalBackdrop/);
     assert.match(domModule, /paletteOptionGrid/);
     assert.match(domModule, /assertRequiredDom/);
     assert.match(domModule, /Missing required DOM nodes/);
@@ -4010,6 +4075,7 @@ await (async () => {
     assert.match(chat, /chatHero\.hidden = true;/);
     assert.doesNotMatch(chat, /if \(shouldSyncChatLayout\(previousRenderState,\s*nextRenderState\)\)\s*\{[\s\S]*syncMessageCardHeights\(dom\.messageStream\);/);
     assert.match(eventsModule, /activateConnectedUser/);
+    assert.match(eventsModule, /closePublicProfileModal/);
     assert.match(eventsModule, /reportEntity/);
     assert.match(eventsModule, /data-report-entity-type/);
     assert.match(eventsModule, /data-connected-user-id/);
@@ -4059,6 +4125,7 @@ await (async () => {
     assert.match(stateStore, /customPaletteHex:\s*"#B25B33"/);
     assert.match(stateStore, /isPaletteModalOpen:\s*false/);
     assert.match(stateStore, /activeConnectedUserId:\s*null/);
+    assert.match(stateStore, /publicProfileUserId:\s*null/);
     assert.doesNotMatch(stateStore, /\brankingType\b|\brankingMetric\b|\brankingIndex\b/);
     assert.match(domStore, /export const dom/);
     assert.match(timerStore, /export const closeTimerRef/);

@@ -1149,14 +1149,17 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", pers
   };
 }
 
-function getFrontendUsers(db, viewerId) {
+function getFrontendUsers(db, viewerId, profileUserIds = []) {
+  const extraUserIds = [...new Set(profileUserIds.filter((userId) => userId && userId !== viewerId))];
+  const extraUserFilter = extraUserIds.length ? ` OR id IN (${extraUserIds.map(() => "?").join(", ")})` : "";
+
   return db.prepare(`
-    SELECT id, name, nickname, type, role, score, email, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
+    SELECT id, name, nickname, type, role, score, email, created_at AS createdAt, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
     FROM users
-    WHERE status = 'active' AND (type = 'registered' OR id = ?)
+    WHERE status = 'active' AND (type = 'registered' OR id = ?${extraUserFilter})
     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, score DESC, created_at ASC
-    LIMIT 12
-  `).all(viewerId, viewerId);
+    LIMIT 80
+  `).all(viewerId, ...extraUserIds, viewerId);
 }
 
 function hydrateTopicMessages(db, topicId, viewerId = null) {
@@ -1245,7 +1248,7 @@ function getBackendPostRankingEntries(db, metric = "comments") {
 
   return mapRankingRows(rows, {
     emptyTitle: metric === "likes" ? "Sin likes" : "Sin comentarios",
-    emptyMeta: metric === "likes" ? "Todavia no hay likes para clasificar." : "Todavia no hay comentarios para clasificar.",
+    emptyMeta: metric === "likes" ? "Los likes apareceran cuando usuarios reales voten." : "Los temas apareceran cuando usuarios reales publiquen.",
     formatMeta: metric === "likes" ? formatBackendLikeCount : formatBackendCommentCount
   });
 }
@@ -1287,7 +1290,7 @@ function getBackendUserRankingEntries(db, { metric = "comments", selectedTopicId
 
   return mapRankingRows(rows, {
     emptyTitle: metric === "likes" ? "Sin likes" : "Sin comentarios",
-    emptyMeta: metric === "likes" ? "Todavia no hay likes para clasificar." : "Todavia no hay comentarios para clasificar.",
+    emptyMeta: metric === "likes" ? "Los likes apareceran cuando usuarios reales voten." : "Los usuarios apareceran cuando empiecen a comentar.",
     formatMeta: metric === "likes" ? formatBackendLikeCount : formatBackendCommentCount,
     currentUserId
   });
@@ -1309,10 +1312,10 @@ function buildBackendRankings(db, context, selectedTopicId = null) {
       users: {
         comments: selectedTopicId
           ? getBackendUserRankingEntries(db, { metric: "comments", selectedTopicId, currentUserId: context.viewer.id })
-          : emptyRankingEntry("Sin tema", "Selecciona un tema para ver las estadisticas."),
+          : emptyRankingEntry("Sin tema", "Selecciona un tema para ver su actividad real."),
         likes: selectedTopicId
           ? getBackendUserRankingEntries(db, { metric: "likes", selectedTopicId, currentUserId: context.viewer.id })
-          : emptyRankingEntry("Sin tema", "Selecciona un tema para ver las estadisticas.")
+          : emptyRankingEntry("Sin tema", "Selecciona un tema para ver su actividad real.")
       }
     }
   };
@@ -1403,10 +1406,15 @@ function buildFrontendPayload(db, context, selectedTopicId = null) {
     }
   }
 
+  const profileUserIds = topics.flatMap((topic) => [
+    topic.authorId,
+    ...topic.messages.map((message) => message.authorId)
+  ]);
+
   return {
     sessionId: context.sessionId,
     viewer: context.viewer,
-    users: getFrontendUsers(db, context.viewer.id),
+    users: getFrontendUsers(db, context.viewer.id, profileUserIds),
     topics,
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,

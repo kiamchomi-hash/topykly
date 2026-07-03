@@ -223,10 +223,10 @@
 
           <form class="composer" id="messageForm">
             <label class="composer__field" hidden>
-              <input id="topicTitleInput" type="text" maxlength="80" placeholder="Título" autocomplete="off" aria-label="Título del tema" />
+              <input id="topicTitleInput" type="text" maxlength="80" placeholder="Titulo del tema" autocomplete="off" aria-label="Titulo del tema" />
             </label>
             <label class="composer__field">
-              <textarea id="messageInput" rows="2" maxlength="240" placeholder="Escribe aquí..." required aria-label="Mensaje"></textarea>
+              <textarea id="messageInput" rows="2" maxlength="240" placeholder="Escribe aqui..." required aria-label="Mensaje"></textarea>
             </label>
             <button class="primary-button" type="submit"><span class="button-label">Enviar</span></button>
           </form>
@@ -405,6 +405,27 @@
             <button class="primary-button" id="saveProfileButton" type="submit">Guardar</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div class="profile-modal-backdrop public-profile-modal-backdrop" id="publicProfileModalBackdrop" hidden>
+      <section class="profile-modal public-profile-modal" id="publicProfileModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="publicProfileName" tabindex="-1">
+        <div class="profile-modal__header">
+          <div>
+            <p class="panel__kicker">Perfil</p>
+            <h2 id="publicProfileName">Usuario</h2>
+          </div>
+          <button class="icon-button icon-button--compact profile-modal__close" id="closePublicProfileModalButton" type="button" aria-label="Cerrar perfil">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="profile-modal__body public-profile-modal__body">
+          <div class="profile-modal__preview public-profile-modal__avatar" id="publicProfileAvatar" aria-hidden="true"></div>
+          <p class="public-profile-modal__meta" id="publicProfileMeta"></p>
+          <div class="profile-modal__actions public-profile-modal__actions">
+            <button class="text-button" id="publicProfileReportButton" type="button" data-report-entity-type="user" data-report-entity-id="">Reportar usuario</button>
+          </div>
+        </div>
       </section>
     </div>
 

@@ -118,6 +118,105 @@ try {
       assert.equal(text, "Invalid path");
     }
   });
+
+  await test("refuses direct access to server-side source files", async () => {
+    for (const pathname of [
+      "/services/backend-store.js",
+      "/services/preview-server.js",
+      "/services/auth-service.js",
+      "/scripts/backup-sqlite.mjs",
+      "/tests/run.mjs",
+      "/package.json"
+    ]) {
+      const response = await fetch(`${origin}${pathname}`);
+      const text = await response.text();
+
+      assert.equal(response.status, 400, pathname);
+      assert.equal(text, "Invalid path");
+    }
+
+    const publicModule = await fetch(`${origin}/services/api.js`);
+    const publicModuleText = await publicModule.text();
+
+    assert.equal(publicModule.status, 200);
+    assert.match(publicModuleText, /export const api/);
+  });
+
+  await test("rejects oversized JSON request bodies", async () => {
+    const body = JSON.stringify({ text: "x".repeat(1024 * 1024) });
+    const response = await fetch(`${origin}/api/topics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 413);
+    assert.equal(payload.error.code, "PAYLOAD_TOO_LARGE");
+  });
+  await test("blocks local fallback login in production", async () => {
+    const isolatedPort = port + 1000;
+    const isolatedOrigin = `http://${host}:${isolatedPort}`;
+    const isolatedTempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-smoke-prod-auth-"));
+    const previousEnv = {
+      NODE_ENV: process.env.NODE_ENV,
+      TOPYKLY_OIDC_ISSUER: process.env.TOPYKLY_OIDC_ISSUER,
+      TOPYKLY_OIDC_CLIENT_ID: process.env.TOPYKLY_OIDC_CLIENT_ID,
+      TOPYKLY_OIDC_CLIENT_SECRET: process.env.TOPYKLY_OIDC_CLIENT_SECRET,
+      TOPYKLY_SESSION_SECRET: process.env.TOPYKLY_SESSION_SECRET,
+      TOPYKLY_TURNSTILE_SITE_KEY: process.env.TOPYKLY_TURNSTILE_SITE_KEY,
+      TOPYKLY_TURNSTILE_SECRET_KEY: process.env.TOPYKLY_TURNSTILE_SECRET_KEY
+    };
+    let isolatedApp = null;
+
+    process.env.NODE_ENV = "production";
+    process.env.TOPYKLY_OIDC_ISSUER = "";
+    process.env.TOPYKLY_OIDC_CLIENT_ID = "";
+    process.env.TOPYKLY_OIDC_CLIENT_SECRET = "";
+    process.env.TOPYKLY_SESSION_SECRET = "";
+    process.env.TOPYKLY_TURNSTILE_SITE_KEY = "";
+    process.env.TOPYKLY_TURNSTILE_SECRET_KEY = "";
+
+    try {
+      isolatedApp = startPreviewServer({
+        port: isolatedPort,
+        host,
+        dbPath: path.join(isolatedTempDir, "topykly.sqlite"),
+        log() {}
+      });
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline) {
+        try {
+          const ready = await fetch(`${isolatedOrigin}/`);
+          if (ready.ok) {
+            break;
+          }
+        } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      const response = await fetch(`${isolatedOrigin}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedTopicId: null })
+      });
+      const payload = await response.json();
+
+      assert.equal(response.status, 503);
+      assert.equal(payload.error.code, "AUTH_NOT_CONFIGURED");
+    } finally {
+      isolatedApp?.close();
+      await rm(isolatedTempDir, { recursive: true, force: true });
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+  });
+
   await test("bootstraps guest session with active and visible topics", async () => {
     const payload = await request("/api/bootstrap", { sessionId: "session-smoke-bootstrap" });
 

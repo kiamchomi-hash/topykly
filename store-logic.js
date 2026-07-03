@@ -13,6 +13,9 @@ export const reducers = {
     const nextActiveConnectedUserId = payload.users.some((user) => user.id === state.activeConnectedUserId)
       ? state.activeConnectedUserId
       : null;
+    const nextPublicProfileUserId = payload.users.some((user) => user.id === state.publicProfileUserId)
+      ? state.publicProfileUserId
+      : null;
 
     return {
       ...state,
@@ -24,7 +27,8 @@ export const reducers = {
       users: payload.users,
       topics: payload.topics,
       selectedTopicId: nextSelectedTopicId,
-      activeConnectedUserId: nextActiveConnectedUserId
+      activeConnectedUserId: nextActiveConnectedUserId,
+      publicProfileUserId: nextPublicProfileUserId
     };
   },
 
@@ -59,6 +63,11 @@ export const reducers = {
   setActiveUser: (state, userId) => ({
     ...state,
     activeConnectedUserId: userId
+  }),
+
+  setPublicProfileUser: (state, userId) => ({
+    ...state,
+    publicProfileUserId: userId
   }),
 
   addMessageToTopic: (state, { topicId, message }) => ({

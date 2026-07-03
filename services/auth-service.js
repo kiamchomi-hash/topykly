@@ -10,6 +10,22 @@ const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DISCOVERY_CACHE_TTL_MS = 10 * 60_000;
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
+function shouldTrustProxy(env = process.env) {
+  return [env.TOPYKLY_TRUST_PROXY, env.CHETREND_TRUST_PROXY]
+    .some((value) => ["1", "true", "yes"].includes(String(value || "").trim().toLowerCase()));
+}
+
+function getRequestIp(req, env = process.env) {
+  if (shouldTrustProxy(env)) {
+    return String(req?.headers?.["cf-connecting-ip"] || "").trim()
+      || String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim()
+      || req?.socket?.remoteAddress
+      || "";
+  }
+
+  return req?.socket?.remoteAddress || "";
+}
+
 function base64UrlEncode(value) {
   return Buffer.from(value)
     .toString("base64")
@@ -285,9 +301,7 @@ export function createAuthService({
       throw new ApiError(403, "TURNSTILE_REQUIRED", "Completa la verificacion antes de iniciar sesion.");
     }
 
-    const remoteip = String(req?.headers?.["cf-connecting-ip"] || req?.headers?.["x-forwarded-for"] || req?.socket?.remoteAddress || "")
-      .split(",")[0]
-      .trim();
+    const remoteip = getRequestIp(req, env);
     const body = new URLSearchParams({
       secret: turnstileSecretKey,
       response: normalizedToken

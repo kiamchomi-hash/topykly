@@ -67,6 +67,15 @@ function getActiveFocusTrapContainer(dom) {
     return dom.profileModal;
   }
 
+  if (
+    dom.publicProfileModal instanceof HTMLElement &&
+    dom.publicProfileModalBackdrop &&
+    !dom.publicProfileModalBackdrop.hidden &&
+    dom.publicProfileModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.publicProfileModal;
+  }
+
   if (dom.rightDrawer instanceof HTMLElement && dom.rightDrawer.classList.contains("is-open")) {
     return dom.rightDrawer;
   }
@@ -114,6 +123,37 @@ export function bindPageEvents(dom, handlers) {
 
   bindConnectedUserListEvents(dom.userList);
   bindConnectedUserListEvents(dom.drawerUserList);
+
+
+  if (typeof HTMLElement !== "undefined" && dom.closePublicProfileModalButton instanceof HTMLElement) {
+    dom.closePublicProfileModalButton.addEventListener("click", () => {
+      handlers.closePublicProfileModal?.();
+    });
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileModalBackdrop instanceof HTMLElement) {
+    dom.publicProfileModalBackdrop.addEventListener("click", (event) => {
+      if (event.target === dom.publicProfileModalBackdrop) {
+        handlers.closePublicProfileModal?.();
+      }
+    });
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileReportButton instanceof HTMLElement) {
+    dom.publicProfileReportButton.addEventListener("click", (event) => {
+      const target = event.currentTarget;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      const entityId = target.dataset.reportEntityId || "";
+      if (!entityId) {
+        return;
+      }
+
+      handlers.reportEntity?.("user", entityId, { trigger: target });
+    });
+  }
 
   if (typeof HTMLFormElement !== "undefined" && dom.messageForm instanceof HTMLFormElement) {
     dom.messageForm.addEventListener("submit", handlers.submitMessage);
@@ -265,6 +305,7 @@ export function bindPageEvents(dom, handlers) {
 
     if (event.key === "Escape") {
       handlers.closePaletteModal();
+      handlers.closePublicProfileModal?.();
       handlers.closeDrawers();
     }
   });
