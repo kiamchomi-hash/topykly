@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "../services/auth-service.js";
 import { createBackendStore, resolveDbConfig } from "../services/backend-store.js";
+import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
 import { initialUsers, topicSeedData } from "../data.js";
 import {
@@ -496,6 +497,32 @@ await (async () => {
       assert.equal(diagnostics.storageWarning, null);
     });
   });
+  await test("sqlite backup script creates a usable database snapshot", async () => {
+    await withTempStore(async (store) => {
+      const backupDir = path.join(path.dirname(store.dbPath), "manual-backups");
+      const config = resolveBackupConfig({ dbPath: store.dbPath, backupDir, env: {} });
+      const result = backupSqliteDatabase({
+        dbPath: store.dbPath,
+        backupDir,
+        now: new Date("2026-01-02T03:04:05.006Z"),
+        env: {}
+      });
+      const backupBytes = await readFile(result.backupPath);
+      const backupStore = createBackendStore({ dbPath: result.backupPath });
+
+      try {
+        assert.deepEqual(config, {
+          dbPath: store.dbPath,
+          backupDir
+        });
+        assert.equal(result.backupPath, path.join(backupDir, "topykly-2026-01-02T03-04-05-006Z.sqlite"));
+        assert.equal(backupBytes.subarray(0, 15).toString("utf8"), "SQLite format 3");
+        assert.equal(backupStore.getDiagnostics().users, initialUsers.length);
+      } finally {
+        backupStore.close();
+      }
+    });
+  });
   await test("backend login and logout persist the viewer mode for the same session", async () => {
     await withTempStore((store) => {
       const initialPayload = store.bootstrap({
@@ -722,6 +749,25 @@ await (async () => {
       assert.equal(removedAvatar.viewer.avatarPendingUrl, null);
       assert.equal(removedAvatar.viewer.avatarReviewStatus, null);
       assert.equal(removedAvatar.users.find((user) => user.id === updated.viewer.id)?.avatarUrl, null);
+      await assert.rejects(() => readFile(path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl))), /ENOENT/);
+
+      const firstPendingAvatar = store.updateProfile({
+        sessionId: "session-profile",
+        displayName: "Nombre nuevo",
+        avatarDataUrl: "data:image/png;base64,b2xk"
+      });
+      const firstPendingAvatarPath = path.join(store.avatarStorageDir, path.basename(firstPendingAvatar.viewer.avatarPendingUrl));
+      const secondPendingAvatar = store.updateProfile({
+        sessionId: "session-profile",
+        displayName: "Nombre nuevo",
+        avatarDataUrl: "data:image/webp;base64,bmV3"
+      });
+      await assert.rejects(() => readFile(firstPendingAvatarPath), /ENOENT/);
+      assert.equal(
+        (await readFile(path.join(store.avatarStorageDir, path.basename(secondPendingAvatar.viewer.avatarPendingUrl)))).toString("utf8"),
+        "new"
+      );
+
       assert.throws(() => store.updateProfile({
         sessionId: "session-profile-guest",
         avatarDataUrl: "data:image/png;base64,aGVsbG8="
@@ -731,6 +777,11 @@ await (async () => {
         sessionId: "session-profile",
         avatarDataUrl: "data:text/html;base64,PHNjcmlwdD4="
       }), /PNG, JPG, WebP o GIF/);
+      const oversizedAvatar = Buffer.alloc((256 * 1024) + 1).toString("base64");
+      assert.throws(() => store.updateProfile({
+        sessionId: "session-profile",
+        avatarDataUrl: `data:image/png;base64,${oversizedAvatar}`
+      }), /256 KB/);
     });
   });
 
@@ -864,6 +915,12 @@ await (async () => {
       });
 
       assert.equal(openReports.reports.length, 2);
+      assert.deepEqual(openReports.reportPagination, {
+        page: 1,
+        limit: 50,
+        total: 2,
+        hasMore: false
+      });
 
       const blockedPayload = store.applyModerationAction("block_topic", {
         sessionId: "session-moderator",
@@ -893,6 +950,58 @@ await (async () => {
     });
   });
 
+  await test("backend paginates moderation reports", async () => {
+    await withTempStore((store) => {
+      const bootstrapPayload = store.bootstrap({
+        sessionId: "session-report-pagination",
+        authMode: "guest"
+      });
+      const topicId = bootstrapPayload.topics[0].id;
+
+      for (let index = 0; index < 55; index += 1) {
+        store.reportEntity("topic", topicId, {
+          sessionId: `session-report-pagination-${index}`,
+          reason: `Reporte ${index}`,
+          selectedTopicId: topicId,
+          ipAddress: `198.51.100.${index}`
+        });
+      }
+
+      store.login({
+        sessionId: "session-report-pagination-moderator",
+        userId: "u2"
+      });
+
+      const firstPage = store.listReports({
+        sessionId: "session-report-pagination-moderator"
+      });
+      const secondPage = store.listReports({
+        sessionId: "session-report-pagination-moderator",
+        reportPage: 2
+      });
+      const oversizedLimit = store.listReports({
+        sessionId: "session-report-pagination-moderator",
+        reportLimit: 500
+      });
+
+      assert.equal(firstPage.reports.length, 50);
+      assert.deepEqual(firstPage.reportPagination, {
+        page: 1,
+        limit: 50,
+        total: 55,
+        hasMore: true
+      });
+      assert.equal(secondPage.reports.length, 5);
+      assert.deepEqual(secondPage.reportPagination, {
+        page: 2,
+        limit: 50,
+        total: 55,
+        hasMore: false
+      });
+      assert.equal(oversizedLimit.reports.length, 55);
+      assert.equal(oversizedLimit.reportPagination.limit, 100);
+    });
+  });
   await test("backend supports user reports and moderator problematic flags", async () => {
     await withTempStore((store) => {
       const bootstrapPayload = store.bootstrap({

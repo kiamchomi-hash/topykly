@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ const TOPIC_TITLE_MAX_LENGTH = 80;
 const MESSAGE_TEXT_MAX_LENGTH = 240;
 const REPORT_REASON_MAX_LENGTH = 240;
 const AVATAR_UPLOAD_MAX_BYTES = 256 * 1024;
+const AVATAR_UPLOAD_MAX_BASE64_BYTES = Math.ceil(AVATAR_UPLOAD_MAX_BYTES / 3) * 4;
 const AVATAR_UPLOAD_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const AVATAR_UPLOAD_EXTENSIONS = new Map([
   ["image/png", "png"],
@@ -25,6 +26,9 @@ const AVATAR_UPLOAD_EXTENSIONS = new Map([
   ["image/gif", "gif"]
 ]);
 const AVATAR_PUBLIC_PATH = "/avatars";
+const ADMIN_REPORT_PAGE_SIZE = 50;
+const ADMIN_AVATAR_PAGE_SIZE = 50;
+const ADMIN_MAX_PAGE_SIZE = 100;
 const TOPIC_STATUS_ACTIVE = "active";
 const TOPIC_STATUS_BLOCKED = "blocked";
 const TOPIC_STATUS_EXPELLED = "expelled";
@@ -206,6 +210,11 @@ function normalizeAvatarUrl(value, { discardInvalid = false } = {}) {
   return parsedUrl.toString();
 }
 
+function estimateBase64DecodedBytes(value) {
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return Math.floor((value.length * 3) / 4) - padding;
+}
+
 function storeAvatarDataUrl(value, avatarStorageDir) {
   const normalized = String(value || "").trim();
   if (!normalized) {
@@ -219,6 +228,10 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
 
   const mimeType = match[1];
   const payload = match[2];
+  if (payload.length > AVATAR_UPLOAD_MAX_BASE64_BYTES || estimateBase64DecodedBytes(payload) > AVATAR_UPLOAD_MAX_BYTES) {
+    throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 256 KB.");
+  }
+
   if (!AVATAR_UPLOAD_MIME_TYPES.has(mimeType)) {
     throw new ApiError(400, "VALIDATION_ERROR", "El tipo de imagen no esta permitido.");
   }
@@ -236,6 +249,49 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
   return `${AVATAR_PUBLIC_PATH}/${fileName}`;
 }
 
+function isStoredAvatarUrl(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized.startsWith(`${AVATAR_PUBLIC_PATH}/`)) {
+    return false;
+  }
+
+  const fileName = normalized.slice(AVATAR_PUBLIC_PATH.length + 1);
+  return Boolean(fileName) && fileName === path.basename(fileName) && !fileName.startsWith(".");
+}
+
+function cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl) {
+  const normalized = String(avatarUrl || "").trim();
+  if (!isStoredAvatarUrl(normalized)) {
+    return;
+  }
+
+  const reference = db.prepare(`
+    SELECT id
+    FROM users
+    WHERE avatar_url = ? OR avatar_pending_url = ?
+    LIMIT 1
+  `).get(normalized, normalized);
+  if (reference) {
+    return;
+  }
+
+  try {
+    unlinkSync(path.join(avatarStorageDir, path.basename(normalized)));
+  } catch {
+    // A missing stale file should not break the profile or moderation flow.
+  }
+}
+
+function scheduleStoredAvatarCleanup(registerAfterCommit, db, avatarStorageDir, avatarUrls) {
+  const uniqueUrls = [...new Set(avatarUrls.filter(Boolean))];
+  if (!uniqueUrls.length) {
+    return;
+  }
+
+  registerAfterCommit(() => {
+    uniqueUrls.forEach((avatarUrl) => cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl));
+  });
+}
 function summarizeText(text, limit = 96) {
   const normalized = normalizeMessageText(text).replace(/\s+/g, " ");
   if (normalized.length <= limit) {
@@ -278,10 +334,16 @@ function getRateLimitConfig(viewerType) {
 }
 
 function withTransaction(db, task) {
+  const afterCommitTasks = [];
   db.exec("BEGIN IMMEDIATE");
   try {
-    const result = task();
+    const result = task((callback) => {
+      if (typeof callback === "function") {
+        afterCommitTasks.push(callback);
+      }
+    });
     db.exec("COMMIT");
+    afterCommitTasks.forEach((callback) => callback());
     return result;
   } catch (error) {
     db.exec("ROLLBACK");
@@ -289,6 +351,37 @@ function withTransaction(db, task) {
   }
 }
 
+function normalizePositiveInteger(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function normalizePaginationOptions({ page = 1, limit } = {}, defaultLimit) {
+  const normalizedLimit = normalizePositiveInteger(limit, defaultLimit, {
+    min: 1,
+    max: ADMIN_MAX_PAGE_SIZE
+  });
+  const normalizedPage = normalizePositiveInteger(page, 1, { min: 1 });
+
+  return {
+    page: normalizedPage,
+    limit: normalizedLimit,
+    offset: (normalizedPage - 1) * normalizedLimit
+  };
+}
+
+function createPaginationMeta(total, { page, limit }) {
+  return {
+    page,
+    limit,
+    total,
+    hasMore: page * limit < total
+  };
+}
 function getSeedTopicEntries() {
   return [...topicSeedData, ...EXTRA_TOPIC_SEEDS].slice(0, ACTIVE_TOPIC_LIMIT);
 }
@@ -1358,14 +1451,20 @@ function recalculateTopicActivity(db, topicId, updatedAt) {
   );
 }
 
-function listPendingAvatars(db) {
-  return db.prepare(`
+function listPendingAvatars(db, options = {}) {
+  const pagination = normalizePaginationOptions(options, ADMIN_AVATAR_PAGE_SIZE);
+  const total = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM users
+    WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
+  `).get()?.count ?? 0;
+  const items = db.prepare(`
     SELECT id, name, email, avatar_pending_url, avatar_review_status, updated_at
     FROM users
     WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
     ORDER BY updated_at DESC, created_at DESC
-    LIMIT 50
-  `).all().map((row) => ({
+    LIMIT ? OFFSET ?
+  `).all(pagination.limit, pagination.offset).map((row) => ({
     userId: row.id,
     name: row.name,
     email: row.email ?? null,
@@ -1373,9 +1472,21 @@ function listPendingAvatars(db) {
     avatarReviewStatus: row.avatar_review_status || "pending",
     updatedAt: row.updated_at
   }));
+
+  return {
+    items,
+    pagination: createPaginationMeta(total, pagination)
+  };
 }
-function listOpenReports(db) {
-  return db.prepare(`
+
+function listOpenReports(db, options = {}) {
+  const pagination = normalizePaginationOptions(options, ADMIN_REPORT_PAGE_SIZE);
+  const total = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM reports
+    WHERE status = ?
+  `).get(REPORT_STATUS_OPEN)?.count ?? 0;
+  const items = db.prepare(`
     SELECT
       reports.id,
       reports.entity_type,
@@ -1389,7 +1500,8 @@ function listOpenReports(db) {
     LEFT JOIN users ON users.id = reports.reporter_user_id
     WHERE reports.status = ?
     ORDER BY reports.created_at DESC, reports.id DESC
-  `).all(REPORT_STATUS_OPEN).map((row) => ({
+    LIMIT ? OFFSET ?
+  `).all(REPORT_STATUS_OPEN, pagination.limit, pagination.offset).map((row) => ({
     id: row.id,
     entityType: row.entity_type,
     entityId: row.entity_id,
@@ -1399,6 +1511,11 @@ function listOpenReports(db) {
     reporterUserId: row.reporter_user_id,
     reporterName: row.reporter_name || "Anonimo"
   }));
+
+  return {
+    items,
+    pagination: createPaginationMeta(total, pagination)
+  };
 }
 
 function trimTopicReplies(db, topicId) {
@@ -1512,7 +1629,7 @@ export function createBackendStore({ dbPath = null } = {}) {
       });
     },
     updateProfile({ sessionId, authMode, displayName = null, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
         assertContextNotBlocked(db, context);
@@ -1521,6 +1638,7 @@ export function createBackendStore({ dbPath = null } = {}) {
         }
 
         const normalizedDisplayName = normalizeUserDisplayName(displayName, context.viewer.displayName || "Usuario");
+        const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
         const normalizedAvatarDataUrl = removeAvatar ? null : storeAvatarDataUrl(avatarDataUrl, avatarStorageDir);
         const nowIso = new Date().toISOString();
         const nextAvatarUrl = removeAvatar ? null : context.viewer.avatarUrl ?? null;
@@ -1539,6 +1657,14 @@ export function createBackendStore({ dbPath = null } = {}) {
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
         `).run(normalizedDisplayName, nextAvatarUrl, nextPendingUrl, nextReviewStatus, nowIso, context.viewer.id);
+
+        const nextAvatarUrls = new Set([nextAvatarUrl, nextPendingUrl].filter(Boolean));
+        scheduleStoredAvatarCleanup(
+          afterCommit,
+          db,
+          avatarStorageDir,
+          previousAvatarUrls.filter((avatarUrl) => avatarUrl && !nextAvatarUrls.has(avatarUrl))
+        );
 
         const refreshedContext = resolveViewer(db, {
           sessionId: context.sessionId,
@@ -1700,22 +1826,37 @@ export function createBackendStore({ dbPath = null } = {}) {
         return buildFrontendPayload(db, context, reportSelectedTopicId);
       });
     },
-    listReports({ sessionId, authMode, ipAddress = "" } = {}) {
+    listReports({ sessionId, authMode, ipAddress = "", reportPage = 1, reportLimit = ADMIN_REPORT_PAGE_SIZE } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
+        const reportPageResult = listOpenReports(db, { page: reportPage, limit: reportLimit });
         return {
-          reports: listOpenReports(db)
+          reports: reportPageResult.items,
+          reportPagination: reportPageResult.pagination
         };
       });
-    },    getAdminDashboard({ sessionId, authMode, ipAddress = "" } = {}) {
+    },
+    getAdminDashboard({
+      sessionId,
+      authMode,
+      ipAddress = "",
+      reportPage = 1,
+      reportLimit = ADMIN_REPORT_PAGE_SIZE,
+      avatarPage = 1,
+      avatarLimit = ADMIN_AVATAR_PAGE_SIZE
+    } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
+        const reportPageResult = listOpenReports(db, { page: reportPage, limit: reportLimit });
+        const avatarPageResult = listPendingAvatars(db, { page: avatarPage, limit: avatarLimit });
         return {
           viewer: context.viewer,
-          reports: listOpenReports(db),
-          pendingAvatars: listPendingAvatars(db)
+          reports: reportPageResult.items,
+          reportPagination: reportPageResult.pagination,
+          pendingAvatars: avatarPageResult.items,
+          avatarPagination: avatarPageResult.pagination
         };
       });
     },
@@ -1728,7 +1869,7 @@ export function createBackendStore({ dbPath = null } = {}) {
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         const nowIso = new Date().toISOString();
@@ -1846,6 +1987,12 @@ export function createBackendStore({ dbPath = null } = {}) {
             SET avatar_url = ?, avatar_pending_url = NULL, avatar_review_status = 'approved', updated_at = ?
             WHERE id = ?
           `).run(userRow.avatar_pending_url, nowIso, userRow.id);
+          scheduleStoredAvatarCleanup(
+            afterCommit,
+            db,
+            avatarStorageDir,
+            userRow.avatar_url && userRow.avatar_url !== userRow.avatar_pending_url ? [userRow.avatar_url] : []
+          );
           recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
@@ -1869,6 +2016,7 @@ export function createBackendStore({ dbPath = null } = {}) {
             SET avatar_pending_url = NULL, avatar_review_status = 'rejected', updated_at = ?
             WHERE id = ?
           `).run(nowIso, userRow.id);
+          scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, [userRow.avatar_pending_url]);
           recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",

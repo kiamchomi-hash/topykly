@@ -9,7 +9,8 @@
   "scripts": {
     "test": "node tests/run.mjs",
     "test:smoke": "node tests/smoke.mjs",
-    "qa": "node tests/run.mjs && node tests/smoke.mjs"
+    "qa": "node tests/run.mjs && node tests/smoke.mjs",
+    "backup:sqlite": "node scripts/backup-sqlite.mjs"
   },
   "repository": {
     "type": "git",
