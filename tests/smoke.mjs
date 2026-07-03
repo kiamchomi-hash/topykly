@@ -97,10 +97,25 @@ try {
 
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "no-store, max-age=0");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.match(response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
+    assert.match(response.headers.get("content-security-policy") || "", /script-src 'self' 'unsafe-inline' https:\/\/cdn\.jsdelivr\.net https:\/\/challenges\.cloudflare\.com/);
     assert.match(html, /<title>TOPYKLY<\/title>/);
     assert.match(html, /id="messageForm"/);
   });
 
+  await test("refuses direct access to hidden files and private directories", async () => {
+    for (const pathname of ["/.env", "/.git/config", "/.data/topykly.sqlite"]) {
+      const response = await fetch(`${origin}${pathname}`);
+      const text = await response.text();
+
+      assert.equal(response.status, 400, pathname);
+      assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+      assert.equal(response.headers.get("x-frame-options"), "DENY");
+      assert.equal(text, "Invalid path");
+    }
+  });
   await test("bootstraps guest session with active and visible topics", async () => {
     const payload = await request("/api/bootstrap", { sessionId: "session-smoke-bootstrap" });
 

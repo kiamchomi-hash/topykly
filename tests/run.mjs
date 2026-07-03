@@ -2465,7 +2465,7 @@ await (async () => {
     }
   });
 
-  await test("auth modal reuses existing Turnstile widget before Google login", async () => {
+  await test("auth modal skips Turnstile when external Google auth is configured", async () => {
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
     const previousHTMLElement = globalThis.HTMLElement;
@@ -2582,7 +2582,7 @@ await (async () => {
         flashTitle() {},
         state,
         async getAuthStatus() {
-          return { turnstile: { configured: true, siteKey: "site-key" } };
+          return { configured: true, turnstile: { configured: true, siteKey: "site-key" } };
         },
         async login() {
           loginCalls += 1;
@@ -2608,9 +2608,10 @@ await (async () => {
       authGoogleButton.dispatch("click");
       await flushAsyncEvents();
 
-      assert.equal(renderCalls, 1);
+      assert.equal(renderCalls, 0);
       assert.equal(resetCalls, 0);
       assert.equal(loginCalls, 1);
+      assert.equal(authTurnstile.hidden, true);
       assert.equal(authTurnstileToken.value, "");
     } finally {
       globalThis.document = previousDocument;
@@ -3210,6 +3211,17 @@ await (async () => {
     assert.match(renderUtils, /function patchElement\(existing, incoming\)/);
     assert.match(renderUtils, /function patchChildren\(existing, incoming\)/);
     const previewServer = await read("services/preview-server.js");
+    assert.match(previewServer, /const authLoginResponse = await authService\.createLoginResponse[\s\S]*await authService\.validateTurnstile/);
+    assert.match(previewServer, /if \(authLoginResponse\) \{[\s\S]*sendJson\(res, 200, authLoginResponse\.payload/);
+    assert.match(previewServer, /segments\.some\(\(segment\) => segment\.startsWith\("\."\)\)/);
+    assert.match(previewServer, /path\.relative\(root, absolutePath\)/);
+    assert.match(previewServer, /relativePath\.startsWith\("\.\."\) \|\| path\.isAbsolute\(relativePath\)/);
+    assert.match(previewServer, /"X-Content-Type-Options": "nosniff"/);
+    assert.match(previewServer, /"X-Frame-Options": "DENY"/);
+    assert.match(previewServer, /"Content-Security-Policy"/);
+    assert.match(previewServer, /frame-ancestors 'none'/);
+    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: false \}\)/);
+    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: extension === "\.html" \}\)/);
     assert.match(previewServer, /DEFAULT_GUEST_CLEANUP_INTERVAL_MS/);
     assert.match(previewServer, /DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS/);
     assert.match(previewServer, /function enforceHttpRateLimit\(res, buckets, req, url, config\)/);
@@ -3259,7 +3271,7 @@ await (async () => {
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/);
     assert.match(html, /integrity="sha384-DY3umZptOgjUNshBFbvu1\+3RVFPoD1\/CgGcc1yyJ77\/aFOJ7jtN4BORnz\/D\/xF0n"/);
-    assert.match(html, /integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmHnRTutomMnUySX9hqDgVQVcvMdc"/);
+    assert.match(html, /integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmXNaoRDWmHnRTutomMnUySX9hqDgVQVcvMdc"/);
     assert.match(html, /crossorigin="anonymous"/);
     assert.match(html, /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/);
     assert.match(html, /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/);

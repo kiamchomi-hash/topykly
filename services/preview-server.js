@@ -61,9 +61,45 @@ function loadEnvFile(envPath) {
   });
 }
 
+function getSecurityHeaders({ includeCsp = true } = {}) {
+  const headers = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Cross-Origin-Opener-Policy": "same-origin"
+  };
+
+  if (includeCsp) {
+    headers["Content-Security-Policy"] = [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "img-src 'self' data: https:",
+      "font-src 'self' data:",
+      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+      "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
+      "frame-src https://challenges.cloudflare.com",
+      "connect-src 'self' https://challenges.cloudflare.com https://accounts.google.com"
+    ].join("; ");
+  }
+
+  return headers;
+}
+
+function writePlainText(res, statusCode, text) {
+  res.writeHead(statusCode, {
+    ...getSecurityHeaders(),
+    "Content-Type": "text/plain; charset=utf-8",
+    "Content-Length": Buffer.byteLength(text)
+  });
+  res.end(text);
+}
 function sendJson(res, statusCode, payload, { headers = {}, cookies = [] } = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(statusCode, {
+    ...getSecurityHeaders(),
     ...headers,
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(body),
@@ -74,6 +110,7 @@ function sendJson(res, statusCode, payload, { headers = {}, cookies = [] } = {})
 
 function sendRedirect(res, statusCode, location, { cookies = [] } = {}) {
   res.writeHead(statusCode, {
+    ...getSecurityHeaders(),
     "Location": location,
     ...(cookies.length ? { "Set-Cookie": cookies } : {})
   });
@@ -142,12 +179,24 @@ function normalizeSelectedTopicId(url) {
 }
 
 function safeFilePathFromUrl(urlPathname) {
-  const decoded = decodeURIComponent(urlPathname);
+  let decoded;
+  try {
+    decoded = decodeURIComponent(urlPathname);
+  } catch {
+    return null;
+  }
+
   const requestedPath = decoded === "/" ? "/index.html" : decoded;
+  const segments = requestedPath.split(/[/\\]/).filter(Boolean);
+  if (segments.some((segment) => segment.startsWith("."))) {
+    return null;
+  }
+
   const normalized = path.normalize(requestedPath).replace(/^(\.\.[/\\])+/, "");
   const absolutePath = path.join(root, normalized);
+  const relativePath = path.relative(root, absolutePath);
 
-  if (!absolutePath.startsWith(root)) {
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     return null;
   }
 
@@ -198,10 +247,6 @@ async function handleApiRequest(store, authService, req, res, url) {
 
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(req);
-      await authService.validateTurnstile({
-        req,
-        token: body.turnstileToken
-      });
       const authLoginResponse = await authService.createLoginResponse({
         req,
         sessionId: context.sessionId,
@@ -214,6 +259,10 @@ async function handleApiRequest(store, authService, req, res, url) {
         return;
       }
 
+      await authService.validateTurnstile({
+        req,
+        token: body.turnstileToken
+      });
       sendBackendPayload(res, req, authService, 200, store.login({
         ...context,
         selectedTopicId: body.selectedTopicId ?? null
@@ -366,20 +415,19 @@ async function handleAuthCallback(store, authService, req, res, url) {
 function handleAvatarRequest(res, url, avatarStorageDir) {
   const fileName = path.basename(decodeURIComponent(url.pathname));
   if (!fileName || url.pathname !== `/avatars/${fileName}`) {
-    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("Invalid path");
+    writePlainText(res, 400, "Invalid path");
     return;
   }
 
   const resolvedFilePath = path.join(avatarStorageDir, fileName);
   fs.readFile(resolvedFilePath, (error, data) => {
     if (error) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Not found");
+      writePlainText(res, 404, "Not found");
       return;
     }
 
     res.writeHead(200, {
+      ...getSecurityHeaders({ includeCsp: false }),
       "Content-Type": mime[path.extname(resolvedFilePath)] || "application/octet-stream",
       "Cache-Control": "public, max-age=31536000, immutable"
     });
@@ -493,8 +541,7 @@ function handleStaticRequest(req, res, url, store) {
   }
   const filePath = safeFilePathFromUrl(url.pathname);
   if (!filePath) {
-    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("Invalid path");
+    writePlainText(res, 400, "Invalid path");
     return;
   }
 
@@ -504,8 +551,7 @@ function handleStaticRequest(req, res, url, store) {
 
   fs.readFile(resolvedFilePath, (error, data) => {
     if (error) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Not found");
+      writePlainText(res, 404, "Not found");
       return;
     }
 
@@ -515,6 +561,7 @@ function handleStaticRequest(req, res, url, store) {
       ? "no-store, max-age=0"
       : "public, max-age=3600";
     res.writeHead(200, {
+      ...getSecurityHeaders({ includeCsp: extension === ".html" }),
       "Content-Type": contentType,
       "Cache-Control": cacheControl
     });
