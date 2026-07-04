@@ -480,6 +480,8 @@ export function createActionHandlers({
     createNewTopic: chatActions.createNewTopic,
     submitMessage: chatActions.submitMessage,
     refreshCurrentTopic: chatActions.refreshCurrentTopic,
+    toggleMessageLike: chatActions.toggleMessageLike,
+    toggleMessageDislike: chatActions.toggleMessageDislike,
     reportEntity: chatActions.reportEntity,
     openPaletteModal,
     closePaletteModal,
