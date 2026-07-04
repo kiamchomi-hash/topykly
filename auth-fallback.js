@@ -1,5 +1,6 @@
 let authStatusPromise = null;
 let turnstileWidgetId = null;
+let pendingTurnstileToken = null;
 
 function clearLegacyClientSessionId() {
   try {
@@ -41,9 +42,28 @@ async function getAuthStatus() {
   return authStatusPromise;
 }
 
+function resetTurnstileToken() {
+  const tokenInput = document.getElementById("authTurnstileToken");
+  if (tokenInput) {
+    tokenInput.value = "";
+  }
+}
+
+function storeTurnstileToken(token) {
+  const tokenInput = document.getElementById("authTurnstileToken");
+  if (tokenInput) {
+    tokenInput.value = token || "";
+  }
+  if (token && pendingTurnstileToken) {
+    const pending = pendingTurnstileToken;
+    pendingTurnstileToken = null;
+    clearTimeout(pending.timer);
+    pending.resolve(token);
+  }
+}
+
 async function syncTurnstile() {
   const container = document.getElementById("authTurnstile");
-  const tokenInput = document.getElementById("authTurnstileToken");
   const status = await getAuthStatus();
   const siteKey = status?.turnstile?.siteKey || "";
   const required = Boolean(status?.turnstile?.configured && siteKey);
@@ -53,48 +73,64 @@ async function syncTurnstile() {
   }
 
   container.hidden = !required;
+  container.dataset.turnstileMode = required ? "silent" : "off";
   if (!required) {
-    if (tokenInput) {
-      tokenInput.value = "";
-    }
+    resetTurnstileToken();
     return false;
   }
 
   if (!globalThis.turnstile?.render) {
-    flash("Verificacion anti-bots cargando");
+    flash("Preparando verificacion anti-bots");
     return true;
   }
 
   if (turnstileWidgetId !== null) {
-    globalThis.turnstile.reset?.(turnstileWidgetId);
-    if (tokenInput) {
-      tokenInput.value = "";
-    }
     return true;
   }
 
   turnstileWidgetId = globalThis.turnstile.render(container, {
     sitekey: siteKey,
+    appearance: "interaction-only",
+    execution: "execute",
     callback(token) {
-      if (tokenInput) {
-        tokenInput.value = token || "";
-      }
+      storeTurnstileToken(token);
     },
     "expired-callback"() {
-      if (tokenInput) {
-        tokenInput.value = "";
-      }
+      resetTurnstileToken();
     },
     "error-callback"() {
-      if (tokenInput) {
-        tokenInput.value = "";
-      }
+      resetTurnstileToken();
     }
   });
 
   return true;
 }
 
+async function requestTurnstileToken() {
+  const tokenInput = document.getElementById("authTurnstileToken");
+  const required = await syncTurnstile();
+  const existingToken = tokenInput?.value || "";
+  if (!required || existingToken) {
+    return existingToken;
+  }
+
+  if (turnstileWidgetId === null || typeof globalThis.turnstile?.execute !== "function") {
+    throw new Error("La verificacion anti-bots todavia esta cargando.");
+  }
+
+  flash("Verificando acceso...");
+  return new Promise((resolve, reject) => {
+    pendingTurnstileToken = {
+      resolve,
+      reject,
+      timer: setTimeout(() => {
+        pendingTurnstileToken = null;
+        reject(new Error("La verificacion esta tardando. Intentalo de nuevo."));
+      }, 12000)
+    };
+    globalThis.turnstile.execute(turnstileWidgetId);
+  });
+}
 async function openAuthModal(event) {
   if (document.documentElement.dataset.authState === "logged-in") {
     return;
@@ -115,11 +151,11 @@ async function continueWithGoogle(event) {
   event.preventDefault();
   event.stopImmediatePropagation();
 
-  const tokenInput = document.getElementById("authTurnstileToken");
-  const turnstileRequired = await syncTurnstile();
-  const turnstileToken = tokenInput?.value || "";
-  if (turnstileRequired && !turnstileToken) {
-    flash("Completa la verificacion anti-bots");
+  let turnstileToken = "";
+  try {
+    turnstileToken = await requestTurnstileToken();
+  } catch (error) {
+    flash(error?.message || "No pudimos verificarte. Intentalo de nuevo.");
     return;
   }
 

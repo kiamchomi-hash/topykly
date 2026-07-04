@@ -224,6 +224,14 @@ export function createActionHandlers({
     dom.profileButton?.focus?.();
   }
 
+
+  function skipProfileSetup() {
+    dispatch(state, reducers.setProfileModalOpen, false);
+    showFeedback("Puedes completar tu perfil desde Perfil.");
+    render();
+    dom.profileButton?.focus?.();
+  }
+
   async function saveProfile(event) {
     event?.preventDefault?.();
     const displayName = dom.profileNameInput?.value?.trim() || null;
@@ -457,6 +465,7 @@ export function createActionHandlers({
     showFeedback,
     openProfileModal,
     closeProfileModal,
+    skipProfileSetup,
     closePublicProfileModal,
     openAdminPanel,
     closeAdminPanel,

@@ -59,6 +59,7 @@ import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
 import { renderTitles } from "../ui/titles.js";
+import { selectUsersViewModel } from "../features/users/selectors.js";
 
 const rootDir = path.dirname(fileURLToPath(new URL("../app.js", import.meta.url)));
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".html", ".css", ".md"]);
@@ -205,6 +206,26 @@ await (async () => {
     assert.equal(users[0].initials, "CM");
   });
 
+  await test("users view hides the current user while profile name is pending", () => {
+    const state = {
+      currentUserId: "u-current",
+      activeConnectedUserId: null,
+      viewer: { id: "u-current", type: "registered", profilePending: true },
+      users: {
+        allIds: ["u-current", "u-other"],
+        byId: {
+          "u-current": { id: "u-current", name: "Usuario", online: true, connectedOrder: 10 },
+          "u-other": { id: "u-other", name: "Otro", online: true, connectedOrder: 1 }
+        }
+      }
+    };
+
+    assert.deepEqual(selectUsersViewModel(state).items.map((user) => user.id), ["u-other"]);
+
+    state.viewer.profilePending = false;
+
+    assert.deepEqual(selectUsersViewModel(state).items.map((user) => user.id), ["u-current", "u-other"]);
+  });
   await test("buildTopics creates a topic per seed with rotating authors", () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -2841,6 +2862,7 @@ await (async () => {
 
       dom.authGoogleButton.dispatch("click");
       await flushAsyncEvents();
+      await flushAsyncEvents();
 
       assert.equal(dom.authModalBackdrop.hidden, true);
       assert.equal(authTools.hidden, false);
@@ -2852,6 +2874,13 @@ await (async () => {
       assert.equal(state.viewer.type, "registered");
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
       assert.equal(flashCalls.at(-1), "Sesion iniciada");
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+
+      assert.equal(logoutCalls, 0);
+      assert.equal(state.viewer.type, "registered");
+      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesion");
 
       authButton.dispatch("click");
       await flushAsyncEvents();
@@ -2926,8 +2955,10 @@ await (async () => {
       viewer: { id: "guest-turnstile", type: "guest" }
     };
     let renderCalls = 0;
+    let executeCalls = 0;
     let resetCalls = 0;
     let loginCalls = 0;
+    let renderOptions = null;
     let receivedTurnstileToken = "";
 
     try {
@@ -2949,8 +2980,13 @@ await (async () => {
       globalThis.turnstile = {
         render(_target, options) {
           renderCalls += 1;
-          options.callback("turnstile-token");
+          renderOptions = options;
           return "widget-1";
+        },
+        execute(widgetId) {
+          assert.equal(widgetId, "widget-1");
+          executeCalls += 1;
+          renderOptions.callback("turnstile-token");
         },
         reset() {
           resetCalls += 1;
@@ -3023,9 +3059,13 @@ await (async () => {
       await flushAsyncEvents();
       authGoogleButton.dispatch("click");
       await flushAsyncEvents();
+      await flushAsyncEvents();
 
       assert.equal(renderCalls, 1);
+      assert.equal(executeCalls, 1);
       assert.equal(resetCalls, 0);
+      assert.equal(renderOptions.appearance, "interaction-only");
+      assert.equal(renderOptions.execution, "execute");
       assert.equal(loginCalls, 1);
       assert.equal(receivedTurnstileToken, "turnstile-token");
       assert.equal(authTurnstile.hidden, false);
@@ -3313,6 +3353,7 @@ await (async () => {
 
       dom.authGoogleButton.dispatch("click");
       await flushAsyncEvents();
+      await flushAsyncEvents();
 
       assert.equal(dom.authModalBackdrop.hidden, true);
       assert.equal(authTools.hidden, false);
@@ -3361,6 +3402,13 @@ await (async () => {
 
       mobileTopbarMenu.dispatch("click", { target: paletteTarget });
       mobileTopbarMenu.dispatch("click", { target: homeButton });
+
+      mobileTopbarMenu.dispatch("click", { target: menuAuthButton });
+      await flushAsyncEvents();
+
+      assert.equal(logoutCalls, 0);
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
+      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesion");
 
       mobileTopbarMenu.dispatch("click", { target: menuAuthButton });
       await flushAsyncEvents();
@@ -3537,6 +3585,7 @@ await (async () => {
       authButton.dispatch("click");
       await flushAsyncEvents();
       authGoogleButton.dispatch("click");
+      await flushAsyncEvents();
       await flushAsyncEvents();
 
       assert.deepEqual(flashCalls, []);
@@ -3716,6 +3765,10 @@ await (async () => {
     assert.match(html, /id="paletteModal"[\s\S]*aria-label="Selector de paletas"/);
     assert.match(html, /class="palette-modal__body"/);
     assert.match(html, /id="paletteOptionGrid"/);
+    assert.match(html, /id="authGoogleButton"[\s\S]*id="authPasswordForm"/);
+    assert.match(html, /id="profileModalHint"/);
+    assert.match(html, /id="profileAvatarPickButton"/);
+    assert.match(html, /id="skipProfileButton"/);
     assert.doesNotMatch(html, /id="paletteModalTitle"/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/);
@@ -4118,7 +4171,7 @@ await (async () => {
     assert.match(topbarActionEvents, /handlers\.setAuthUiSync\?\.\(syncAuthUi\)/);
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(topbarActionEvents, /document\.documentElement\.dataset\.authState = isLoggedIn\(\) \? "logged-in" : "logged-out"/);
-    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\{ turnstileToken:/);
+    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\{ turnstileToken \}\)/);
     assert.match(topbarActionEvents, /await handlers\.logout\?\.\(\)/);
     assert.match(topbarActionEvents, /dom\.authTools\.hidden = !loggedIn/);
     assert.match(topbarActionEvents, /setLoggedIn/);
@@ -4126,7 +4179,8 @@ await (async () => {
     assert.match(topbarActionEvents, /dom\.authButton\.hidden = isMobile && loggedIn/);
     assert.match(topbarActionEvents, /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/);
     assert.match(topbarActionEvents, /target\.dataset\.mobileTopbarAction === "auth"/);
-    assert.match(topbarActionEvents, /void setLoggedIn\(false\)/);
+    assert.match(topbarActionEvents, /Toca de nuevo para cerrar sesion/);
+    assert.match(topbarActionEvents, /requestLogoutConfirmation\(\)/);
     assert.match(topbarActionEvents, /data-mobile-topbar-action/);
     assert.match(topbarActionEvents, /setMobileDrawerPanel/);
     assert.match(topbarActionEvents, /data-mobile-drawer-panel/);

@@ -1,7 +1,8 @@
 export function selectUsersViewModel(state) {
+  const hidePendingCurrentUser = Boolean(state.viewer?.profilePending);
   const items = state.users.allIds
     .map(id => state.users.byId[id])
-    .filter((user) => user.online)
+    .filter((user) => user.online && !(hidePendingCurrentUser && user.id === state.currentUserId))
     .sort((left, right) => {
       if (left.id === state.currentUserId) return -1;
       if (right.id === state.currentUserId) return 1;

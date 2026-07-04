@@ -21,6 +21,8 @@ export function bindTopbarActionEvents(dom, handlers) {
   let turnstileWidgetId = null;
   let authPasswordMode = "login";
   let turnstileRequired = false;
+  let pendingTurnstileToken = null;
+  let logoutConfirmUntil = 0;
   let activeMobileDrawerPanel = null;
   let lastMobilePanelTrigger = null;
   globalThis.__topyklyAuthControllerReady = true;
@@ -29,7 +31,11 @@ export function bindTopbarActionEvents(dom, handlers) {
   handlers.setAuthUiSync?.(syncAuthUi);
 
   function addListener(node, type, listener, options) {
-    node?.addEventListener?.(type, listener, options);
+    if (!node || typeof listener !== "function") {
+      return;
+    }
+
+    node.addEventListener?.(type, listener, options);
   }
 
   function scheduleOpen(task) {
@@ -491,6 +497,47 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   }
 
+  function getTurnstileToken() {
+    const storedToken = dom.authTurnstileToken?.value || "";
+    if (storedToken) {
+      return storedToken;
+    }
+
+    if (turnstileWidgetId !== null && typeof globalThis.turnstile?.getResponse === "function") {
+      return globalThis.turnstile.getResponse(turnstileWidgetId) || "";
+    }
+
+    return "";
+  }
+
+  function settlePendingTurnstile(error, token = "") {
+    if (!pendingTurnstileToken) {
+      return;
+    }
+
+    const pending = pendingTurnstileToken;
+    pendingTurnstileToken = null;
+    clearTimeout(pending.timer);
+
+    if (error) {
+      pending.reject(error);
+      return;
+    }
+
+    pending.resolve(token);
+  }
+
+  function storeTurnstileToken(token) {
+    const normalizedToken = token || "";
+    if (dom.authTurnstileToken) {
+      dom.authTurnstileToken.value = normalizedToken;
+    }
+
+    if (normalizedToken) {
+      settlePendingTurnstile(null, normalizedToken);
+    }
+  }
+
   async function syncTurnstile({ resetExisting = false } = {}) {
     const status = await loadAuthStatus();
     const siteKey = status?.turnstile?.siteKey || "";
@@ -501,40 +548,99 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     dom.authTurnstile.hidden = !turnstileRequired;
+    dom.authTurnstile.dataset.turnstileMode = turnstileRequired ? "silent" : "off";
     if (!turnstileRequired) {
       resetTurnstileToken();
       return;
     }
 
     if (!globalThis.turnstile?.render) {
-      handlers.flashTitle?.("Verificacion anti-bots cargando");
+      handlers.flashTitle?.("Preparando verificacion anti-bots");
       return;
     }
 
     if (turnstileWidgetId !== null) {
-      if (!resetExisting) {
-        return;
+      if (resetExisting) {
+        globalThis.turnstile.reset?.(turnstileWidgetId);
+        resetTurnstileToken();
       }
-
-      globalThis.turnstile.reset?.(turnstileWidgetId);
-      resetTurnstileToken();
       return;
     }
 
     turnstileWidgetId = globalThis.turnstile.render(dom.authTurnstile, {
       sitekey: siteKey,
+      appearance: "interaction-only",
+      execution: "execute",
       callback(token) {
-        if (dom.authTurnstileToken) {
-          dom.authTurnstileToken.value = token || "";
-        }
+        storeTurnstileToken(token);
       },
       "expired-callback"() {
         resetTurnstileToken();
+        settlePendingTurnstile(new Error("La verificacion expiro. Intentalo de nuevo."));
       },
       "error-callback"() {
         resetTurnstileToken();
+        settlePendingTurnstile(new Error("No pudimos verificarte. Intentalo de nuevo."));
       }
     });
+  }
+
+  async function requestTurnstileToken() {
+    await syncTurnstile();
+    if (!turnstileRequired) {
+      return "";
+    }
+
+    const existingToken = getTurnstileToken();
+    if (existingToken) {
+      return existingToken;
+    }
+
+    if (turnstileWidgetId === null || typeof globalThis.turnstile?.execute !== "function") {
+      throw new Error("La verificacion anti-bots todavia esta cargando.");
+    }
+
+    handlers.flashTitle?.("Verificando acceso...");
+    setAuthStatusMessage("Verificando acceso...");
+    return new Promise((resolve, reject) => {
+      pendingTurnstileToken = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          pendingTurnstileToken = null;
+          reject(new Error("La verificacion esta tardando. Intentalo de nuevo."));
+        }, 12000)
+      };
+      globalThis.turnstile.execute(turnstileWidgetId);
+    });
+  }
+
+  function setAuthButtonPending(button, pending, pendingText = "Verificando...") {
+    if (!button) {
+      return;
+    }
+
+    const label = button.querySelector?.("span:last-child") ?? button.querySelector?.("span") ?? button;
+    if (label && !button.dataset.defaultAuthLabel) {
+      button.dataset.defaultAuthLabel = label.textContent || "";
+    }
+
+    button.disabled = pending;
+    button.setAttribute("aria-busy", String(pending));
+    if (label) {
+      label.textContent = pending ? pendingText : button.dataset.defaultAuthLabel || label.textContent;
+    }
+  }
+
+  function setAuthStatusMessage(message = "", kind = "info") {
+    if (!dom.authStatus) {
+      return;
+    }
+
+    const normalized = String(message || "").trim();
+    dom.authStatus.textContent = normalized;
+    dom.authStatus.hidden = !normalized;
+    dom.authStatus.dataset.statusKind = normalized ? kind : "off";
   }
   function syncAuthPasswordMode() {
     const isRegister = authPasswordMode === "register";
@@ -567,6 +673,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   function setAuthPasswordMode(nextMode) {
     authPasswordMode = nextMode === "register" ? "register" : "login";
     resetTurnstileToken();
+    setAuthStatusMessage();
     syncAuthPasswordMode();
   }
   function setAuthModalOpen(isOpen) {
@@ -580,7 +687,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     if (isOpen) {
       syncAuthPasswordMode();
-      dom.authEmailInput?.focus?.();
+      dom.authGoogleButton?.focus?.();
       return;
     }
 
@@ -592,25 +699,27 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
+    setAuthStatusMessage();
     setAuthModalOpen(true);
-    if (dom.authGoogleButton) {
-      dom.authGoogleButton.disabled = true;
-      dom.authGoogleButton.setAttribute("aria-busy", "true");
-    }
-
-    try {
-      await syncTurnstile();
-    } finally {
-      if (dom.authGoogleButton) {
-        dom.authGoogleButton.disabled = false;
-        dom.authGoogleButton.setAttribute("aria-busy", "false");
-      }
-    }
+    await syncTurnstile();
   }
 
   function closeAuthModal() {
     resetTurnstileToken();
+    setAuthStatusMessage();
     setAuthModalOpen(false);
+  }
+
+  function requestLogoutConfirmation() {
+    const now = Date.now();
+    if (now <= logoutConfirmUntil) {
+      logoutConfirmUntil = 0;
+      void setLoggedIn(false);
+      return;
+    }
+
+    logoutConfirmUntil = now + 4500;
+    handlers.flashTitle?.("Toca de nuevo para cerrar sesion");
   }
   async function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
     const currentLoggedIn = isLoggedIn();
@@ -628,17 +737,10 @@ export function bindTopbarActionEvents(dom, handlers) {
     syncAuthUi();
 
     try {
-      if (nextLoggedIn) {
-        await syncTurnstile();
-      }
-
-      if (nextLoggedIn && turnstileRequired && !dom.authTurnstileToken?.value) {
-        handlers.flashTitle?.("Completa la verificacion anti-bots");
-        return;
-      }
+      const turnstileToken = nextLoggedIn ? await requestTurnstileToken() : "";
 
       const authResult = nextLoggedIn
-        ? await handlers.login?.({ turnstileToken: dom.authTurnstileToken?.value || "" })
+        ? await handlers.login?.({ turnstileToken })
         : await handlers.logout?.();
 
       if (authResult?.redirected) {
@@ -654,7 +756,9 @@ export function bindTopbarActionEvents(dom, handlers) {
     } catch (error) {
       console.error(error);
       if (announce) {
-        handlers.flashTitle(error?.message || (nextLoggedIn ? "No se pudo iniciar sesion" : "No se pudo cerrar sesion"));
+        const message = error?.message || (nextLoggedIn ? "No se pudo iniciar sesion" : "No se pudo cerrar sesion");
+        setAuthStatusMessage(message, "error");
+        handlers.flashTitle(message);
       }
     } finally {
       authPending = false;
@@ -747,7 +851,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (isLoggedIn()) {
-      void setLoggedIn(false);
+      requestLogoutConfirmation();
       return;
     }
 
@@ -761,8 +865,13 @@ export function bindTopbarActionEvents(dom, handlers) {
       handleAuthButtonClick(event);
     }
   });
-  addListener(dom.authGoogleButton, "click", () => {
-    void setLoggedIn(true);
+  addListener(dom.authGoogleButton, "click", async () => {
+    setAuthButtonPending(dom.authGoogleButton, true, "Verificando...");
+    try {
+      await setLoggedIn(true);
+    } finally {
+      setAuthButtonPending(dom.authGoogleButton, false);
+    }
   });
   addListener(dom.closeAuthModalButton, "click", closeAuthModal);
   addListener(dom.authModalBackdrop, "click", (event) => {
@@ -780,40 +889,34 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     authPending = true;
     syncAuthUi();
-    if (dom.authPasswordButton) {
-      dom.authPasswordButton.disabled = true;
-      dom.authPasswordButton.setAttribute("aria-busy", "true");
-    }
+    setAuthButtonPending(dom.authPasswordButton, true, "Verificando...");
 
     try {
-      await syncTurnstile();
-      if (turnstileRequired && !dom.authTurnstileToken?.value) {
-        handlers.flashTitle?.("Completa la verificacion anti-bots");
-        return;
-      }
+      setAuthStatusMessage("Verificando acceso...");
+      const turnstileToken = await requestTurnstileToken();
 
       const payload = {
         email: dom.authEmailInput?.value || "",
         password: dom.authPasswordInput?.value || "",
-        turnstileToken: dom.authTurnstileToken?.value || ""
+        turnstileToken
       };
       const authResult = authPasswordMode === "register"
         ? await handlers.registerWithPassword?.({ ...payload, nickname: dom.authNicknameInput?.value || "" })
         : await handlers.loginWithPassword?.(payload);
 
       if (authResult) {
+        setAuthStatusMessage();
         closeAuthModal();
         handlers.flashTitle(authPasswordMode === "register" ? "Cuenta creada" : "Sesion iniciada");
       }
     } catch (error) {
       console.error(error);
-      handlers.flashTitle(error?.message || "No se pudo completar el acceso");
+      const message = error?.message || "No se pudo completar el acceso";
+      setAuthStatusMessage(message, "error");
+      handlers.flashTitle(message);
     } finally {
       authPending = false;
-      if (dom.authPasswordButton) {
-        dom.authPasswordButton.disabled = false;
-        dom.authPasswordButton.setAttribute("aria-busy", "false");
-      }
+      setAuthButtonPending(dom.authPasswordButton, false);
       syncAuthUi();
     }
   });
@@ -885,7 +988,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     if (target.dataset.mobileTopbarAction === "auth") {
       setMobileDrawerPanel(null, { restoreFocus: false });
-      void setLoggedIn(false);
+      requestLogoutConfirmation();
       return;
     }
 
@@ -908,6 +1011,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.paletteButton, "click", handlers.openPaletteModal);
   addListener(dom.closePaletteModalButton, "click", dismissPaletteModal);
   addListener(dom.closeProfileModalButton, "click", handlers.closeProfileModal);
+  addListener(dom.skipProfileButton, "click", handlers.skipProfileSetup);
   addListener(dom.closeAdminModalButton, "click", handlers.closeAdminPanel);
   addListener(dom.profileModalBackdrop, "click", (event) => {
     if (event.target === dom.profileModalBackdrop) {
@@ -1000,6 +1104,9 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   addListener(dom.profileAvatarInput, "change", () => {
     void syncProfileAvatarPreview();
+  });
+  addListener(dom.profileAvatarPickButton, "click", () => {
+    dom.profileAvatarInput?.click?.();
   });
   addListener(dom.profileAvatarClearButton, "click", () => {
     const selectedAvatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || "";

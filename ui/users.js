@@ -3,8 +3,9 @@ import { renderIntoTargets } from "./render-utils.js";
 
 export function renderUsers(state, dom) {
   const isLoading = !state.viewer;
+  const hidePendingCurrentUser = Boolean(state.viewer?.profilePending);
   const ordered = [...state.users]
-    .filter((user) => user.online)
+    .filter((user) => user.online && !(hidePendingCurrentUser && user.id === state.currentUserId))
     .sort((a, b) => {
       if (a.id === state.currentUserId) return -1;
       if (b.id === state.currentUserId) return 1;
