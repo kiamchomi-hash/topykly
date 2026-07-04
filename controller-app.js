@@ -142,6 +142,8 @@ export function bootstrap() {
     setRankingScope: actions.setRankingScope,
     toggleRankingScope: actions.toggleRankingScope,
     refreshCurrentTopic: actions.refreshCurrentTopic,
+    toggleMessageLike: actions.toggleMessageLike,
+    toggleMessageDislike: actions.toggleMessageDislike,
     reportEntity: actions.reportEntity,
     createNewTopic: actions.createNewTopic,
     submitMessage: actions.submitMessage,

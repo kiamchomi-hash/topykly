@@ -4073,6 +4073,8 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
     assert.match(controllerApp, /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/);
     assert.match(controllerApp, /bindPageEvents\(dom, \{[\s\S]*state: actions\.state,[\s\S]*setAuthUiSync: actions\.setAuthUiSync,/);
+    assert.match(controllerApp, /toggleMessageLike:\s*actions\.toggleMessageLike/);
+    assert.match(controllerApp, /toggleMessageDislike:\s*actions\.toggleMessageDislike/);
     assert.match(controllerApp, /openAdminPanel: actions\.openAdminPanel,[\s\S]*closeAdminPanel: actions\.closeAdminPanel,[\s\S]*applyAdminAction: actions\.applyAdminAction,/);
     assert.match(controllerApp, /closePublicProfileModal: actions\.closePublicProfileModal/);
     assert.doesNotMatch(controllerApp, /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/);
@@ -4087,6 +4089,8 @@ await (async () => {
     assert.match(actions, /randomizeCustomPalette/);
     assert.match(actions, /activateConnectedUser/);
     assert.match(actions, /reportEntity/);
+    assert.match(actions, /toggleMessageLike:\s*chatActions\.toggleMessageLike/);
+    assert.match(actions, /toggleMessageDislike:\s*chatActions\.toggleMessageDislike/);
     assert.match(rankingActions, /from "\.\/ranking-state\.js"/);
     assert.match(rankingState, /export function getActiveRankingStep/);
     assert.match(rankingState, /export function setStoredRankingIndex/);
