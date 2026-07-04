@@ -1031,6 +1031,28 @@ function readSessionRow(db, sessionId) {
   return db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId);
 }
 
+function createRotatedSessionId(previousSessionId = "") {
+  let nextSessionId;
+  do {
+    nextSessionId = `session-${crypto.randomUUID()}`;
+  } while (nextSessionId === previousSessionId);
+
+  return nextSessionId;
+}
+
+function invalidateSession(db, sessionId) {
+  const normalizedSessionId = String(sessionId || "").trim();
+  if (normalizedSessionId) {
+    db.prepare("DELETE FROM sessions WHERE id = ?").run(normalizedSessionId);
+  }
+}
+
+function invalidatePreviousSession(db, previousSessionId, nextSessionId) {
+  if (previousSessionId && previousSessionId !== nextSessionId) {
+    invalidateSession(db, previousSessionId);
+  }
+}
+
 function createGuestSession(db, sessionId, ipAddress, nowIso, existingSessionRow = null) {
   const resolvedIpAddress = normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "");
   const guestRow = getOrCreateGuestUser(db);
@@ -1067,7 +1089,7 @@ function createRegisteredSession(db, sessionId, ipAddress, nowIso, existingSessi
   const registeredViewerRow = getRegisteredViewerRow(db, userId);
   const resolvedIpAddress = normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "");
 
-  if (existingSessionRow) {
+  if (existingSessionRow?.id === sessionId) {
     db.prepare(`
       UPDATE sessions
       SET user_id = ?, auth_mode = 'registered', guest_label = NULL, last_ip = ?, last_topic_at = ?, last_message_at = ?, updated_at = ?
@@ -2101,7 +2123,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
     resetDailyMessageReactions({ now = new Date() } = {}) {
       return withTransaction(db, () => resetDailyMessageReactionsIfNeeded(db, now));
     },
-    registerWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, nickname } = {}) {
+    registerWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, nickname, rotateSession = false } = {}) {
       return withTransaction(db, () => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
@@ -2112,11 +2134,13 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
         const viewerRow = createPasswordUser(db, { email, password, nickname, nowIso });
-        const context = createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
+        const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    loginWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password } = {}) {
+    loginWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, rotateSession = false } = {}) {
       return withTransaction(db, () => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
@@ -2127,10 +2151,12 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
         const viewerRow = getAuthenticatedPasswordUser(db, { email, password });
-        const context = createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
+        const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
-    },    login({ sessionId, selectedTopicId = null, ipAddress = "", userId = REGISTERED_USER_ID } = {}) {
+    },    login({ sessionId, selectedTopicId = null, ipAddress = "", userId = REGISTERED_USER_ID, rotateSession = false } = {}) {
       return withTransaction(db, () => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
@@ -2140,7 +2166,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           sessionRow: existingSessionRow,
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
-        const context = createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow, userId);
+        const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
+        const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, userId);
+        invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
@@ -2176,6 +2204,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         });
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
         const context = createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        invalidatePreviousSession(db, normalizedSourceSessionId, normalizedSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },

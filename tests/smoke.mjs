@@ -230,6 +230,7 @@ try {
   await test("opens a topic and posts a comment through the HTTP route", async () => {
     const sessionId = "session-smoke-comment";
     const initial = await request("/api/bootstrap", { sessionId });
+    const guestCookie = cookieJars.get(sessionId);
     await request("/api/auth/password/register", {
       method: "POST",
       sessionId,
@@ -240,6 +241,12 @@ try {
         nickname: `smoke_c_${Date.now() % 100000}`
       }
     });
+    const registeredCookie = cookieJars.get(sessionId);
+
+    assert.ok(guestCookie);
+    assert.ok(registeredCookie);
+    assert.notEqual(registeredCookie, guestCookie);
+
     const topic = initial.topics.find((entry) => entry.visible);
     const messageText = `Smoke comment ${Date.now()}`;
 
@@ -303,6 +310,7 @@ try {
         nickname: `smoke_c_${Date.now() % 100000}`
       }
     });
+
     const topic = initial.topics.find((entry) => entry.visible);
 
     const reported = await request("/api/reports", {

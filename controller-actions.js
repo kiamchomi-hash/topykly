@@ -450,6 +450,8 @@ export function createActionHandlers({
     },
     getAuthStatus,
     login,
+    loginWithPassword,
+    registerWithPassword,
     logout,
     flashTitle,
     showFeedback,

@@ -23,6 +23,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   let turnstileRequired = false;
   let activeMobileDrawerPanel = null;
   let lastMobilePanelTrigger = null;
+  globalThis.__topyklyAuthControllerReady = true;
   syncAuthUi();
   setPickerOpenState(false);
   handlers.setAuthUiSync?.(syncAuthUi);
@@ -493,7 +494,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   async function syncTurnstile({ resetExisting = false } = {}) {
     const status = await loadAuthStatus();
     const siteKey = status?.turnstile?.siteKey || "";
-    turnstileRequired = Boolean(!status?.configured && status?.turnstile?.configured && siteKey);
+    turnstileRequired = Boolean(status?.turnstile?.configured && siteKey);
 
     if (!dom.authTurnstile) {
       return;

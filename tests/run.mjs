@@ -643,14 +643,17 @@ await (async () => {
         sessionId: "session-password-register",
         email: "Clave@Example.com",
         password: "password-segura",
-        nickname: "clave_user"
+        nickname: "clave_user",
+        rotateSession: true
       });
 
+      assert.notEqual(registered.sessionId, "session-password-register");
       assert.equal(registered.viewer.type, "registered");
       assert.equal(registered.viewer.email, "clave@example.com");
       assert.equal(registered.viewer.nickname, "clave_user");
       assert.equal(registered.viewer.displayName, "clave_user");
       assert.equal(registered.viewer.profilePending, false);
+      assert.equal(store.refresh({ sessionId: "session-password-register" }).viewer.type, "guest");
       assert.throws(() => store.registerWithPassword({
         sessionId: "session-password-register-duplicate-email",
         email: "clave@example.com",
@@ -672,13 +675,16 @@ await (async () => {
       const loggedIn = store.loginWithPassword({
         sessionId: "session-password-login",
         email: "clave@example.com",
-        password: "password-segura"
+        password: "password-segura",
+        rotateSession: true
       });
+      assert.notEqual(loggedIn.sessionId, "session-password-login");
       assert.equal(loggedIn.viewer.id, registered.viewer.id);
       assert.equal(loggedIn.viewer.nickname, "clave_user");
+      assert.equal(store.refresh({ sessionId: "session-password-login" }).viewer.type, "guest");
     }, { seedDemoData: false });
   });
-  await test("backend login and logout persist the viewer mode for the same session", async () => {
+  await test("backend login rotates the session and logout clears the rotated session", async () => {
     await withTempStore((store) => {
       const initialPayload = store.bootstrap({
         sessionId: "session-auth-flow"
@@ -689,31 +695,37 @@ await (async () => {
 
       const loggedIn = store.login({
         sessionId: "session-auth-flow",
-        selectedTopicId
+        selectedTopicId,
+        rotateSession: true
       });
 
+      assert.notEqual(loggedIn.sessionId, "session-auth-flow");
       assert.equal(loggedIn.viewer.type, "registered");
       assert.equal(loggedIn.viewer.id, "u1");
       assert.equal(loggedIn.selectedTopicId, selectedTopicId);
 
-      const refreshedRegistered = store.refresh({
+      const oldSessionRefresh = store.refresh({
         sessionId: "session-auth-flow"
+      });
+      assert.equal(oldSessionRefresh.viewer.type, "guest");
+
+      const refreshedRegistered = store.refresh({
+        sessionId: loggedIn.sessionId
       });
 
       assert.equal(refreshedRegistered.viewer.type, "registered");
       assert.equal(refreshedRegistered.viewer.id, "u1");
 
       const loggedOut = store.logout({
-        sessionId: "session-auth-flow",
+        sessionId: loggedIn.sessionId,
         selectedTopicId
       });
-
       assert.equal(loggedOut.viewer.type, "guest");
       assert.notEqual(loggedOut.viewer.id, "u1");
       assert.equal(loggedOut.selectedTopicId, selectedTopicId);
 
       const refreshedGuest = store.refresh({
-        sessionId: "session-auth-flow"
+        sessionId: loggedIn.sessionId
       });
 
       assert.equal(refreshedGuest.viewer.type, "guest");
@@ -2861,7 +2873,7 @@ await (async () => {
     }
   });
 
-  await test("auth modal skips Turnstile when external Google auth is configured", async () => {
+  await test("auth modal requires Turnstile when backend advertises it", async () => {
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
     const previousHTMLElement = globalThis.HTMLElement;
@@ -2916,6 +2928,7 @@ await (async () => {
     let renderCalls = 0;
     let resetCalls = 0;
     let loginCalls = 0;
+    let receivedTurnstileToken = "";
 
     try {
       globalThis.Element = FakeElement;
@@ -2986,8 +2999,9 @@ await (async () => {
         async getAuthStatus() {
           return { configured: true, turnstile: { configured: true, siteKey: "site-key" } };
         },
-        async login() {
+        async login({ turnstileToken = "" } = {}) {
           loginCalls += 1;
+          receivedTurnstileToken = turnstileToken;
           state.viewer = { id: "u1", type: "registered" };
           return { viewer: state.viewer };
         },
@@ -3010,10 +3024,11 @@ await (async () => {
       authGoogleButton.dispatch("click");
       await flushAsyncEvents();
 
-      assert.equal(renderCalls, 0);
+      assert.equal(renderCalls, 1);
       assert.equal(resetCalls, 0);
       assert.equal(loginCalls, 1);
-      assert.equal(authTurnstile.hidden, true);
+      assert.equal(receivedTurnstileToken, "turnstile-token");
+      assert.equal(authTurnstile.hidden, false);
       assert.equal(authTurnstileToken.value, "");
     } finally {
       globalThis.document = previousDocument;

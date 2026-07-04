@@ -152,11 +152,17 @@ async function continueWithGoogle(event) {
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest("#authButton")) {
+    if (globalThis.__topyklyAuthControllerReady) {
+      return;
+    }
     void openAuthModal(event);
     return;
   }
 
   if (target?.closest("#authGoogleButton")) {
+    if (globalThis.__topyklyAuthControllerReady) {
+      return;
+    }
     void continueWithGoogle(event);
   }
 }, true);
