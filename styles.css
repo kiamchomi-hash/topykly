@@ -2251,6 +2251,7 @@ html[data-theme="dark"] .ranking-item--skeleton .ranking-item__skeleton-line::af
 
 input,
 textarea {
+  box-sizing: border-box;
   width: 100%;
   color: var(--text);
   background: var(--surface-strong);
@@ -2259,6 +2260,18 @@ textarea {
   padding: 0.92rem 1rem;
   outline: none;
   resize: none;
+}
+
+textarea {
+  padding-right: 1.36rem;
+  line-height: 1.38;
+  max-height: 10rem;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 input::placeholder,
@@ -2277,6 +2290,49 @@ input:disabled,
 textarea:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+textarea.is-scrollable {
+  overflow-y: auto;
+}
+
+#messageInput:not(.is-scrollable) {
+  scrollbar-width: none;
+}
+
+#messageInput:not(.is-scrollable)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+textarea::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+html.is-desktop-viewport textarea::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html.is-desktop-viewport textarea::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 html[data-theme="light"] .composer input,

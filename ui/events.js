@@ -1,4 +1,5 @@
 import { bindTopbarEvents } from "./topbar.js?v=20260702-sessioncookie";
+import { syncComposerTextareaHeight } from "./chat.js";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled]):not([tabindex='-1'])",
@@ -159,6 +160,11 @@ export function bindPageEvents(dom, handlers) {
     dom.messageForm.addEventListener("submit", handlers.submitMessage);
   }
 
+  if (typeof HTMLTextAreaElement !== "undefined" && dom.messageInput instanceof HTMLTextAreaElement) {
+    dom.messageInput.addEventListener("input", () => {
+      syncComposerTextareaHeight(dom.messageInput);
+    });
+  }
   if (typeof HTMLElement !== "undefined" && dom.reportTopicButton instanceof HTMLElement) {
     dom.reportTopicButton.addEventListener("click", (event) => {
       const target = event.currentTarget;

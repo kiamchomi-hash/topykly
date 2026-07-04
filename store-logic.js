@@ -5,6 +5,22 @@ import { insertTopicAtTop, prepareTopicFeed, reviveTopicWithMessage } from "./mo
  * These functions follow the pattern: (state, payload) => nextState
  */
 
+function updateMessageReaction(topics, messageId, updater) {
+  return topics.map((topic) => {
+    let changed = false;
+    const messages = topic.messages.map((message) => {
+      if (message.id !== messageId) {
+        return message;
+      }
+
+      changed = true;
+      return updater(message);
+    });
+
+    return changed ? { ...topic, messages } : topic;
+  });
+}
+
 export const reducers = {
   hydrateFromBackend: (state, payload) => {
     const nextSelectedTopicId = payload.selectedTopicId && payload.topics.some((topic) => topic.id === payload.selectedTopicId)
@@ -73,6 +89,34 @@ export const reducers = {
   addMessageToTopic: (state, { topicId, message }) => ({
     ...state,
     topics: reviveTopicWithMessage(state.topics, topicId, message)
+  }),
+
+  applyMessageReaction: (state, { messageId, reactionType }) => ({
+    ...state,
+    topics: updateMessageReaction(state.topics, messageId, (message) => {
+      if (message.likedByViewer || message.dislikedByViewer) {
+        return message;
+      }
+
+      if (reactionType === "dislike") {
+        return {
+          ...message,
+          dislikes: (message.dislikes ?? 0) + 1,
+          dislikedByViewer: true
+        };
+      }
+
+      return {
+        ...message,
+        likes: (message.likes ?? 0) + 1,
+        likedByViewer: true
+      };
+    })
+  }),
+
+  restoreTopics: (state, topics) => ({
+    ...state,
+    topics
   }),
 
   setLoadingData: (state, { users, topics }) => ({

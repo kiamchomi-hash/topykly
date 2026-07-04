@@ -381,6 +381,29 @@ await (async () => {
     assert.equal(getVisibleTopics(nextState.topics).length, TOPIC_VISIBLE_LIMIT);
   });
 
+  await test("applyMessageReaction increments the visible message like optimistically", () => {
+    const message = createMessage("u1", "Mensaje votable", 0);
+    const state = {
+      topics: [{
+        id: "topic-like",
+        title: "Tema con like",
+        subtitle: "Mensaje votable",
+        authorId: "u1",
+        status: "active",
+        visible: true,
+        messages: [message]
+      }]
+    };
+
+    const nextState = reducers.applyMessageReaction(state, { messageId: message.id, reactionType: "like" });
+    const nextMessage = nextState.topics[0].messages[0];
+
+    assert.equal(nextMessage.likes, 1);
+    assert.equal(nextMessage.likedByViewer, true);
+    assert.equal(message.likes, 0);
+    assert.equal(message.likedByViewer, undefined);
+  });
+
   await test("createTopic builds a new topic from title and first message", () => {
     const topic = createTopic("u1", "  Nuevo tema  ", "  Primer mensaje para abrir el hilo.  ", 1_700_000_000_000);
 
@@ -4004,6 +4027,11 @@ await (async () => {
     assert.match(styles, /html\[data-theme="light"\] \.topic-item,\s*html\[data-theme="light"\] \.user-item,\s*html\[data-theme="light"\] \.ranking-item\s*\{[\s\S]*border-color:\s*color-mix/);
     assert.match(styles, /html\[data-theme="light"\] \.ranking-carousel,\s*html\[data-theme="light"\] \.drawer-ranking__switch\s*\{[\s\S]*border-color:\s*color-mix/);
     assert.match(styles, /html\[data-theme="light"\] \.composer\s*\{[\s\S]*border-top:\s*1px solid/);
+    assert.match(styles, /input,\s*textarea\s*\{[\s\S]*box-sizing:\s*border-box;[\s\S]*padding:\s*0\.92rem 1rem;/);
+    assert.match(styles, /textarea\s*\{[\s\S]*max-height:\s*10rem;[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*hidden;[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb\) transparent;/);
+    assert.match(styles, /textarea::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--scrollbar-thumb\);[\s\S]*border-radius:\s*999px;[\s\S]*background-clip:\s*content-box;/);
+    assert.match(styles, /textarea\.is-scrollable\s*\{[\s\S]*overflow-y:\s*auto;/);
+    assert.match(styles, /#messageInput:not\(\.is-scrollable\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*0;[\s\S]*height:\s*0;/);
     assert.match(styles, /input::placeholder,\s*textarea::placeholder\s*\{[\s\S]*color:\s*color-mix\(in srgb,\s*var\(--accent\) 28%,\s*var\(--text-soft\)\);[\s\S]*opacity:\s*1;/);
     assert.match(styles, /html\[data-theme="light"\] \.composer input,\s*html\[data-theme="light"\] \.composer textarea\s*\{[\s\S]*border:\s*1px solid color-mix/);
     assert.match(styles, /html\[data-theme="light"\] \.composer--topic-create input,\s*html\[data-theme="light"\] \.composer--topic-create textarea\s*\{[\s\S]*border-radius:\s*0;/);
@@ -4134,9 +4162,13 @@ await (async () => {
     assert.match(domModule, /assertRequiredDom/);
     assert.match(domModule, /Missing required DOM nodes/);
     assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260702-sessioncookie"/);
+    assert.match(eventsModule, /syncComposerTextareaHeight/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
     assert.match(eventsModule, /messageForm\.addEventListener\("submit", handlers\.submitMessage\)/);
+    assert.match(eventsModule, /messageInput\.addEventListener\("input", \(\) => \{[\s\S]*syncComposerTextareaHeight\(dom\.messageInput\);/);
+    assert.match(chat, /export function syncComposerTextareaHeight/);
+    assert.match(chat, /classList\.toggle\(\s*"is-scrollable"/);
     assert.match(previewServer, /const topicId = segments\[2\] \|\| "";/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
     assert.match(chat, /syncTopicReportButton/);

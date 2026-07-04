@@ -297,6 +297,45 @@ try {
     assert.equal(created.selectedTopicId, topic.id);
   });
 
+  await test("likes a message and returns the updated visible counter", async () => {
+    const sessionId = "session-smoke-like";
+    const title = `Smoke like topic ${Date.now()}`;
+    const text = "Smoke like root message";
+
+    await request("/api/auth/password/register", {
+      method: "POST",
+      sessionId,
+      expectedStatus: 201,
+      body: {
+        email: `smoke-like-${Date.now()}@example.com`,
+        password: "password-segura",
+        nickname: `smoke_l_${Date.now() % 100000}`
+      }
+    });
+    const created = await request("/api/topics", {
+      method: "POST",
+      sessionId,
+      expectedStatus: 201,
+      body: { title, text }
+    });
+    const topic = created.topics[0];
+    const message = topic.messages[0];
+
+    assert.equal(message.likes, 0);
+
+    const liked = await request(`/api/messages/${encodeURIComponent(message.id)}/like`, {
+      method: "POST",
+      sessionId,
+      body: { selectedTopicId: topic.id }
+    });
+    const likedMessage = liked.topics
+      .find((entry) => entry.id === topic.id)
+      .messages.find((entry) => entry.id === message.id);
+
+    assert.equal(likedMessage.likes, 1);
+    assert.equal(likedMessage.likedByViewer, true);
+  });
+
   await test("reports a topic and hydrates reported ids", async () => {
     const sessionId = "session-smoke-report";
     const initial = await request("/api/bootstrap", { sessionId });

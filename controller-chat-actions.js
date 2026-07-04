@@ -205,11 +205,16 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       return;
     }
 
+    const previousTopics = state.topics;
     setReportTriggerState(trigger, true);
+    dispatch(state, reducers.applyMessageReaction, { messageId, reactionType: "like" });
+    render();
+
     try {
       await syncBackendPayload(() => apiClient.toggleMessageLike(messageId, state.selectedTopicId));
       render();
     } catch (error) {
+      dispatch(state, reducers.restoreTopics, previousTopics);
       console.error(error);
       showFeedback?.(getActionErrorMessage(error, "No se pudo actualizar el like."), { kind: "error" });
     } finally {
@@ -223,11 +228,16 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       return;
     }
 
+    const previousTopics = state.topics;
     setReportTriggerState(trigger, true);
+    dispatch(state, reducers.applyMessageReaction, { messageId, reactionType: "dislike" });
+    render();
+
     try {
       await syncBackendPayload(() => apiClient.toggleMessageDislike(messageId, state.selectedTopicId));
       render();
     } catch (error) {
+      dispatch(state, reducers.restoreTopics, previousTopics);
       console.error(error);
       showFeedback?.(getActionErrorMessage(error, "No se pudo actualizar el dislike."), { kind: "error" });
     } finally {

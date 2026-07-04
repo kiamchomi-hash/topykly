@@ -3,6 +3,27 @@ import { getSelectedTopic } from "../model.js";
 import { renderIntoTargets } from "./render-utils.js";
 
 const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 24;
+const COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX = 1;
+
+export function syncComposerTextareaHeight(textarea) {
+  if (typeof HTMLTextAreaElement === "undefined" || !(textarea instanceof HTMLTextAreaElement)) {
+    return;
+  }
+
+  textarea.style.height = "auto";
+
+  const styles = getComputedStyle(textarea);
+  const maxHeight = Number.parseFloat(styles.maxHeight);
+  const nextHeight = Number.isFinite(maxHeight)
+    ? Math.min(textarea.scrollHeight, maxHeight)
+    : textarea.scrollHeight;
+
+  textarea.style.height = `${nextHeight}px`;
+  textarea.classList.toggle(
+    "is-scrollable",
+    Number.isFinite(maxHeight) && textarea.scrollHeight > maxHeight + COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX
+  );
+}
 
 function parseRenderedNumber(value) {
   const parsed = Number(value);
@@ -173,6 +194,7 @@ function syncChatComposer(topic, dom, isLoading) {
         ? "Escribe un comentario..."
         : "Tema cerrado para comentarios";
     dom.messageInput.rows = isCreatingTopic ? 4 : 2;
+    syncComposerTextareaHeight(dom.messageInput);
   }
   if (submitButton) {
     submitButton.disabled = isLoading || (!isCreatingTopic && !isCommentableTopic);
