@@ -69,6 +69,15 @@ function getActiveFocusTrapContainer(dom) {
   }
 
   if (
+    dom.profileAvatarCropModal instanceof HTMLElement &&
+    dom.profileAvatarCropBackdrop &&
+    !dom.profileAvatarCropBackdrop.hidden &&
+    dom.profileAvatarCropModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.profileAvatarCropModal;
+  }
+
+  if (
     dom.publicProfileModal instanceof HTMLElement &&
     dom.publicProfileModalBackdrop &&
     !dom.publicProfileModalBackdrop.hidden &&

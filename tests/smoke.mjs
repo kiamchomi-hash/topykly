@@ -143,7 +143,7 @@ try {
   });
 
   await test("rejects oversized JSON request bodies", async () => {
-    const body = JSON.stringify({ text: "x".repeat(1024 * 1024) });
+    const body = JSON.stringify({ text: "x".repeat(4 * 1024 * 1024) });
     const response = await fetch(`${origin}/api/topics`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

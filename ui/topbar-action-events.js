@@ -1,6 +1,9 @@
 import { CUSTOM_PALETTE_ID } from "../palettes.js";
+import { setProfileSectionEditing } from "./profile-modal.js";
 import { dispatch, reducers } from "../store-logic.js";
-const PROFILE_AVATAR_MAX_BYTES = 256 * 1024;
+const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const PROFILE_AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
+const PROFILE_AVATAR_CROP_SIZE = 1024;
 const PROFILE_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 const FOCUSABLE_SELECTOR = [
@@ -25,6 +28,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   let logoutConfirmUntil = 0;
   let activeMobileDrawerPanel = null;
   let lastMobilePanelTrigger = null;
+  let profileAvatarCropState = null;
   globalThis.__topyklyAuthControllerReady = true;
   syncAuthUi();
   setPickerOpenState(false);
@@ -921,6 +925,12 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   });
   addListener(typeof window !== "undefined" ? window : null, "keydown", (event) => {
+    if (event.key === "Escape" && dom.profileAvatarCropBackdrop && !dom.profileAvatarCropBackdrop.hidden) {
+      closeProfileAvatarCrop();
+      renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
+      return;
+    }
+
     if (event.key === "Escape" && dom.authModalBackdrop && !dom.authModalBackdrop.hidden) {
       closeAuthModal();
     }
@@ -1030,6 +1040,124 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
     void handlers.applyAdminAction?.(target.dataset.adminAction, target.dataset.targetType, target.dataset.targetId);
   });
+  function setProfileAvatarSelection(dataUrl) {
+    if (dom.profileAvatarInput) {
+      dom.profileAvatarInput.dataset.selectedAvatarDataUrl = dataUrl;
+      dom.profileAvatarInput.dataset.removeAvatar = "false";
+    }
+    renderProfileAvatarPreview(dataUrl);
+  }
+
+  function setProfileAvatarCropOpen(isOpen) {
+    if (dom.profileAvatarCropBackdrop) {
+      dom.profileAvatarCropBackdrop.hidden = !isOpen;
+    }
+    if (dom.profileAvatarCropModal) {
+      dom.profileAvatarCropModal.setAttribute("aria-hidden", String(!isOpen));
+    }
+    if (isOpen) {
+      scheduleOpen(() => dom.profileAvatarCropModal?.focus?.());
+    }
+  }
+
+  function closeProfileAvatarCrop({ clearInput = true } = {}) {
+    profileAvatarCropState = null;
+    setProfileAvatarCropOpen(false);
+    if (clearInput && dom.profileAvatarInput) {
+      dom.profileAvatarInput.value = "";
+    }
+    if (dom.profileAvatarCropImage) {
+      dom.profileAvatarCropImage.removeAttribute("src");
+      dom.profileAvatarCropImage.style.width = "";
+      dom.profileAvatarCropImage.style.height = "";
+      dom.profileAvatarCropImage.style.transform = "";
+    }
+  }
+
+  function clampProfileAvatarCropOffset() {
+    if (!profileAvatarCropState) {
+      return;
+    }
+
+    const state = profileAvatarCropState;
+    const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
+    const scaledWidth = state.width * scale;
+    const scaledHeight = state.height * scale;
+    const maxX = Math.max(0, (scaledWidth - PROFILE_AVATAR_CROP_SIZE) / 2);
+    const maxY = Math.max(0, (scaledHeight - PROFILE_AVATAR_CROP_SIZE) / 2);
+    state.offsetX = Math.max(-maxX, Math.min(maxX, state.offsetX));
+    state.offsetY = Math.max(-maxY, Math.min(maxY, state.offsetY));
+  }
+
+  function syncProfileAvatarCropImage() {
+    if (!profileAvatarCropState || !dom.profileAvatarCropImage) {
+      return;
+    }
+
+    clampProfileAvatarCropOffset();
+    const state = profileAvatarCropState;
+    const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
+    dom.profileAvatarCropImage.style.width = `${state.width * scale}px`;
+    dom.profileAvatarCropImage.style.height = `${state.height * scale}px`;
+    dom.profileAvatarCropImage.style.transform = `translate(-50%, -50%) translate(${state.offsetX}px, ${state.offsetY}px)`;
+  }
+
+  function loadProfileAvatarImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.addEventListener("load", () => resolve(image));
+      image.addEventListener("error", () => reject(new Error("No se pudo preparar la foto.")));
+      image.src = dataUrl;
+    });
+  }
+
+  function openProfileAvatarCrop(dataUrl, fileType, image) {
+    profileAvatarCropState = {
+      dataUrl,
+      fileType,
+      image,
+      width: image.naturalWidth || image.width,
+      height: image.naturalHeight || image.height,
+      zoom: 1,
+      offsetX: 0,
+      offsetY: 0,
+      drag: null
+    };
+
+    if (dom.profileAvatarCropImage) {
+      dom.profileAvatarCropImage.src = dataUrl;
+    }
+    if (dom.profileAvatarCropZoom) {
+      dom.profileAvatarCropZoom.value = "1";
+    }
+    syncProfileAvatarCropImage();
+    setProfileAvatarCropOpen(true);
+  }
+
+  function renderCroppedProfileAvatar() {
+    if (!profileAvatarCropState) {
+      return "";
+    }
+
+    const state = profileAvatarCropState;
+    const canvas = document.createElement("canvas");
+    canvas.width = PROFILE_AVATAR_CROP_SIZE;
+    canvas.height = PROFILE_AVATAR_CROP_SIZE;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return "";
+    }
+
+    const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
+    const scaledWidth = state.width * scale;
+    const scaledHeight = state.height * scale;
+    const dx = (PROFILE_AVATAR_CROP_SIZE - scaledWidth) / 2 + state.offsetX;
+    const dy = (PROFILE_AVATAR_CROP_SIZE - scaledHeight) / 2 + state.offsetY;
+    context.drawImage(state.image, dx, dy, scaledWidth, scaledHeight);
+
+    return canvas.toDataURL("image/jpeg", 0.88);
+  }
+
   function renderProfileAvatarPreview(avatarUrl = "") {
     if (!dom.profileAvatarPreview) {
       return;
@@ -1061,8 +1189,8 @@ export function bindTopbarActionEvents(dom, handlers) {
         return;
       }
 
-      if (file.size > PROFILE_AVATAR_MAX_BYTES) {
-        reject(new Error("La foto no puede superar 256 KB."));
+      if (file.size > PROFILE_AVATAR_SOURCE_MAX_BYTES) {
+        reject(new Error("La foto no puede superar 8 MB."));
         return;
       }
 
@@ -1086,32 +1214,88 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     try {
       const dataUrl = await readProfileAvatarFile(file);
-      if (dom.profileAvatarInput) {
-        dom.profileAvatarInput.dataset.selectedAvatarDataUrl = dataUrl;
-        dom.profileAvatarInput.dataset.removeAvatar = "false";
+      const image = await loadProfileAvatarImage(dataUrl);
+      const width = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      if (width && height && width !== height) {
+        openProfileAvatarCrop(dataUrl, file.type, image);
+        return;
       }
-      renderProfileAvatarPreview(dataUrl);
+
+      setProfileAvatarSelection(dataUrl);
     } catch (error) {
       if (dom.profileAvatarInput) {
         dom.profileAvatarInput.value = "";
         dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
         dom.profileAvatarInput.dataset.removeAvatar = "false";
       }
+      closeProfileAvatarCrop({ clearInput: false });
       renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
       handlers.flashTitle(error?.message || "No se pudo cargar la foto");
     }
   }
 
+  function toggleProfileSection(section) {
+    const sectionNode = section === "name" ? dom.profileNameSection : dom.profileDescriptionSection;
+    const isEditing = sectionNode?.dataset?.editing === "true";
+    setProfileSectionEditing(dom, section, !isEditing);
+    if (isEditing) {
+      if (section === "name") {
+        dom.profileNameEditButton?.focus?.();
+      } else if (section === "description") {
+        dom.profileDescriptionEditButton?.focus?.();
+      }
+      return;
+    }
+
+    if (section === "name") {
+      dom.profileNameInput?.focus?.();
+      dom.profileNameInput?.select?.();
+      return;
+    }
+    if (section === "description") {
+      dom.profileDescriptionInput?.focus?.();
+    }
+  }
+
+  function toggleProfileVisibility(button) {
+    if (!button) {
+      return;
+    }
+    const nextVisible = button.dataset.visible !== "false" ? false : true;
+    button.dataset.visible = String(nextVisible);
+    button.setAttribute("aria-pressed", String(!nextVisible));
+    const label = button.dataset.profileVisibility === "joinedAt" ? "fecha de registro" : "descripción";
+    button.setAttribute("aria-label", nextVisible ? `Ocultar ${label}` : `Mostrar ${label}`);
+    button.innerHTML = nextVisible
+      ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg>`
+      : `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3l18 18"/><path d="M10.6 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-1.2"/><path d="M9.9 5.3A10.8 10.8 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-2.3 3.2"/><path d="M6.2 6.8A16.6 16.6 0 0 0 2.5 12s3.5 7 9.5 7a10 10 0 0 0 4.1-.9"/></svg>`;
+  }
+  addListener(dom.profileNameEditButton, "click", () => toggleProfileSection("name"));
+  addListener(dom.profileDescriptionEditButton, "click", () => toggleProfileSection("description"));
+  addListener(dom.profileDescriptionVisibilityButton, "click", () => toggleProfileVisibility(dom.profileDescriptionVisibilityButton));
+  addListener(dom.profileJoinedAtVisibilityButton, "click", () => toggleProfileVisibility(dom.profileJoinedAtVisibilityButton));
+  addListener(dom.profileNameInput, "input", () => {
+    dom.profileNameInput?.removeAttribute?.("aria-invalid");
+    if (dom.profileNameFeedback) {
+      dom.profileNameFeedback.textContent = "";
+      dom.profileNameFeedback.hidden = true;
+    }
+  });
   addListener(dom.profileAvatarInput, "change", () => {
     void syncProfileAvatarPreview();
   });
-  addListener(dom.profileAvatarPickButton, "click", () => {
+  const openProfileAvatarPicker = () => {
     dom.profileAvatarInput?.click?.();
-  });
+  };
+
+  addListener(dom.profileAvatarPickButton, "click", openProfileAvatarPicker);
+  addListener(dom.profileAvatarPreview, "click", openProfileAvatarPicker);
   addListener(dom.profileAvatarClearButton, "click", () => {
     const selectedAvatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || "";
     const renderedAvatarUrl = dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "";
 
+    closeProfileAvatarCrop();
     if (dom.profileAvatarInput) {
       dom.profileAvatarInput.value = "";
       dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
@@ -1119,6 +1303,65 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     renderProfileAvatarPreview(selectedAvatarDataUrl ? renderedAvatarUrl : "");
+  });
+  addListener(dom.profileAvatarCropCancelButton, "click", () => {
+    closeProfileAvatarCrop();
+    renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
+  });
+  addListener(dom.profileAvatarCropApplyButton, "click", () => {
+    const dataUrl = renderCroppedProfileAvatar();
+    if (!dataUrl) {
+      handlers.flashTitle("No se pudo ajustar la foto");
+      return;
+    }
+
+    setProfileAvatarSelection(dataUrl);
+    closeProfileAvatarCrop({ clearInput: false });
+  });
+  addListener(dom.profileAvatarCropBackdrop, "click", (event) => {
+    if (event.target === dom.profileAvatarCropBackdrop) {
+      closeProfileAvatarCrop();
+      renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
+    }
+  });
+  addListener(dom.profileAvatarCropZoom, "input", () => {
+    if (!profileAvatarCropState) {
+      return;
+    }
+    profileAvatarCropState.zoom = Number.parseFloat(dom.profileAvatarCropZoom?.value || "1") || 1;
+    syncProfileAvatarCropImage();
+  });
+  addListener(dom.profileAvatarCropFrame, "pointerdown", (event) => {
+    if (!profileAvatarCropState) {
+      return;
+    }
+    profileAvatarCropState.drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: profileAvatarCropState.offsetX,
+      offsetY: profileAvatarCropState.offsetY
+    };
+    dom.profileAvatarCropFrame?.setPointerCapture?.(event.pointerId);
+  });
+  addListener(dom.profileAvatarCropFrame, "pointermove", (event) => {
+    const drag = profileAvatarCropState?.drag;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    profileAvatarCropState.offsetX = drag.offsetX + event.clientX - drag.startX;
+    profileAvatarCropState.offsetY = drag.offsetY + event.clientY - drag.startY;
+    syncProfileAvatarCropImage();
+  });
+  addListener(dom.profileAvatarCropFrame, "pointerup", (event) => {
+    if (profileAvatarCropState?.drag?.pointerId === event.pointerId) {
+      profileAvatarCropState.drag = null;
+    }
+  });
+  addListener(dom.profileAvatarCropFrame, "pointercancel", () => {
+    if (profileAvatarCropState) {
+      profileAvatarCropState.drag = null;
+    }
   });
   addListener(dom.profileModal?.querySelector?.("#profileForm") ?? null, "submit", handlers.saveProfile);
   addListener(dom.paletteModalBackdrop, "click", (event) => {

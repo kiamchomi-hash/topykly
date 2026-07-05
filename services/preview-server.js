@@ -14,7 +14,7 @@ const DEFAULT_REACTION_RESET_CHECK_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
-const MAX_JSON_BODY_BYTES = 1024 * 1024;
+const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -416,6 +416,9 @@ async function handleApiRequest(store, authService, req, res, url) {
       sendBackendPayload(res, req, authService, 200, store.updateProfile({
         ...context,
         displayName: body.displayName,
+        description: body.description,
+        profileShowDescription: body.profileShowDescription !== false,
+        profileShowJoinedAt: body.profileShowJoinedAt !== false,
         avatarDataUrl: body.avatarDataUrl,
         removeAvatar: body.removeAvatar === true,
         selectedTopicId: body.selectedTopicId ?? null
@@ -782,6 +785,39 @@ export function startPreviewServer({
           return;
         }
         await handleAuthCallback(store, authService, req, res, url);
+        return;
+      }
+
+      if (url.pathname === "/api/agents/pause") {
+        const flagPath = path.join(root, ".agents", "paused.flag");
+        fs.writeFileSync(flagPath, "1", "utf8");
+        sendJson(res, 200, { success: true, message: "Paused" }, {
+          headers: { "Access-Control-Allow-Origin": "*" }
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/agents/status") {
+        const flagPath = path.join(root, ".agents", "running.flag");
+        const running = fs.existsSync(flagPath);
+        sendJson(res, 200, { running }, {
+          headers: { "Access-Control-Allow-Origin": "*" }
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/agents/run") {
+        const flagPath = path.join(root, ".agents", "paused.flag");
+        if (fs.existsSync(flagPath)) {
+          fs.unlinkSync(flagPath);
+        }
+        const scriptPath = path.join(root, ".agents", "scripts", "orchestrate.mjs");
+        import("node:child_process").then(({ exec }) => {
+          exec(`node "${scriptPath}"`);
+        });
+        sendJson(res, 200, { success: true, message: "Running" }, {
+          headers: { "Access-Control-Allow-Origin": "*" }
+        });
         return;
       }
 

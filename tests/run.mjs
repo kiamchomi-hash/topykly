@@ -440,7 +440,7 @@ await (async () => {
         sessionId: "session-real-user",
         email: "real-user@example.com",
         password: "password-segura",
-        nickname: "real_user"
+        nickname: "Real_user"
       });
       const created = store.createTopic({
         sessionId: "session-real-user",
@@ -459,7 +459,7 @@ await (async () => {
       assert.equal(payload.topics.some((topic) => topic.id === "topic-1"), false);
       assert.equal(payload.users.some((user) => user.id === "u1"), false);
       assert.equal(payload.topics.some((topic) => topic.id === realTopicId), true);
-      assert.equal(payload.viewer.nickname, "real_user");
+      assert.equal(payload.viewer.nickname, "Real_user");
     } finally {
       store.close();
       await rm(tempDir, { recursive: true, force: true });
@@ -529,10 +529,10 @@ await (async () => {
         sessionId: "session-first-real-user",
         email: "first-real@example.com",
         password: "password-segura",
-        nickname: "first_real"
+        nickname: "First_real"
       });
       assert.equal(registered.topics.length, 0);
-      assert.equal(registered.users.some((user) => user.nickname === "first_real"), true);
+      assert.equal(registered.users.some((user) => user.nickname === "First_real"), true);
 
       const created = store.createTopic({
         sessionId: "session-first-real-user",
@@ -546,7 +546,7 @@ await (async () => {
       assert.equal(topic.messages.length, 1);
       assert.equal(topic.messages[0].authorId, created.viewer.id);
       assert.equal(created.rankings.global.posts.comments[0].id, topic.id);
-      assert.equal(created.rankings.global.users.comments[0].title, "first_real");
+      assert.equal(created.rankings.global.users.comments[0].title, "First_real");
     }, { seedDemoData: false });
   });
 
@@ -687,15 +687,15 @@ await (async () => {
         sessionId: "session-password-register",
         email: "Clave@Example.com",
         password: "password-segura",
-        nickname: "clave_user",
+        nickname: "Clave_user",
         rotateSession: true
       });
 
       assert.notEqual(registered.sessionId, "session-password-register");
       assert.equal(registered.viewer.type, "registered");
       assert.equal(registered.viewer.email, "clave@example.com");
-      assert.equal(registered.viewer.nickname, "clave_user");
-      assert.equal(registered.viewer.displayName, "clave_user");
+      assert.equal(registered.viewer.nickname, "Clave_user");
+      assert.equal(registered.viewer.displayName, "Clave_user");
       assert.equal(registered.viewer.profilePending, false);
       assert.equal(store.refresh({ sessionId: "session-password-register" }).viewer.type, "guest");
       assert.throws(() => store.registerWithPassword({
@@ -710,6 +710,26 @@ await (async () => {
         password: "password-segura",
         nickname: "CLAVE_USER"
       }), (error) => error.code === "NICKNAME_TAKEN");
+      const compactName = store.registerWithPassword({
+        sessionId: "session-password-register-compact-name",
+        email: "compact-name@example.com",
+        password: "password-segura",
+        nickname: "COCOMORA"
+      });
+      const underscoredName = store.registerWithPassword({
+        sessionId: "session-password-register-underscored-name",
+        email: "underscored-name@example.com",
+        password: "password-segura",
+        nickname: "coco_MORA"
+      });
+      assert.equal(compactName.viewer.nickname, "Cocomora");
+      assert.equal(underscoredName.viewer.nickname, "Coco_mora");
+      assert.throws(() => store.registerWithPassword({
+        sessionId: "session-password-register-spaced-name",
+        email: "spaced-name@example.com",
+        password: "password-segura",
+        nickname: "Coco Mora"
+      }), (error) => error.code === "VALIDATION_ERROR");
       assert.throws(() => store.loginWithPassword({
         sessionId: "session-password-wrong",
         email: "clave@example.com",
@@ -724,7 +744,7 @@ await (async () => {
       });
       assert.notEqual(loggedIn.sessionId, "session-password-login");
       assert.equal(loggedIn.viewer.id, registered.viewer.id);
-      assert.equal(loggedIn.viewer.nickname, "clave_user");
+      assert.equal(loggedIn.viewer.nickname, "Clave_user");
       assert.equal(store.refresh({ sessionId: "session-password-login" }).viewer.type, "guest");
     }, { seedDemoData: false });
   });
@@ -806,15 +826,29 @@ await (async () => {
 
       const completedPayload = store.updateProfile({
         sessionId: "session-oidc-1",
-        displayName: "Alias elegido",
+        displayName: "Alias_elegido",
         avatarDataUrl: "data:image/png;base64,aGVsbG8="
       });
       assert.equal(completedPayload.viewer.profilePending, false);
-      assert.equal(completedPayload.viewer.displayName, "Alias elegido");
+      assert.equal(completedPayload.viewer.displayName, "Alias_elegido");
+      assert.equal(completedPayload.viewer.nickname, "Alias_elegido");
       assert.equal(completedPayload.viewer.avatarUrl, null);
       assert.match(completedPayload.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
       assert.doesNotMatch(completedPayload.viewer.avatarPendingUrl, /^data:/);
       assert.equal(completedPayload.viewer.avatarReviewStatus, "pending");
+
+      store.loginWithIdentity({
+        sessionId: "session-oidc-duplicate-name",
+        sourceSessionId: "session-oidc-duplicate-name-source",
+        authProvider: "https://accounts.example.com",
+        authSubject: "subject-duplicate-name",
+        email: "duplicate-name@example.com",
+        displayName: "Alias_elegido"
+      });
+      assert.throws(() => store.updateProfile({
+        sessionId: "session-oidc-duplicate-name",
+        displayName: "alias_elegido"
+      }), (error) => error.code === "NICKNAME_TAKEN");
 
       const secondPayload = store.loginWithIdentity({
         sessionId: "session-oidc-2",
@@ -826,12 +860,61 @@ await (async () => {
       });
 
       assert.equal(secondPayload.viewer.id, initialPayload.viewer.id);
-      assert.equal(secondPayload.viewer.displayName, "Alias elegido");
+      assert.equal(secondPayload.viewer.displayName, "Alias_elegido");
       assert.equal(secondPayload.viewer.profilePending, false);
       assert.equal(secondPayload.viewer.profileSuggestedName, "Test User Renamed");
     });
   });
 
+  await test("backend loginWithIdentity preserves existing account data when provider data is incomplete", async () => {
+    await withTempStore((store) => {
+      const initialPayload = store.loginWithIdentity({
+        sessionId: "session-oidc-preserve-1",
+        sourceSessionId: "session-oidc-preserve-source-1",
+        authProvider: "https://accounts.example.com",
+        authSubject: "subject-preserve",
+        email: "preserve@example.com",
+        displayName: "Provider User",
+        avatarUrl: "https://cdn.example.com/provider-avatar.png"
+      });
+
+      const completedPayload = store.updateProfile({
+        sessionId: "session-oidc-preserve-1",
+        displayName: "Alias_protegido",
+        avatarDataUrl: "data:image/png;base64,c2FmZQ=="
+      });
+
+      store.login({
+        sessionId: "session-oidc-preserve-moderator",
+        userId: "u2"
+      });
+      const approvedPayload = store.applyModerationAction("approve_avatar", {
+        sessionId: "session-oidc-preserve-moderator",
+        targetType: "user",
+        targetId: completedPayload.viewer.id
+      });
+      const approvedUser = approvedPayload.users.find((user) => user.id === completedPayload.viewer.id);
+
+      const secondPayload = store.loginWithIdentity({
+        sessionId: "session-oidc-preserve-2",
+        sourceSessionId: "session-oidc-preserve-source-2",
+        authProvider: "https://accounts.example.com",
+        authSubject: "subject-preserve",
+        email: "",
+        displayName: "   ",
+        avatarUrl: "javascript:alert(1)"
+      });
+
+      assert.equal(secondPayload.viewer.id, initialPayload.viewer.id);
+      assert.equal(secondPayload.viewer.email, "preserve@example.com");
+      assert.equal(secondPayload.viewer.displayName, "Alias_protegido");
+      assert.equal(secondPayload.viewer.profilePending, false);
+      assert.equal(secondPayload.viewer.avatarUrl, approvedUser.avatarUrl);
+      assert.equal(secondPayload.viewer.avatarPendingUrl, null);
+      assert.equal(secondPayload.viewer.profileSuggestedName, null);
+      assert.equal(secondPayload.viewer.profileSuggestedAvatarUrl, null);
+    });
+  });
   await test("backend loginWithIdentity ignores invalid provider avatar urls", async () => {
     await withTempStore((store) => {
       const longAvatarUrl = `https://cdn.example.com/avatar.png?signature=${"a".repeat(520)}`;
@@ -882,7 +965,7 @@ await (async () => {
 
       store.updateProfile({
         sessionId: "session-persist-1",
-        displayName: "Persist Alias"
+        displayName: "Persist_alias"
       });
       const created = store.createTopic({
         sessionId: "session-persist-1",
@@ -904,7 +987,7 @@ await (async () => {
       const persistedTopic = secondLogin.topics.find((topic) => topic.id === topicId);
 
       assert.equal(secondLogin.viewer.id, userId);
-      assert.equal(secondLogin.viewer.displayName, "Persist Alias");
+      assert.equal(secondLogin.viewer.displayName, "Persist_alias");
       assert.equal(secondLogin.viewer.profilePending, false);
       assert.ok(persistedTopic);
       assert.equal(persistedTopic.title, "Tema persistente");
@@ -923,12 +1006,22 @@ await (async () => {
 
       const updated = store.updateProfile({
         sessionId: "session-profile",
-        displayName: "Nombre nuevo",
+        displayName: "Nombre_nuevo",
+        description: "Descripcion breve del perfil",
+        profileShowDescription: false,
+        profileShowJoinedAt: false,
         avatarDataUrl: "data:image/jpeg;base64,aW1hZ2U="
       });
 
       assert.equal(updated.viewer.type, "registered");
-      assert.equal(updated.viewer.displayName, "Nombre nuevo");
+      assert.equal(updated.viewer.displayName, "Nombre_nuevo");
+      assert.equal(updated.viewer.nickname, "Nombre_nuevo");
+      assert.equal(updated.viewer.description, "Descripcion breve del perfil");
+      assert.equal(updated.viewer.profileShowDescription, false);
+      assert.equal(updated.viewer.profileShowJoinedAt, false);
+      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.description, "Descripcion breve del perfil");
+      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.profileShowDescription, false);
+      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.profileShowJoinedAt, false);
       assert.equal(updated.viewer.avatarUrl, null);
       assert.match(updated.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.jpg$/);
       assert.doesNotMatch(updated.viewer.avatarPendingUrl, /^data:/);
@@ -936,6 +1029,12 @@ await (async () => {
       assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarPendingUrl, updated.viewer.avatarPendingUrl);
       const storedAvatar = await readFile(path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl)));
       assert.equal(storedAvatar.toString("utf8"), "image");
+      assert.throws(() => store.registerWithPassword({
+        sessionId: "session-profile-duplicate-register",
+        email: "profile-duplicate@example.com",
+        password: "password-segura",
+        nickname: "nombre_nuevo"
+      }), (error) => error.code === "NICKNAME_TAKEN");
 
       store.login({
         sessionId: "session-profile-moderator",
@@ -953,7 +1052,7 @@ await (async () => {
 
       const removedAvatar = store.updateProfile({
         sessionId: "session-profile",
-        displayName: "Nombre nuevo",
+        displayName: "Nombre_nuevo",
         removeAvatar: true
       });
       assert.equal(removedAvatar.viewer.avatarUrl, null);
@@ -964,13 +1063,13 @@ await (async () => {
 
       const firstPendingAvatar = store.updateProfile({
         sessionId: "session-profile",
-        displayName: "Nombre nuevo",
+        displayName: "Nombre_nuevo",
         avatarDataUrl: "data:image/png;base64,b2xk"
       });
       const firstPendingAvatarPath = path.join(store.avatarStorageDir, path.basename(firstPendingAvatar.viewer.avatarPendingUrl));
       const secondPendingAvatar = store.updateProfile({
         sessionId: "session-profile",
-        displayName: "Nombre nuevo",
+        displayName: "Nombre_nuevo",
         avatarDataUrl: "data:image/webp;base64,bmV3"
       });
       await assert.rejects(() => readFile(firstPendingAvatarPath), /ENOENT/);
@@ -988,11 +1087,16 @@ await (async () => {
         sessionId: "session-profile",
         avatarDataUrl: "data:text/html;base64,PHNjcmlwdD4="
       }), /PNG, JPG, WebP o GIF/);
-      const oversizedAvatar = Buffer.alloc((256 * 1024) + 1).toString("base64");
+      const oversizedAvatar = Buffer.alloc((2 * 1024 * 1024) + 1).toString("base64");
       assert.throws(() => store.updateProfile({
         sessionId: "session-profile",
         avatarDataUrl: `data:image/png;base64,${oversizedAvatar}`
-      }), /256 KB/);
+      }), /2 MB/);
+      assert.throws(() => store.updateProfile({
+        sessionId: "session-profile",
+        displayName: "Nombre_nuevo",
+        description: "x".repeat(181)
+      }), (error) => error.code === "VALIDATION_ERROR");
     });
   });
 
@@ -1059,7 +1163,7 @@ await (async () => {
         });
         const pendingPayload = store.updateProfile({
           sessionId: "session-avatar-review-user",
-          displayName: "Review User",
+          displayName: "Review_user",
           avatarDataUrl: "data:image/png;base64,aGVsbG8="
         });
 
@@ -1171,7 +1275,7 @@ await (async () => {
         sessionId: "session-ranking-author",
         email: "ranking-author@example.com",
         password: "password-segura",
-        nickname: "ranking_author"
+        nickname: "Ranking_author"
       });
       store.registerWithPassword({
         sessionId: "session-ranking-voter",
@@ -1196,12 +1300,12 @@ await (async () => {
       assert.equal(liked.rankings.global.posts.comments[0].count, 1);
       assert.equal(liked.rankings.global.posts.likes[0].id, topic.id);
       assert.equal(liked.rankings.global.posts.likes[0].count, 1);
-      assert.equal(liked.rankings.global.users.comments[0].title, "ranking_author");
+      assert.equal(liked.rankings.global.users.comments[0].title, "Ranking_author");
       assert.equal(liked.rankings.global.users.comments[0].count, 1);
-      assert.equal(liked.rankings.global.users.likes[0].title, "ranking_author");
+      assert.equal(liked.rankings.global.users.likes[0].title, "Ranking_author");
       assert.equal(liked.rankings.global.users.likes[0].count, 1);
-      assert.equal(liked.rankings.topic.users.comments[0].title, "ranking_author");
-      assert.equal(liked.rankings.topic.users.likes[0].title, "ranking_author");
+      assert.equal(liked.rankings.topic.users.comments[0].title, "Ranking_author");
+      assert.equal(liked.rankings.topic.users.likes[0].title, "Ranking_author");
     }, { seedDemoData: false });
   });
   await test("backend reports persist per session and moderation can resolve topic and message reports", async () => {
@@ -3733,7 +3837,7 @@ await (async () => {
     assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: extension === "\.html" \}\)/);
     assert.match(previewServer, /DEFAULT_GUEST_CLEANUP_INTERVAL_MS/);
     assert.match(previewServer, /DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS/);
-    assert.match(previewServer, /MAX_JSON_BODY_BYTES = 1024 \* 1024/);
+    assert.match(previewServer, /MAX_JSON_BODY_BYTES = 3 \* 1024 \* 1024/);
     assert.match(previewServer, /content-length/);
     assert.match(previewServer, /PAYLOAD_TOO_LARGE/);
     assert.match(previewServer, /receivedBytes > maxBytes/);
@@ -3745,6 +3849,8 @@ await (async () => {
     assert.match(previewServer, /function enforceHttpRateLimit\(res, buckets, req, url, config\)/);
     assert.match(previewServer, /sendJson\(res, 429/);
     assert.match(backendStore, /created_at AS createdAt/);
+    assert.match(backendStore, /profile_show_description AS profileShowDescription/);
+    assert.match(backendStore, /profile_show_joined_at AS profileShowJoinedAt/);
     assert.match(backendStore, /function getFrontendUsers\(db, viewerId, profileUserIds = \[\]\)/);
     assert.match(backendStore, /users: getFrontendUsers\(db, context\.viewer\.id, profileUserIds\)/);
     assert.match(previewServer, /"Retry-After": String\(result.retryAfterSeconds\)/);
@@ -3782,16 +3888,29 @@ await (async () => {
     assert.match(html, /id="drawerRankingScopeTabs"/);
     assert.doesNotMatch(html, /id="drawerRankingModeList"/);
     assert.match(html, /id="drawerUsersSection"[\s\S]*<h3>Usuarios activos<\/h3>/);
-    assert.doesNotMatch(html, /[ÚU]ltimos usuarios activos/);
+    assert.doesNotMatch(html, /[\u00daU]ltimos usuarios activos/);
     assert.match(html, /id="paletteModalBackdrop"/);
     assert.match(html, /id="paletteModal"/);
     assert.match(html, /id="paletteModal"[\s\S]*aria-label="Selector de paletas"/);
     assert.match(html, /class="palette-modal__body"/);
     assert.match(html, /id="paletteOptionGrid"/);
     assert.match(html, /id="authGoogleButton"[\s\S]*id="authPasswordForm"/);
-    assert.match(html, /id="profileModalHint"/);
-    assert.match(html, /id="profileAvatarPickButton"/);
-    assert.match(html, /id="skipProfileButton"/);
+    assert.match(html, /<h2 class="profile-modal__title">Perfil<\/h2>/);
+    assert.match(html, /id="profileNameSection"[\s\S]*data-editing="false"[\s\S]*id="profileAvatarPreview"/);
+    assert.match(html, /id="profileNameEditButton"[\s\S]*aria-label="Editar nombre visible"[\s\S]*data-profile-section-edit="name"/);
+    assert.match(html, /id="profileNameFeedback"/);
+    assert.match(html, /id="profileNameInput"[\s\S]*readonly/);
+    assert.match(html, /id="profileDescriptionEditButton"[\s\S]*aria-label="Editar descripción"[\s\S]*data-profile-section-edit="description"/);
+    assert.match(html, /id="profileDescriptionInput"[\s\S]*maxlength="180"[\s\S]*readonly/);
+    assert.doesNotMatch(html, /id="profileDescriptionInput"[\s\S]*rows=/);
+    assert.match(html, /id="profileAvatarPreview"[\s\S]*aria-label="Cambiar avatar"/);
+    assert.match(html, /id="profileJoinedAtText"/);
+    assert.match(html, /id="profileJoinedAtVisibilityButton"[\s\S]*data-profile-visibility="joinedAt"/);
+    assert.match(html, /id="profileDescriptionVisibilityButton"[\s\S]*data-profile-visibility="description"/);
+    assert.match(html, /id="profileAvatarPickButton"[\s\S]*Elegir avatar/);
+    assert.doesNotMatch(html, /Foto de perfil|Elegir foto|<span>Avatar<\/span>|id="profileAvatarEditButton"/);
+    assert.match(html, /id="skipProfileButton"[\s\S]*>Cancelar<\/button>/);
+    assert.doesNotMatch(html, /Puedes completar esto ahora|Quitar seleccion|id="profileAvatarClearButton"/);
     assert.doesNotMatch(html, /id="paletteModalTitle"/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/);
@@ -3823,6 +3942,11 @@ await (async () => {
     assert.match(html, /id="storeButton"[\s\S]*id="themeToggleMobileSlot"/);
     assert.match(html, /id="profileButton"[\s\S]*class="profile-button__avatar"/);
     assert.match(html, /id="publicProfileModalBackdrop"/);
+    assert.match(html, /public-profile-modal__description-label">DESCRIPCIÓN<\/p>/);
+    assert.match(html, /id="publicProfileDescription"/);
+    assert.match(html, /id="publicProfileJoinedAt"/);
+    assert.match(html, /id="publicProfileRecentCafes"/);
+    assert.match(html, /id="publicProfileActions"/);
     assert.match(html, /id="publicProfileReportButton"[\s\S]*Reportar usuario/);
     assert.match(html, /class="theme-switch"/);
     assert.match(html, /role="switch"/);
@@ -3849,8 +3973,8 @@ await (async () => {
     assert.match(html, /<h3 id="rankingsTitle">Ranking<\/h3>/);
     assert.match(html, /<h3 id="drawerRankingsTitle">Ranking<\/h3>/);
     assert.doesNotMatch(html, /createTopicForm|mobileCreateTopicForm|Nuevo tema|Ordenados por presencia/);
-    assert.match(data, /"Café de madrugada"/);
-    assert.match(data, /"Moderación"/);
+    assert.match(data, /"Caf\u00e9 de madrugada"/);
+    assert.match(data, /"Moderaci\u00f3n"/);
     assert.match(styles, /\.topic-item__title,\s*\.topic-item__meta\s*\{[\s\S]*text-overflow:\s*ellipsis;/);
     assert.match(styles, /\.topic-item\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
     assert.match(styles, /\.workspace\s*\{[\s\S]*grid-template-columns:\s*minmax\(275px,\s*1fr\)\s*minmax\(0,\s*1\.78fr\)\s*minmax\(275px,\s*1fr\);/);
@@ -3900,7 +4024,46 @@ await (async () => {
     assert.match(styles, /#profileButton\s*\{[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*0 14px 0 0;[\s\S]*gap:\s*0;[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/);
     assert.match(styles, /\.profile-button__avatar\s*\{[\s\S]*width:\s*42px;[\s\S]*height:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/);
-    assert.match(styles, /\.public-profile-modal-backdrop\s*\{[\s\S]*background:\s*var\(--bg\);[\s\S]*backdrop-filter:\s*none;/);
+    assert.match(styles, /\.profile-modal\s*\{[\s\S]*width:\s*min\(920px,\s*100%\);/);
+    assert.match(styles, /\.profile-modal__header\s*\{[\s\S]*padding:\s*16px 24px 14px;/);
+    assert.match(styles, /\.profile-modal__title\s*\{[\s\S]*font-size:\s*1\.45rem;/);
+    assert.match(styles, /\.profile-modal__actions\s*\{[\s\S]*padding:\s*11px 24px;/);
+    assert.match(styles, /\.profile-modal__actions \.primary-button,[\s\S]*\.profile-modal__actions \.text-button\s*\{[\s\S]*min-height:\s*38px;/);
+    assert.match(styles, /\.profile-modal__body\s*\{[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/);
+    assert.match(styles, /\.profile-modal__preview\s*\{[\s\S]*grid-row:\s*2;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/);
+    assert.match(styles, /\.profile-modal__field--name\s*\{[\s\S]*grid-row:\s*1;/);
+    assert.match(styles, /\.profile-modal__field--avatar\s*\{[\s\S]*grid-row:\s*4;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/);
+    assert.match(styles, /\.profile-modal__joined\s*\{[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/);
+    assert.match(styles, /\.profile-modal__visibility-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/);
+    assert.match(styles, /\.profile-modal__field--description\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 4;/);
+    assert.match(styles, /\.profile-modal__field--description textarea\s*\{[\s\S]*height:\s*100%;[\s\S]*max-height:\s*none;/);
+    assert.match(styles, /\.profile-modal__field-heading\s*\{[\s\S]*justify-content:\s*space-between;/);
+    assert.match(styles, /\.profile-modal__edit-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/);
+    assert.match(styles, /\.profile-modal__edit-button:hover,[\s\S]*\.profile-modal__edit-button:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--accent-soft\) 38%, var\(--surface-strong\)\);/);
+    assert.match(styles, /\.profile-modal__field\.is-editing \.profile-modal__edit-button\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--accent\) 34%, var\(--surface-strong\)\);[\s\S]*color:\s*var\(--accent-strong\);/);
+    assert.match(styles, /\.profile-modal__edit-button:active\s*\{[\s\S]*transform:\s*none;/);
+    assert.match(styles, /\.profile-modal__edit-button--inside:active\s*\{[\s\S]*transform:\s*translateY\(-50%\);/);
+    assert.match(styles, /\.profile-modal__input-shell\s*\{[\s\S]*position:\s*relative;/);
+    assert.match(styles, /\.profile-modal__edit-button--inside\s*\{[\s\S]*right:\s*6px;/);
+    assert.match(styles, /\.profile-modal__file-button\s*\{[\s\S]*justify-content:\s*center;[\s\S]*background:\s*color-mix\(in srgb, var\(--accent-soft\) 72%, var\(--surface-strong\)\);/);
+    assert.match(styles, /\.profile-modal__edit-button svg\s*\{[\s\S]*fill:\s*none;[\s\S]*stroke:\s*currentColor;[\s\S]*stroke-width:\s*2;/);
+    assert.match(styles, /@media \(max-width:\s*920px\)/);
+    assert.match(styles, /\.profile-avatar-crop-backdrop\s*\{[\s\S]*z-index:\s*95;[\s\S]*backdrop-filter:\s*blur\(8px\);/);
+    assert.match(styles, /\.profile-avatar-crop__frame\s*\{[\s\S]*aspect-ratio:\s*1;[\s\S]*touch-action:\s*none;/);
+    assert.match(styles, /\.public-profile-modal-backdrop\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--bg\) 12%, transparent\);[\s\S]*backdrop-filter:\s*blur\(5px\);/);
+    assert.match(styles, /\.public-profile-modal\s*\{[\s\S]*background:\s*var\(--bg\);/);
+    assert.match(styles, /\.public-profile-modal \.profile-modal__header,[\s\S]*\.public-profile-modal \.public-profile-modal__actions\s*\{[\s\S]*background:\s*var\(--bg\);/);
+    assert.match(styles, /\.public-profile-modal__body\s*\{[\s\S]*grid-template-columns:\s*minmax\(220px, 260px\) minmax\(0, 1fr\);[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/);
+    assert.match(styles, /\.public-profile-modal__avatar\s*\{[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*image-rendering:\s*auto;/);
+    assert.match(styles, /\.public-profile-modal__meta\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 3;[\s\S]*grid-template-rows:\s*auto minmax\(0, 1fr\);/);
+    assert.match(styles, /\.public-profile-modal__description-label\s*\{[\s\S]*border-bottom:\s*0;[\s\S]*font-weight:\s*950;[\s\S]*text-align:\s*center;/);
+    assert.match(styles, /\.public-profile-modal__description\s*\{[\s\S]*min-height:\s*100%;[\s\S]*height:\s*100%;[\s\S]*border:\s*1px solid var\(--line-strong\);[\s\S]*border-radius:\s*0 0 8px 8px;/);
+    assert.match(styles, /\.public-profile-modal__joined\s*\{[\s\S]*grid-template-columns:\s*repeat\(3, 1fr\);[\s\S]*overflow:\s*hidden;[\s\S]*border:\s*1px solid/);
+    assert.match(styles, /\.public-profile-modal__joined span \+ span\s*\{[\s\S]*border-left:\s*1px solid/);
+    assert.match(styles, /\.public-profile-modal__cafes\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*align-self:\s*stretch;/);
+    assert.match(styles, /\.public-profile-modal__cafes ul\s*\{[\s\S]*grid-template-rows:\s*repeat\(3, minmax\(0, 1fr\)\);/);
+    assert.match(styles, /\.public-profile-modal__cafes li\s*\{[\s\S]*display:\s*flex;[\s\S]*text-overflow:\s*ellipsis;/);
+    assert.match(styles, /\.public-profile-modal__actions\s*\{[\s\S]*margin:\s*8px -28px -28px;[\s\S]*padding:\s*11px 24px;/);
     assert.match(styles, /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/);
     assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-item__avatar\s*\{[\s\S]*width:\s*76px;[\s\S]*height:\s*76px;/);
     assert.match(styles, /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/);
@@ -4043,6 +4206,12 @@ await (async () => {
     assert.match(components, /message__body/);
     assert.match(components, /message__time/);
     assert.match(components, /message__like-button/);
+    assert.match(components, /message__like-button--positive/);
+    assert.match(components, /message__like-button--negative/);
+    assert.match(components, /const likeScore = \(message\.likes \?\? 0\) - \(message\.dislikes \?\? 0\);/);
+    assert.match(components, /const likeLabel = likeScore > 0 \? `\+\$\{likeScore\}` : String\(likeScore\);/);
+    assert.doesNotMatch(components, /`Like/);
+    assert.doesNotMatch(components, /Te gusta/);
     assert.match(components, /message__action-menu/);
     assert.match(components, /dataset\.messageMenuTrigger/);
     assert.match(components, /dataset\.messageProfileAuthorId/);
@@ -4140,6 +4309,17 @@ await (async () => {
     assert.doesNotMatch(paletteModal, /palette-option__description/);
     assert.match(publicProfileModal, /export function renderPublicProfileModal/);
     assert.match(publicProfileModal, /createdAt/);
+    assert.match(publicProfileModal, /return \[day, month, String\(year\)\]/);
+    assert.match(publicProfileModal, /document\.createElement\("span"\)/);
+    assert.match(publicProfileModal, /profileShowDescription/);
+    assert.match(publicProfileModal, /profileShowJoinedAt/);
+    assert.match(publicProfileModal, /avatarPendingUrl \|\| user\.avatarUrl/);
+    assert.match(publicProfileModal, /getRecentUserCafes/);
+    assert.match(publicProfileModal, /Últimos temas/);
+    assert.match(publicProfileModal, /publicProfileRecentCafes/);
+    assert.match(publicProfileModal, /publicProfileDescription/);
+    assert.match(publicProfileModal, /publicProfileJoinedAt/);
+    assert.match(publicProfileModal, /publicProfileActions\.hidden = isCurrentUser/);
     assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isCurrentUser/);
     assert.doesNotMatch(publicProfileModal, /comment|comentario|likes received|likesRecibidos|online|estado/i);
     assert.match(titles, /renderTitles/);
@@ -4179,6 +4359,7 @@ await (async () => {
     assert.match(chat, /chatHero\.hidden = true;/);
     assert.doesNotMatch(chat, /if \(shouldSyncChatLayout\(previousRenderState,\s*nextRenderState\)\)\s*\{[\s\S]*syncMessageCardHeights\(dom\.messageStream\);/);
     assert.match(eventsModule, /activateConnectedUser/);
+    assert.match(eventsModule, /profileAvatarCropModal/);
     assert.match(eventsModule, /closePublicProfileModal/);
     assert.match(eventsModule, /reportEntity/);
     assert.match(eventsModule, /data-report-entity-type/);
@@ -4196,6 +4377,13 @@ await (async () => {
     assert.match(topbarActionEvents, /data-custom-palette-picker/);
     assert.match(topbarActionEvents, /data-custom-palette-card/);
     assert.match(topbarActionEvents, /CUSTOM_PALETTE_ID/);
+    assert.match(topbarActionEvents, /const PROFILE_AVATAR_SOURCE_MAX_BYTES = 8 \* 1024 \* 1024;/);
+    assert.match(topbarActionEvents, /const PROFILE_AVATAR_CROP_SIZE = 1024;/);
+    assert.match(topbarActionEvents, /addListener\(dom\.profileAvatarPreview, "click", openProfileAvatarPicker\)/);
+    assert.match(topbarActionEvents, /setProfileSectionEditing\(dom, section, !isEditing\)/);
+    assert.match(topbarActionEvents, /addListener\(dom\.profileNameEditButton, "click", \(\) => toggleProfileSection\("name"\)\)/);
+    assert.match(topbarActionEvents, /let profileAvatarCropState = null;/);
+    assert.match(topbarActionEvents, /canvas\.toDataURL\("image\/jpeg", 0\.88\)/);
     assert.match(topbarActionEvents, /bindPickerLifecycle/);
     assert.match(topbarActionEvents, /bindPickerActionButtons/);
     assert.match(topbarActionEvents, /requestPickerClose/);
@@ -4242,3 +4430,6 @@ await (async () => {
   console.error(error);
   process.exitCode = 1;
 });
+
+
+

@@ -19,8 +19,9 @@ const MESSAGE_TEXT_MAX_LENGTH = 240;
 const REPORT_REASON_MAX_LENGTH = 240;
 const NICKNAME_MIN_LENGTH = 3;
 const NICKNAME_MAX_LENGTH = 24;
+const PROFILE_DESCRIPTION_MAX_LENGTH = 180;
 const PASSWORD_MIN_LENGTH = 8;
-const AVATAR_UPLOAD_MAX_BYTES = 256 * 1024;
+const AVATAR_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 const AVATAR_UPLOAD_MAX_BASE64_BYTES = Math.ceil(AVATAR_UPLOAD_MAX_BYTES / 3) * 4;
 const AVATAR_UPLOAD_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const AVATAR_UPLOAD_EXTENSIONS = new Map([
@@ -188,19 +189,35 @@ function normalizeRequiredEmail(value) {
 }
 
 function normalizeNickname(value) {
-  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  const normalized = String(value || "").trim();
   if (normalized.length < NICKNAME_MIN_LENGTH || normalized.length > NICKNAME_MAX_LENGTH) {
     throw new ApiError(400, "VALIDATION_ERROR", `El nickname debe tener entre ${NICKNAME_MIN_LENGTH} y ${NICKNAME_MAX_LENGTH} caracteres.`);
   }
   if (!/^[A-Za-z0-9_.-]+$/.test(normalized)) {
-    throw new ApiError(400, "VALIDATION_ERROR", "El nickname solo puede usar letras, numeros, punto, guion y guion bajo.");
+    throw new ApiError(400, "VALIDATION_ERROR", "El nickname solo puede usar letras, numeros, punto, guion y guion bajo. Usa _ en lugar de espacios.");
+  }
+  if (!/^[A-Za-z]/.test(normalized)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "El nickname debe empezar con una letra.");
   }
 
-  return normalized;
+  return `${normalized[0].toUpperCase()}${normalized.slice(1).toLowerCase()}`;
+}
+
+function normalizeUniqueNameKey(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function normalizeNicknameKey(value) {
-  return normalizeNickname(value).toLowerCase();
+  return normalizeUniqueNameKey(normalizeNickname(value));
+}
+
+function normalizeProfileDescription(value) {
+  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  if (normalized.length > PROFILE_DESCRIPTION_MAX_LENGTH) {
+    throw new ApiError(400, "VALIDATION_ERROR", `La descripcion no puede superar ${PROFILE_DESCRIPTION_MAX_LENGTH} caracteres.`);
+  }
+
+  return normalized;
 }
 
 function validatePassword(value) {
@@ -290,7 +307,7 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
   const mimeType = match[1];
   const payload = match[2];
   if (payload.length > AVATAR_UPLOAD_MAX_BASE64_BYTES || estimateBase64DecodedBytes(payload) > AVATAR_UPLOAD_MAX_BYTES) {
-    throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 256 KB.");
+    throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 2 MB.");
   }
 
   if (!AVATAR_UPLOAD_MIME_TYPES.has(mimeType)) {
@@ -299,7 +316,7 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
 
   const avatarBuffer = Buffer.from(payload, "base64");
   if (avatarBuffer.byteLength > AVATAR_UPLOAD_MAX_BYTES) {
-    throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 256 KB.");
+    throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 2 MB.");
   }
 
   const extension = AVATAR_UPLOAD_EXTENSIONS.get(mimeType);
@@ -504,6 +521,9 @@ function initSchema(db) {
       auth_provider TEXT,
       auth_subject TEXT,
       email TEXT,
+      description TEXT NOT NULL DEFAULT '',
+      profile_show_description INTEGER NOT NULL DEFAULT 1,
+      profile_show_joined_at INTEGER NOT NULL DEFAULT 1,
       avatar_url TEXT,
       avatar_pending_url TEXT,
       avatar_review_status TEXT,
@@ -631,6 +651,9 @@ function initSchema(db) {
   ensureColumn(db, "users", "auth_provider", "TEXT");
   ensureColumn(db, "users", "auth_subject", "TEXT");
   ensureColumn(db, "users", "email", "TEXT");
+  ensureColumn(db, "users", "description", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "profile_show_description", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "users", "profile_show_joined_at", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "nickname", "TEXT");
   ensureColumn(db, "users", "nickname_norm", "TEXT");
   ensureColumn(db, "users", "password_hash", "TEXT");
@@ -905,6 +928,10 @@ function mapViewerRow(row, sessionRow) {
     role: getEffectiveViewerRole(row),
     isAdmin: row.type === "registered" && canModerate(row),
     email: row.email ?? null,
+    description: row.description ?? "",
+    profileShowDescription: row.profile_show_description !== 0,
+    profileShowJoinedAt: row.profile_show_joined_at !== 0,
+    createdAt: row.created_at ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarPendingUrl: row.avatar_pending_url ?? null,
     avatarReviewStatus: row.avatar_review_status ?? null,
@@ -1177,12 +1204,16 @@ function getFrontendUsers(db, viewerId, profileUserIds = []) {
   const extraUserFilter = extraUserIds.length ? ` OR id IN (${extraUserIds.map(() => "?").join(", ")})` : "";
 
   return db.prepare(`
-    SELECT id, name, nickname, type, role, score, email, created_at AS createdAt, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
+    SELECT id, name, nickname, type, role, score, email, description, profile_show_description AS profileShowDescription, profile_show_joined_at AS profileShowJoinedAt, created_at AS createdAt, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
     FROM users
     WHERE status = 'active' AND (type = 'registered' OR id = ?${extraUserFilter})
     ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, score DESC, created_at ASC
     LIMIT 80
-  `).all(viewerId, ...extraUserIds, viewerId);
+  `).all(viewerId, ...extraUserIds, viewerId).map((user) => ({
+    ...user,
+    profileShowDescription: user.profileShowDescription !== 0,
+    profileShowJoinedAt: user.profileShowJoinedAt !== 0
+  }));
 }
 
 function hydrateTopicMessages(db, topicId, viewerId = null) {
@@ -1785,6 +1816,16 @@ function getAuthenticatedPasswordUser(db, { email, password }) {
 
   return userRow;
 }
+
+function resolvePreservedOptionalValue(nextValue, currentValue = null) {
+  return nextValue ?? currentValue ?? null;
+}
+
+function resolvePreservedSuggestedDisplayName(nextValue, currentValue = null) {
+  const normalized = normalizeUserDisplayName(nextValue, "");
+  return normalized || currentValue || null;
+}
+
 function getOrCreateAuthenticatedUser(db, {
   authProvider,
   authSubject,
@@ -1815,6 +1856,15 @@ function getOrCreateAuthenticatedUser(db, {
   `).get(normalizedProvider, normalizedSubject);
 
   if (existingUser) {
+    const nextEmail = resolvePreservedOptionalValue(normalizedEmail, existingUser.email);
+    const nextSuggestedDisplayName = resolvePreservedSuggestedDisplayName(
+      displayName,
+      existingUser.profile_suggested_name
+    );
+    const nextSuggestedAvatarUrl = resolvePreservedOptionalValue(
+      normalizedSuggestedAvatarUrl,
+      existingUser.profile_suggested_avatar_url
+    );
     const nextRole = resolvedRole === ADMIN_ROLE || isModeratorRole(existingUser.role || "")
       ? (resolvedRole === ADMIN_ROLE ? ADMIN_ROLE : existingUser.role)
       : DEFAULT_REGISTERED_ROLE;
@@ -1824,9 +1874,9 @@ function getOrCreateAuthenticatedUser(db, {
       WHERE id = ?
     `).run(
       nextRole,
-      normalizedEmail,
-      normalizedSuggestedDisplayName,
-      normalizedSuggestedAvatarUrl,
+      nextEmail,
+      nextSuggestedDisplayName,
+      nextSuggestedAvatarUrl,
       nowIso,
       existingUser.id
     );
@@ -2015,6 +2065,7 @@ function listPendingAvatars(db, options = {}) {
     userId: row.id,
     name: row.name,
     email: row.email ?? null,
+    description: row.description ?? "",
     avatarPendingUrl: row.avatar_pending_url,
     avatarReviewStatus: row.avatar_review_status || "pending",
     updatedAt: row.updated_at
@@ -2218,7 +2269,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({ sessionId, authMode, displayName = null, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateProfile({ sessionId, authMode, displayName = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -2227,7 +2278,10 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para editar el perfil.");
         }
 
-        const normalizedDisplayName = normalizeUserDisplayName(displayName, context.viewer.displayName || "Usuario");
+        const normalizedDisplayName = normalizeNickname(displayName || context.viewer.displayName || "Usuario");
+        const normalizedDisplayNameKey = normalizeNicknameKey(normalizedDisplayName);
+        const normalizedDescription = normalizeProfileDescription(description);
+        assertNicknameAvailable(db, normalizedDisplayNameKey, context.viewer.id);
         const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
         const normalizedAvatarDataUrl = removeAvatar ? null : storeAvatarDataUrl(avatarDataUrl, avatarStorageDir);
         const nowIso = new Date().toISOString();
@@ -2243,10 +2297,10 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
 
         db.prepare(`
           UPDATE users
-          SET name = ?, avatar_url = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
+          SET name = ?, nickname = ?, nickname_norm = ?, description = ?, profile_show_description = ?, profile_show_joined_at = ?, avatar_url = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
-        `).run(normalizedDisplayName, nextAvatarUrl, nextPendingUrl, nextReviewStatus, nowIso, context.viewer.id);
+        `).run(normalizedDisplayName, normalizedDisplayName, normalizedDisplayNameKey, normalizedDescription, profileShowDescription === false ? 0 : 1, profileShowJoinedAt === false ? 0 : 1, nextAvatarUrl, nextPendingUrl, nextReviewStatus, nowIso, context.viewer.id);
 
         const nextAvatarUrls = new Set([nextAvatarUrl, nextPendingUrl].filter(Boolean));
         scheduleStoredAvatarCleanup(

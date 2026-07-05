@@ -16,7 +16,7 @@ export function renderTopics(state, dom, onFocusTopic) {
     }
 
     return topics.map((topic) => {
-      const button = createTopicItem(topic, state.users, topic.id === state.selectedTopicId);
+      const button = createTopicItem(topic, state.users, topic.id === state.selectedTopicId, state.viewer?.id || null);
       button.addEventListener("click", () => onFocusTopic(topic.id));
       return button;
     });

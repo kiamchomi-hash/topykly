@@ -180,11 +180,14 @@ export const api = {
     });
   },
 
-  async updateProfile({ displayName = null, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null } = {}) {
+  async updateProfile({ displayName = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null } = {}) {
     return request("/api/profile", {
       method: "PATCH",
       body: {
         displayName,
+        description,
+        profileShowDescription,
+        profileShowJoinedAt,
         avatarDataUrl,
         removeAvatar,
         selectedTopicId

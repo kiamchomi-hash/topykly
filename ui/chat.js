@@ -112,7 +112,8 @@ export function renderChat(state, dom) {
 
   renderIntoTargets([dom.messageStream], "message-stream", () =>
     topic.messages.map((message) => createMessageItem(message, state.users, {
-      reported: reportedMessageIds.has(message.id)
+      reported: reportedMessageIds.has(message.id),
+      currentUserId: state.viewer?.id || null
     }))
   );
 

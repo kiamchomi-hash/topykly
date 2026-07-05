@@ -57,10 +57,19 @@ export function createIcon(name, options = {}) {
 /**
  * Specialized avatar creator to match existing component logic.
  */
-export function createAvatarIcon(className = "topic-item__avatar") {
+export function createAvatarIcon(className = "topic-item__avatar", avatarUrl = "") {
   const container = document.createElement("span");
   container.className = className;
   container.setAttribute("aria-hidden", "true");
+
+  if (avatarUrl) {
+    const image = document.createElement("img");
+    image.src = avatarUrl;
+    image.alt = "";
+    image.loading = "lazy";
+    container.appendChild(image);
+    return container;
+  }
   
   const svg = createIcon("avatar", { viewBox: "0 0 48 48", strokeWidth: "0" });
   // Avatar uses fills for parts of the rect/circle/path logic in CSS 

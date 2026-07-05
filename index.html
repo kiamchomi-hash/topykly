@@ -384,39 +384,84 @@
       <section class="profile-modal" id="profileModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Perfil" tabindex="-1">
         <div class="profile-modal__header">
           <div>
-            <p class="panel__kicker">Perfil</p>
+            <h2 class="profile-modal__title">Perfil</h2>
             <h2 id="profileDisplayName">Usuario</h2>
-            <p class="profile-modal__hint" id="profileModalHint">Puedes completar esto ahora o seguir usando TOPYKLY.</p>
           </div>
           <button class="icon-button icon-button--compact profile-modal__close" id="closeProfileModalButton" type="button" aria-label="Cerrar perfil">
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
         <form class="profile-modal__body" id="profileForm">
-          <div class="profile-modal__preview" id="profileAvatarPreview" aria-hidden="true"></div>
-          <label class="profile-modal__field" for="profileNameInput">
-            <span>Nombre visible</span>
-            <input id="profileNameInput" type="text" autocomplete="nickname" maxlength="80" placeholder="Usuario" />
-          </label>
-          <div class="profile-modal__field">
-            <span>Foto de perfil</span>
+          <div class="profile-modal__field profile-modal__field--name" id="profileNameSection" data-profile-section="name" data-editing="false">
+            <div class="profile-modal__field-heading">
+              <label for="profileNameInput">Nombre visible</label>
+            </div>
+            <div class="profile-modal__input-shell">
+              <input id="profileNameInput" type="text" autocomplete="nickname" maxlength="24" placeholder="Coco_mora" aria-describedby="profileNameFeedback" readonly />
+              <button class="profile-modal__edit-button profile-modal__edit-button--inside" id="profileNameEditButton" type="button" aria-label="Editar nombre visible" aria-pressed="false" data-profile-section-edit="name">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"/></svg>
+              </button>
+            </div>
+            <p class="profile-modal__field-feedback" id="profileNameFeedback" hidden></p>
+          </div>
+          <button class="profile-modal__preview profile-modal__preview-button" id="profileAvatarPreview" type="button" aria-label="Cambiar avatar"></button>
+          <div class="profile-modal__joined" id="profileJoinedAtSection">
+            <span id="profileJoinedAtText">Fecha de registro</span>
+            <button class="profile-modal__visibility-button" id="profileJoinedAtVisibilityButton" type="button" aria-label="Ocultar fecha de registro" aria-pressed="false" data-visible="true" data-profile-visibility="joinedAt"></button>
+          </div>
+          <div class="profile-modal__field profile-modal__field--avatar" id="profileAvatarSection">
             <input class="profile-modal__file-input" id="profileAvatarInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-            <button class="text-button profile-modal__file-button" id="profileAvatarPickButton" type="button">Elegir foto</button>
+            <button class="text-button profile-modal__file-button" id="profileAvatarPickButton" type="button">Elegir avatar</button>
+          </div>
+          <div class="profile-modal__field profile-modal__field--description" id="profileDescriptionSection" data-profile-section="description" data-editing="false">
+            <div class="profile-modal__field-heading">
+              <label for="profileDescriptionInput">Descripción</label>
+              <span class="profile-modal__field-actions">
+                <button class="profile-modal__visibility-button" id="profileDescriptionVisibilityButton" type="button" aria-label="Ocultar descripción" aria-pressed="false" data-visible="true" data-profile-visibility="description"></button>
+                <button class="profile-modal__edit-button" id="profileDescriptionEditButton" type="button" aria-label="Editar descripción" aria-pressed="false" data-profile-section-edit="description">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"/></svg>
+                </button>
+              </span>
+            </div>
+            <textarea id="profileDescriptionInput" maxlength="180" placeholder="Cuenta algo breve sobre ti" readonly></textarea>
           </div>
           <div class="profile-modal__actions">
-            <button class="text-button" id="skipProfileButton" type="button">Ahora no</button>
-            <button class="text-button" id="profileAvatarClearButton" type="button">Quitar seleccion</button>
+            <button class="text-button" id="skipProfileButton" type="button">Cancelar</button>
             <button class="primary-button" id="saveProfileButton" type="submit">Guardar</button>
           </div>
         </form>
       </section>
     </div>
 
+
+    <div class="profile-avatar-crop-backdrop" id="profileAvatarCropBackdrop" hidden>
+      <section class="profile-avatar-crop" id="profileAvatarCropModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Ajustar foto" tabindex="-1">
+        <div class="profile-avatar-crop__header">
+          <div>
+            <p class="panel__kicker">Foto</p>
+            <h2>Ajustar foto</h2>
+          </div>
+        </div>
+        <div class="profile-avatar-crop__body">
+          <div class="profile-avatar-crop__frame" id="profileAvatarCropFrame">
+            <img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" />
+          </div>
+          <label class="profile-avatar-crop__control" for="profileAvatarCropZoom">
+            <span>Zoom</span>
+            <input id="profileAvatarCropZoom" type="range" min="1" max="3" step="0.01" value="1" />
+          </label>
+        </div>
+        <div class="profile-avatar-crop__actions">
+          <button class="text-button" id="profileAvatarCropCancelButton" type="button">Cancelar</button>
+          <button class="primary-button" id="profileAvatarCropApplyButton" type="button">Usar foto</button>
+        </div>
+      </section>
+    </div>
     <div class="profile-modal-backdrop public-profile-modal-backdrop" id="publicProfileModalBackdrop" hidden>
       <section class="profile-modal public-profile-modal" id="publicProfileModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="publicProfileName" tabindex="-1">
         <div class="profile-modal__header">
           <div>
-            <p class="panel__kicker">Perfil</p>
+            <h2 class="profile-modal__title">Perfil</h2>
             <h2 id="publicProfileName">Usuario</h2>
           </div>
           <button class="icon-button icon-button--compact profile-modal__close" id="closePublicProfileModalButton" type="button" aria-label="Cerrar perfil">
@@ -425,8 +470,13 @@
         </div>
         <div class="profile-modal__body public-profile-modal__body">
           <div class="profile-modal__preview public-profile-modal__avatar" id="publicProfileAvatar" aria-hidden="true"></div>
-          <p class="public-profile-modal__meta" id="publicProfileMeta"></p>
-          <div class="profile-modal__actions public-profile-modal__actions">
+          <p class="public-profile-modal__joined" id="publicProfileJoinedAt"></p>
+          <div class="public-profile-modal__cafes" id="publicProfileRecentCafes" hidden></div>
+          <div class="public-profile-modal__meta" id="publicProfileMeta">
+            <p class="public-profile-modal__description-label">DESCRIPCIÓN</p>
+            <p class="public-profile-modal__description" id="publicProfileDescription"></p>
+          </div>
+          <div class="profile-modal__actions public-profile-modal__actions" id="publicProfileActions">
             <button class="text-button" id="publicProfileReportButton" type="button" data-report-entity-type="user" data-report-entity-id="">Reportar usuario</button>
           </div>
         </div>
@@ -630,3 +680,5 @@
     <script type="module" src="./auth-fallback.js?v=20260702-sessioncookie"></script>
   </body>
 </html>
+
+

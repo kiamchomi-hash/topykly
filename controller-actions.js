@@ -176,7 +176,7 @@ export function createActionHandlers({
   function openProfileModal() {
     dispatch(state, reducers.setProfileModalOpen, true);
     render();
-    setTimeout(() => dom.profileNameInput?.focus?.(), 0);
+    setTimeout(() => dom.profileNameEditButton?.focus?.(), 0);
   }
 
   async function openAdminPanel() {
@@ -225,6 +225,21 @@ export function createActionHandlers({
   }
 
 
+  function setProfileNameFeedback(message = "") {
+    const normalized = String(message || "").trim();
+    if (dom.profileNameInput) {
+      if (normalized) {
+        dom.profileNameInput.setAttribute("aria-invalid", "true");
+      } else {
+        dom.profileNameInput.removeAttribute("aria-invalid");
+      }
+    }
+    if (dom.profileNameFeedback) {
+      dom.profileNameFeedback.textContent = normalized;
+      dom.profileNameFeedback.hidden = !normalized;
+    }
+  }
+
   function skipProfileSetup() {
     dispatch(state, reducers.setProfileModalOpen, false);
     showFeedback("Puedes completar tu perfil desde Perfil.");
@@ -235,8 +250,11 @@ export function createActionHandlers({
   async function saveProfile(event) {
     event?.preventDefault?.();
     const displayName = dom.profileNameInput?.value?.trim() || null;
+    const description = dom.profileDescriptionInput?.value?.trim() || "";
     const avatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || null;
     const removeAvatar = dom.profileAvatarInput?.dataset?.removeAvatar === "true";
+    const profileShowDescription = dom.profileDescriptionVisibilityButton?.dataset?.visible !== "false";
+    const profileShowJoinedAt = dom.profileJoinedAtVisibilityButton?.dataset?.visible !== "false";
 
     if (dom.saveProfileButton) {
       dom.saveProfileButton.disabled = true;
@@ -244,8 +262,12 @@ export function createActionHandlers({
     }
 
     try {
+      setProfileNameFeedback();
       const payload = await api.updateProfile({
         displayName,
+        description,
+        profileShowDescription,
+        profileShowJoinedAt,
         avatarDataUrl,
         removeAvatar,
         selectedTopicId: state.selectedTopicId
@@ -256,7 +278,13 @@ export function createActionHandlers({
       return payload;
     } catch (error) {
       console.error(error);
-      showFeedback(error?.message || "No se pudo actualizar el perfil.", { kind: "error" });
+      const message = error?.code === "NICKNAME_TAKEN"
+        ? "Ese nombre no esta disponible."
+        : error?.message || "No se pudo actualizar el perfil.";
+      if (error?.code === "NICKNAME_TAKEN" || error?.code === "VALIDATION_ERROR") {
+        setProfileNameFeedback(message);
+      }
+      showFeedback(message, { kind: "error" });
       return null;
     } finally {
       if (dom.saveProfileButton) {

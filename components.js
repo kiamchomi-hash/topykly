@@ -15,7 +15,16 @@ function getUserName(users, userId, fallback = "Anonimo") {
   return users.find((user) => user.id === userId)?.name ?? fallback;
 }
 
-export function createTopicItem(topic, users, selected = false) {
+function getUserAvatarUrl(users, userId, currentUserId = null) {
+  const user = users.find((entry) => entry.id === userId);
+  if (!user) {
+    return "";
+  }
+
+  return user.avatarUrl || (user.id === currentUserId ? user.avatarPendingUrl : "") || "";
+}
+
+export function createTopicItem(topic, users, selected = false, currentUserId = null) {
   const button = el("button", `topic-item${selected ? " is-active" : ""}`);
   button.type = "button";
   button.dataset.id = topic.id;
@@ -26,7 +35,7 @@ export function createTopicItem(topic, users, selected = false) {
     ? getUserName(users, lastCommentAuthor.authorId)
     : "Sin actividad";
 
-  const avatar = createProfileAvatar();
+  const avatar = createProfileAvatar("topic-item__avatar", getUserAvatarUrl(users, topic.authorId, currentUserId));
   const content = el("span", "topic-item__content");
   content.append(
     el("span", "topic-item__title", topic.title),
@@ -95,11 +104,11 @@ export function createRankingSkeleton(index) {
   return node;
 }
 
-export function createMessageItem(message, users, { reported = false } = {}) {
+export function createMessageItem(message, users, { reported = false, currentUserId = null } = {}) {
   const node = el("article", `message${message.kind === "system" ? " message--system" : ""}`);
   node.dataset.id = message.id;
   const author = message.kind === "system" ? "Sistema" : getUserName(users, message.authorId);
-  const avatar = createProfileAvatar("message__avatar");
+  const avatar = createProfileAvatar("message__avatar", getUserAvatarUrl(users, message.authorId, currentUserId));
   const avatarButton = el("button", "message__avatar-button");
   avatarButton.type = "button";
   avatarButton.append(avatar);
@@ -118,7 +127,14 @@ export function createMessageItem(message, users, { reported = false } = {}) {
     avatarButton.setAttribute("aria-expanded", "false");
 
     const hasViewerReaction = Boolean(message.likedByViewer || message.dislikedByViewer);
-    const likeButton = el("button", `message__like-button${message.likedByViewer ? " is-liked" : ""}`, `${message.likedByViewer ? "Te gusta" : "Like"} ${message.likes ?? 0}`);
+    const likeScore = (message.likes ?? 0) - (message.dislikes ?? 0);
+    const likeToneClass = likeScore > 0
+      ? " message__like-button--positive"
+      : likeScore < 0
+        ? " message__like-button--negative"
+        : "";
+    const likeLabel = likeScore > 0 ? `+${likeScore}` : String(likeScore);
+    const likeButton = el("button", `message__like-button${message.likedByViewer ? " is-liked" : ""}${likeToneClass}`, likeLabel);
     likeButton.type = "button";
     likeButton.dataset.likeMessageId = message.id;
     likeButton.disabled = hasViewerReaction;
