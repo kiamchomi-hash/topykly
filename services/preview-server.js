@@ -777,6 +777,19 @@ export function startPreviewServer({
   runGuestCleanup(store, log);
   runMessageReactionReset(store, log);
   const server = http.createServer(async (req, res) => {
+    // Handle CORS preflight globally for all routes
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+        "Access-Control-Allow-Private-Network": "true",
+        "Access-Control-Max-Age": "86400"
+      });
+      res.end();
+      return;
+    }
+
     try {
       const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
 
@@ -801,6 +814,47 @@ export function startPreviewServer({
         const flagPath = path.join(root, ".agents", "running.flag");
         const running = fs.existsSync(flagPath);
         sendJson(res, 200, { running }, {
+          headers: { "Access-Control-Allow-Origin": "*" }
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/agents/decision") {
+        const id = url.searchParams.get("id");
+        const agent = url.searchParams.get("agent");
+        const action = url.searchParams.get("action");
+        
+        if (id && agent && action) {
+          const decisionsPath = path.join(root, ".agents", "decisions.json");
+          let decisions = { suggestions: {} };
+          if (fs.existsSync(decisionsPath)) {
+            try {
+              decisions = JSON.parse(fs.readFileSync(decisionsPath, "utf8"));
+            } catch {}
+          }
+          decisions.suggestions[id] = {
+            agent,
+            decision: action,
+            timestamp: new Date().toISOString()
+          };
+           fs.writeFileSync(decisionsPath, JSON.stringify(decisions, null, 2), "utf8");
+          
+          // Regenerate the dashboard HTML instantly using --render-only flag
+          const scriptPath = path.join(root, ".agents", "scripts", "orchestrate.mjs");
+          try {
+             const { execSync } = await import("node:child_process");
+            execSync(`node "${scriptPath}" --render-only`, { cwd: root });
+          } catch (e) {
+            console.error("Error regenerating dashboard on decision:", e);
+            fs.writeFileSync(path.join(root, ".agents", "server_exec.log"), e.stack || String(e), "utf8");
+          }
+
+          sendJson(res, 200, { success: true }, {
+            headers: { "Access-Control-Allow-Origin": "*" }
+          });
+          return;
+        }
+        sendJson(res, 400, { error: "Missing parameters" }, {
           headers: { "Access-Control-Allow-Origin": "*" }
         });
         return;

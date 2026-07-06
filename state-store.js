@@ -10,6 +10,7 @@ export const state = {
   viewer: null,
   reportedTopicIds: [],
   reportedMessageIds: [],
+  unreadTopicIds: [],
   rankings: null,
   selectedTopicId: null,
   rankingScope: "global",

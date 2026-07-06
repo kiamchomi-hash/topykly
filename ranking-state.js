@@ -41,6 +41,15 @@ export function getActiveRankingStep(state) {
   };
 }
 
+export function getScopeActiveRankingStep(state, scope) {
+  const steps = getRankingSteps(scope);
+  const index = normalizeRankingIndex(getStoredRankingIndex(state, scope), steps.length);
+  return {
+    ...steps[index],
+    index
+  };
+}
+
 function normalizeRankingIndex(index, length) {
   if (!length) {
     return 0;

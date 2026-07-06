@@ -24,8 +24,8 @@ function getUserAvatarUrl(users, userId, currentUserId = null) {
   return user.avatarUrl || (user.id === currentUserId ? user.avatarPendingUrl : "") || "";
 }
 
-export function createTopicItem(topic, users, selected = false, currentUserId = null) {
-  const button = el("button", `topic-item${selected ? " is-active" : ""}`);
+export function createTopicItem(topic, users, selected = false, currentUserId = null, unread = false) {
+  const button = el("button", `topic-item${selected ? " is-active" : ""}${unread ? " topic-item--unread" : ""}`);
   button.type = "button";
   button.dataset.id = topic.id;
 
@@ -34,12 +34,23 @@ export function createTopicItem(topic, users, selected = false, currentUserId = 
   const lastCommenterName = lastCommentAuthor
     ? getUserName(users, lastCommentAuthor.authorId)
     : "Sin actividad";
-
   const avatar = createProfileAvatar("topic-item__avatar", getUserAvatarUrl(users, topic.authorId, currentUserId));
   const content = el("span", "topic-item__content");
+  const meta = el("span", "topic-item__meta");
+  const commentCount = el(
+    "span",
+    `topic-item__meta-count${unread ? " topic-item__meta-count--unread" : ""}`,
+    String(topicCommentCount)
+  );
+  const separator = el("span", "topic-item__meta-separator", ", ");
+  const lastCommenter = el("span", "topic-item__meta-user", lastCommenterName);
+  if (lastCommentAuthor) {
+    meta.dataset.lastAuthorId = lastCommentAuthor.authorId;
+  }
+  meta.append(commentCount, separator, lastCommenter);
   content.append(
     el("span", "topic-item__title", topic.title),
-    el("span", "topic-item__meta", `${topicCommentCount}, ${lastCommenterName}`)
+    meta
   );
 
   button.append(avatar, content);
@@ -134,12 +145,14 @@ export function createMessageItem(message, users, { reported = false, currentUse
         ? " message__like-button--negative"
         : "";
     const likeLabel = likeScore > 0 ? `+${likeScore}` : String(likeScore);
+    const reactionMenuId = `message-reaction-menu-${message.id}`;
     const likeButton = el("button", `message__like-button${message.likedByViewer ? " is-liked" : ""}${likeToneClass}`, likeLabel);
     likeButton.type = "button";
-    likeButton.dataset.likeMessageId = message.id;
-    likeButton.disabled = hasViewerReaction;
+    likeButton.dataset.messageReactionTrigger = message.id;
+    likeButton.setAttribute("aria-controls", reactionMenuId);
+    likeButton.setAttribute("aria-expanded", "false");
     likeButton.setAttribute("aria-pressed", String(Boolean(message.likedByViewer)));
-    likeButton.setAttribute("aria-label", `${message.likedByViewer ? "Quitar like" : "Dar like"} al mensaje`);
+    likeButton.setAttribute("aria-label", "Abrir opciones de reaccion del mensaje");
 
     const reportButton = el("button", `message__report-button${reported ? " is-reported" : ""}`, reported ? "Reportado" : "Reportar");
     reportButton.type = "button";
@@ -148,6 +161,23 @@ export function createMessageItem(message, users, { reported = false, currentUse
     reportButton.disabled = reported;
     reportButton.setAttribute("aria-label", reported ? "Mensaje ya reportado" : "Reportar mensaje");
     meta.append(likeButton, reportButton);
+
+    const reactionMenu = el("div", "message__reaction-menu");
+    reactionMenu.id = reactionMenuId;
+    reactionMenu.hidden = true;
+    reactionMenu.dataset.messageReactionMenu = message.id;
+    reactionMenu.append(
+      el("button", `message__action-menu-button${message.likedByViewer ? " is-active" : ""}`, "LIKE"),
+      el("button", `message__action-menu-button${message.dislikedByViewer ? " is-active" : ""}`, "DISLIKE")
+    );
+    const [reactionLikeAction, reactionDislikeAction] = reactionMenu.querySelectorAll("button");
+    reactionLikeAction.type = "button";
+    reactionLikeAction.dataset.likeMessageId = message.id;
+    reactionLikeAction.disabled = hasViewerReaction;
+    reactionDislikeAction.type = "button";
+    reactionDislikeAction.dataset.dislikeMessageId = message.id;
+    reactionDislikeAction.disabled = hasViewerReaction;
+    body.append(reactionMenu);
 
     const actionMenu = el("div", "message__action-menu");
     actionMenu.hidden = true;
@@ -184,6 +214,7 @@ export function createMessageItem(message, users, { reported = false, currentUse
 export function createUserItem(user, currentUserId, activeConnectedUserId = null) {
   const isCurrentUser = user.id === currentUserId;
   const isActive = user.id === activeConnectedUserId;
+  const menuId = `user-action-menu-${user.id}`;
   const node = el("article", `user-item${isCurrentUser ? " is-current" : ""}${isActive ? " is-active" : ""}`);
   node.dataset.id = user.id;
   node.dataset.connectedUserId = user.id;
@@ -191,8 +222,10 @@ export function createUserItem(user, currentUserId, activeConnectedUserId = null
   const info = el("div", "user-item__info");
   const trigger = el("button", "user-item__trigger");
   trigger.type = "button";
-  trigger.dataset.connectedUserId = user.id;
+  trigger.dataset.userMenuTrigger = user.id;
   trigger.setAttribute("aria-pressed", String(isActive));
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.setAttribute("aria-controls", menuId);
   trigger.setAttribute("aria-label", `${isActive ? "Usuario activo" : "Seleccionar usuario"}: ${user.name}${isCurrentUser ? ", usuario actual" : ""}`);
   if (isCurrentUser) {
     trigger.setAttribute("aria-current", "true");
@@ -206,20 +239,40 @@ export function createUserItem(user, currentUserId, activeConnectedUserId = null
     createUserActionButton("Mensaje directo", "message")
   );
 
-  node.append(info, actions);
+  const menu = el("div", "user-item__menu");
+  menu.id = menuId;
+  menu.hidden = true;
+  menu.dataset.userMenu = user.id;
+  menu.setAttribute("role", "menu");
+  menu.append(
+    createUserMenuButton("Perfil", "profile"),
+    createUserMenuButton("Agregar amigo", "friend"),
+    createUserMenuButton("Reportar", "report")
+  );
+
+  node.append(info, actions, menu);
   return node;
 }
 
-function createUserActionButton(label, kind) {
+function createUserActionButton(label, kind, userId = "", menuId = "") {
   const button = el("button", "user-item__action");
   button.type = "button";
   button.setAttribute("aria-label", label);
   button.title = label;
+
   button.dataset.userAction = kind;
 
   const iconName = kind === "profile" ? "userProfile" : "userMessage";
   button.appendChild(createIcon(iconName));
-  
+  return button;
+}
+
+function createUserMenuButton(label, kind) {
+  const button = el("button", "user-item__menu-button", label);
+  button.type = "button";
+  button.setAttribute("aria-label", label);
+  button.setAttribute("role", "menuitem");
+  button.dataset.userAction = kind;
   return button;
 }
 

@@ -458,7 +458,10 @@ export function createActionHandlers({
       return;
     }
 
-    flashTitle(`${targetUser.name} seleccionado`);
+    if (action === "friend") {
+      flashTitle(`Solicitud de amistad para ${targetUser.name} lista para conectar`);
+      return;
+    }
   }
 
   const rankingActions = createRankingActions({
@@ -504,6 +507,7 @@ export function createActionHandlers({
     toggleRankingScope: rankingActions.toggleRankingScope,
     focusTopic: rankingActions.focusTopic,
     setRankingStep: rankingActions.setRankingStep,
+    setScopeRankingStep: rankingActions.setScopeRankingStep,
     selectRankingStep: rankingActions.selectRankingStep,
     createNewTopic: chatActions.createNewTopic,
     submitMessage: chatActions.submitMessage,

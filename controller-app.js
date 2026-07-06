@@ -11,6 +11,8 @@ import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
 import { api } from "./services/api.js?v=20260702-sessioncookie";
 
+const LIVE_TOPIC_REFRESH_INTERVAL_MS = 5000;
+
 function readBootstrapLocationParams() {
   if (typeof window === "undefined") {
     return {
@@ -92,6 +94,59 @@ function scheduleInitialDataHydration(render, initialSelectedTopicId = null) {
   setTimeout(applyData, 0);
 }
 
+export function createLiveTopicSync({
+  state,
+  render,
+  apiClient = api,
+  intervalMs = LIVE_TOPIC_REFRESH_INTERVAL_MS,
+  onError = console.error
+}) {
+  let timer = 0;
+  let inFlight = false;
+
+  async function refreshNow() {
+    if (inFlight || !state.viewer) {
+      return false;
+    }
+
+    inFlight = true;
+    try {
+      const payload = await apiClient.refreshTopics(state.selectedTopicId);
+      dispatch(state, reducers.hydrateFromBackend, payload);
+      render();
+      return true;
+    } catch (error) {
+      onError?.(error);
+      return false;
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  function start() {
+    if (timer || intervalMs <= 0 || typeof setInterval !== "function") {
+      return;
+    }
+
+    timer = setInterval(refreshNow, intervalMs);
+    timer.unref?.();
+  }
+
+  function stop() {
+    if (!timer) {
+      return;
+    }
+
+    clearInterval(timer);
+    timer = 0;
+  }
+
+  return {
+    refreshNow,
+    start,
+    stop
+  };
+}
 export function bootstrap() {
   const bootstrapLocationParams = readBootstrapLocationParams();
   applyStoredTheme(state);
@@ -148,6 +203,7 @@ export function bootstrap() {
     createNewTopic: actions.createNewTopic,
     submitMessage: actions.submitMessage,
     setRankingStep: actions.setRankingStep,
+    setScopeRankingStep: actions.setScopeRankingStep,
     selectRankingStep: actions.selectRankingStep,
     openPaletteModal: actions.openPaletteModal,
     closePaletteModal: actions.closePaletteModal,
@@ -182,4 +238,8 @@ export function bootstrap() {
 
   clearBootstrapLocationParams();
   scheduleInitialDataHydration(renderers.render, bootstrapLocationParams.selectedTopicId);
+  createLiveTopicSync({
+    state,
+    render: renderers.render
+  }).start();
 }

@@ -35,7 +35,7 @@ import {
   getActiveRankingStep,
   setStoredRankingIndex
 } from "../ranking-state.js";
-import { getAuthErrorFeedbackMessage } from "../controller-app.js";
+import { createLiveTopicSync, getAuthErrorFeedbackMessage } from "../controller-app.js";
 import { createResponsiveHelpers } from "../controller-responsive.js";
 import { createResizeHandler } from "../controller-runtime.js";
 import { applyStoredTheme } from "../controller-theme.js";
@@ -55,6 +55,7 @@ import {
   isPaletteId
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
+import { createTopicItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
@@ -381,6 +382,207 @@ await (async () => {
     assert.equal(getVisibleTopics(nextState.topics).length, TOPIC_VISIBLE_LIMIT);
   });
 
+  await test("live topic sync hydrates remote activity in other topics", async () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const remoteMessage = createMessage("u2", "Comentario remoto que debe aparecer sin refrescar la pagina.", 0);
+    const remoteTopics = reviveTopicWithMessage(topics, topics[1].id, remoteMessage);
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topics[0].id
+    };
+    let renderCalls = 0;
+    const sync = createLiveTopicSync({
+      state,
+      render: () => {
+        renderCalls += 1;
+      },
+      intervalMs: 0,
+      apiClient: {
+        async refreshTopics(selectedTopicId) {
+          return {
+            viewer: state.viewer,
+            users,
+            topics: remoteTopics,
+            selectedTopicId
+          };
+        }
+      }
+    });
+
+    const refreshed = await sync.refreshNow();
+
+    assert.equal(refreshed, true);
+    assert.equal(renderCalls, 1);
+    assert.equal(state.topics[0].id, topics[1].id);
+    assert.equal(state.topics[0].messages.at(-1).id, remoteMessage.id);
+    assert.equal(state.selectedTopicId, topics[0].id);
+    assert.deepEqual(state.unreadTopicIds, [topics[1].id]);
+  });
+
+  await test("topic item marks only the unread count with palette accent", () => {
+    const previousDocument = globalThis.document;
+    const users = buildUsers(initialUsers);
+    const ownMessage = createMessage("u1", "Propio", 0);
+    const externalMessage = createMessage("u2", "Externo", 0);
+
+    class MockNode {
+      constructor(tagName) {
+        this.tagName = tagName;
+        this.children = [];
+        this.dataset = {};
+        this.attributes = new Map();
+        this.className = "";
+        this.textContent = "";
+        this.classList = {
+          add: (...tokens) => {
+            this.className = [this.className, ...tokens].filter(Boolean).join(" ");
+          }
+        };
+      }
+
+      append(...nodes) {
+        this.children.push(...nodes);
+      }
+
+      appendChild(node) {
+        this.children.push(node);
+        return node;
+      }
+
+      setAttribute(name, value) {
+        this.attributes.set(name, value);
+      }
+    }
+
+    try {
+      globalThis.document = {
+        createElement: (tagName) => new MockNode(tagName),
+        createElementNS: (namespace, tagName) => new MockNode(tagName)
+      };
+
+      const readTopicItem = createTopicItem({
+        id: "topic-read",
+        title: "Leido",
+        authorId: "u1",
+        messages: [ownMessage]
+      }, users, false, "u1", false);
+      const unreadTopicItem = createTopicItem({
+        id: "topic-unread",
+        title: "Nuevo",
+        authorId: "u1",
+        messages: [ownMessage, externalMessage]
+      }, users, false, "u1", true);
+      const readMeta = readTopicItem.children[1].children[1];
+      const unreadMeta = unreadTopicItem.children[1].children[1];
+      const readCount = readMeta.children[0];
+      const unreadCount = unreadMeta.children[0];
+      const unreadUser = unreadMeta.children[2];
+
+      assert.equal(readCount.textContent, "1");
+      assert.equal(readCount.className.includes("topic-item__meta-count--unread"), false);
+      assert.equal(unreadCount.textContent, "2");
+      assert.equal(unreadCount.className.includes("topic-item__meta-count--unread"), true);
+      assert.equal(unreadUser.textContent, "Nadia");
+      assert.equal(unreadUser.className.includes("topic-item__meta-count--unread"), false);
+      assert.equal(unreadMeta.dataset.lastAuthorId, "u2");
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
+
+  await test("hydrate marks unread updates even for the open topic", () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const openTopicMessage = createMessage("u2", "Nuevo en el tema abierto", 0);
+    const otherTopicMessage = createMessage("u2", "Nuevo en otro tema", 0);
+    const withOpenTopicUpdate = reviveTopicWithMessage(topics, topics[0].id, openTopicMessage);
+    const withOtherTopicUpdate = reviveTopicWithMessage(topics, topics[1].id, otherTopicMessage);
+    const baseState = {
+      viewer: { id: "u1", type: "registered" },
+      currentUserId: "u1",
+      selectedTopicId: topics[0].id,
+      activeConnectedUserId: null,
+      publicProfileUserId: null,
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      unreadTopicIds: [],
+      rankings: null,
+      topics,
+      users
+    };
+
+    const openTopicState = reducers.hydrateFromBackend(baseState, {
+      viewer: baseState.viewer,
+      selectedTopicId: topics[0].id,
+      users,
+      topics: withOpenTopicUpdate,
+      reportedTopicIds: [],
+      reportedMessageIds: []
+    });
+    const otherTopicState = reducers.hydrateFromBackend(baseState, {
+      viewer: baseState.viewer,
+      selectedTopicId: topics[0].id,
+      users,
+      topics: withOtherTopicUpdate,
+      reportedTopicIds: [],
+      reportedMessageIds: []
+    });
+
+    assert.deepEqual(openTopicState.unreadTopicIds, [topics[0].id]);
+    assert.deepEqual(otherTopicState.unreadTopicIds, [topics[1].id]);
+  });
+  await test("hydrate does not mark current-user updates as unread", () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const sameAuthorMessage = createMessage("u1", "Nuevo desde otra ventana del mismo usuario", 0);
+    const withOtherTopicUpdate = reviveTopicWithMessage(topics, topics[1].id, sameAuthorMessage);
+    const nextState = reducers.hydrateFromBackend({
+      viewer: { id: "u1", type: "registered" },
+      currentUserId: "u1",
+      selectedTopicId: topics[0].id,
+      activeConnectedUserId: null,
+      publicProfileUserId: null,
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      unreadTopicIds: [],
+      rankings: null,
+      topics,
+      users
+    }, {
+      viewer: { id: "u1", type: "registered" },
+      selectedTopicId: topics[0].id,
+      users,
+      topics: withOtherTopicUpdate,
+      reportedTopicIds: [],
+      reportedMessageIds: []
+    });
+
+    assert.deepEqual(nextState.unreadTopicIds, []);
+  });
+  await test("markTopicRead clears the selected topic after manual refresh", () => {
+    const nextState = reducers.markTopicRead({
+      unreadTopicIds: ["topic-1", "topic-2"]
+    }, "topic-1");
+
+    assert.deepEqual(nextState.unreadTopicIds, ["topic-2"]);
+  });
+  await test("selecting a topic clears its unread marker", () => {
+    const nextState = reducers.setSelectedTopic({
+      selectedTopicId: "topic-1",
+      unreadTopicIds: ["topic-1", "topic-2"],
+      activeConnectedUserId: "u2"
+    }, "topic-2");
+
+    assert.deepEqual(nextState.unreadTopicIds, ["topic-1"]);
+    assert.equal(nextState.selectedTopicId, "topic-2");
+    assert.equal(nextState.activeConnectedUserId, null);
+  });
   await test("applyMessageReaction increments the visible message like optimistically", () => {
     const message = createMessage("u1", "Mensaje votable", 0);
     const state = {
@@ -1864,6 +2066,63 @@ await (async () => {
     assert.equal(buttonAttributes.get("aria-busy"), "false");
   });
 
+  await test("submitting a comment scrolls the message stream to the bottom", async () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const topicId = topics[0].id;
+    const submittedMessage = createMessage("u1", "Nuevo comentario", 0, "user", 1_700_000_060_000);
+    const updatedTopics = topics.map((topic) => topic.id === topicId
+      ? { ...topic, messages: [...topic.messages, submittedMessage] }
+      : topic);
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topicId,
+      unreadTopicIds: [topicId],
+      refreshCount: 0
+    };
+    const messageStream = {
+      scrollTop: 0,
+      scrollHeight: 320
+    };
+    const messageInput = {
+      value: "Nuevo comentario",
+      readOnly: false
+    };
+    let renderCalls = 0;
+    const actions = createChatActions({
+      state,
+      dom: {
+        messageInput,
+        messageStream
+      },
+      render: () => {
+        renderCalls += 1;
+        messageStream.scrollHeight = 640;
+      },
+      apiClient: {
+        async submitMessage(selectedTopicId, text) {
+          assert.equal(selectedTopicId, topicId);
+          assert.equal(text, "Nuevo comentario");
+          return {
+            viewer: { id: "u1", type: "registered" },
+            users,
+            topics: updatedTopics,
+            selectedTopicId
+          };
+        }
+      }
+    });
+
+    await actions.submitMessage({ preventDefault() {} });
+
+    assert.equal(messageInput.value, "");
+    assert.equal(messageStream.scrollTop, 640);
+    assert.deepEqual(state.unreadTopicIds, []);
+    assert.equal(renderCalls >= 2, true);
+  });
   await test("report action hydrates reported topic and message ids from backend payloads", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -2496,8 +2755,8 @@ await (async () => {
     handlers.activateConnectedUser("u1");
 
     assert.equal(state.activeConnectedUserId, "u1");
-    assert.equal(state.feedback.message, "Coco Mora seleccionado");
-    assert.equal(renderCount, 2);
+    assert.equal(state.feedback?.message, undefined);
+    assert.equal(renderCount, 1);
   });
 
   await test("palette modal dismiss closes the active Coloris picker first", () => {
@@ -2885,6 +3144,7 @@ await (async () => {
     const themeToggle = new FakeElement();
     const themeToggleDesktopSlot = new FakeElement();
     const themeToggleMobileSlot = new FakeElement();
+    const themeToggleDrawerSlot = new FakeElement();
     const flashCalls = [];
     const state = {
       viewer: { id: "guest-auth", type: "guest" }
@@ -2903,6 +3163,7 @@ await (async () => {
       paletteButton: new FakeElement(),
       themeToggleDesktopSlot,
       themeToggleMobileSlot,
+      themeToggleDrawerSlot,
       closePaletteModalButton: new FakeElement(),
       paletteModalBackdrop: new FakeElement(),
       paletteOptionGrid: new FakeElement(),
@@ -3302,6 +3563,7 @@ await (async () => {
     const themeToggle = new FakeElement();
     const themeToggleDesktopSlot = new FakeElement();
     const themeToggleMobileSlot = new FakeElement();
+    const themeToggleDrawerSlot = new FakeElement();
     const openRightDrawer = new FakeElement();
     const searchInput = new FakeElement();
     searchInput.value = "";
@@ -3362,6 +3624,7 @@ await (async () => {
       paletteButton: new FakeElement(),
       themeToggleDesktopSlot,
       themeToggleMobileSlot,
+      themeToggleDrawerSlot,
       mobileTopbarMenu,
       mobileDrawerPanels,
       drawerUsersSection,
@@ -3396,8 +3659,8 @@ await (async () => {
       globalThis.HTMLElement = FakeElement;
       globalThis.window = {
         addEventListener() {},
-        matchMedia() {
-          return { matches: true };
+        matchMedia(query) {
+          return { matches: query.includes("960px") };
         }
       };
       globalThis.requestAnimationFrame = (task) => {
@@ -3939,7 +4202,8 @@ await (async () => {
     assert.match(html, /id="themeToggleMobileSlot"/);
     assert.match(html, /id="themeToggleTemplate"/);
     assert.match(html, /id="paletteButton"[\s\S]*id="themeToggleDesktopSlot"/);
-    assert.match(html, /id="storeButton"[\s\S]*id="themeToggleMobileSlot"/);
+    assert.match(html, /data-mobile-topbar-action="palette"[\s\S]*data-mobile-topbar-action="store"[\s\S]*class="drawer-action-button__label">Tienda/);
+    assert.match(html, /id="themeToggleMobileSlot"[\s\S]*class="drawer-theme-slot"[\s\S]*id="themeToggleDrawerSlot"/);
     assert.match(html, /id="profileButton"[\s\S]*class="profile-button__avatar"/);
     assert.match(html, /id="publicProfileModalBackdrop"/);
     assert.match(html, /public-profile-modal__description-label">DESCRIPCIÓN<\/p>/);
@@ -3960,7 +4224,7 @@ await (async () => {
     assert.match(html, /data-mobile-topbar-action="home"/);
     assert.match(html, /drawer-action-button drawer-action-button--auth/);
     assert.match(html, /data-mobile-topbar-action="palette"/);
-    assert.doesNotMatch(html, /data-mobile-topbar-action="store"/);
+    assert.match(html, /data-mobile-topbar-action="store"/);
     assert.doesNotMatch(html, /data-mobile-topbar-action="theme"/);
     assert.match(html, /data-mobile-drawer-panel="ranking"/);
     assert.match(html, /data-mobile-drawer-back/);
@@ -4025,6 +4289,8 @@ await (async () => {
     assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/);
     assert.match(styles, /\.profile-button__avatar\s*\{[\s\S]*width:\s*42px;[\s\S]*height:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/);
     assert.match(styles, /\.profile-modal\s*\{[\s\S]*width:\s*min\(920px,\s*100%\);/);
+    assert.match(styles, /\.profile-modal\s*\{[\s\S]*scrollbar-gutter:\s*stable;[\s\S]*scrollbar-color:\s*var\(--profile-modal-scrollbar-thumb\) var\(--profile-modal-scrollbar-track\);/);
+    assert.match(styles, /\.profile-modal::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--profile-modal-scrollbar-thumb\);[\s\S]*border:\s*3px solid var\(--profile-modal-scrollbar-track\);[\s\S]*border-radius:\s*999px;/);
     assert.match(styles, /\.profile-modal__header\s*\{[\s\S]*padding:\s*16px 24px 14px;/);
     assert.match(styles, /\.profile-modal__title\s*\{[\s\S]*font-size:\s*1\.45rem;/);
     assert.match(styles, /\.profile-modal__actions\s*\{[\s\S]*padding:\s*11px 24px;/);
@@ -4036,6 +4302,8 @@ await (async () => {
     assert.match(styles, /\.profile-modal__joined\s*\{[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/);
     assert.match(styles, /\.profile-modal__visibility-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/);
     assert.match(styles, /\.profile-modal__field--description\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 4;/);
+    assert.match(styles, /\.profile-modal__field input,\s*\.profile-modal__field textarea\s*\{[\s\S]*max-width:\s*100%;[\s\S]*overflow-x:\s*hidden;/);
+    assert.match(styles, /\.profile-modal__field textarea,\s*\.public-profile-modal__description\s*\{[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*word-break:\s*break-word;/);
     assert.match(styles, /\.profile-modal__field--description textarea\s*\{[\s\S]*height:\s*100%;[\s\S]*max-height:\s*none;/);
     assert.match(styles, /\.profile-modal__field-heading\s*\{[\s\S]*justify-content:\s*space-between;/);
     assert.match(styles, /\.profile-modal__edit-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/);
@@ -4064,7 +4332,10 @@ await (async () => {
     assert.match(styles, /\.public-profile-modal__cafes ul\s*\{[\s\S]*grid-template-rows:\s*repeat\(3, minmax\(0, 1fr\)\);/);
     assert.match(styles, /\.public-profile-modal__cafes li\s*\{[\s\S]*display:\s*flex;[\s\S]*text-overflow:\s*ellipsis;/);
     assert.match(styles, /\.public-profile-modal__actions\s*\{[\s\S]*margin:\s*8px -28px -28px;[\s\S]*padding:\s*11px 24px;/);
-    assert.match(styles, /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/);
+    assert.match(styles, /html\[data-theme\] \.topic-item:hover,[\s\S]*html\[data-theme\] #topicList \.topic-item:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 86%,\s*var\(--accent\) 14%\);/);
+    assert.match(styles, /html\[data-theme\] \.topic-item\.is-active,[\s\S]*html\[data-theme\] #topicList \.topic-item\.is-active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 76%,\s*var\(--accent\) 24%\);/);
+    assert.match(styles, /html\[data-theme\] \.topic-item\.is-active:hover,[\s\S]*html\[data-theme\] #topicList \.topic-item\.is-active:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 70%,\s*var\(--accent\) 30%\);/);
+    assert.doesNotMatch(styles, /#(?:efd8c7|e5bfa7|2a201d|252b33|1f3035|263020|342421|252d3d)/i);    assert.match(styles, /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/);
     assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-item__avatar\s*\{[\s\S]*width:\s*76px;[\s\S]*height:\s*76px;/);
     assert.match(styles, /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/);
     assert.match(styles, /\.theme-toggle-slot\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;/);
@@ -4072,7 +4343,7 @@ await (async () => {
     assert.match(styles, /\.theme-switch\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*78px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*3px;[\s\S]*border-radius:\s*999px;/);
     assert.match(styles, /#themeToggleDesktopSlot \.theme-switch\s*\{[\s\S]*border:\s*1px solid var\(--button-ghost-border\);[\s\S]*background:\s*var\(--button-ghost-bg\);/);
     assert.match(styles, /#themeToggleDesktopSlot \.theme-switch:hover,\s*#themeToggleDesktopSlot \.theme-switch:active\s*\{[\s\S]*background:\s*var\(--button-ghost-bg-hover\);[\s\S]*border-color:\s*var\(--button-ghost-border\);/);
-    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:focus-visible\s*\{[\s\S]*outline:\s*2px solid color-mix/);
+    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleDrawerSlot \.theme-switch:focus-visible\s*\{[\s\S]*outline:\s*2px solid color-mix/);
     assert.match(styles, /\.message\s*\{[\s\S]*position:\s*relative;[\s\S]*padding:\s*0 0 0 84px;[\s\S]*min-height:\s*84px;[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /\.message \+ \.message::before\s*\{[\s\S]*top:\s*0;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*height:\s*1px;/);
     assert.match(styles, /\.message \+ \.message \.message__avatar\s*\{[\s\S]*border-top:\s*1px solid/);
@@ -4116,35 +4387,46 @@ await (async () => {
     assert.match(styles, /html\.is-mobile-viewport #storeButton \.button-label\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport #authButton\s*\{[\s\S]*min-width:\s*0;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding-block:\s*0;[\s\S]*padding-inline:\s*10px;[\s\S]*align-items:\s*center;[\s\S]*font-size:\s*0\.78rem;[\s\S]*letter-spacing:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*font-weight:\s*900;[\s\S]*letter-spacing:\s*0;[\s\S]*-webkit-text-stroke:\s*0\.2px currentColor;/);
-    assert.match(styles, /#themeToggleMobileSlot \.theme-switch\s*\{[\s\S]*border:\s*2px solid color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);/);
-    assert.match(styles, /#themeToggleMobileSlot \.theme-switch:hover,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);/);
+    assert.match(styles, /#themeToggleMobileSlot \.theme-switch,\s*#themeToggleDrawerSlot \.theme-switch\s*\{[\s\S]*border:\s*2px solid color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);/);
+    assert.match(styles, /#themeToggleMobileSlot \.theme-switch:hover,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:active,\s*#themeToggleDrawerSlot \.theme-switch:hover,\s*#themeToggleDrawerSlot \.theme-switch:focus-visible,\s*#themeToggleDrawerSlot \.theme-switch:active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);/);
     assert.match(styles, /\.theme-switch__track\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*border-radius:\s*999px;[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 88%,\s*var\(--accent-soft\) 12%\);[\s\S]*overflow:\s*hidden;/);
     assert.match(styles, /\.theme-switch__icons\s*\{[\s\S]*display:\s*block;[\s\S]*pointer-events:\s*none;/);
     assert.match(styles, /\.theme-switch__icon\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*50%;[\s\S]*width:\s*14px;[\s\S]*height:\s*14px;[\s\S]*opacity:\s*0\.96;[\s\S]*transform:\s*translateY\(-50%\);[\s\S]*z-index:\s*2;/);
     assert.match(styles, /\.theme-switch__icon--light\s*\{[\s\S]*left:\s*10px;/);
-    assert.match(styles, /\.theme-switch__icon--dark\s*\{[\s\S]*right:\s*10\.6px;/);
-    assert.match(styles, /\.theme-switch__icon--dark svg\s*\{[\s\S]*transform:\s*translateY\(-0\.35px\);/);
-    assert.match(styles, /\.theme-switch__thumb\s*\{[\s\S]*left:\s*0;[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*transform:\s*translate\(34px,\s*-50%\);[\s\S]*z-index:\s*1;/);
-    assert.match(styles, /html\[data-theme="light"\] \.theme-switch__thumb\s*\{[\s\S]*transform:\s*translate\(0,\s*-50%\);/);
+    assert.match(styles, /\.theme-switch__icon--dark\s*\{[\s\S]*right:\s*10px;/);
+    assert.doesNotMatch(styles, /\.theme-switch__icon--dark svg\s*\{/);
+    assert.match(styles, /\.theme-switch__thumb\s*\{[\s\S]*left:\s*0;[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*transform:\s*translateY\(-50%\);[\s\S]*transition:[\s\S]*left 180ms ease,[\s\S]*z-index:\s*1;/);
+    assert.match(styles, /html\[data-theme="dark"\] \.theme-switch__thumb\s*\{[\s\S]*left:\s*calc\(100% - 34px\);/);
+    assert.match(styles, /html\[data-theme="light"\] \.theme-switch__thumb\s*\{[\s\S]*left:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/);
     assert.match(styles, /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*2;[\s\S]*justify-content:\s*flex-end;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*grid-column:\s*1;[\s\S]*display:\s*inline-flex;[\s\S]*max-width:\s*100%;/);
+    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*max-width:\s*calc\(100vw - 132px\);[\s\S]*overflow:\s*hidden;[\s\S]*white-space:\s*nowrap;/);
     assert.match(styles, /html\.is-mobile-viewport\[data-auth-state="logged-in"\] #authButton\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.topbar__auth-tools\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat\s*\{[\s\S]*gap:\s*10px;/);
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat \.chat-header__back\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;[\s\S]*min-width:\s*40px;[\s\S]*min-height:\s*40px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*justify-items:\s*start;[\s\S]*text-align:\s*left;/);
+    assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*font-size:\s*1rem;[\s\S]*white-space:\s*nowrap;/);
+    assert.match(styles, /html\.is-mobile-viewport \.brand-mark__che,\s*html\.is-mobile-viewport \.brand-mark__trend\s*\{[\s\S]*display:\s*inline;/);
+    assert.match(styles, /html\.is-mobile-viewport \.brand-mark__icon\s*\{[\s\S]*width:\s*2\.25rem;[\s\S]*height:\s*2\.25rem;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-stack\s*\{[\s\S]*flex-direction:\s*column;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer__header\s*\{[\s\S]*position:\s*relative;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);[\s\S]*border-color:\s*var\(--button-fill-border\);[\s\S]*color:\s*var\(--button-fill-text\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\] > span\s*\{[\s\S]*display:\s*grid;[\s\S]*place-items:\s*center;[\s\S]*transform:\s*translateY\(-0\.5px\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:hover,\s*html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*#c63834 62%,\s*var\(--accent-strong\) 38%\);[\s\S]*transform:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px minmax\(0,\s*1fr\) 20px;[\s\S]*gap:\s*12px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px minmax\(0,\s*1fr\) 20px;[\s\S]*justify-content:\s*flex-start;[\s\S]*gap:\s*12px;[\s\S]*min-width:\s*0;[\s\S]*overflow:\s*hidden;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__icon\s*\{[\s\S]*width:\s*20px;[\s\S]*height:\s*20px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__label\s*\{[\s\S]*text-align:\s*center;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__label\s*\{[\s\S]*display:\s*block;[\s\S]*justify-self:\s*center;[\s\S]*width:\s*min\(112px,\s*100%\);[\s\S]*max-width:\s*100%;[\s\S]*overflow:\s*hidden;[\s\S]*text-align:\s*center;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth \.drawer-action-button__label\s*\{[\s\S]*padding-left:\s*14px;[\s\S]*text-align:\s*left;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-search__field\s*\{[\s\S]*position:\s*relative;[\s\S]*display:\s*block;[\s\S]*min-height:\s*52px;[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*0;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-search__input\s*\{[\s\S]*display:\s*block;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*52px;[\s\S]*border:\s*0 !important;[\s\S]*border-radius:\s*0 !important;[\s\S]*padding:\s*0 14px 0 46px;[\s\S]*box-shadow:\s*none !important;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\.is-search-hidden\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--store\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 76%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent\) 72%,\s*var\(--surface-strong\) 28%\);[\s\S]*color:\s*var\(--button-fill-text\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--store \.drawer-action-button__icon\s*\{[\s\S]*color:\s*var\(--button-fill-text\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--store:hover,\s*html\.is-mobile-viewport \.drawer-action-button--store:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 78%,\s*var\(--surface-strong\) 22%\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer-theme-slot\s*\{[\s\S]*justify-content:\s*flex-end;[\s\S]*margin-top:\s*14px;/);
+    assert.match(styles, /@media \(max-width:\s*380px\)\s*\{[\s\S]*html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*left:\s*50%;[\s\S]*max-width:\s*calc\(100vw - 168px\);/);
+    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*display:\s*none;/);
+    assert.match(styles, /@media \(max-width:\s*430px\)\s*\{[\s\S]*html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__back\s*\{/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth\s*\{[\s\S]*margin-top:\s*10px;[\s\S]*color:\s*var\(--button-fill-text\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth \.drawer-action-button__icon\s*\{[\s\S]*color:\s*var\(--button-fill-text\);/);
@@ -4156,6 +4438,14 @@ await (async () => {
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panels\[hidden\],\s*[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer\s*\{[\s\S]*width:\s*min\(84vw,\s*360px\);[\s\S]*max-width:\s*calc\(100vw - 52px\);/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__brand\s*\{[\s\S]*gap:\s*12px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__brand-icon\s*\{[\s\S]*width:\s*2rem;[\s\S]*height:\s*2rem;/);
+    assert.match(styles, /html\.is-mobile-viewport \.drawer__brand \.brand-mark\s*\{[\s\S]*font-size:\s*1\.05rem;[\s\S]*white-space:\s*nowrap;/);
+    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand\s*\{[\s\S]*inset:\s*0 50px 0 42px;[\s\S]*gap:\s*5px;/);
+    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand-icon\s*\{[\s\S]*width:\s*1\.45rem;[\s\S]*height:\s*1\.45rem;/);
+    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark\s*\{[\s\S]*display:\s*grid;[\s\S]*font-size:\s*0\.7rem;[\s\S]*white-space:\s*normal;/);
+    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark__che,\s*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark__trend\s*\{[\s\S]*display:\s*block;/);
+    assert.match(styles, /@media \(max-width:\s*216px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header,\s*html\.is-mobile-viewport \.drawer-ranking__header\s*\{[\s\S]*grid-template-columns:\s*40px minmax\(0,\s*1fr\) 40px;[\s\S]*gap:\s*12px;[\s\S]*margin-bottom:\s*12px;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header::after,\s*html\.is-mobile-viewport \.drawer-ranking__header::after\s*\{[\s\S]*grid-column:\s*3;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;/);
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header h3,\s*html\.is-mobile-viewport \.drawer-ranking__header h3\s*\{[\s\S]*justify-content:\s*center;[\s\S]*text-align:\s*center;/);
@@ -4181,7 +4471,7 @@ await (async () => {
     assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-list\s*\{[\s\S]*grid-auto-rows:\s*76px;/);
     assert.match(styles, /\.topic-item\.is-active \.topic-item__avatar\s*\{[\s\S]*border-color:\s*inherit;/);
     assert.match(styles, /\.user-item__trigger\s*\{/);
-    assert.match(styles, /\.user-item__trigger:focus-visible,\s*\.user-item__action:focus-visible\s*\{/);
+    assert.match(styles, /\.user-item__trigger:focus-visible,\s*\.user-item__action:focus-visible,\s*\.user-item__menu-button:focus-visible\s*\{/);
     assert.match(styles, /html\[data-theme="light"\]\.is-desktop-viewport \.panel--topics \.topics-panel__list-frame\s*\{[\s\S]*border:\s*1px solid/);
     assert.match(styles, /html\[data-theme="light"\] \.panel--chat,\s*html\[data-theme="light"\] \.panel--users-rankings\s*\{[\s\S]*border:\s*1px solid[\s\S]*box-shadow:\s*none;[\s\S]*backdrop-filter:\s*none;/);
     assert.match(styles, /html\[data-theme="light"\] \.panel--chat\s*\{[\s\S]*border-top:\s*1px solid[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-top-right-radius:\s*0;[\s\S]*background:\s*var\(--surface-strong\);/);
@@ -4221,6 +4511,11 @@ await (async () => {
     assert.match(components, /dataset\.reportEntityType = "message"/);
     assert.match(components, /dataset\.connectedUserId/);
     assert.match(components, /dataset\.userAction/);
+    assert.match(components, /dataset\.userMenuTrigger/);
+    assert.match(components, /user-item__menu/);
+    assert.match(components, /createUserMenuButton\("Perfil", "profile"\)/);
+    assert.match(components, /createUserMenuButton\("Agregar amigo", "friend"\)/);
+    assert.match(components, /createUserMenuButton\("Reportar", "report"\)/);
     assert.match(components, /user-item__trigger/);
     assert.match(components, /aria-pressed/);
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
@@ -4275,7 +4570,7 @@ await (async () => {
     assert.match(renderController, /renderPublicProfileModal/);
     assert.match(chat, /renderChat/);
     assert.match(chat, /panel--topic-create/);
-    assert.match(chat, /Primer posteo del tema/);
+    assert.match(chat, /Primer mensaje/);
     assert.match(chat, /Crear tema/);
     assert.match(chatActions, /Inicia sesion o crea una cuenta para participar/);
     assert.match(chatActions, /Motivo del reporte del usuario/);
@@ -4337,6 +4632,7 @@ await (async () => {
     assert.doesNotMatch(domModule, /drawerRankingModeList/);
     assert.match(domModule, /themeToggleDesktopSlot/);
     assert.match(domModule, /themeToggleMobileSlot/);
+    assert.match(domModule, /themeToggleDrawerSlot/);
     assert.match(domModule, /mobileTopbarMenu/);
     assert.match(domModule, /mobileDrawerPanels/);
     assert.match(domModule, /drawerUsersSection/);

@@ -190,7 +190,7 @@ function syncChatComposer(topic, dom, isLoading) {
   if (dom.messageInput) {
     dom.messageInput.disabled = !isCreatingTopic && !isCommentableTopic;
     dom.messageInput.placeholder = isCreatingTopic
-      ? "Primer posteo del tema"
+      ? "Primer mensaje"
       : isCommentableTopic
         ? "Escribe un comentario..."
         : "Tema cerrado para comentarios";

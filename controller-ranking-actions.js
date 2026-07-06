@@ -40,11 +40,18 @@ export function createRankingActions({ state, isMobileViewport, syncResponsiveVi
     applyRankingStep(getActiveRankingIndex(state) + delta);
   }
 
+  function setScopeRankingStep(scope, delta) {
+    const currentIndex = getStoredRankingIndex(state, scope);
+    setStoredRankingIndex(state, currentIndex + delta, scope);
+    render();
+  }
+
   return {
     setRankingScope,
     toggleRankingScope,
     focusTopic,
     setRankingStep,
-    selectRankingStep: applyRankingStep
+    selectRankingStep: applyRankingStep,
+    setScopeRankingStep
   };
 }

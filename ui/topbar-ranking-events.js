@@ -2,8 +2,10 @@ export function bindTopbarRankingEvents(dom, handlers) {
   addListener(dom.rankingScopeButton, "click", handlers.toggleRankingScope);
   addListener(dom.rankingPrev, "click", () => handlers.setRankingStep(-1));
   addListener(dom.rankingNext, "click", () => handlers.setRankingStep(1));
-  addListener(dom.drawerRankingPrev, "click", () => handlers.setRankingStep(-1));
-  addListener(dom.drawerRankingNext, "click", () => handlers.setRankingStep(1));
+  addListener(dom.drawerGlobalRankingPrev, "click", () => handlers.setScopeRankingStep("global", -1));
+  addListener(dom.drawerGlobalRankingNext, "click", () => handlers.setScopeRankingStep("global", 1));
+  addListener(dom.drawerRankingPrev, "click", () => handlers.setScopeRankingStep("topic", -1));
+  addListener(dom.drawerRankingNext, "click", () => handlers.setScopeRankingStep("topic", 1));
 
   bindScopeTabs(dom.rankingScopeTabs, handlers.setRankingScope);
   bindScopeTabs(dom.drawerRankingScopeTabs, handlers.setRankingScope);

@@ -33,5 +33,8 @@ export const dom = {
   drawerRankingList: null,
   leftDrawer: null,
   rightDrawer: null,
+  themeToggleDesktopSlot: null,
+  themeToggleMobileSlot: null,
+  themeToggleDrawerSlot: null,
   drawerCloseButtons: []
 };

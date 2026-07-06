@@ -1,5 +1,5 @@
 import { getSelectedTopic } from "../model.js";
-import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel } from "./ranking-labels.js";
+import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel, getScopeRankingLabel } from "./ranking-labels.js";
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
 const SITE_NAME = "TOPYKLY";
@@ -36,20 +36,35 @@ export function renderTitles(state, dom) {
   }
 
   const currentLabel = getCurrentRankingLabel(state);
-  const currentAriaLabel = `Modo actual: ${currentLabel}`;
-  [
-    dom.rankingCurrent,
-    dom.drawerRankingCurrent
-  ].forEach((button) => {
-    if (!button) {
-      return;
+
+  // Desktop
+  if (dom.rankingCurrent) {
+    const labelEl = dom.rankingCurrent.querySelector(".button-label");
+    if (labelEl) {
+      labelEl.innerHTML = renderRankingLabel(currentLabel);
     }
-    const label = button.querySelector(".button-label");
-    if (label) {
-      label.innerHTML = renderRankingLabel(currentLabel);
+    dom.rankingCurrent.setAttribute("aria-label", `Modo actual: ${currentLabel}`);
+  }
+
+  // Mobile drawer Global
+  if (dom.drawerGlobalRankingCurrent) {
+    const globalLabel = getScopeRankingLabel(state, "global");
+    const labelEl = dom.drawerGlobalRankingCurrent.querySelector(".button-label");
+    if (labelEl) {
+      labelEl.innerHTML = renderRankingLabel(globalLabel);
     }
-    button.setAttribute("aria-label", currentAriaLabel);
-  });
+    dom.drawerGlobalRankingCurrent.setAttribute("aria-label", `Modo actual: ${globalLabel}`);
+  }
+
+  // Mobile drawer Topic
+  if (dom.drawerRankingCurrent) {
+    const topicLabel = getScopeRankingLabel(state, "topic");
+    const labelEl = dom.drawerRankingCurrent.querySelector(".button-label");
+    if (labelEl) {
+      labelEl.innerHTML = renderRankingLabel(topicLabel);
+    }
+    dom.drawerRankingCurrent.setAttribute("aria-label", `Modo actual: ${topicLabel}`);
+  }
 
   const glyph = getRankingGlyph(state);
   if (dom.rankingsGlyph) {

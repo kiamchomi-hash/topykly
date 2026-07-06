@@ -152,9 +152,10 @@
         <script>
           (function () {
             const template = document.getElementById("themeToggleTemplate");
-            const targetSlot = document.documentElement.classList.contains("is-mobile-viewport")
+            const preferredSlot = document.documentElement.classList.contains("is-mobile-viewport")
               ? document.getElementById("themeToggleMobileSlot")
               : document.getElementById("themeToggleDesktopSlot");
+            const targetSlot = preferredSlot || document.getElementById("themeToggleDesktopSlot");
             if (template instanceof HTMLTemplateElement && targetSlot && !targetSlot.firstElementChild) {
               targetSlot.appendChild(template.content.cloneNode(true));
             }
@@ -223,7 +224,7 @@
 
           <form class="composer" id="messageForm">
             <label class="composer__field" hidden>
-              <input id="topicTitleInput" type="text" maxlength="80" placeholder="Titulo del tema" autocomplete="off" aria-label="Titulo del tema" />
+              <input id="topicTitleInput" type="text" maxlength="80" placeholder="Título del tema" autocomplete="off" aria-label="Título del tema" />
             </label>
             <label class="composer__field">
               <textarea id="messageInput" rows="2" maxlength="240" placeholder="Escribe aqui..." required aria-label="Mensaje"></textarea>
@@ -569,6 +570,15 @@
               </span>
               <span class="drawer-action-button__label">Paletas</span>
             </button>
+            <button class="drawer-action-button drawer-action-button--store" type="button" data-mobile-topbar-action="store" data-auth-private>
+              <span class="drawer-action-button__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 9h14l-1 11H6L5 9Z"></path>
+                  <path d="M9 9V7a3 3 0 0 1 6 0v2"></path>
+                </svg>
+              </span>
+              <span class="drawer-action-button__label">Tienda</span>
+            </button>
             <button class="drawer-action-button" type="button" data-mobile-drawer-panel="users" aria-pressed="false">
               <span class="drawer-action-button__icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter">
@@ -602,6 +612,9 @@
               </span>
               <span class="drawer-action-button__label">Cerrar sesión</span>
             </button>
+          </div>
+          <div class="drawer-theme-slot" aria-label="Tema">
+            <div class="theme-toggle-slot theme-toggle-slot--drawer" id="themeToggleDrawerSlot"></div>
           </div>
       </section>
       <div class="drawer-mobile-panels" id="mobileDrawerPanels" hidden>
@@ -641,29 +654,68 @@
               <button class="ranking-scope-tabs__button" type="button" data-ranking-scope="topic">TEMA</button>
             </div>
           </div>
-          <div class="drawer-ranking__switch">
-            <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerRankingPrev" type="button" aria-label="Ranking anterior">
-              <span class="icon-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m15 18-6-6 6-6"></path>
-                </svg>
-              </span>
-            </button>
-            <button class="icon-button icon-button--compact ranking-carousel__current" id="drawerRankingCurrent" type="button" aria-label="Modo actual">
-              <span class="button-label">TEMA COMENTARIOS</span>
-            </button>
-            <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerRankingNext" type="button" aria-label="Ranking siguiente">
-              <span class="icon-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m9 18 6-6-6-6"></path>
-                </svg>
-              </span>
-            </button>
+          <div class="scroll-list" id="drawerRankingList" style="display: none !important;"></div>
+
+          <!-- Global Ranking -->
+          <div class="panel" id="drawerGlobalRankingPanel">
+            <div class="panel__header" id="drawerGlobalRankingHeader">
+              <div class="panel__title-inline panel__title-inline--ranking">
+                <h3>Global</h3>
+              </div>
+            </div>
+            <div class="drawer-ranking__switch drawer-ranking__switch--split" id="drawerGlobalRankingSwitch">
+              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerGlobalRankingPrev" type="button" aria-label="Ranking anterior">
+                <span class="icon-button__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                  </svg>
+                </span>
+              </button>
+              <button class="icon-button icon-button--compact ranking-carousel__current" id="drawerGlobalRankingCurrent" type="button" aria-label="Modo actual">
+                <span class="button-label">TEMAS COMENTARIOS</span>
+              </button>
+              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerGlobalRankingNext" type="button" aria-label="Ranking siguiente">
+                <span class="icon-button__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                  </svg>
+                </span>
+              </button>
+            </div>
+            <div class="scroll-list" id="drawerGlobalRankingList"></div>
           </div>
-          <div class="drawer-ranking-content">
-            <div class="scroll-list" id="drawerRankingList"></div>
-            <div class="panel__empty panel__empty--drawer" id="drawerRankingsEmpty" hidden></div>
+
+          <!-- Topic (Tema) Ranking -->
+          <div class="panel" id="drawerTopicRankingPanel">
+            <div class="panel__header" id="drawerTopicRankingHeader">
+              <div class="panel__title-inline panel__title-inline--ranking">
+                <h3 id="drawerTopicRankingTitle">Tema</h3>
+              </div>
+            </div>
+            <div class="drawer-ranking__switch drawer-ranking__switch--split" id="drawerTopicRankingSwitch">
+              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerRankingPrev" type="button" aria-label="Ranking anterior">
+                <span class="icon-button__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                  </svg>
+                </span>
+              </button>
+              <button class="icon-button icon-button--compact ranking-carousel__current" id="drawerRankingCurrent" type="button" aria-label="Modo actual">
+                <span class="button-label">COMENTARIOS</span>
+              </button>
+              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerRankingNext" type="button" aria-label="Ranking siguiente">
+                <span class="icon-button__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m9 18 6-6-6-6"></path>
+                  </svg>
+                </span>
+              </button>
+            </div>
+            <div class="scroll-list" id="drawerTopicRankingList"></div>
           </div>
+          
+          <div class="panel__empty panel__empty--drawer" id="drawerRankingsEmpty" hidden></div>
+        </div>
         </div>
       </section>
       </div>

@@ -144,9 +144,17 @@ export function bindTopbarActionEvents(dom, handlers) {
     avatar.append(image);
   }
 
+  function isThemeDrawerViewport() {
+    return isMobileViewport() && window.matchMedia?.("(max-width: 380px)")?.matches;
+  }
+
   function syncThemeTogglePlacement() {
     const themeToggle = dom.themeToggle;
-    const targetSlot = isMobileViewport() ? dom.themeToggleMobileSlot : dom.themeToggleDesktopSlot;
+    const targetSlot = isThemeDrawerViewport()
+      ? dom.themeToggleDrawerSlot
+      : isMobileViewport()
+        ? dom.themeToggleMobileSlot
+        : dom.themeToggleDesktopSlot;
     if (!themeToggle || !targetSlot) {
       return;
     }
@@ -155,7 +163,11 @@ export function bindTopbarActionEvents(dom, handlers) {
       targetSlot.append(themeToggle);
     }
 
-    themeToggle.dataset.themeTogglePlacement = isMobileViewport() ? "mobile" : "desktop";
+    themeToggle.dataset.themeTogglePlacement = isThemeDrawerViewport()
+      ? "drawer"
+      : isMobileViewport()
+        ? "mobile"
+        : "desktop";
   }
 
   function lockPickerReopen() {

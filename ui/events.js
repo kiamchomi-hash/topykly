@@ -100,24 +100,114 @@ function getActiveFocusTrapContainer(dom) {
 export function bindPageEvents(dom, handlers) {
   bindTopbarEvents(dom, handlers);
 
-  function handleConnectedUserActivation(target) {
+  function positionConnectedUserMenu(menu, userItem, pointer = null) {
+    const actions = userItem.querySelector(".user-item__actions");
+    const actionsRect = actions instanceof HTMLElement ? actions.getBoundingClientRect() : null;
+    const menuRect = menu.getBoundingClientRect();
+    const gap = 8;
+    const viewportPadding = 8;
+    const pointerX = Number.isFinite(pointer?.clientX) ? pointer.clientX : userItem.getBoundingClientRect().left;
+    const pointerY = Number.isFinite(pointer?.clientY) ? pointer.clientY : userItem.getBoundingClientRect().top;
+    const maxLeft = window.innerWidth - menuRect.width - viewportPadding;
+    const maxTop = window.innerHeight - menuRect.height - viewportPadding;
+    let left = Math.max(viewportPadding, Math.min(maxLeft, pointerX + gap));
+    const top = Math.max(viewportPadding, Math.min(maxTop, pointerY - menuRect.height / 2));
+
+    if (actionsRect) {
+      const overlapsActions =
+        left < actionsRect.right &&
+        left + menuRect.width > actionsRect.left &&
+        top < actionsRect.bottom &&
+        top + menuRect.height > actionsRect.top;
+
+      if (overlapsActions) {
+        left = Math.max(viewportPadding, actionsRect.left - menuRect.width - gap);
+      }
+    }
+
+    menu.style.setProperty("--user-menu-left", `${left}px`);
+    menu.style.setProperty("--user-menu-top", `${top}px`);
+  }
+
+  function closeConnectedUserMenus(exceptMenu = null) {
+    [dom.userList, dom.drawerUserList].forEach((listNode) => {
+      if (!(listNode instanceof HTMLElement)) {
+        return;
+      }
+
+      listNode.querySelectorAll("[data-user-menu]").forEach((menu) => {
+        if (!(menu instanceof HTMLElement) || menu === exceptMenu) {
+          return;
+        }
+        menu.hidden = true;
+        menu.style.removeProperty("--user-menu-left");
+        menu.style.removeProperty("--user-menu-top");
+        listNode.querySelectorAll(`[data-user-menu-trigger="${menu.dataset.userMenu}"]`).forEach((trigger) => {
+          if (trigger instanceof HTMLElement) {
+            trigger.setAttribute("aria-expanded", "false");
+          }
+        });
+      });
+    });
+  }
+
+  function handleConnectedUserActivation(target, pointer = null) {
     if (!(target instanceof Element)) {
       return false;
     }
 
     const userItem = target.closest("[data-connected-user-id]");
     if (!(userItem instanceof HTMLElement)) {
+      closeConnectedUserMenus();
       return false;
     }
 
     const userId = userItem.dataset.connectedUserId;
     if (!userId) {
+      closeConnectedUserMenus();
       return false;
     }
 
     const actionButton = target.closest("[data-user-action]");
-    const action = actionButton instanceof HTMLElement ? actionButton.dataset.userAction || "item" : "item";
-    handlers.activateConnectedUser?.(userId, action);
+    if (actionButton instanceof HTMLElement) {
+      const action = actionButton.dataset.userAction || "item";
+      closeConnectedUserMenus();
+      if (action === "report") {
+        handlers.reportEntity?.("user", userId, { trigger: actionButton });
+        return true;
+      }
+      handlers.activateConnectedUser?.(userId, action);
+      return true;
+    }
+
+    const menuTrigger = target.closest("[data-user-menu-trigger]");
+    if (menuTrigger instanceof HTMLElement) {
+      const menuId = menuTrigger.dataset.userMenuTrigger || "";
+      if (menuTrigger.getAttribute("aria-pressed") !== "true") {
+        closeConnectedUserMenus();
+        handlers.activateConnectedUser?.(userId, "item");
+        return true;
+      }
+
+      const menu = userItem.querySelector(`[data-user-menu="${menuId}"]`);
+      if (menu instanceof HTMLElement) {
+        const willOpen = menu.hidden;
+        closeConnectedUserMenus(menu);
+        menu.hidden = !willOpen;
+        if (willOpen) {
+          positionConnectedUserMenu(menu, userItem, pointer);
+        }
+        userItem.querySelectorAll(`[data-user-menu-trigger="${menuId}"]`).forEach((trigger) => {
+          if (trigger instanceof HTMLElement) {
+            trigger.setAttribute("aria-expanded", String(willOpen));
+          }
+        });
+      }
+      return true;
+    }
+
+    closeConnectedUserMenus();
+    handlers.activateConnectedUser?.(userId, "item");
     return true;
   }
 
@@ -127,7 +217,7 @@ export function bindPageEvents(dom, handlers) {
     }
 
     listNode.addEventListener("click", (event) => {
-      handleConnectedUserActivation(event.target);
+      handleConnectedUserActivation(event.target, event);
     });
   }
 
@@ -208,6 +298,22 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
+  function closeMessageReactionMenus(exceptMenu = null) {
+    if (!(dom.messageStream instanceof HTMLElement)) {
+      return;
+    }
+
+    dom.messageStream.querySelectorAll("[data-message-reaction-menu]").forEach((menu) => {
+      if (!(menu instanceof HTMLElement) || menu === exceptMenu) {
+        return;
+      }
+      menu.hidden = true;
+      const trigger = dom.messageStream.querySelector(`[data-message-reaction-trigger="${menu.dataset.messageReactionMenu}"]`);
+      if (trigger instanceof HTMLElement) {
+        trigger.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
   if (typeof HTMLElement !== "undefined" && dom.messageStream instanceof HTMLElement) {
     dom.messageStream.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) {
@@ -220,6 +326,7 @@ export function bindPageEvents(dom, handlers) {
         const menu = dom.messageStream.querySelector(`[data-message-menu="${menuId}"]`);
         if (menu instanceof HTMLElement) {
           const willOpen = menu.hidden;
+          closeMessageReactionMenus();
           closeMessageActionMenus(menu);
           menu.hidden = !willOpen;
           menuTrigger.setAttribute("aria-expanded", String(willOpen));
@@ -227,8 +334,22 @@ export function bindPageEvents(dom, handlers) {
         return;
       }
 
+      const reactionTrigger = event.target.closest("[data-message-reaction-trigger]");
+      if (reactionTrigger instanceof HTMLElement) {
+        const menuId = reactionTrigger.dataset.messageReactionTrigger || "";
+        const menu = dom.messageStream.querySelector(`[data-message-reaction-menu="${menuId}"]`);
+        if (menu instanceof HTMLElement) {
+          const willOpen = menu.hidden;
+          closeMessageActionMenus();
+          closeMessageReactionMenus(menu);
+          menu.hidden = !willOpen;
+          reactionTrigger.setAttribute("aria-expanded", String(willOpen));
+        }
+        return;
+      }
       const profileTrigger = event.target.closest("[data-message-profile-author-id]");
       if (profileTrigger instanceof HTMLElement) {
+        closeMessageReactionMenus();
         closeMessageActionMenus();
         handlers.activateConnectedUser?.(profileTrigger.dataset.messageProfileAuthorId || "", "profile");
         return;
@@ -236,6 +357,7 @@ export function bindPageEvents(dom, handlers) {
 
       const likeTrigger = event.target.closest("[data-like-message-id]");
       if (likeTrigger instanceof HTMLElement) {
+        closeMessageReactionMenus();
         closeMessageActionMenus();
         handlers.toggleMessageLike?.(likeTrigger.dataset.likeMessageId || "", { trigger: likeTrigger });
         return;
@@ -243,6 +365,7 @@ export function bindPageEvents(dom, handlers) {
 
       const dislikeTrigger = event.target.closest("[data-dislike-message-id]");
       if (dislikeTrigger instanceof HTMLElement) {
+        closeMessageReactionMenus();
         closeMessageActionMenus();
         handlers.toggleMessageDislike?.(dislikeTrigger.dataset.dislikeMessageId || "", { trigger: dislikeTrigger });
         return;
@@ -250,10 +373,12 @@ export function bindPageEvents(dom, handlers) {
 
       const trigger = event.target.closest("[data-report-entity-type][data-report-entity-id]");
       if (!(trigger instanceof HTMLElement)) {
+        closeMessageReactionMenus();
         closeMessageActionMenus();
         return;
       }
 
+      closeMessageReactionMenus();
       closeMessageActionMenus();
       handlers.reportEntity?.(
         trigger.dataset.reportEntityType || "message",

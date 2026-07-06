@@ -5,6 +5,56 @@ import { insertTopicAtTop, prepareTopicFeed, reviveTopicWithMessage } from "./mo
  * These functions follow the pattern: (state, payload) => nextState
  */
 
+function getUserMessageCount(topic) {
+  return topic?.messages?.filter?.((message) => message.kind === "user").length ?? 0;
+}
+
+function getLastUserMessage(topic) {
+  if (!topic?.messages?.length) {
+    return null;
+  }
+
+  return [...topic.messages].reverse().find((message) => message.kind === "user") ?? null;
+}
+
+function getUnreadTopicIdsAfterHydration(state, payload) {
+  const previousTopics = Array.isArray(state.topics) ? state.topics : [];
+  const nextTopics = Array.isArray(payload.topics) ? payload.topics : [];
+  const previousTopicById = new Map(previousTopics.map((topic) => [topic.id, topic]));
+  const visibleNextTopicIds = new Set(nextTopics.map((topic) => topic.id));
+  const viewerId = payload.viewer?.id ?? state.viewer?.id ?? state.currentUserId ?? null;
+  const unreadTopicIds = new Set(
+    (state.unreadTopicIds ?? []).filter((topicId) => visibleNextTopicIds.has(topicId))
+  );
+
+  if (!previousTopics.length || !viewerId) {
+    return [...unreadTopicIds];
+  }
+
+  nextTopics.forEach((topic) => {
+    const previousTopic = previousTopicById.get(topic.id);
+    if (!previousTopic) {
+      return;
+    }
+
+    const previousLastMessage = getLastUserMessage(previousTopic);
+    const nextLastMessage = getLastUserMessage(topic);
+    const messageCountIncreased = getUserMessageCount(topic) > getUserMessageCount(previousTopic);
+    const lastMessageChanged = Boolean(nextLastMessage && previousLastMessage?.id !== nextLastMessage.id);
+    if (!nextLastMessage || (!lastMessageChanged && !messageCountIncreased)) {
+      return;
+    }
+
+    if (nextLastMessage.authorId === viewerId) {
+      unreadTopicIds.delete(topic.id);
+      return;
+    }
+
+    unreadTopicIds.add(topic.id);
+  });
+
+  return [...unreadTopicIds];
+}
 function updateMessageReaction(topics, messageId, updater) {
   return topics.map((topic) => {
     let changed = false;
@@ -42,6 +92,7 @@ export const reducers = {
       rankings: payload.rankings ?? state.rankings ?? null,
       users: payload.users,
       topics: payload.topics,
+      unreadTopicIds: getUnreadTopicIdsAfterHydration(state, payload),
       selectedTopicId: nextSelectedTopicId,
       activeConnectedUserId: nextActiveConnectedUserId,
       publicProfileUserId: nextPublicProfileUserId
@@ -62,6 +113,7 @@ export const reducers = {
   setSelectedTopic: (state, selectedTopicId) => ({
     ...state,
     selectedTopicId,
+    unreadTopicIds: (state.unreadTopicIds ?? []).filter((topicId) => topicId !== selectedTopicId),
     // Reset message flow state if needed
     activeConnectedUserId: null
   }),
@@ -128,7 +180,13 @@ export const reducers = {
   createTopic: (state, topic) => ({
     ...state,
     topics: insertTopicAtTop(state.topics, topic),
+    unreadTopicIds: (state.unreadTopicIds ?? []).filter((topicId) => topicId !== topic.id),
     selectedTopicId: topic.id
+  }),
+
+  markTopicRead: (state, topicId) => ({
+    ...state,
+    unreadTopicIds: (state.unreadTopicIds ?? []).filter((unreadTopicId) => unreadTopicId !== topicId)
   }),
 
   incrementRefreshCount: (state) => ({

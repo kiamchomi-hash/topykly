@@ -1,4 +1,4 @@
-import { getActiveRankingIndex, getActiveRankingStep, getRankingSteps } from "../ranking-state.js";
+import { getActiveRankingIndex, getActiveRankingStep, getRankingSteps, getScopeActiveRankingStep } from "../ranking-state.js";
 import { getMetricIcon } from "./ranking-icons.js";
 
 const GLOBAL_MODE_LABELS = {
@@ -29,6 +29,20 @@ export function getCurrentRankingLabel(state) {
   const { type, metric } = getActiveRankingStep(state);
 
   if (state.rankingScope === "topic") {
+    return metric === "likes" ? "LIKES" : "COMENTARIOS";
+  }
+
+  if (type === "posts") {
+    return metric === "likes" ? "TEMAS LIKES" : "TEMAS COMENTARIOS";
+  }
+
+  return metric === "likes" ? "USUARIOS LIKES" : "USUARIOS COMENTARIOS";
+}
+
+export function getScopeRankingLabel(state, scope) {
+  const { type, metric } = getScopeActiveRankingStep(state, scope);
+
+  if (scope === "topic") {
     return metric === "likes" ? "LIKES" : "COMENTARIOS";
   }
 

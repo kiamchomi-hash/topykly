@@ -20,12 +20,11 @@ export function showRankingEmpty(dom, emptyHtml) {
   if (dom.drawerRankingsSection) {
     dom.drawerRankingsSection.classList.add("is-empty");
   }
-  if (dom.rankingList) {
-    dom.rankingList.hidden = true;
-  }
-  if (dom.drawerRankingList) {
-    dom.drawerRankingList.hidden = true;
-  }
+  [dom.rankingList, dom.drawerRankingList].forEach(list => {
+    if (list) {
+      list.hidden = true;
+    }
+  });
   if (dom.rankingCarousel) {
     dom.rankingCarousel.hidden = true;
   }
@@ -36,12 +35,11 @@ export function showRankingEmpty(dom, emptyHtml) {
 }
 
 export function resetRankingScroll(dom) {
-  if (dom.rankingList) {
-    dom.rankingList.scrollTop = 0;
-  }
-  if (dom.drawerRankingList) {
-    dom.drawerRankingList.scrollTop = 0;
-  }
+  [dom.rankingList, dom.drawerRankingList, dom.drawerGlobalRankingList, dom.drawerTopicRankingList].forEach(list => {
+    if (list) {
+      list.scrollTop = 0;
+    }
+  });
 }
 
 function captureRankingSkeletonHeight(list) {
@@ -63,6 +61,8 @@ function captureRankingSkeletonHeight(list) {
 export function syncRankingSkeletonHeights(dom) {
   captureRankingSkeletonHeight(dom.rankingList);
   captureRankingSkeletonHeight(dom.drawerRankingList);
+  captureRankingSkeletonHeight(dom.drawerGlobalRankingList);
+  captureRankingSkeletonHeight(dom.drawerTopicRankingList);
 }
 
 function fitRankingListHeight(list) {
@@ -109,10 +109,12 @@ function fitRankingListHeight(list) {
 export function syncRankingListHeights(dom) {
   fitRankingListHeight(dom.rankingList);
   fitRankingListHeight(dom.drawerRankingList);
+  fitRankingListHeight(dom.drawerGlobalRankingList);
+  fitRankingListHeight(dom.drawerTopicRankingList);
 }
 
 export function clearRankingListHeights(dom) {
-  [dom.rankingList, dom.drawerRankingList].forEach((list) => {
+  [dom.rankingList, dom.drawerRankingList, dom.drawerGlobalRankingList, dom.drawerTopicRankingList].forEach((list) => {
     if (!list) {
       return;
     }
@@ -147,12 +149,11 @@ export function showRankingList(dom) {
     dom.drawerRankingsSection.classList.remove("is-empty");
     dom.drawerRankingsSection.classList.remove("is-loading");
   }
-  if (dom.rankingList) {
-    dom.rankingList.hidden = false;
-  }
-  if (dom.drawerRankingList) {
-    dom.drawerRankingList.hidden = false;
-  }
+  [dom.rankingList, dom.drawerRankingList].forEach(list => {
+    if (list) {
+      list.hidden = false;
+    }
+  });
   if (dom.rankingCarousel) {
     dom.rankingCarousel.hidden = false;
   }
@@ -175,10 +176,9 @@ export function showRankingLoading(dom) {
     dom.drawerRankingsSection.classList.add("is-loading");
   }
   clearRankingListHeights(dom);
-  if (dom.rankingList) {
-    dom.rankingList.hidden = true;
-  }
-  if (dom.drawerRankingList) {
-    dom.drawerRankingList.hidden = true;
-  }
+  [dom.rankingList, dom.drawerRankingList].forEach(list => {
+    if (list) {
+      list.hidden = true;
+    }
+  });
 }

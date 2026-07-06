@@ -25,6 +25,7 @@ const REQUIRED_DOM_KEYS = [
   "paletteButton",
   "themeToggleDesktopSlot",
   "themeToggleMobileSlot",
+  "themeToggleDrawerSlot",
   "mobileTopbarMenu",
   "mobileDrawerPanels",
   "paletteModalBackdrop",
@@ -120,6 +121,8 @@ const REQUIRED_DOM_KEYS = [
   "drawerUserList",
   "rankingList",
   "drawerRankingList",
+  "drawerGlobalRankingList",
+  "drawerTopicRankingList",
   "leftDrawer",
   "rightDrawer"
 ];
@@ -128,9 +131,12 @@ const DOM_IDS = [
   "themeToggle", "refreshButton", "reportTopicButton", "chatTitle", "messageForm",
   "rankingPrev", "rankingCurrent", "rankingNext",
   "drawerRankingPrev", "drawerRankingCurrent", "drawerRankingNext",
+  "drawerGlobalRankingPrev", "drawerGlobalRankingCurrent", "drawerGlobalRankingNext",
+  "drawerTopicRankingHeader", "drawerGlobalRankingHeader",
+  "drawerGlobalRankingPanel", "drawerTopicRankingPanel",
   "openRightDrawer", "drawerBackdrop", "profileButton", "backToTopics",
   "authTools", "friendRequestsButton", "notificationsButton", "messagesButton",
-  "authButton", "storeButton", "paletteButton", "adminPanelButton", "adminModalBackdrop", "adminModal", "adminPanelBody", "closeAdminModalButton", "themeToggleDesktopSlot", "themeToggleMobileSlot", "mobileTopbarMenu", "mobileDrawerPanels", "paletteModalBackdrop",
+  "authButton", "storeButton", "paletteButton", "adminPanelButton", "adminModalBackdrop", "adminModal", "adminPanelBody", "closeAdminModalButton", "themeToggleDesktopSlot", "themeToggleMobileSlot", "themeToggleDrawerSlot", "mobileTopbarMenu", "mobileDrawerPanels", "paletteModalBackdrop",
   "authModalBackdrop",
   "authModal",
   "closeAuthModalButton",
@@ -198,7 +204,7 @@ const DOM_IDS = [
   "drawerRankingsGlyph",
   "drawerRankingsEmpty", "topicTitleInput", "messageInput", "messageStream",
   "topicList", "createTopicButton", "leftDrawerTopics", "userList",
-  "drawerUserList", "rankingList", "drawerRankingList", "leftDrawer", "rightDrawer"
+  "drawerUserList", "rankingList", "drawerRankingList", "drawerGlobalRankingList", "drawerTopicRankingList", "leftDrawer", "rightDrawer"
 ];
 
 export function cacheDom() {
@@ -240,6 +246,8 @@ export function cacheDom() {
   domProxy.drawerRankingsSection = domProxy.drawerRankingList?.closest(".drawer__section") ?? null;
   domProxy.drawerUsersSection = domProxy.drawerUserList?.closest(".drawer__section") ?? null;
   domProxy.drawerRankingSwitch = domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
+  domProxy.drawerGlobalRankingSwitch = domProxy.drawerGlobalRankingPrev?.closest(".drawer-ranking__switch") ?? null;
+  domProxy.drawerTopicRankingSwitch = domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
   domProxy.composerSubmitButton = domProxy.messageForm?.querySelector('button[type="submit"]') ?? null;
 
   assertRequiredDom(domProxy);

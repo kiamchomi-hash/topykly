@@ -31,6 +31,22 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     }
   }
 
+  function scrollMessageStreamToBottom() {
+    const stream = dom.messageStream;
+    if (!stream) {
+      return;
+    }
+
+    const applyScroll = () => {
+      stream.scrollTop = stream.scrollHeight;
+    };
+
+    applyScroll();
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(applyScroll);
+    }
+  }
+
   function flashComposerLock(topicStatus = "blocked") {
     const submitButton = dom.composerSubmitButton;
     if (!submitButton) {
@@ -127,6 +143,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       return;
     }
 
+    let shouldScrollAfterSubmit = false;
     setComposerBusy(true);
     try {
       if (!topic) {
@@ -137,6 +154,10 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
       } else {
         await syncBackendPayload(() => apiClient.submitMessage(topic.id, text));
       }
+
+      dispatch(state, reducers.markTopicRead, state.selectedTopicId);
+
+      shouldScrollAfterSubmit = true;
 
       input.value = "";
       render();
@@ -154,6 +175,9 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     } finally {
       setComposerBusy(false);
       render();
+      if (shouldScrollAfterSubmit) {
+        scrollMessageStreamToBottom();
+      }
     }
   }
 
@@ -166,7 +190,9 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
 
     setRefreshButtonState(true);
     try {
-      await syncBackendPayload(() => apiClient.refreshTopics(state.selectedTopicId));
+      const refreshedTopicId = state.selectedTopicId;
+      await syncBackendPayload(() => apiClient.refreshTopics(refreshedTopicId));
+      dispatch(state, reducers.markTopicRead, refreshedTopicId);
       dispatch(state, reducers.incrementRefreshCount);
       render();
     } catch (error) {
