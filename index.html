@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="es">
   <head>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
     <meta charset="UTF-8" />
+    <meta name="description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TOPYKLY</title>
     <script>
@@ -169,7 +169,7 @@
         </script>
       </header>
 
-      <main class="workspace" aria-label="Chat social">
+      <main id="main-content" class="workspace" aria-label="Chat social">
         <section class="panel panel--topics" aria-label="Temas">
           <div class="topics-panel__body">
             <div class="topics-panel__list-frame">
@@ -180,7 +180,7 @@
               </div>
             </div>
             <div class="topics-panel__footer">
-              <button class="primary-button topics-panel__create-button" id="createTopicButton" type="button">
+              <button class="primary-button topics-panel__create-button" id="createTopicButton" type="button" aria-label="Crear nuevo tema de chat">
                 Crear nuevo tema
               </button>
             </div>
@@ -224,12 +224,12 @@
 
           <form class="composer" id="messageForm">
             <label class="composer__field" hidden>
-              <input id="topicTitleInput" type="text" maxlength="80" placeholder="Título del tema" autocomplete="off" aria-label="Título del tema" />
+              <input id="topicTitleInput" type="text" maxlength="80" placeholder="Titulo del tema" autocomplete="off" aria-label="Titulo del nuevo tema" />
             </label>
             <label class="composer__field">
-              <textarea id="messageInput" rows="2" maxlength="240" placeholder="Escribe aqui..." required aria-label="Mensaje"></textarea>
+              <textarea id="messageInput" rows="2" maxlength="240" placeholder="Escribe aqui..." required aria-label="Mensaje del chat"></textarea>
             </label>
-            <button class="primary-button" type="submit"><span class="button-label">Enviar</span></button>
+            <button class="primary-button" type="submit" aria-label="Enviar mensaje al chat"><span class="button-label">Enviar</span></button>
           </form>
         </section>
 
@@ -445,7 +445,7 @@
         </div>
         <div class="profile-avatar-crop__body">
           <div class="profile-avatar-crop__frame" id="profileAvatarCropFrame">
-            <img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" />
+            <img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" width="320" height="320" />
           </div>
           <label class="profile-avatar-crop__control" for="profileAvatarCropZoom">
             <span>Zoom</span>

@@ -7,6 +7,9 @@
     "test": "tests"
   },
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "hooks:install": "git config core.hooksPath .githooks",
     "test": "node tests/run.mjs",
     "test:smoke": "node tests/smoke.mjs",
     "qa": "node tests/run.mjs && node tests/smoke.mjs",
@@ -23,5 +26,8 @@
   "bugs": {
     "url": "https://github.com/kiamchomi-hash/topykly/issues"
   },
-  "homepage": "https://github.com/kiamchomi-hash/topykly#readme"
+  "homepage": "https://github.com/kiamchomi-hash/topykly#readme",
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
 }

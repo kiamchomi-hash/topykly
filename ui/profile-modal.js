@@ -1,3 +1,5 @@
+import { formatProfileJoinedDate } from "./date-utils.js";
+
 const PROFILE_SECTION_CONFIG = {
   name: {
     sectionKey: "profileNameSection",
@@ -44,22 +46,6 @@ export function setProfileSectionEditing(dom, section, editing) {
 export function resetProfileEditing(dom) {
   Object.keys(PROFILE_SECTION_CONFIG).forEach((section) => setProfileSectionEditing(dom, section, false));
 }
-function formatProfileJoinedDate(createdAt) {
-  if (!createdAt) {
-    return "Fecha de registro no disponible";
-  }
-
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) {
-    return "Fecha de registro no disponible";
-  }
-
-  return `Registro: ${date.toLocaleDateString("es-AR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  })}`;
-}
 
 function getVisibilityIcon(visible) {
   return visible
@@ -87,6 +73,8 @@ function setPreviewImage(preview, avatarUrl) {
     const image = document.createElement("img");
     image.src = avatarUrl;
     image.alt = "";
+    image.width = 232;
+    image.height = 232;
     image.loading = "lazy";
     preview.append(image);
     return;

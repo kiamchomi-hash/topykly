@@ -4,6 +4,7 @@
  */
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const AVATAR_INTRINSIC_SIZE = "84";
 
 const iconPaths = {
   avatar: `
@@ -66,12 +67,14 @@ export function createAvatarIcon(className = "topic-item__avatar", avatarUrl = "
     const image = document.createElement("img");
     image.src = avatarUrl;
     image.alt = "";
+    image.width = 84;
+    image.height = 84;
     image.loading = "lazy";
     container.appendChild(image);
     return container;
   }
   
-  const svg = createIcon("avatar", { viewBox: "0 0 48 48", strokeWidth: "0" });
+  const svg = createIcon("avatar", { viewBox: "0 0 48 48", strokeWidth: "0", size: AVATAR_INTRINSIC_SIZE });
   // Avatar uses fills for parts of the rect/circle/path logic in CSS 
   // but the current JS sets them as elements. 
   // Let's refine the paths to be clean.

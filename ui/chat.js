@@ -195,11 +195,13 @@ function syncChatComposer(topic, dom, isLoading) {
         ? "Escribe un comentario..."
         : "Tema cerrado para comentarios";
     dom.messageInput.rows = isCreatingTopic ? 4 : 2;
+    dom.messageInput.setAttribute("aria-label", isCreatingTopic ? "Primer mensaje del nuevo tema" : "Comentario para el tema seleccionado");
     syncComposerTextareaHeight(dom.messageInput);
   }
   if (submitButton) {
     submitButton.disabled = isLoading || (!isCreatingTopic && !isCommentableTopic);
     submitButton.setAttribute("aria-disabled", String(submitButton.disabled));
+    submitButton.setAttribute("aria-label", !isCreatingTopic && !isCommentableTopic ? "No se pueden enviar mensajes en este tema cerrado" : isCreatingTopic ? "Crear tema con el primer mensaje" : "Enviar comentario al tema seleccionado");
   }
   if (submitLabel) {
     submitLabel.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : isCreatingTopic ? "Crear tema" : "Enviar";

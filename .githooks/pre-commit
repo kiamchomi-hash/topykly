@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(cjs|css|html|js|json|md|mjs)$' || true)
+
+if [ -z "$files" ]; then
+  exit 0
+fi
+
+printf '%s\n' "$files" | while IFS= read -r file; do
+  npx --no-install prettier --write "$file"
+  git add "$file"
+done

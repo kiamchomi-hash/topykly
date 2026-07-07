@@ -19,6 +19,8 @@ function renderAvatarItem(item) {
   const image = document.createElement("img");
   image.src = item.avatarPendingUrl;
   image.alt = "";
+  image.width = 64;
+  image.height = 64;
   image.loading = "lazy";
   imageWrap.append(image);
 

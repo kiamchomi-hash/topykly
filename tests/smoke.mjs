@@ -101,7 +101,9 @@ try {
     assert.equal(response.headers.get("cache-control"), "no-store, max-age=0");
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
     assert.match(response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
+    assert.match(response.headers.get("content-security-policy") || "", /upgrade-insecure-requests/);
     assert.match(response.headers.get("content-security-policy") || "", /script-src 'self' 'unsafe-inline' https:\/\/cdn\.jsdelivr\.net https:\/\/challenges\.cloudflare\.com/);
     assert.match(html, /<title>TOPYKLY<\/title>/);
     assert.match(html, /id="messageForm"/);
@@ -115,6 +117,7 @@ try {
       assert.equal(response.status, 400, pathname);
       assert.equal(response.headers.get("x-content-type-options"), "nosniff");
       assert.equal(response.headers.get("x-frame-options"), "DENY");
+      assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
       assert.equal(text, "Invalid path");
     }
   });

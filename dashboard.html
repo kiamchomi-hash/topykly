@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>TOPYKLY - Oficina de Agentes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --card-bg: #11141a;
+      --border: #1d242e;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --font: 'Outfit', sans-serif;
+      
+      /* Agent Themes */
+      --coordinator-color: #a78bfa;
+      --security-color: #34d399;
+      --qa-color: #60a5fa;
+      --architect-color: #fbbf24;
+      --frontend-color: #ec4899;
+      --monetization-color: #10b981;
+      --responsive-color: #06b6d4;
+      --ux-color: #a855f7;
+      --flows-color: #f97316;
+      --standards-color: #38bdf8;
+      --seo-color: #a3e635;
+      
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --primary: #4f46e5;
+      --primary-hover: #6366f1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      padding: 2.5rem;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #c7d2fe, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .timestamp {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background-color: var(--card-bg);
+      padding: 0.6rem 1.2rem;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      gap: 2rem;
+    }
+
+    /* Agent Container */
+    .agent-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Accent color lines on the side of each card */
+    .agent-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+    }
+
+    .agent-card--coordinator::before { background-color: var(--coordinator-color); }
+    .agent-card--security::before { background-color: var(--security-color); }
+    .agent-card--qa::before { background-color: var(--qa-color); }
+    .agent-card--architect::before { background-color: var(--architect-color); }
+    .agent-card--frontend::before { background-color: var(--frontend-color); }
+    .agent-card--monetization::before { background-color: var(--monetization-color); }
+    .agent-card--responsive::before { background-color: var(--responsive-color); }
+    .agent-card--ux::before { background-color: var(--ux-color); }
+    .agent-card--flows::before { background-color: var(--flows-color); }
+    .agent-card--standards::before { background-color: var(--standards-color); }
+    .agent-card--seo::before { background-color: var(--seo-color); }
+
+    .agent-card__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+    }
+
+    .agent-card__title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    
+    .agent-card--coordinator .agent-card__title { color: var(--coordinator-color); }
+    .agent-card--security .agent-card__title { color: var(--security-color); }
+    .agent-card--qa .agent-card__title { color: var(--qa-color); }
+    .agent-card--architect .agent-card__title { color: var(--architect-color); }
+    .agent-card--frontend .agent-card__title { color: var(--frontend-color); }
+    .agent-card--monetization .agent-card__title { color: var(--monetization-color); }
+    .agent-card--responsive .agent-card__title { color: var(--responsive-color); }
+    .agent-card--ux .agent-card__title { color: var(--ux-color); }
+    .agent-card--flows .agent-card__title { color: var(--flows-color); }
+    .agent-card--standards .agent-card__title { color: var(--standards-color); }
+    .agent-card--seo .agent-card__title { color: var(--seo-color); }
+
+    .agent-card__badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.3rem 0.75rem;
+      border-radius: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    .agent-card__body {
+      flex-grow: 1;
+    }
+
+    .agent-card__list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .agent-card__list li {
+      font-size: 0.95rem;
+      color: #e2e8f0;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+    }
+
+    .bullet {
+      font-weight: bold;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+      font-size: 1.2rem;
+    }
+
+    .suggestion-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      width: 100%;
+    }
+
+    .suggestion-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+    }
+
+    .action-btn {
+      font-family: var(--font);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      background-color: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .action-btn--accept:hover {
+      background-color: rgba(16, 185, 129, 0.1);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .action-btn--reject:hover {
+      background-color: rgba(239, 68, 68, 0.1);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    code {
+      font-family: 'Courier New', Courier, monospace;
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Actions Section */
+    .actions-footer {
+      margin-top: 3rem;
+      border-top: 1px solid var(--border);
+      padding-top: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn {
+      font-family: var(--font);
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.75rem 2.5rem;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s ease, transform 0.1s ease;
+    }
+
+    .btn--primary {
+      background-color: var(--primary);
+      color: #ffffff;
+    }
+
+    .btn--primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn:disabled {
+      background-color: var(--border);
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+
+    .btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .status-text {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="server-offline-banner" style="display: none; background-color: var(--danger); color: #fff; padding: 1rem; border-radius: 12px; margin-bottom: 2rem; font-weight: 600; text-align: center;">
+      ⚠️ El servidor local está desactivado. Por favor, ejecuta el archivo <code>abrir-servidor-local.bat</code> en la carpeta de tu proyecto para poder interactuar con el Dashboard (Aceptar/Rechazar/Comprobar).
+    </div>
+
+    <header>
+      <h1>💼 Oficina de Agentes de Desarrollo</h1>
+      <span class="timestamp">Último Reporte: 2026-07-07T01:45:10.525Z</span>
+    </header>
+
+    <div class="grid">
+      
+      <section class="agent-card agent-card--coordinator">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">👑 Agente Coordinador / Scrum Master</h2>
+          <span class="agent-card__badge">Al día</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Tienes 23 archivos locales modificados sin commitear:</span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M components.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M controller-actions.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M controller-app.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M controller-ranking-actions.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M dom-store.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M index.html</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ranking-state.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M services/preview-server.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M styles.css</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M tests/run.mjs</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/dom.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/events.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/ranking-labels.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/ranking-panel-state.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/rankings.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/titles.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/topbar-action-events.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>M ui/topbar-ranking-events.js</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>?? .playwright-cli/</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>?? output/playwright/mobile-brand-after.png</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>?? output/playwright/mobile-drawer-brand-after.png</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>?? output/playwright/mobile-drawer-priority-after.png</code></span>
+            
+          </div>
+        </li>
+      
+
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text"><code>?? output/playwright/profile-modal-updated.png</code></span>
+            
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--security">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">🛡️ Agente Auditor de Seguridad</h2>
+          <span class="agent-card__badge">Alerta</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: var(--warning)">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Configurar la directiva <code>base-uri 'self'</code> en la cabecera CSP para evitar ataques de inyección de etiquetas base que alteren las rutas de los archivos estáticos.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('sf2o6y7', 'security', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('sf2o6y7', 'security', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--frontend">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">🎨 Agente Revisor de Frontend</h2>
+          <span class="agent-card__badge">Sugerencia</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Implementar la propiedad CSS <code>contain: layout style;</code> en los elementos <code>.topic-item</code> y <code>.ranking-item</code> para mejorar el rendimiento del rendering y reducir el tiempo de cálculo del layout del navegador.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('smj8pih', 'frontend', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('smj8pih', 'frontend', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--responsive">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">📱 Agente de Pruebas Responsive</h2>
+          <span class="agent-card__badge">Sugerencia</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Ajustar el ancho máximo del selector de paletas de colores en móviles medianos (entre 320px y 375px) a <code>280px</code> para garantizar un centrado estético y uniforme.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('stasqb0', 'responsive', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('stasqb0', 'responsive', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--ux">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">👥 Agente de Usabilidad y UX</h2>
+          <span class="agent-card__badge">Sugerencia</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Mejorar la visualización del input del chat en pantallas ultra pequeñas: Reducir ligeramente el tamaño de fuente del placeholder del campo de entrada de mensajes a <code>0.85rem</code> para evitar saltos de línea innecesarios.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('sladhdo', 'ux', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('sladhdo', 'ux', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--flows">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">⚡ Agente de Flujos de Usabilidad</h2>
+          <span class="agent-card__badge">Sugerencia</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Optimizar el flujo de cierre del drawer de perfil: Cerrar automáticamente el modal de perfil si el usuario abre directamente la sección de administración, evitando superposiciones de ventanas modales.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('sqmn7hl', 'flows', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('sqmn7hl', 'flows', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--standards">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">🎓 Agente de Estándares y Mentoría</h2>
+          <span class="agent-card__badge">Sugerencia</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Definir una directiva en <code>eslint</code> (o guías de estilo internas) para forzar la utilización exclusiva de plantillas de cadena (template literals) en lugar de concatenaciones de strings con el operador <code>+</code> en todas las utilidades de renderizado del DOM.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('sewc6k9', 'standards', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('sewc6k9', 'standards', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--seo">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">🚀 Agente de SEO y Rendimiento</h2>
+          <span class="agent-card__badge">Sugerencia</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Mejorar la accesibilidad del botón de scroll to top: Agregar el atributo semántico <code>aria-hidden="true"</code> a la flecha interna del botón para que los lectores de pantalla no lean caracteres vacíos o confusos.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('s5o7lbx', 'seo', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('s5o7lbx', 'seo', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+    </div>
+
+    <div class="actions-footer">
+      <button class="btn btn--primary" id="run-btn" onclick="runCheck()">Comprobar de Nuevo</button>
+      <div id="status-msg" style="display: none;" class="status-text"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_ORIGIN = window.location.origin.includes("localhost") || window.location.origin.includes("127.0.0.1")
+      ? window.location.origin
+      : "http://127.0.0.1:4173";
+
+    async function checkServerStatus() {
+      const banner = document.getElementById("server-offline-banner");
+      const runBtn = document.getElementById("run-btn");
+      try {
+        const res = await fetch(API_ORIGIN + "/api/agents/status");
+        if (res.ok) {
+          banner.style.display = "none";
+          runBtn.disabled = false;
+        } else {
+          throw new Error();
+        }
+      } catch (err) {
+        banner.style.display = "block";
+        runBtn.disabled = true;
+        document.querySelectorAll(".action-btn").forEach(btn => btn.disabled = true);
+      }
+    }
+    window.addEventListener("DOMContentLoaded", checkServerStatus);
+
+    async function makeDecision(id, agent, action) {
+      try {
+        const url = API_ORIGIN + "/api/agents/decision?id=" + encodeURIComponent(id) + "&agent=" + encodeURIComponent(agent) + "&action=" + encodeURIComponent(action);
+        const res = await fetch(url);
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          throw new Error();
+        }
+      } catch (err) {
+        alert("No se pudo registrar tu decisión localmente. Asegúrate de tener el servidor local activo.");
+      }
+    }
+
+    async function runCheck() {
+      const btn = document.getElementById("run-btn");
+      const statusMsg = document.getElementById("status-msg");
+      
+      btn.disabled = true;
+      btn.innerText = "Ejecutando...";
+      statusMsg.style.display = "block";
+      statusMsg.innerHTML = "🔄 Los agentes están ejecutando los tests locales y auditando producción. Por favor, espera...";
+
+      try {
+        await fetch(API_ORIGIN + "/api/agents/run");
+        setTimeout(pollStatus, 1500);
+      } catch (err) {
+        statusMsg.style.color = "var(--danger)";
+        statusMsg.innerHTML = "❌ No se pudo conectar al servidor local para iniciar la auditoría.";
+        btn.disabled = false;
+        btn.innerText = "Comprobar de Nuevo";
+      }
+
+      async function pollStatus() {
+        try {
+          const res = await fetch(API_ORIGIN + "/api/agents/status");
+          const data = await res.json();
+          if (data.running) {
+            setTimeout(pollStatus, 2000);
+          } else {
+            window.location.reload();
+          }
+        } catch (err) {
+          setTimeout(pollStatus, 3000);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

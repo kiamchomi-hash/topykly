@@ -4,6 +4,7 @@ import { dispatch, reducers } from "../store-logic.js";
 const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 const PROFILE_AVATAR_CROP_SIZE = 1024;
+const PROFILE_AVATAR_CROP_EDGE_GUARD = 2;
 const PROFILE_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 const FOCUSABLE_SELECTOR = [
@@ -21,8 +22,10 @@ export function bindTopbarActionEvents(dom, handlers) {
   let authPending = false;
   let authStatus = null;
   let authStatusPromise = null;
+  let turnstileScriptPromise = null;
   let turnstileWidgetId = null;
   let authPasswordMode = "login";
+  let pendingAuthTopicId = null;
   let turnstileRequired = false;
   let pendingTurnstileToken = null;
   let logoutConfirmUntil = 0;
@@ -140,6 +143,8 @@ export function bindTopbarActionEvents(dom, handlers) {
     const image = document.createElement("img");
     image.src = avatarUrl;
     image.alt = "";
+    image.width = 42;
+    image.height = 42;
     image.loading = "lazy";
     avatar.append(image);
   }
@@ -554,6 +559,49 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   }
 
+  function loadTurnstileScript() {
+    if (globalThis.turnstile?.render) {
+      return Promise.resolve();
+    }
+
+    if (turnstileScriptPromise) {
+      return turnstileScriptPromise;
+    }
+
+    const existingScript = document.getElementById?.("turnstile-script") ?? null;
+    if (existingScript) {
+      turnstileScriptPromise = new Promise((resolve) => {
+        const waitForTurnstile = window.setInterval?.(() => {
+          if (globalThis.turnstile?.render) {
+            window.clearInterval?.(waitForTurnstile);
+            resolve();
+          }
+        }, 50);
+        existingScript.addEventListener?.("load", () => resolve(), { once: true });
+        existingScript.addEventListener?.("error", () => resolve(), { once: true });
+      });
+      return turnstileScriptPromise;
+    }
+
+    turnstileScriptPromise = new Promise((resolve) => {
+      const script = document.createElement?.("script");
+      if (!script || !document.head?.appendChild) {
+        resolve();
+        return;
+      }
+
+      script.id = "turnstile-script";
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve();
+      script.onerror = () => resolve();
+      document.head.appendChild(script);
+    });
+
+    return turnstileScriptPromise;
+  }
+
   async function syncTurnstile({ resetExisting = false } = {}) {
     const status = await loadAuthStatus();
     const siteKey = status?.turnstile?.siteKey || "";
@@ -571,8 +619,11 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (!globalThis.turnstile?.render) {
-      handlers.flashTitle?.("Preparando verificacion anti-bots");
-      return;
+      await loadTurnstileScript();
+      if (!globalThis.turnstile?.render) {
+        handlers.flashTitle?.("Preparando verificacion anti-bots");
+        return;
+      }
     }
 
     if (turnstileWidgetId !== null) {
@@ -710,17 +761,23 @@ export function bindTopbarActionEvents(dom, handlers) {
     dom.authButton?.focus?.();
   }
 
+  function getPendingAuthTopicId() {
+    return pendingAuthTopicId ?? handlers.state?.selectedTopicId ?? null;
+  }
+
   async function openAuthModal() {
     if (authPending || isLoggedIn()) {
       return;
     }
 
+    pendingAuthTopicId = handlers.state?.selectedTopicId ?? null;
     setAuthStatusMessage();
     setAuthModalOpen(true);
     await syncTurnstile();
   }
 
   function closeAuthModal() {
+    pendingAuthTopicId = null;
     resetTurnstileToken();
     setAuthStatusMessage();
     setAuthModalOpen(false);
@@ -756,7 +813,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       const turnstileToken = nextLoggedIn ? await requestTurnstileToken() : "";
 
       const authResult = nextLoggedIn
-        ? await handlers.login?.({ turnstileToken })
+        ? await handlers.login?.({ turnstileToken, selectedTopicId: getPendingAuthTopicId() })
         : await handlers.logout?.();
 
       if (authResult?.redirected) {
@@ -914,7 +971,8 @@ export function bindTopbarActionEvents(dom, handlers) {
       const payload = {
         email: dom.authEmailInput?.value || "",
         password: dom.authPasswordInput?.value || "",
-        turnstileToken
+        turnstileToken,
+        selectedTopicId: getPendingAuthTopicId()
       };
       const authResult = authPasswordMode === "register"
         ? await handlers.registerWithPassword?.({ ...payload, nickname: dom.authNicknameInput?.value || "" })
@@ -1109,8 +1167,8 @@ export function bindTopbarActionEvents(dom, handlers) {
     clampProfileAvatarCropOffset();
     const state = profileAvatarCropState;
     const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
-    dom.profileAvatarCropImage.style.width = `${state.width * scale}px`;
-    dom.profileAvatarCropImage.style.height = `${state.height * scale}px`;
+    dom.profileAvatarCropImage.style.width = `${state.width * scale + PROFILE_AVATAR_CROP_EDGE_GUARD * 2}px`;
+    dom.profileAvatarCropImage.style.height = `${state.height * scale + PROFILE_AVATAR_CROP_EDGE_GUARD * 2}px`;
     dom.profileAvatarCropImage.style.transform = `translate(-50%, -50%) translate(${state.offsetX}px, ${state.offsetY}px)`;
   }
 
@@ -1165,7 +1223,15 @@ export function bindTopbarActionEvents(dom, handlers) {
     const scaledHeight = state.height * scale;
     const dx = (PROFILE_AVATAR_CROP_SIZE - scaledWidth) / 2 + state.offsetX;
     const dy = (PROFILE_AVATAR_CROP_SIZE - scaledHeight) / 2 + state.offsetY;
-    context.drawImage(state.image, dx, dy, scaledWidth, scaledHeight);
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      state.image,
+      dx - PROFILE_AVATAR_CROP_EDGE_GUARD,
+      dy - PROFILE_AVATAR_CROP_EDGE_GUARD,
+      scaledWidth + PROFILE_AVATAR_CROP_EDGE_GUARD * 2,
+      scaledHeight + PROFILE_AVATAR_CROP_EDGE_GUARD * 2
+    );
 
     return canvas.toDataURL("image/jpeg", 0.88);
   }
@@ -1180,6 +1246,8 @@ export function bindTopbarActionEvents(dom, handlers) {
       const image = document.createElement("img");
       image.src = avatarUrl;
       image.alt = "";
+      image.width = 232;
+      image.height = 232;
       dom.profileAvatarPreview.append(image);
       return;
     }

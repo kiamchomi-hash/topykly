@@ -82,7 +82,8 @@ function getSecurityHeaders({ includeCsp = true } = {}) {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-    "Cross-Origin-Opener-Policy": "same-origin"
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin"
   };
 
   if (includeCsp) {
@@ -96,7 +97,8 @@ function getSecurityHeaders({ includeCsp = true } = {}) {
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
       "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
       "frame-src https://challenges.cloudflare.com",
-      "connect-src 'self' https://challenges.cloudflare.com https://accounts.google.com"
+      "connect-src 'self' https://challenges.cloudflare.com https://accounts.google.com",
+      "upgrade-insecure-requests"
     ].join("; ");
   }
 

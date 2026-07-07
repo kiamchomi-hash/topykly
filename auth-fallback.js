@@ -62,6 +62,30 @@ function storeTurnstileToken(token) {
   }
 }
 
+function loadTurnstileScript() {
+  if (document.getElementById("turnstile-script")) {
+    if (globalThis.turnstile?.render) return Promise.resolve();
+    return new Promise((resolve) => {
+      const check = setInterval(() => {
+        if (globalThis.turnstile?.render) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 50);
+    });
+  }
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.id = "turnstile-script";
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => resolve();
+    document.head.appendChild(script);
+  });
+}
+
 async function syncTurnstile() {
   const container = document.getElementById("authTurnstile");
   const status = await getAuthStatus();
@@ -80,8 +104,11 @@ async function syncTurnstile() {
   }
 
   if (!globalThis.turnstile?.render) {
-    flash("Preparando verificacion anti-bots");
-    return true;
+    await loadTurnstileScript();
+    if (!globalThis.turnstile?.render) {
+      flash("Preparando verificacion anti-bots");
+      return true;
+    }
   }
 
   if (turnstileWidgetId !== null) {

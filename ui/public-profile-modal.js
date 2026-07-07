@@ -1,3 +1,5 @@
+import { formatJoinedDateParts } from "./date-utils.js";
+
 function setPublicProfileAvatar(container, avatarUrl) {
   if (!container) {
     return;
@@ -8,6 +10,8 @@ function setPublicProfileAvatar(container, avatarUrl) {
     const image = document.createElement("img");
     image.src = avatarUrl;
     image.alt = "";
+    image.width = 232;
+    image.height = 232;
     image.loading = "eager";
     image.decoding = "async";
     container.append(image);
@@ -38,21 +42,6 @@ function getRecentUserCafes(topics, userId) {
     .slice(0, 3)
     .map(({ topic }) => topic);
 }
-function formatJoinedDate(createdAt) {
-  if (!createdAt) {
-    return "";
-  }
-
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return [day, month, String(year)];
-}
 
 export function renderPublicProfileModal(state, dom) {
   const user = state.users.find((candidate) => candidate.id === state.publicProfileUserId) || null;
@@ -77,7 +66,7 @@ export function renderPublicProfileModal(state, dom) {
 
   setPublicProfileAvatar(dom.publicProfileAvatar, user.avatarPendingUrl || user.avatarUrl || "");
 
-  const joinedDate = user.profileShowJoinedAt === false ? "" : formatJoinedDate(user.createdAt);
+  const joinedDate = user.profileShowJoinedAt === false ? [] : formatJoinedDateParts(user.createdAt);
   const description = user.profileShowDescription === false ? "" : String(user.description || "").trim();
 
   if (dom.publicProfileDescription) {
@@ -87,14 +76,14 @@ export function renderPublicProfileModal(state, dom) {
 
   if (dom.publicProfileJoinedAt) {
     dom.publicProfileJoinedAt.textContent = "";
-    if (joinedDate) {
+    if (joinedDate.length) {
       joinedDate.forEach((part) => {
         const segment = document.createElement("span");
         segment.textContent = part;
         dom.publicProfileJoinedAt.append(segment);
       });
     }
-    dom.publicProfileJoinedAt.hidden = !joinedDate;
+    dom.publicProfileJoinedAt.hidden = !joinedDate.length;
   }
 
   if (dom.publicProfileMeta) {

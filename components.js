@@ -1,4 +1,5 @@
 import { createAvatarIcon as createProfileAvatar, createIcon } from "./ui/icons.js";
+import { formatMessageTime } from "./ui/date-utils.js";
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -128,7 +129,7 @@ export function createMessageItem(message, users, { reported = false, currentUse
   const meta = el("div", "message__meta");
   meta.append(
     el("span", "message__author", author),
-    el("span", "message__time", message.timestamp.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }))
+    el("span", "message__time", formatMessageTime(message.timestamp))
   );
 
   if (message.kind !== "system") {
@@ -152,14 +153,14 @@ export function createMessageItem(message, users, { reported = false, currentUse
     likeButton.setAttribute("aria-controls", reactionMenuId);
     likeButton.setAttribute("aria-expanded", "false");
     likeButton.setAttribute("aria-pressed", String(Boolean(message.likedByViewer)));
-    likeButton.setAttribute("aria-label", "Abrir opciones de reaccion del mensaje");
+    likeButton.setAttribute("aria-label", `Abrir opciones de reaccion del mensaje de ${author}`);
 
     const reportButton = el("button", `message__report-button${reported ? " is-reported" : ""}`, reported ? "Reportado" : "Reportar");
     reportButton.type = "button";
     reportButton.dataset.reportEntityType = "message";
     reportButton.dataset.reportEntityId = message.id;
     reportButton.disabled = reported;
-    reportButton.setAttribute("aria-label", reported ? "Mensaje ya reportado" : "Reportar mensaje");
+    reportButton.setAttribute("aria-label", reported ? `Mensaje de ${author} ya reportado` : `Reportar mensaje de ${author}`);
     meta.append(likeButton, reportButton);
 
     const reactionMenu = el("div", "message__reaction-menu");
@@ -174,9 +175,11 @@ export function createMessageItem(message, users, { reported = false, currentUse
     reactionLikeAction.type = "button";
     reactionLikeAction.dataset.likeMessageId = message.id;
     reactionLikeAction.disabled = hasViewerReaction;
+    reactionLikeAction.setAttribute("aria-label", `Marcar me gusta en el mensaje de ${author}`);
     reactionDislikeAction.type = "button";
     reactionDislikeAction.dataset.dislikeMessageId = message.id;
     reactionDislikeAction.disabled = hasViewerReaction;
+    reactionDislikeAction.setAttribute("aria-label", `Marcar no me gusta en el mensaje de ${author}`);
     body.append(reactionMenu);
 
     const actionMenu = el("div", "message__action-menu");
@@ -191,16 +194,20 @@ export function createMessageItem(message, users, { reported = false, currentUse
     const [profileAction, likeAction, dislikeAction, reportAction] = actionMenu.querySelectorAll("button");
     profileAction.type = "button";
     profileAction.dataset.messageProfileAuthorId = message.authorId;
+    profileAction.setAttribute("aria-label", `Abrir perfil de ${author}`);
     likeAction.type = "button";
     likeAction.dataset.likeMessageId = message.id;
+    likeAction.setAttribute("aria-label", `Marcar me gusta en el mensaje de ${author}`);
     dislikeAction.type = "button";
     dislikeAction.dataset.dislikeMessageId = message.id;
+    dislikeAction.setAttribute("aria-label", `Marcar no me gusta en el mensaje de ${author}`);
     likeAction.disabled = hasViewerReaction;
     dislikeAction.disabled = hasViewerReaction;
     reportAction.type = "button";
     reportAction.dataset.reportEntityType = "message";
     reportAction.dataset.reportEntityId = message.id;
     reportAction.disabled = reported;
+    reportAction.setAttribute("aria-label", reported ? `Mensaje de ${author} ya reportado` : `Reportar mensaje de ${author}`);
     body.append(actionMenu);
   } else {
     avatarButton.disabled = true;

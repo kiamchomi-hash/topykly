@@ -11,7 +11,7 @@ import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
 import { api } from "./services/api.js?v=20260702-sessioncookie";
 
-const LIVE_TOPIC_REFRESH_INTERVAL_MS = 5000;
+const LIVE_TOPIC_REFRESH_INTERVAL_MS = 0;
 
 function readBootstrapLocationParams() {
   if (typeof window === "undefined") {

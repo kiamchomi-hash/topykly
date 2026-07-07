@@ -15,6 +15,8 @@ export function createProfileAvatar(className = "topic-item__avatar") {
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 48 48");
+  svg.setAttribute("width", "84");
+  svg.setAttribute("height", "84");
   svg.setAttribute("fill", "none");
   svg.setAttribute("aria-hidden", "true");
 

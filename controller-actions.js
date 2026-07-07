@@ -19,6 +19,27 @@ function focusPaletteOption(dom, paletteId) {
     ?.focus();
 }
 
+function resetPaletteModalScroll(dom) {
+  const body = dom.paletteModal?.querySelector(".palette-modal__body");
+  if (!body) {
+    return;
+  }
+
+  body.scrollTop = 0;
+  body.scrollLeft = 0;
+}
+
+function focusPaletteModalStart(dom) {
+  try {
+    dom.paletteModal?.focus?.({ preventScroll: true });
+  } catch {
+    dom.paletteModal?.focus?.();
+  }
+
+  resetPaletteModalScroll(dom);
+  globalThis.requestAnimationFrame?.(() => resetPaletteModalScroll(dom));
+}
+
 function hslToHex(hue, saturation, lightness) {
   const h = hue / 360;
   const s = saturation / 100;
@@ -131,8 +152,12 @@ export function createActionHandlers({
     return api.getAuthStatus();
   }
 
-  async function login({ turnstileToken = "" } = {}) {
-    const result = await api.login(state.selectedTopicId, { turnstileToken });
+  function resolveSelectedTopicId(selectedTopicId = null) {
+    return selectedTopicId ?? state.selectedTopicId;
+  }
+
+  async function login({ turnstileToken = "", selectedTopicId = null } = {}) {
+    const result = await api.login(resolveSelectedTopicId(selectedTopicId), { turnstileToken });
     if (result?.redirected) {
       return result;
     }
@@ -142,25 +167,25 @@ export function createActionHandlers({
     return result;
   }
 
-  async function loginWithPassword({ email, password, turnstileToken = "" } = {}) {
+  async function loginWithPassword({ email, password, turnstileToken = "", selectedTopicId = null } = {}) {
     const result = await api.loginWithPassword({
       email,
       password,
       turnstileToken,
-      selectedTopicId: state.selectedTopicId
+      selectedTopicId: resolveSelectedTopicId(selectedTopicId)
     });
     dispatch(state, reducers.hydrateFromBackend, result);
     render();
     return result;
   }
 
-  async function registerWithPassword({ email, password, nickname, turnstileToken = "" } = {}) {
+  async function registerWithPassword({ email, password, nickname, turnstileToken = "", selectedTopicId = null } = {}) {
     const result = await api.registerWithPassword({
       email,
       password,
       nickname,
       turnstileToken,
-      selectedTopicId: state.selectedTopicId
+      selectedTopicId: resolveSelectedTopicId(selectedTopicId)
     });
     dispatch(state, reducers.hydrateFromBackend, result);
     render();
@@ -372,7 +397,7 @@ export function createActionHandlers({
 
     state.isPaletteModalOpen = true;
     render();
-    focusPaletteOption(dom, state.paletteId);
+    focusPaletteModalStart(dom);
   }
 
   function closePaletteModal() {

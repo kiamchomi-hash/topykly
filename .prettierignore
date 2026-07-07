@@ -1,0 +1,13 @@
+.git/
+.agents/
+.playwright-cli/
+.playwright-mcp/
+node_modules/
+dist/
+build/
+.data/
+output/
+*.log
+*.png
+*.svg
+dashboard.html

@@ -1,3 +1,5 @@
+export { formatMessageTime } from "../../ui/date-utils.js";
+
 export function getUserNameById(users, userId, fallback = "Anonimo") {
   if (users.byId && users.byId[userId]) {
     return users.byId[userId].name;
@@ -9,11 +11,4 @@ export function getUserNameById(users, userId, fallback = "Anonimo") {
   }
   
   return fallback;
-}
-
-export function formatMessageTime(timestamp, locale = "es-AR") {
-  return timestamp.toLocaleTimeString(locale, {
-    hour: "2-digit",
-    minute: "2-digit"
-  });
 }

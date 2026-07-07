@@ -59,6 +59,7 @@ import { createTopicItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
+import { formatJoinedDateParts, formatMessageTime, formatProfileJoinedDate } from "../ui/date-utils.js";
 import { renderTitles } from "../ui/titles.js";
 import { selectUsersViewModel } from "../features/users/selectors.js";
 
@@ -494,6 +495,25 @@ await (async () => {
     } finally {
       globalThis.document = previousDocument;
     }
+  });
+
+  await test("date utils centralize UI date and time formatting", () => {
+    const timestamp = new Date(2026, 0, 2, 3, 4, 5);
+    const joinedAt = new Date(2026, 0, 2, 12, 0, 0);
+
+    assert.equal(formatMessageTime(timestamp), timestamp.toLocaleTimeString("es-AR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    }));
+    assert.equal(formatProfileJoinedDate(joinedAt), `Registro: ${joinedAt.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    })}`);
+    assert.deepEqual(formatJoinedDateParts(joinedAt), ["02", "01", "2026"]);
+    assert.equal(formatMessageTime(""), "");
+    assert.equal(formatProfileJoinedDate(""), "Fecha de registro no disponible");
+    assert.deepEqual(formatJoinedDateParts(""), []);
   });
 
   await test("hydrate marks unread updates even for the open topic", () => {
@@ -2969,6 +2989,16 @@ await (async () => {
     assert.equal(getRequestIp({ ...req, headers: { "x-forwarded-for": "198.51.100.7, 198.51.100.8" } }, { TOPYKLY_TRUST_PROXY: "yes" }), "198.51.100.7");
   });
 
+  await test("production headers restrict unused device permissions", async () => {
+    const vercelConfig = JSON.parse(await read("vercel.json"));
+    const globalHeaders = vercelConfig.headers.find((entry) => entry.source === "/(.*)")?.headers || [];
+    const permissionsPolicy = globalHeaders.find((header) => header.key === "Permissions-Policy");
+
+    assert.deepEqual(permissionsPolicy, {
+      key: "Permissions-Policy",
+      value: "camera=(), microphone=(), geolocation=()"
+    });
+  });
   await test("auth service validates Turnstile tokens server-side when configured", async () => {
     const req = {
       headers: { host: "127.0.0.1:4173", "cf-connecting-ip": "203.0.113.8" },
@@ -3290,6 +3320,325 @@ await (async () => {
     }
   });
 
+  await test("email registration returns to the topic active when auth started", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.className = "";
+        this.textContent = "";
+        this.value = "";
+        this.parentElement = null;
+        this.classList = createClassList();
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector() {
+        return null;
+      }
+
+      querySelectorAll() {
+        return [];
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {}
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+    }
+
+    const state = {
+      viewer: { id: "guest-register", type: "guest" },
+      selectedTopicId: "topic-original"
+    };
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const themeToggle = new FakeElement();
+    const themeToggleDesktopSlot = new FakeElement();
+    let registeredPayload = null;
+
+    const dom = {
+      themeToggle,
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      openRightDrawer: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      themeToggleDesktopSlot,
+      themeToggleMobileSlot: new FakeElement(),
+      themeToggleDrawerSlot: new FakeElement(),
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      messagesButton: new FakeElement(),
+      authButton,
+      authTools: new FakeElement(),
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
+      closeAuthModalButton: new FakeElement()
+    };
+    dom.authEmailInput.value = "new@example.com";
+    dom.authPasswordInput.value = "password123";
+    dom.authNicknameInput.value = "Nuevo";
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        state,
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {},
+        async getAuthStatus() {
+          return { turnstile: { configured: false, siteKey: null } };
+        },
+        async registerWithPassword(payload) {
+          registeredPayload = payload;
+          state.viewer = { id: "u-new", type: "registered" };
+          return { viewer: state.viewer, selectedTopicId: payload.selectedTopicId, users: [], topics: [] };
+        }
+      });
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+      state.selectedTopicId = "topic-after-modal-open";
+      dom.authRegisterModeButton.dispatch("click");
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(registeredPayload?.selectedTopicId, "topic-original");
+      assert.equal(dom.authModalBackdrop.hidden, true);
+    } finally {
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+
+  await test("auth modal lazy-loads Turnstile script only after login interaction", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousWindow = globalThis.window;
+    const previousTurnstile = globalThis.turnstile;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.className = "";
+        this.textContent = "";
+        this.classList = createClassList();
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        return selector === ".button-label" ? this.label : null;
+      }
+
+      querySelectorAll() {
+        return [];
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {}
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const authTurnstile = new FakeElement();
+    const appendedScripts = [];
+    let renderCalls = 0;
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.turnstile = undefined;
+      globalThis.window = {
+        addEventListener() {},
+        matchMedia() {
+          return { matches: false };
+        }
+      };
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        head: {
+          appendChild(node) {
+            appendedScripts.push(node);
+            globalThis.turnstile = {
+              render() {
+                renderCalls += 1;
+                return "widget-lazy";
+              }
+            };
+            node.onload?.();
+            return node;
+          }
+        },
+        addEventListener() {},
+        createElement(tagName) {
+          return { tagName, async: false, defer: false, onload: null, onerror: null };
+        },
+        getElementById(id) {
+          return appendedScripts.find((script) => script.id === id) ?? null;
+        },
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents({
+        themeToggle: new FakeElement(),
+        refreshButton: new FakeElement(),
+        messageForm: new FakeElement(),
+        profileButton: new FakeElement(),
+        openRightDrawer: new FakeElement(),
+        backToTopics: new FakeElement(),
+        storeButton: new FakeElement(),
+        paletteButton: new FakeElement(),
+        themeToggleDesktopSlot: new FakeElement(),
+        themeToggleMobileSlot: new FakeElement(),
+        themeToggleDrawerSlot: new FakeElement(),
+        closePaletteModalButton: new FakeElement(),
+        paletteModalBackdrop: new FakeElement(),
+        paletteOptionGrid: new FakeElement(),
+        createTopicButton: new FakeElement(),
+        friendRequestsButton: new FakeElement(),
+        notificationsButton: new FakeElement(),
+        messagesButton: new FakeElement(),
+        authButton,
+        authTools: new FakeElement(),
+        authModalBackdrop: new FakeElement(),
+        authModal: new FakeElement(),
+        authGoogleButton: new FakeElement(),
+        authTurnstile,
+        authTurnstileToken: { value: "" },
+        authPasswordForm: new FakeElement(),
+        authLoginModeButton: new FakeElement(),
+        authRegisterModeButton: new FakeElement(),
+        authNicknameInput: new FakeElement(),
+        authEmailInput: new FakeElement(),
+        authPasswordInput: new FakeElement(),
+        authPasswordButton: new FakeElement(),
+        closeAuthModalButton: new FakeElement()
+      }, {
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        state: { viewer: { id: "guest-lazy-turnstile", type: "guest" } },
+        async getAuthStatus() {
+          return { turnstile: { configured: true, siteKey: "site-key" } };
+        },
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {}
+      });
+
+      assert.equal(appendedScripts.length, 0);
+      assert.equal(renderCalls, 0);
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(appendedScripts.length, 1);
+      assert.equal(appendedScripts[0].id, "turnstile-script");
+      assert.equal(appendedScripts[0].src, "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit");
+      assert.equal(appendedScripts[0].async, true);
+      assert.equal(appendedScripts[0].defer, true);
+      assert.equal(renderCalls, 1);
+      assert.equal(authTurnstile.hidden, false);
+    } finally {
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+      globalThis.window = previousWindow;
+      globalThis.turnstile = previousTurnstile;
+    }
+  });
   await test("auth modal requires Turnstile when backend advertises it", async () => {
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
@@ -4073,6 +4422,11 @@ await (async () => {
     const rankingIcons = await read("ui/ranking-icons.js");
     const paletteModal = await read("ui/palette-modal.js");
     const publicProfileModal = await read("ui/public-profile-modal.js");
+    const profileModal = await read("ui/profile-modal.js");
+    const adminPanel = await read("ui/admin-panel.js");
+    const icons = await read("ui/icons.js");
+    const sharedBaseComponents = await read("features/shared/components/base.js");
+    const dateUtils = await read("ui/date-utils.js");
     const titles = await read("ui/titles.js");
     const topics = await read("ui/topics.js");
     const users = await read("ui/users.js");
@@ -4094,6 +4448,7 @@ await (async () => {
     assert.match(previewServer, /relativePath\.startsWith\("\.\."\) \|\| path\.isAbsolute\(relativePath\)/);
     assert.match(previewServer, /"X-Content-Type-Options": "nosniff"/);
     assert.match(previewServer, /"X-Frame-Options": "DENY"/);
+    assert.match(previewServer, /"Permissions-Policy": "camera=\(\), microphone=\(\), geolocation=\(\)"/);
     assert.match(previewServer, /"Content-Security-Policy"/);
     assert.match(previewServer, /frame-ancestors 'none'/);
     assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: false \}\)/);
@@ -4120,17 +4475,23 @@ await (async () => {
     assert.match(previewServer, /if \(!enforceHttpRateLimit\(res, httpRateLimitBuckets, req, url, httpRateLimitConfig\)\)/);
     assert.match(previewServer, /setInterval\(\(\) => runGuestCleanup\(store, log\), guestCleanupIntervalMs\)/);
     assert.match(previewServer, /clearInterval\(guestCleanupTimer\)/);
+    const vercelConfig = await read("vercel.json");
+    assert.match(vercelConfig, /"key": "Permissions-Policy"/);
+    assert.match(vercelConfig, /"value": "camera=\(\), microphone=\(\), geolocation=\(\)"/);
     const drawers = await read("ui/drawers.js");
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
 
     assert.match(html, /<title>TOPYKLY<\/title>/);
+    assert.match(html, /<main id="main-content" class="workspace" aria-label="Chat social">/);
     assert.match(html, /class="topbar__title" aria-label="TOPYKLY"/);
     assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
     assert.match(html, /class="brand-mark__trend">KLY<\/span>/);
     assert.match(html, /id="topicList"/);
     assert.match(html, /id="createTopicButton"/);
+    assert.match(html, /id="createTopicButton"[\s\S]*aria-label="Crear nuevo tema de chat"/);
     assert.match(html, /id="topicTitleInput"/);
+    assert.match(html, /id="topicTitleInput"[\s\S]*aria-label="Titulo del nuevo tema"/);
     assert.match(html, /id="chatTitle"/);
     assert.match(html, /class="panel__header-title"[\s\S]*id="backToTopics"[\s\S]*aria-label="Volver a temas"[\s\S]*id="chatTitle"/);
     assert.match(html, /id="reportTopicButton"/);
@@ -4139,6 +4500,8 @@ await (async () => {
     assert.match(html, /refresh-button__wheel/);
     assert.match(html, /id="backToTopics"/);
     assert.match(html, /placeholder="Escribe aqui\.\.\."/);
+    assert.match(html, /id="messageInput"[\s\S]*aria-label="Mensaje del chat"/);
+    assert.match(html, /<button class="primary-button" type="submit" aria-label="Enviar mensaje al chat">/);
     assert.match(html, /<p class="panel__kicker">Menú<\/p>/);
     assert.match(html, /id="rankingPrev"/);
     assert.match(html, /id="rankingCurrent"/);
@@ -4159,6 +4522,7 @@ await (async () => {
     assert.match(html, /id="paletteOptionGrid"/);
     assert.match(html, /id="authGoogleButton"[\s\S]*id="authPasswordForm"/);
     assert.match(html, /<h2 class="profile-modal__title">Perfil<\/h2>/);
+    assert.match(html, /<meta name="description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil\." \/>/);
     assert.match(html, /id="profileNameSection"[\s\S]*data-editing="false"[\s\S]*id="profileAvatarPreview"/);
     assert.match(html, /id="profileNameEditButton"[\s\S]*aria-label="Editar nombre visible"[\s\S]*data-profile-section-edit="name"/);
     assert.match(html, /id="profileNameFeedback"/);
@@ -4167,6 +4531,7 @@ await (async () => {
     assert.match(html, /id="profileDescriptionInput"[\s\S]*maxlength="180"[\s\S]*readonly/);
     assert.doesNotMatch(html, /id="profileDescriptionInput"[\s\S]*rows=/);
     assert.match(html, /id="profileAvatarPreview"[\s\S]*aria-label="Cambiar avatar"/);
+    assert.match(html, /<img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" width="320" height="320" \/>/);
     assert.match(html, /id="profileJoinedAtText"/);
     assert.match(html, /id="profileJoinedAtVisibilityButton"[\s\S]*data-profile-visibility="joinedAt"/);
     assert.match(html, /id="profileDescriptionVisibilityButton"[\s\S]*data-profile-visibility="description"/);
@@ -4177,6 +4542,7 @@ await (async () => {
     assert.doesNotMatch(html, /id="paletteModalTitle"/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/);
     assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/);
+    assert.doesNotMatch(html, /challenges\.cloudflare\.com\/turnstile\/v0\/api\.js/);
     assert.match(html, /integrity="sha384-DY3umZptOgjUNshBFbvu1\+3RVFPoD1\/CgGcc1yyJ77\/aFOJ7jtN4BORnz\/D\/xF0n"/);
     assert.match(html, /integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmXNaoRDWmHnRTutomMnUySX9hqDgVQVcvMdc"/);
     assert.match(html, /crossorigin="anonymous"/);
@@ -4259,6 +4625,10 @@ await (async () => {
     assert.match(styles, /\.palette-modal__body\s*\{[\s\S]*overflow:\s*auto;[\s\S]*padding-right:\s*4px;/);
     assert.match(styles, /\.palette-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
     assert.match(styles, /\.palette-grid__featured\s*\{[\s\S]*grid-column:\s*1 \/ -1;[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
+    assert.match(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
+    assert.match(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid__featured\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
+    assert.doesNotMatch(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid\s*\{[\s\S]*overflow-x:\s*auto;/);
+    assert.doesNotMatch(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-modal__body::before,/);
     assert.match(styles, /\.palette-option\s*\{[\s\S]*padding:\s*12px;[\s\S]*border-radius:\s*14px;[\s\S]*transition:\s*[\s\S]*border-color 180ms ease,[\s\S]*background-color 180ms ease,[\s\S]*box-shadow 180ms ease;/);
     assert.match(styles, /\.palette-option:hover,\s*\.palette-option:focus-visible\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 72%,\s*var\(--line\)\);[\s\S]*box-shadow:/);
     assert.doesNotMatch(styles, /\.palette-option:hover,\s*\.palette-option:focus-visible\s*\{[^}]*transform:/);
@@ -4338,6 +4708,7 @@ await (async () => {
     assert.doesNotMatch(styles, /#(?:efd8c7|e5bfa7|2a201d|252b33|1f3035|263020|342421|252d3d)/i);    assert.match(styles, /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/);
     assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-item__avatar\s*\{[\s\S]*width:\s*76px;[\s\S]*height:\s*76px;/);
     assert.match(styles, /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/);
+    assert.match(styles, /@media \(max-width:\s*319px\)\s*\{[\s\S]*\.auth-modal-backdrop\s*\{[\s\S]*padding:\s*8px;[\s\S]*\.auth-modal__body\s*\{[\s\S]*padding:\s*10px 12px;[\s\S]*\.auth-email-form__field input,\s*\.auth-email-submit\s*\{[\s\S]*min-height:\s*40px;/);
     assert.match(styles, /\.theme-toggle-slot\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;/);
     assert.match(styles, /\.theme-toggle-slot:empty\s*\{[\s\S]*display:\s*none;/);
     assert.match(styles, /\.theme-switch\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*78px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*3px;[\s\S]*border-radius:\s*999px;/);
@@ -4468,6 +4839,10 @@ await (async () => {
     assert.match(styles, /\.user-item\[data-connected-user-id\]:active\s*\{/);
     assert.match(styles, /\.user-item\.is-active\s*\{/);
     assert.match(styles, /\.topic-list\s*\{[\s\S]*grid-auto-rows:\s*84px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-list\s*\{[\s\S]*gap:\s*12px;/);
+    assert.match(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item::after\s*\{[\s\S]*border-top:\s*1px solid color-mix\(in srgb,\s*var\(--accent\) 62%,\s*var\(--line-strong\)\);/);
+    assert.doesNotMatch(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item\s*\{\s*border-top:\s*0;/);
+    assert.doesNotMatch(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item::after\s*\{\s*border-top:\s*0;/);
     assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-list\s*\{[\s\S]*grid-auto-rows:\s*76px;/);
     assert.match(styles, /\.topic-item\.is-active \.topic-item__avatar\s*\{[\s\S]*border-color:\s*inherit;/);
     assert.match(styles, /\.user-item__trigger\s*\{/);
@@ -4493,6 +4868,11 @@ await (async () => {
     assert.match(app, /from "\.\/controller\.js\?v=20260702-sessioncookie"/);
     assert.match(components, /createProfileAvatar/);
     assert.match(components, /message__avatar/);
+    assert.match(components, /Abrir opciones de reaccion del mensaje de/);
+    assert.match(components, /Marcar me gusta en el mensaje de/);
+    assert.match(components, /Marcar no me gusta en el mensaje de/);
+    assert.match(components, /Reportar mensaje de/);
+    assert.match(components, /Abrir perfil de/);
     assert.match(components, /message__body/);
     assert.match(components, /message__time/);
     assert.match(components, /message__like-button/);
@@ -4546,6 +4926,9 @@ await (async () => {
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
     assert.match(actions, /openPaletteModal/);
+    assert.match(actions, /function resetPaletteModalScroll\(dom\)\s*\{[\s\S]*body\.scrollTop = 0;[\s\S]*body\.scrollLeft = 0;/);
+    assert.match(actions, /function focusPaletteModalStart\(dom\)\s*\{[\s\S]*preventScroll:\s*true[\s\S]*resetPaletteModalScroll\(dom\);[\s\S]*requestAnimationFrame/);
+    assert.match(actions, /function openPaletteModal\(\)\s*\{[\s\S]*state\.isPaletteModalOpen = true;[\s\S]*render\(\);[\s\S]*focusPaletteModalStart\(dom\);[\s\S]*\}/);
     assert.match(actions, /closePaletteModal/);
     assert.match(actions, /selectPalette/);
     assert.match(actions, /ensureCustomPaletteActive/);
@@ -4572,6 +4955,9 @@ await (async () => {
     assert.match(chat, /panel--topic-create/);
     assert.match(chat, /Primer mensaje/);
     assert.match(chat, /Crear tema/);
+    assert.match(chat, /Primer mensaje del nuevo tema/);
+    assert.match(chat, /Enviar comentario al tema seleccionado/);
+    assert.match(chat, /No se pueden enviar mensajes en este tema cerrado/);
     assert.match(chatActions, /Inicia sesion o crea una cuenta para participar/);
     assert.match(chatActions, /Motivo del reporte del usuario/);
     assert.match(rankings, /renderRankings/);
@@ -4602,9 +4988,20 @@ await (async () => {
     assert.match(paletteModal, /closeLabel:\s*"Aceptar"/);
     assert.match(paletteModal, /syncCustomPalettePicker/);
     assert.doesNotMatch(paletteModal, /palette-option__description/);
+    assert.match(icons, /image\.width = 84;[\s\S]*image\.height = 84;/);
+    assert.match(icons, /size: AVATAR_INTRINSIC_SIZE/);
+    assert.match(sharedBaseComponents, /svg\.setAttribute\("width", "84"\);[\s\S]*svg\.setAttribute\("height", "84"\);/);
+    assert.match(topbarActionEvents, /image\.width = 42;[\s\S]*image\.height = 42;[\s\S]*image\.loading = "lazy";/);
+    assert.match(topbarActionEvents, /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*dom\.profileAvatarPreview\.append\(image\)/);
+    assert.match(profileModal, /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*image\.loading = "lazy";/);
+    assert.match(publicProfileModal, /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*image\.loading = "eager";/);
+    assert.match(adminPanel, /image\.width = 64;[\s\S]*image\.height = 64;[\s\S]*image\.loading = "lazy";/);
     assert.match(publicProfileModal, /export function renderPublicProfileModal/);
     assert.match(publicProfileModal, /createdAt/);
-    assert.match(publicProfileModal, /return \[day, month, String\(year\)\]/);
+    assert.match(publicProfileModal, /formatJoinedDateParts/);
+    assert.match(dateUtils, /export function formatMessageTime/);
+    assert.match(dateUtils, /export function formatProfileJoinedDate/);
+    assert.match(dateUtils, /export function formatJoinedDateParts/);
     assert.match(publicProfileModal, /document\.createElement\("span"\)/);
     assert.match(publicProfileModal, /profileShowDescription/);
     assert.match(publicProfileModal, /profileShowJoinedAt/);
@@ -4691,7 +5088,7 @@ await (async () => {
     assert.match(topbarActionEvents, /handlers\.setAuthUiSync\?\.\(syncAuthUi\)/);
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(topbarActionEvents, /document\.documentElement\.dataset\.authState = isLoggedIn\(\) \? "logged-in" : "logged-out"/);
-    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\{ turnstileToken \}\)/);
+    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\{ turnstileToken, selectedTopicId: getPendingAuthTopicId\(\) \}\)/);
     assert.match(topbarActionEvents, /await handlers\.logout\?\.\(\)/);
     assert.match(topbarActionEvents, /dom\.authTools\.hidden = !loggedIn/);
     assert.match(topbarActionEvents, /setLoggedIn/);
@@ -4726,6 +5123,7 @@ await (async () => {
   console.error(error);
   process.exitCode = 1;
 });
+
 
 
 
