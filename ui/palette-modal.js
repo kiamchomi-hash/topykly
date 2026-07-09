@@ -12,17 +12,26 @@ function syncCustomPalettePicker(state, dom, option) {
   }
 
   const pickerParent = dom.paletteModal.querySelector(".palette-modal__body") || dom.paletteModal;
+  const themeMode = state.theme === "dark" ? "dark" : "light";
+  const pickerConfigSignature = `theme:${themeMode}`;
+  const activePicker = typeof document !== "undefined" ? document.querySelector(".clr-picker.clr-open") : null;
 
   if (typeof document !== "undefined" && document.documentElement.dataset.customPickerOpen !== "true") {
     document.documentElement.dataset.customPickerOpen = "false";
   }
+
+  if (activePicker || pickerInput.dataset.colorisSignature === pickerConfigSignature) {
+    return;
+  }
+
+  pickerInput.dataset.colorisSignature = pickerConfigSignature;
 
   Coloris({
     el: pickerInput,
     parent: pickerParent,
     wrap: false,
     theme: "pill",
-    themeMode: state.theme === "dark" ? "dark" : "light",
+    themeMode,
     margin: 10,
     format: "hex",
     formatToggle: false,
@@ -32,6 +41,36 @@ function syncCustomPalettePicker(state, dom, option) {
     closeButton: true,
     closeLabel: "Aceptar"
   });
+}
+
+function getPaletteGridSignature(state, option) {
+  return [
+    state.theme,
+    state.paletteId,
+    option.hex,
+    state.isPaletteModalOpen ? "open" : "closed"
+  ].join("|");
+}
+
+function isCustomPaletteEditing() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  if (document.documentElement?.dataset?.customPickerOpen === "true") {
+    return true;
+  }
+
+  const activeElement = document.activeElement;
+  if (typeof Element === "undefined" || !(activeElement instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(
+    activeElement.closest("[data-custom-palette-hex]") ||
+      activeElement.closest("[data-custom-palette-picker]") ||
+      activeElement.closest(".clr-picker")
+  );
 }
 
 function createPreviewMarkup(mode, preview, { inlineStyles = true } = {}) {
@@ -202,6 +241,19 @@ export function renderPaletteModal(state, dom) {
   const remainingMarkup = remainingOptions
     .map((option) => createPaletteOptionMarkup(option, option.id === state.paletteId))
     .join("");
+  const gridDataset = dom.paletteOptionGrid.dataset || (dom.paletteOptionGrid.dataset = {});
+  const nextSignature = getPaletteGridSignature(state, customOption);
+
+  if (gridDataset.paletteRenderSignature === nextSignature) {
+    syncCustomPalettePicker(state, dom, customOption);
+    return;
+  }
+
+  if (isCustomPaletteEditing()) {
+    gridDataset.paletteRenderPendingSignature = nextSignature;
+    syncCustomPalettePicker(state, dom, customOption);
+    return;
+  }
 
   dom.paletteOptionGrid.innerHTML = `
     <div class="palette-grid__featured">
@@ -211,6 +263,8 @@ export function renderPaletteModal(state, dom) {
     ${defaultMarkup}
     ${remainingMarkup}
   `;
+  gridDataset.paletteRenderSignature = nextSignature;
+  delete gridDataset.paletteRenderPendingSignature;
 
   syncCustomPalettePicker(state, dom, customOption);
 }

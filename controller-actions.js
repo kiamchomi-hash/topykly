@@ -1,6 +1,6 @@
 import { createChatActions } from "./controller-chat-actions.js";
 import { createRankingActions } from "./controller-ranking-actions.js";
-import { api } from "./services/api.js?v=20260702-sessioncookie";
+import { api } from "./services/api.js?v=20260709-palettefocus5";
 import { dispatch, reducers } from "./store-logic.js";
 import {
   applyPaletteToDocument,
@@ -361,11 +361,12 @@ export function createActionHandlers({
 
   function syncCustomPaletteControls(hexValue) {
     const normalized = normalizeHexColor(hexValue, state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
+    const activeElement = typeof document !== "undefined" ? document.activeElement : null;
 
     dom.paletteOptionGrid
       ?.querySelectorAll("[data-custom-palette-hex]")
       ?.forEach((input) => {
-        if (!isInputLike(input)) {
+        if (!isInputLike(input) || input === activeElement) {
           return;
         }
         input.value = normalized;
@@ -376,7 +377,7 @@ export function createActionHandlers({
     dom.paletteOptionGrid
       ?.querySelectorAll("[data-custom-palette-picker]")
       ?.forEach((input) => {
-        if (isInputLike(input)) {
+        if (isInputLike(input) && input !== activeElement) {
           input.value = normalized;
         }
       });

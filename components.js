@@ -41,6 +41,8 @@ export function createTopicItem(topic, users, selected = false, currentUserId = 
   const button = el("button", `topic-item${selected ? " is-active" : ""}${unread ? " topic-item--unread" : ""}`);
   button.type = "button";
   button.dataset.id = topic.id;
+  button.setAttribute("aria-pressed", String(selected));
+  button.setAttribute("aria-current", selected ? "true" : "false");
 
   const topicCommentCount = topic.messages.filter((message) => message.kind === "user").length;
   const lastCommentAuthor = [...topic.messages].reverse().find((message) => message.kind === "user");

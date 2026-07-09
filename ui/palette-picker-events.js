@@ -3,6 +3,7 @@ import { CUSTOM_PALETTE_ID } from "../palettes.js";
 export function createPalettePickerController(dom, handlers, scheduleOpen) {
   let pickerReopenLockUntil = 0;
   let pickerTriggerUnlockTimer = 0;
+  let pickerPointerStartedInside = false;
 
   function lockPickerReopen() {
     pickerReopenLockUntil = Date.now() + 220;
@@ -222,13 +223,25 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
     }
   }
 
+  function isCustomPickerEventTarget(target) {
+    return target instanceof Element && Boolean(
+      target.closest(".clr-picker") ||
+        target.closest("[data-open-custom-palette-picker]") ||
+        target.closest("[data-custom-palette-hex]")
+    );
+  }
   function dismissPaletteModal() {
     requestPickerClose(false);
     handlers.closePaletteModal();
   }
 
+  function handleDocumentPointerDown(event) {
+    pickerPointerStartedInside = isCustomPickerEventTarget(event.target);
+  }
+
   function handleDocumentClick(event) {
     if (!(event.target instanceof Element)) {
+      pickerPointerStartedInside = false;
       return;
     }
 
@@ -253,16 +266,19 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
 
     const picker = document.querySelector(".clr-picker");
     const pickerIsOpen = picker instanceof HTMLElement && picker.classList.contains("clr-open");
-    if (
-      pickerIsOpen &&
-      !event.target.closest(".clr-picker") &&
-      !event.target.closest("[data-open-custom-palette-picker]")
-    ) {
+    if (pickerIsOpen && !pickerPointerStartedInside && !isCustomPickerEventTarget(event.target)) {
       requestPickerClose(false);
     }
+    pickerPointerStartedInside = false;
   }
 
   function handlePaletteGridClick(event) {
+    const hexInputTarget = event.target instanceof Element ? event.target.closest("[data-custom-palette-hex]") : null;
+    if (hexInputTarget instanceof HTMLInputElement) {
+      hexInputTarget.focus();
+      return;
+    }
+
     const randomizeTarget = event.target instanceof Element ? event.target.closest("[data-randomize-custom-palette]") : null;
     if (randomizeTarget instanceof HTMLElement) {
       requestPickerClose(false);
@@ -288,7 +304,6 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
               : pickerInput.value
           );
           syncCustomPickerDraft(committedHex, { commit: true });
-          setPickerOpenState(true);
           pickerInput.focus();
           pickerInput.dispatchEvent(new MouseEvent("click", {
             bubbles: false,
@@ -333,7 +348,7 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
     }
 
     if (target.matches("[data-custom-palette-hex]")) {
-      const applied = handlers.updateCustomPaletteHex(target.value);
+      const applied = handlers.updateCustomPaletteHex(target.value, { focus: false });
       if (!applied) {
         target.value = target.dataset.lastValid || target.defaultValue;
       }
@@ -355,7 +370,7 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
       const nextValue = sanitizeHexDraft(target.value);
       target.value = nextValue;
       if (nextValue.length === 4 || nextValue.length === 7) {
-        const applied = handlers.updateCustomPaletteHex(nextValue);
+        const applied = handlers.updateCustomPaletteHex(nextValue, { render: false, focus: false });
         if (applied) {
           target.dataset.lastValid = nextValue;
         }
@@ -368,6 +383,7 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
     bindPickerActionButtons,
     bindPickerLifecycle,
     dismissPaletteModal,
+    handleDocumentPointerDown,
     handleDocumentClick,
     handlePaletteGridChange,
     handlePaletteGridClick,

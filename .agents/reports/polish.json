@@ -1,0 +1,13 @@
+{
+  "agentName": "Agente de Acabado y Detalles",
+  "status": "Sugerencia",
+  "lastChecked": "2026-07-07T16:10:00.000Z",
+  "suggestions": [
+    {
+      "level": "suggestion",
+      "message": "Implementar transiciones de fundido de entrada/salida (fade in/out de <code>150ms</code>) al conmutar entre los filtros de la lista de rankings globales para suavizar el cambio de datos y mejorar la percepción de fluidez.",
+      "id": "sv532u6",
+      "agent": "polish"
+    }
+  ]
+}

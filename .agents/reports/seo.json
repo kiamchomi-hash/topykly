@@ -1,0 +1,13 @@
+{
+  "agentName": "Agente de SEO y Rendimiento",
+  "status": "Sugerencia",
+  "lastChecked": "2026-07-07T16:10:00.000Z",
+  "suggestions": [
+    {
+      "level": "suggestion",
+      "message": "Añadir metadatos de Open Graph (<code>og:title</code>, <code>og:description</code>, <code>og:image</code>) en el head de <code>index.html</code> para mejorar la indexación y la presentación visual del enlace del sitio al compartirlo en plataformas como Discord, WhatsApp o X.",
+      "id": "s9m6k6u",
+      "agent": "seo"
+    }
+  ]
+}

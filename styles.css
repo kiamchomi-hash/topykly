@@ -710,11 +710,12 @@ html.is-mobile-viewport .topbar__auth-tools {
   background: var(--palette-modal-scrollbar-thumb-hover);
 }
 
-html[data-custom-picker-open="false"] .clr-picker {
+html[data-custom-picker-open="false"] .clr-picker:not(.clr-open),
+.clr-picker:not(.clr-open) {
   display: none !important;
 }
 
-.clr-picker {
+.clr-picker.clr-open {
   display: grid !important;
   grid-template-columns: minmax(138px, 150px) minmax(0, 1fr);
   grid-template-areas:
@@ -2497,18 +2498,22 @@ html[data-theme] #topicList .topic-item:focus-visible {
 }
 
 html[data-theme] .topic-item.is-active,
+html[data-theme] .topic-item[aria-current="true"],
 html[data-theme] #topicList .topic-item.is-active {
   border-color: color-mix(in srgb, var(--accent-strong) 88%, var(--line-strong));
   background: color-mix(in srgb, var(--surface-strong) 76%, var(--accent) 24%);
 }
 
 html[data-theme] .topic-item.is-active::after,
+html[data-theme] .topic-item[aria-current="true"]::after,
 html[data-theme] #topicList .topic-item.is-active::after {
   border-color: color-mix(in srgb, var(--accent-strong) 88%, var(--line-strong));
 }
 
 html[data-theme] .topic-item.is-active:hover,
 html[data-theme] .topic-item.is-active:focus-visible,
+html[data-theme] .topic-item[aria-current="true"]:hover,
+html[data-theme] .topic-item[aria-current="true"]:focus-visible,
 html[data-theme] #topicList .topic-item.is-active:hover,
 html[data-theme] #topicList .topic-item.is-active:focus-visible {
   border-color: color-mix(in srgb, var(--accent-strong) 96%, var(--line-strong));
@@ -2768,7 +2773,8 @@ html[data-theme="dark"] .composer textarea:focus {
   overflow: auto;
   overflow-x: hidden;
   min-height: 0;
-  padding: 0 16px 16px 0;
+  padding: 0 16px 72px 0;
+  scroll-padding-bottom: 72px;
 }
 
 .message-stream--empty {
@@ -9213,7 +9219,6 @@ button.icon-button.profile-modal__close {
   }
 }
 
-/* Notification empty state: solid outlined block with a lightweight mascot. */
 .notification-panel__empty {
   display: grid;
   justify-items: center;

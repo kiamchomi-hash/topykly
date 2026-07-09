@@ -1,0 +1,13 @@
+{
+  "agentName": "Agente de Estándares y Mentoría",
+  "status": "Sugerencia",
+  "lastChecked": "2026-07-07T16:10:00.000Z",
+  "suggestions": [
+    {
+      "level": "suggestion",
+      "message": "Definir un estándar de orden de declaración de clases CSS (ej. usando la convención BEM estricta o agrupamiento posicional) en todas las hojas de estilo del proyecto para simplificar las auditorías de diseño responsive.",
+      "id": "sxnp3d0",
+      "agent": "standards"
+    }
+  ]
+}

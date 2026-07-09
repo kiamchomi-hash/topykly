@@ -61,14 +61,15 @@ import {
   normalizeHexColor,
   parseHexColor,
   PALETTE_OPTIONS,
-  isPaletteId
+  isPaletteId,
+  getActiveAccentColor
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
 import { createTopicItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
-import { collectTopicNotifications, createNotificationStateUpdate, groupNotificationsForDisplay } from "../ui/notifications.js";
+import { collectTopicNotifications, createNotificationStateUpdate, groupNotificationsForDisplay, createNotificationEmptyState } from "../ui/notifications.js";
 import {
   formatJoinedDateParts,
   formatMessageTime,
@@ -577,6 +578,24 @@ await (async () => {
       assert.equal(unreadUser.textContent, "Nadia");
       assert.equal(unreadUser.className.includes("topic-item__meta-count--unread"), false);
       assert.equal(unreadMeta.dataset.lastAuthorId, "u2");
+      assert.equal(unreadTopicItem.attributes.get("aria-pressed"), "false");
+      assert.equal(unreadTopicItem.attributes.get("aria-current"), "false");
+
+      const selectedTopicItem = createTopicItem(
+        {
+          id: "topic-selected",
+          title: "Seleccionado",
+          authorId: "u1",
+          messages: [ownMessage]
+        },
+        users,
+        true,
+        "u1",
+        false
+      );
+
+      assert.equal(selectedTopicItem.attributes.get("aria-pressed"), "true");
+      assert.equal(selectedTopicItem.attributes.get("aria-current"), "true");
     } finally {
       globalThis.document = previousDocument;
     }
@@ -829,6 +848,98 @@ await (async () => {
     assert.ok(styles.includes(".notification-panel__empty-mascot"));
     assert.ok(styles.includes("place-items: center"));
     assert.ok(styles.includes("width: 76px"));
+  });
+
+  await test("notification empty state custom and brand/satirical mascots", () => {
+    const previousDocument = globalThis.document;
+
+    class MockNode {
+      constructor(tagName) {
+        this.tagName = tagName;
+        this.children = [];
+        this.dataset = {};
+        this.attributes = new Map();
+        this.className = "";
+        this.textContent = "";
+        this.innerHTML = "";
+        this.style = {
+          properties: new Map(),
+          setProperty(name, value) {
+            this.properties.set(name, value);
+          },
+          getPropertyValue(name) {
+            return this.properties.get(name);
+          }
+        };
+      }
+
+      append(...nodes) {
+        this.children.push(...nodes);
+      }
+
+      appendChild(node) {
+        this.children.push(node);
+        return node;
+      }
+
+      setAttribute(name, value) {
+        this.attributes.set(name, value);
+      }
+    }
+
+    globalThis.document = {
+      createElement(tagName) {
+        return new MockNode(tagName);
+      }
+    };
+
+    try {
+      // 1. Check brand/satirical mascot (Coca-Cola #F40009)
+      const stateCoke = {
+        theme: "light",
+        paletteId: "custom",
+        customPaletteHex: "#F40009"
+      };
+      const elementCoke = createNotificationEmptyState(stateCoke);
+      const mascotCoke = elementCoke.children[0];
+      const titleCoke = elementCoke.children[1];
+      assert.equal(titleCoke.textContent, "Aun no hay comentarios");
+      assert.ok(mascotCoke.innerHTML.includes("fill=\"#F40009\""));
+
+      // 2. Check brand/satirical mascot (Pepsi #003087)
+      const statePepsi = {
+        theme: "dark",
+        paletteId: "custom",
+        customPaletteHex: "#003087"
+      };
+      const elementPepsi = createNotificationEmptyState(statePepsi);
+      const titlePepsi = elementPepsi.children[1];
+      assert.equal(titlePepsi.textContent, "Aun no hay comentarios");
+
+      // 3. Check brand/satirical mascot with slightly off brand color (proximity matching, e.g. #F30008, close to Coke)
+      const stateCloseCoke = {
+        theme: "light",
+        paletteId: "custom",
+        customPaletteHex: "#F30008"
+      };
+      const elementCloseCoke = createNotificationEmptyState(stateCloseCoke);
+      const titleCloseCoke = elementCloseCoke.children[1];
+      assert.equal(titleCloseCoke.textContent, "Aun no hay comentarios");
+
+      // 4. Check procedural/custom mascot for normal color (e.g. #B25B33)
+      const stateNormal = {
+        theme: "light",
+        paletteId: "custom",
+        customPaletteHex: "#B25B33"
+      };
+      const elementNormal = createNotificationEmptyState(stateNormal);
+      const mascotNormal = elementNormal.children[0];
+      const titleNormal = elementNormal.children[1];
+      assert.equal(titleNormal.textContent, "Aun no hay comentarios");
+      assert.equal(mascotNormal.style.getPropertyValue("--accent"), getActiveAccentColor(stateNormal.theme, stateNormal.paletteId, stateNormal.customPaletteHex));
+    } finally {
+      globalThis.document = previousDocument;
+    }
   });
 
   await test("notification state update deduplicates toasts and remembers message ids", () => {
@@ -3362,6 +3473,30 @@ await (async () => {
     }
   });
 
+  await test("custom palette hex input updates live without rerendering the modal", async () => {
+    const topbarActionEvents = await read("ui/topbar-action-events.js");
+    const palettePickerEvents = await read("ui/palette-picker-events.js");
+    const actions = await read("controller-actions.js");
+
+    assert.match(
+      topbarActionEvents,
+      /handlers\.updateCustomPaletteHex\(nextValue, \{ render: false, focus: false \}\)/
+    );
+    assert.match(
+      palettePickerEvents,
+      /handlers\.updateCustomPaletteHex\(nextValue, \{ render: false, focus: false \}\)/
+    );
+    assert.match(actions, /const activeElement = typeof document !== "undefined" \? document\.activeElement : null;/);
+    assert.match(actions, /input === activeElement/);
+    assert.match(topbarActionEvents, /hexInputTarget\.focus\(\);/);
+    assert.match(palettePickerEvents, /hexInputTarget\.focus\(\);/);
+    assert.match(topbarActionEvents, /function isCustomPickerEventTarget/);
+    assert.match(palettePickerEvents, /function isCustomPickerEventTarget/);
+    assert.match(topbarActionEvents, /document\.addEventListener\("pointerdown",/);
+    assert.match(topbarActionEvents, /pickerPointerStartedInside = isCustomPickerEventTarget\(event\.target\);/);
+    assert.match(topbarActionEvents, /pickerIsOpen && !pickerPointerStartedInside && !isCustomPickerEventTarget\(event\.target\)/);
+    assert.match(palettePickerEvents, /handleDocumentPointerDown/);
+  });
   await test("connected user activation stores selected card", () => {
     const state = {
       theme: "light",
@@ -3406,6 +3541,29 @@ await (async () => {
     assert.equal(renderCount, 1);
   });
 
+  await test("custom palette picker opens only after Coloris emits open", async () => {
+    const topbarActionEvents = await read("ui/topbar-action-events.js");
+    const palettePickerEvents = await read("ui/palette-picker-events.js");
+    const eventsModule = await read("ui/events.js");
+
+    assert.match(
+      topbarActionEvents,
+      /pickerInput\.addEventListener\("open", \(\) => \{[\s\S]*setPickerOpenState\(true\);/
+    );
+    assert.doesNotMatch(
+      topbarActionEvents,
+      /syncCustomPickerDraft\(committedHex, \{ commit: true \}\);\s*setPickerOpenState\(true\);\s*pickerInput\.focus\(\);/
+    );
+    assert.doesNotMatch(
+      palettePickerEvents,
+      /syncCustomPickerDraft\(committedHex, \{ commit: true \}\);\s*setPickerOpenState\(true\);\s*pickerInput\.focus\(\);/
+    );
+    assert.match(
+      eventsModule,
+      /const pickerIsOpen = picker instanceof HTMLElement && picker\.classList\.contains\("clr-open"\);/
+    );
+    assert.doesNotMatch(eventsModule, /pickerMarkedOpen \|\|/);
+  });
   await test("palette modal dismiss closes the active Coloris picker first", () => {
     const previousColoris = globalThis.Coloris;
     const previousDocument = globalThis.document;
@@ -5673,7 +5831,7 @@ await (async () => {
     assert.match(styles, /\.clr-clear\s*\{[\s\S]*display:\s*none !important;/);
     assert.match(
       styles,
-      /\.clr-picker\s*\{[\s\S]*grid-template-areas:\s*[\s\S]*"actions actions";/
+      /\.clr-picker\.clr-open\s*\{[\s\S]*grid-template-areas:\s*[\s\S]*"actions actions";/
     );
     assert.match(
       styles,
@@ -5700,7 +5858,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /html\[data-custom-picker-open="false"\] \.clr-picker\s*\{[\s\S]*display:\s*none !important;/
+      /html\[data-custom-picker-open="false"\] \.clr-picker:not\(\.clr-open\),[\s\S]*\.clr-picker:not\(\.clr-open\)\s*\{[\s\S]*display:\s*none !important;/
     );
     assert.match(
       styles,
@@ -6544,7 +6702,7 @@ await (async () => {
       styles,
       /html\[data-theme="light"\] \.rankings-section\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top:\s*1px solid/
     );
-    assert.match(app, /from "\.\/controller\.js\?v=20260702-sessioncookie"/);
+    assert.match(app, /from "\.\/controller\.js\?v=20260709-palettefocus5"/);
     assert.match(components, /createProfileAvatar/);
     assert.match(components, /message__avatar/);
     assert.match(components, /Abrir opciones de reaccion del mensaje de/);
@@ -6586,7 +6744,7 @@ await (async () => {
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
     assert.match(
       controller,
-      /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260702-sessioncookie";/
+      /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260709-palettefocus5";/
     );
     assert.match(controllerApp, /from "\.\/ui\/transition-utils\.js"/);
     assert.match(controllerTheme, /export function applyStoredTheme/);
@@ -6598,10 +6756,10 @@ await (async () => {
     assert.match(controllerViewport, /syncRankingListHeights/);
     assert.match(controllerApp, /from "\.\/app-store\.js"/);
     assert.match(controllerApp, /from "\.\/ui\/dom\.js"/);
-    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260702-sessioncookie"/);
-    assert.match(controllerApp, /from "\.\/controller-actions\.js\?v=20260702-sessioncookie"/);
+    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260709-palettefocus5"/);
+    assert.match(controllerApp, /from "\.\/controller-actions\.js\?v=20260709-palettefocus5"/);
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
-    assert.match(controllerApp, /from "\.\/controller-render\.js"/);
+    assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260709-palettefocus5"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
     assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;/);
     assert.match(
@@ -6623,7 +6781,7 @@ await (async () => {
       controllerApp,
       /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/
     );
-    assert.match(actions, /from "\.\/services\/api\.js\?v=20260702-sessioncookie"/);
+    assert.match(actions, /from "\.\/services\/api\.js\?v=20260709-palettefocus5"/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
     assert.match(actions, /openPaletteModal/);
@@ -6659,6 +6817,7 @@ await (async () => {
     assert.match(palettes, /export function parseHexColor/);
     assert.match(responsiveController, /export function createResponsiveHelpers/);
     assert.match(renderController, /export function createRenderers/);
+    assert.match(renderController, /from "\.\/ui\/palette-modal\.js\?v=20260709-palettefocus5"/);
     assert.match(renderController, /renderPaletteModal/);
     assert.match(renderController, /renderPublicProfileModal/);
     assert.match(chat, /renderChat/);
@@ -6703,6 +6862,12 @@ await (async () => {
     assert.match(paletteModal, /closeButton:\s*true/);
     assert.match(paletteModal, /closeLabel:\s*"Aceptar"/);
     assert.match(paletteModal, /syncCustomPalettePicker/);
+    assert.match(paletteModal, /colorisSignature/);
+    assert.match(paletteModal, /document\.querySelector\("\.clr-picker\.clr-open"\)/);
+    assert.match(paletteModal, /getPaletteGridSignature/);
+    assert.match(paletteModal, /paletteRenderSignature/);
+    assert.match(paletteModal, /paletteRenderPendingSignature/);
+    assert.match(paletteModal, /isCustomPaletteEditing/);
     assert.doesNotMatch(paletteModal, /palette-option__description/);
     assert.match(icons, /image\.width = 84;[\s\S]*image\.height = 84;/);
     assert.match(icons, /size: AVATAR_INTRINSIC_SIZE/);
@@ -6784,7 +6949,7 @@ await (async () => {
     assert.match(domModule, /paletteOptionGrid/);
     assert.match(domModule, /assertRequiredDom/);
     assert.match(domModule, /Missing required DOM nodes/);
-    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260702-sessioncookie"/);
+    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260709-palettefocus5"/);
     assert.match(eventsModule, /syncComposerTextareaHeight/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
@@ -6800,6 +6965,7 @@ await (async () => {
     assert.match(chat, /classList\.toggle\(\s*"is-scrollable"/);
     assert.match(previewServer, /const topicId = segments\[2\] \|\| "";/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
+    assert.match(styles, /\.message-stream\s*\{[\s\S]*padding:\s*0 16px 72px 0;[\s\S]*scroll-padding-bottom:\s*72px;/);
     assert.match(chat, /function getMessageBodyMeasuredScrollHeight\(body\)/);
     assert.match(chat, /if \(card\.style\.minHeight !== nextMinHeight\)/);
     assert.match(chat, /\.message__action-menu:not\(\[hidden\]\), \.message__reaction-menu:not\(\[hidden\]\)/);
@@ -6828,7 +6994,7 @@ await (async () => {
     assert.match(renderUtils, /function shouldPreserveMessageLayoutStyle/);
     assert.match(renderUtils, /existing\.classList\?\.contains\?\.\("message"\)/);
     assert.match(drawers, /getTransitionDurationMs/);
-    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260702-sessioncookie"/);
+    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260709-palettefocus5"/);
     assert.match(topbar, /bindTopbarEvents/);
     assert.match(topbarActionEvents, /openPaletteModal/);
     assert.match(topbarActionEvents, /closePaletteModal/);

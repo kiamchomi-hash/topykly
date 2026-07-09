@@ -1,0 +1,103 @@
+{
+  "agentName": "Agente Coordinador / Scrum Master",
+  "status": "Al día",
+  "lastChecked": "2026-07-06T12:34:45.572Z",
+  "summary": [
+    {
+      "level": "info",
+      "message": "Tienes 23 archivos locales modificados sin commitear:"
+    },
+    {
+      "level": "info",
+      "message": "<code>M components.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M controller-actions.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M controller-app.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M controller-ranking-actions.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M dom-store.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M index.html</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ranking-state.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M services/preview-server.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M styles.css</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M tests/run.mjs</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/dom.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/events.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/ranking-labels.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/ranking-panel-state.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/rankings.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/titles.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/topbar-action-events.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>M ui/topbar-ranking-events.js</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>?? .playwright-cli/</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>?? output/playwright/mobile-brand-after.png</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>?? output/playwright/mobile-drawer-brand-after.png</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>?? output/playwright/mobile-drawer-priority-after.png</code>"
+    },
+    {
+      "level": "info",
+      "message": "<code>?? output/playwright/profile-modal-updated.png</code>"
+    }
+  ]
+}

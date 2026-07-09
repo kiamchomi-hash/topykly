@@ -22,6 +22,7 @@ const FOCUSABLE_SELECTOR = [
 export function bindTopbarActionEvents(dom, handlers) {
   let pickerReopenLockUntil = 0;
   let pickerTriggerUnlockTimer = 0;
+  let pickerPointerStartedInside = false;
   let authPending = false;
   let authStatus = null;
   let authStatusPromise = null;
@@ -317,6 +318,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     pickerInput.addEventListener("open", () => {
       scheduleOpen(() => {
         bindPickerActionButtons();
+        setPickerOpenState(true);
         if (typeof globalThis.Coloris?.updatePosition === "function") {
           globalThis.Coloris.updatePosition();
         }
@@ -396,6 +398,13 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   }
 
+  function isCustomPickerEventTarget(target) {
+    return target instanceof Element && Boolean(
+      target.closest(".clr-picker") ||
+        target.closest("[data-open-custom-palette-picker]") ||
+        target.closest("[data-custom-palette-hex]")
+    );
+  }
   function dismissPaletteModal() {
     requestPickerClose(false);
     handlers.closePaletteModal();
@@ -1583,8 +1592,12 @@ export function bindTopbarActionEvents(dom, handlers) {
       dismissPaletteModal();
     }
   });
+  document.addEventListener("pointerdown", (event) => {
+    pickerPointerStartedInside = isCustomPickerEventTarget(event.target);
+  }, true);
   document.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) {
+      pickerPointerStartedInside = false;
       return;
     }
 
@@ -1609,15 +1622,18 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     const picker = document.querySelector(".clr-picker");
     const pickerIsOpen = picker instanceof HTMLElement && picker.classList.contains("clr-open");
-    if (
-      pickerIsOpen &&
-      !event.target.closest(".clr-picker") &&
-      !event.target.closest("[data-open-custom-palette-picker]")
-    ) {
+    if (pickerIsOpen && !pickerPointerStartedInside && !isCustomPickerEventTarget(event.target)) {
       requestPickerClose(false);
     }
+    pickerPointerStartedInside = false;
   }, true);
   addListener(dom.paletteOptionGrid, "click", (event) => {
+    const hexInputTarget = event.target instanceof Element ? event.target.closest("[data-custom-palette-hex]") : null;
+    if (hexInputTarget instanceof HTMLInputElement) {
+      hexInputTarget.focus();
+      return;
+    }
+
     const randomizeTarget = event.target instanceof Element ? event.target.closest("[data-randomize-custom-palette]") : null;
     if (randomizeTarget instanceof HTMLElement) {
       requestPickerClose(false);
@@ -1643,7 +1659,6 @@ export function bindTopbarActionEvents(dom, handlers) {
               : pickerInput.value
           );
           syncCustomPickerDraft(committedHex, { commit: true });
-          setPickerOpenState(true);
           pickerInput.focus();
           pickerInput.dispatchEvent(new MouseEvent("click", {
             bubbles: false,
@@ -1687,7 +1702,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (target.matches("[data-custom-palette-hex]")) {
-      const applied = handlers.updateCustomPaletteHex(target.value);
+      const applied = handlers.updateCustomPaletteHex(target.value, { focus: false });
       if (!applied) {
         target.value = target.dataset.lastValid || target.defaultValue;
       }
@@ -1708,7 +1723,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       const nextValue = sanitizeHexDraft(target.value);
       target.value = nextValue;
       if (nextValue.length === 4 || nextValue.length === 7) {
-        const applied = handlers.updateCustomPaletteHex(nextValue);
+        const applied = handlers.updateCustomPaletteHex(nextValue, { render: false, focus: false });
         if (applied) {
           target.dataset.lastValid = nextValue;
         }

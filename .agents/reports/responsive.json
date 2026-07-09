@@ -1,0 +1,25 @@
+{
+    "agentName":  "Agente de Pruebas Responsive",
+    "status":  "Corregido",
+    "lastChecked":  "2026-07-08T16:36:36.080Z",
+    "suggestions":  [
+                        {
+                            "level":  "suggestion",
+                            "message":  "Corregir el posicionamiento de la ventana modal del chat de soporte/ayuda en pantallas táctiles horizontales: Reducir su altura máxima a \u003ccode\u003e70vh\u003c/code\u003e en orientación landscape de dispositivos móviles de gama baja para asegurar que el input del teclado en pantalla no oculte los mensajes.",
+                            "id":  "sofllw1",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "El topbar mobile ahora reserva columnas para menu, marca y acciones, evitando que el boton de inicio de sesion se superponga al logo TOPYKLY.",
+                            "id":  "mobile-topbar-auth-brand-overlap",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "El avatar de los temas en mobile queda pegado al borde izquierdo del item: se removio el gutter izquierdo del scroll y el borde interno del avatar.",
+                            "id":  "mobile-topic-avatar-flush-left",
+                            "agent":  "responsive"
+                        }
+                    ]
+}

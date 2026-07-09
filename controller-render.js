@@ -3,7 +3,7 @@ import { renderChat } from "./ui/chat.js";
 import { renderFeedback } from "./ui/feedback.js";
 import { renderFriendRequests } from "./ui/friend-requests.js";
 import { renderNotifications } from "./ui/notifications.js";
-import { renderPaletteModal } from "./ui/palette-modal.js";
+import { renderPaletteModal } from "./ui/palette-modal.js?v=20260709-palettefocus5";
 import { renderProfileModal } from "./ui/profile-modal.js";
 import { renderPublicProfileModal } from "./ui/public-profile-modal.js";
 import { renderRankings } from "./ui/rankings.js";

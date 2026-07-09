@@ -1,15 +1,15 @@
 import { openDrawer, closeDrawers } from "./ui/drawers.js";
-import { bindPageEvents } from "./ui/events.js?v=20260702-sessioncookie";
+import { bindPageEvents } from "./ui/events.js?v=20260709-palettefocus5";
 import { cacheDom } from "./ui/dom.js";
-import { createActionHandlers } from "./controller-actions.js?v=20260702-sessioncookie";
+import { createActionHandlers } from "./controller-actions.js?v=20260709-palettefocus5";
 import { createResponsiveHelpers } from "./controller-responsive.js";
-import { createRenderers } from "./controller-render.js";
+import { createRenderers } from "./controller-render.js?v=20260709-palettefocus5";
 import { closeTimerRef, dom, state } from "./app-store.js";
 import { applyStoredTheme, createBackToTopicsHandler, createResizeHandler } from "./controller-runtime.js";
 import { dispatch, reducers } from "./store-logic.js";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
-import { api } from "./services/api.js?v=20260702-sessioncookie";
+import { api } from "./services/api.js?v=20260709-palettefocus5";
 import {
   collectTopicNotifications,
   createNotificationStateUpdate,

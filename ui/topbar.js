@@ -1,4 +1,4 @@
-import { bindTopbarActionEvents } from "./topbar-action-events.js?v=20260702-sessioncookie";
+import { bindTopbarActionEvents } from "./topbar-action-events.js?v=20260709-palettefocus5";
 import { bindTopbarDrawerEvents } from "./topbar-drawer-events.js";
 import { bindTopbarRankingEvents } from "./topbar-ranking-events.js";
 

@@ -1,4 +1,4 @@
-import { bindTopbarEvents } from "./topbar.js?v=20260702-sessioncookie";
+import { bindTopbarEvents } from "./topbar.js?v=20260709-palettefocus5";
 import { syncComposerTextareaHeight } from "./chat.js";
 
 const FOCUSABLE_SELECTOR = [
@@ -500,9 +500,8 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
       return;
     }
 
-    const pickerMarkedOpen = document.documentElement?.dataset?.customPickerOpen === "true";
     const picker = document.querySelector(".clr-picker");
-    const pickerIsOpen = pickerMarkedOpen || (picker instanceof HTMLElement && picker.classList.contains("clr-open"));
+    const pickerIsOpen = picker instanceof HTMLElement && picker.classList.contains("clr-open");
     if (!pickerIsOpen || typeof globalThis.Coloris?.close !== "function") {
       return;
     }
