@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta property="og:title" content="TOPYKLY" />
+    <meta property="og:description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
+    <meta property="og:image" content="https://www.topykly.com/favicon.svg" />
     <title>TOPYKLY</title>
     <script>
       (function () {
@@ -201,6 +204,13 @@
             </div>
             <div class="chat-actions">
               <button class="icon-button icon-button--compact chat-actions__report" id="reportTopicButton" type="button" aria-label="Reportar tema" hidden>
+                <span class="report-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3 3.8 18.5h16.4L12 3Z"></path>
+                    <path d="M12 9v4"></path>
+                    <path d="M12 17h.01"></path>
+                  </svg>
+                </span>
                 <span class="button-label">Reportar</span>
               </button>
               <button class="icon-button icon-button--compact icon-button--refresh" id="refreshButton" type="button" aria-label="Actualizar contenido manualmente">
@@ -307,7 +317,11 @@
       <section class="palette-modal" id="paletteModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Selector de paletas" tabindex="-1">
         <div class="palette-modal__header">
           <button class="icon-button icon-button--compact palette-modal__close" id="closePaletteModalButton" type="button" aria-label="Cerrar selector de paletas">
-            <span aria-hidden="true">&times;</span>
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
           </button>
         </div>
         <div class="palette-modal__body">
@@ -324,7 +338,11 @@
             <h2>Moderacion</h2>
           </div>
           <button class="icon-button icon-button--compact admin-modal__close" id="closeAdminModalButton" type="button" aria-label="Cerrar administracion">
-            <span aria-hidden="true">&times;</span>
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
           </button>
         </div>
         <div class="admin-modal__body" id="adminPanelBody"></div>
@@ -338,7 +356,11 @@
             <h2>Iniciar sesion</h2>
           </div>
           <button class="icon-button icon-button--compact auth-modal__close" id="closeAuthModalButton" type="button" aria-label="Cerrar inicio de sesion">
-            <span aria-hidden="true">&times;</span>
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
           </button>
         </div>
         <div class="auth-modal__body">
@@ -360,23 +382,27 @@
           <form class="auth-email-form" id="authPasswordForm">
             <div class="auth-mode-tabs" role="group" aria-label="Modo de acceso">
               <button class="auth-mode-tabs__button is-active" id="authLoginModeButton" type="button" data-auth-mode="login">Entrar</button>
-              <button class="auth-mode-tabs__button" id="authRegisterModeButton" type="button" data-auth-mode="register">Registrarse</button>
+              <button class="auth-mode-tabs__button" id="authRegisterModeButton" type="button" data-auth-mode="register">Crear cuenta</button>
             </div>
             <label class="auth-email-form__field auth-register-only" for="authNicknameInput" hidden>
-              <span>Nickname</span>
-              <input id="authNicknameInput" type="text" autocomplete="nickname" maxlength="24" placeholder="tu_nick" />
+              <span class="auth-email-form__label-text">Nombre de Usuario <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
+              <input id="authNicknameInput" type="text" autocomplete="nickname" maxlength="24" aria-describedby="authStatus" />
             </label>
             <label class="auth-email-form__field" for="authEmailInput">
-              <span>Email</span>
-              <input id="authEmailInput" type="email" autocomplete="email" placeholder="tu@email.com" />
+              <span class="auth-email-form__label-text">Email <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
+              <input id="authEmailInput" type="email" autocomplete="email" required aria-describedby="authStatus" />
             </label>
             <label class="auth-email-form__field" for="authPasswordInput">
-              <span>Contrasena</span>
-              <input id="authPasswordInput" type="password" autocomplete="current-password" minlength="8" placeholder="Minimo 8 caracteres" />
+              <span class="auth-email-form__label-text">Contraseña <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
+              <input id="authPasswordInput" type="password" autocomplete="current-password" minlength="8" required aria-describedby="authStatus" />
             </label>
             <button class="auth-email-submit" id="authPasswordButton" type="submit">
               <span>Entrar con email</span>
             </button>
+            <p class="auth-recovery-help" id="authRecoveryHelp" hidden>
+              <span>No podes entrar?</span>
+              <a href="mailto:soporte@topykly.com?subject=Ayuda%20para%20recuperar%20clave">Recuperar clave o pedir ayuda</a>
+            </p>
           </form>
         </div>
       </section>
@@ -389,7 +415,11 @@
             <h2 id="profileDisplayName">Usuario</h2>
           </div>
           <button class="icon-button icon-button--compact profile-modal__close" id="closeProfileModalButton" type="button" aria-label="Cerrar perfil">
-            <span aria-hidden="true">&times;</span>
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
           </button>
         </div>
         <form class="profile-modal__body" id="profileForm">
@@ -446,6 +476,7 @@
         <div class="profile-avatar-crop__body">
           <div class="profile-avatar-crop__frame" id="profileAvatarCropFrame">
             <img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" width="320" height="320" />
+            <span class="profile-avatar-crop__window" aria-hidden="true"></span>
           </div>
           <label class="profile-avatar-crop__control" for="profileAvatarCropZoom">
             <span>Zoom</span>
@@ -466,7 +497,11 @@
             <h2 id="publicProfileName">Usuario</h2>
           </div>
           <button class="icon-button icon-button--compact profile-modal__close" id="closePublicProfileModalButton" type="button" aria-label="Cerrar perfil">
-            <span aria-hidden="true">&times;</span>
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
           </button>
         </div>
         <div class="profile-modal__body public-profile-modal__body">
@@ -493,7 +528,11 @@
           <h2>Temas</h2>
         </div>
         <button class="icon-button icon-button--compact" data-close-drawer="left" type="button" aria-label="Cerrar temas">
-          <span aria-hidden="true">×</span>
+          <span class="drawer-close-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </span>
         </button>
       </div>
       <div class="scroll-list" id="leftDrawerTopics"></div>
@@ -516,7 +555,11 @@
           </span>
         </div>
         <button class="icon-button icon-button--compact" data-close-drawer="right" type="button" aria-label="Cerrar menú">
-          <span aria-hidden="true">×</span>
+          <span class="drawer-close-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </span>
         </button>
       </div>
       <section class="drawer__section drawer__section--menu" id="mobileTopbarMenu" aria-label="Acciones secundarias">
@@ -721,6 +764,8 @@
       </div>
     </aside>
 
+    <div class="friend-request-panel" id="friendRequestsPanel" aria-label="Solicitudes de amistad" aria-hidden="true" hidden></div>
+    <div class="notification-toasts" id="notificationToasts" role="status" aria-live="polite" aria-label="Notificaciones" hidden></div>
     <div class="action-feedback" id="actionFeedback" role="status" aria-live="polite" hidden></div>
 
     <script

@@ -18,6 +18,8 @@ const CUSTOM_PALETTE_VAR_NAMES = [
   "--ranking-badge-border"
 ];
 
+const CUSTOM_PALETTE_STYLESHEET_ID = "customPaletteStylesheet";
+
 export const PALETTE_OPTIONS = [
   {
     id: DEFAULT_PALETTE_ID,
@@ -281,6 +283,67 @@ export function buildCustomPaletteOption(hexValue) {
   };
 }
 
+function formatCssCustomProperties(properties) {
+  return Object.entries(properties)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join("\n");
+}
+
+export function buildCustomPaletteStylesheetCss(hexValue) {
+  const normalized = normalizeHexColor(hexValue);
+  const lightVars = buildLightPaletteVars(normalized);
+  const darkVars = buildDarkPaletteVars(normalized);
+  const lightPreview = buildPreviewFromVars(lightVars);
+  const darkPreview = buildPreviewFromVars(darkVars);
+
+  return [
+    `html[data-theme="light"][data-palette="${CUSTOM_PALETTE_ID}"] {\n${formatCssCustomProperties(lightVars)}\n}`,
+    `html[data-theme="dark"][data-palette="${CUSTOM_PALETTE_ID}"] {\n${formatCssCustomProperties(darkVars)}\n}`,
+    `[data-custom-palette-card] .palette-option__color-preview {\n  --palette-custom-preview: ${normalized};\n}`,
+    `[data-custom-palette-card] .palette-option__mode[data-mode="light"] {\n  --palette-preview-bg: ${lightPreview.bg};\n  --palette-preview-surface: ${lightPreview.surface};\n  --palette-preview-accent: ${lightPreview.accent};\n  --palette-preview-text: ${lightPreview.text};\n}`,
+    `[data-custom-palette-card] .palette-option__mode[data-mode="dark"] {\n  --palette-preview-bg: ${darkPreview.bg};\n  --palette-preview-surface: ${darkPreview.surface};\n  --palette-preview-accent: ${darkPreview.accent};\n  --palette-preview-text: ${darkPreview.text};\n}`
+  ].join("\n\n");
+}
+
+export function removeCustomPaletteStylesheet(documentRef) {
+  if (!documentRef || typeof documentRef.querySelector !== "function") {
+    return;
+  }
+
+  const style = documentRef.querySelector(`#${CUSTOM_PALETTE_STYLESHEET_ID}`);
+  style?.remove?.();
+}
+
+export function injectCustomPaletteStylesheet(documentRef, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
+  if (!documentRef?.head || typeof documentRef.createElement !== "function") {
+    return null;
+  }
+
+  const cssText = buildCustomPaletteStylesheetCss(customHex);
+  let style = typeof documentRef.querySelector === "function"
+    ? documentRef.querySelector(`#${CUSTOM_PALETTE_STYLESHEET_ID}`)
+    : null;
+
+  if (style?.dataset?.paletteCssSignature === cssText) {
+    return style;
+  }
+
+  if (!style) {
+    style = documentRef.createElement("style");
+    style.id = CUSTOM_PALETTE_STYLESHEET_ID;
+    documentRef.head.appendChild(style);
+  }
+
+  if (style.dataset) {
+    style.dataset.paletteCssSignature = cssText;
+  } else if (typeof style.setAttribute === "function") {
+    style.setAttribute("data-palette-css-signature", cssText);
+  }
+  style.textContent = cssText;
+
+  return style;
+}
+
 function getResolvedPaletteOption(paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
   if ((paletteId || DEFAULT_PALETTE_ID) === CUSTOM_PALETTE_ID) {
     return buildCustomPaletteOption(customHex);
@@ -372,15 +435,8 @@ export function applyPaletteToDocument(rootElement, theme, paletteId, customHex 
   rootElement.dataset.theme = theme;
   rootElement.dataset.palette = paletteId || DEFAULT_PALETTE_ID;
   clearCustomPaletteVars(rootElement);
-
-  if ((paletteId || DEFAULT_PALETTE_ID) !== CUSTOM_PALETTE_ID) {
-    return;
-  }
-
-  const paletteVars = getCustomPaletteVars(customHex, theme);
-  for (const [propertyName, propertyValue] of Object.entries(paletteVars)) {
-    rootElement.style.setProperty(propertyName, propertyValue);
-  }
+  const documentRef = rootElement.ownerDocument || (typeof document !== "undefined" ? document : null);
+  injectCustomPaletteStylesheet(documentRef, customHex);
 }
 
 export function isPaletteId(value) {

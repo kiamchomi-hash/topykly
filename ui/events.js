@@ -183,12 +183,6 @@ export function bindPageEvents(dom, handlers) {
     const menuTrigger = target.closest("[data-user-menu-trigger]");
     if (menuTrigger instanceof HTMLElement) {
       const menuId = menuTrigger.dataset.userMenuTrigger || "";
-      if (menuTrigger.getAttribute("aria-pressed") !== "true") {
-        closeConnectedUserMenus();
-        handlers.activateConnectedUser?.(userId, "item");
-        return true;
-      }
-
       const menu = userItem.querySelector(`[data-user-menu="${menuId}"]`);
       if (menu instanceof HTMLElement) {
         const willOpen = menu.hidden;
@@ -255,10 +249,65 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
+
+  if (typeof HTMLElement !== "undefined" && dom.friendRequestsPanel instanceof HTMLElement) {
+    dom.friendRequestsPanel.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const closeTarget = event.target.closest("[data-close-friend-requests]");
+      if (closeTarget instanceof HTMLElement) {
+        handlers.toggleFriendRequestsPanel?.(false);
+        return;
+      }
+
+      const actionTarget = event.target.closest("[data-friend-action][data-friend-user-id]");
+      if (!(actionTarget instanceof HTMLElement)) {
+        return;
+      }
+
+      const userId = actionTarget.dataset.friendUserId || "";
+      if (actionTarget.dataset.friendAction === "accept") {
+        handlers.acceptFriendRequest?.(userId);
+        return;
+      }
+
+      if (actionTarget.dataset.friendAction === "reject") {
+        handlers.rejectFriendRequest?.(userId);
+      }
+    });
+  }
   if (typeof HTMLFormElement !== "undefined" && dom.messageForm instanceof HTMLFormElement) {
     dom.messageForm.addEventListener("submit", handlers.submitMessage);
   }
+if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTMLElement) {
+    dom.notificationToasts.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
 
+
+      const closeNotificationsTarget = event.target.closest("[data-close-notifications]");
+      if (closeNotificationsTarget instanceof HTMLElement) {
+        handlers.toggleNotificationsPanel?.(false);
+        return;
+      }
+      const dismissTarget = event.target.closest("[data-dismiss-notification]");
+      if (dismissTarget instanceof HTMLElement) {
+        handlers.dismissNotification?.(dismissTarget.dataset.dismissNotification || "");
+        return;
+      }
+
+      const openTarget = event.target.closest("[data-open-notification-topic]");
+      if (openTarget instanceof HTMLElement) {
+        handlers.openNotificationTopic?.(
+          openTarget.dataset.openNotificationTopic || "",
+          openTarget.dataset.notificationId || null
+        );
+      }
+    });
+  }
   if (typeof HTMLTextAreaElement !== "undefined" && dom.messageInput instanceof HTMLTextAreaElement) {
     dom.messageInput.addEventListener("input", () => {
       syncComposerTextareaHeight(dom.messageInput);
@@ -371,6 +420,14 @@ export function bindPageEvents(dom, handlers) {
         return;
       }
 
+
+      const quoteTrigger = event.target.closest("[data-quote-message-id]");
+      if (quoteTrigger instanceof HTMLElement) {
+        closeMessageReactionMenus();
+        closeMessageActionMenus();
+        handlers.quoteMessage?.(quoteTrigger.dataset.quoteMessageId || "", { trigger: quoteTrigger });
+        return;
+      }
       const trigger = event.target.closest("[data-report-entity-type][data-report-entity-id]");
       if (!(trigger instanceof HTMLElement)) {
         closeMessageReactionMenus();
@@ -388,6 +445,24 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
+
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) {
+      return;
+    }
+
+    const insideFriendPanel = event.target.closest("#friendRequestsPanel");
+    const friendButton = event.target.closest("#friendRequestsButton");
+    if (!insideFriendPanel && !friendButton) {
+      handlers.toggleFriendRequestsPanel?.(false);
+    }
+
+    const insideNotificationsPanel = event.target.closest("#notificationToasts");
+    const notificationsButton = event.target.closest("#notificationsButton");
+    if (!insideNotificationsPanel && !notificationsButton) {
+      handlers.toggleNotificationsPanel?.(false);
+    }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Tab") {
       const focusTrapContainer = getActiveFocusTrapContainer(dom);

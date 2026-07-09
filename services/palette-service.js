@@ -65,10 +65,5 @@ export class PaletteService {
         input.value = normalized;
       });
 
-    this.dom.paletteOptionGrid
-      ?.querySelectorAll(".palette-option__color-preview")
-      ?.forEach((preview) => {
-        preview.style.setProperty("--palette-custom-preview", normalized);
-      });
   }
 }

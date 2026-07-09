@@ -27,6 +27,7 @@
       --flows-color: #f97316;
       --standards-color: #38bdf8;
       --seo-color: #a3e635;
+      --polish-color: #f472b6;
       
       --success: #10b981;
       --warning: #f59e0b;
@@ -122,6 +123,7 @@
     .agent-card--flows::before { background-color: var(--flows-color); }
     .agent-card--standards::before { background-color: var(--standards-color); }
     .agent-card--seo::before { background-color: var(--seo-color); }
+    .agent-card--polish::before { background-color: var(--polish-color); }
 
     .agent-card__header {
       display: flex;
@@ -148,6 +150,7 @@
     .agent-card--flows .agent-card__title { color: var(--flows-color); }
     .agent-card--standards .agent-card__title { color: var(--standards-color); }
     .agent-card--seo .agent-card__title { color: var(--seo-color); }
+    .agent-card--polish .agent-card__title { color: var(--polish-color); }
 
     .agent-card__badge {
       font-size: 0.75rem;
@@ -292,7 +295,7 @@
 
     <header>
       <h1>💼 Oficina de Agentes de Desarrollo</h1>
-      <span class="timestamp">Último Reporte: 2026-07-07T01:45:10.525Z</span>
+      <span class="timestamp">Último Reporte: 2026-07-07T19:23:35.028Z</span>
     </header>
 
     <div class="grid">
@@ -532,11 +535,11 @@
         <li>
           <span class="bullet" style="color: var(--warning)">•</span> 
           <div class="suggestion-item">
-            <span class="suggestion-text">Configurar la directiva <code>base-uri 'self'</code> en la cabecera CSP para evitar ataques de inyección de etiquetas base que alteren las rutas de los archivos estáticos.</span>
+            <span class="suggestion-text">Configurar la directiva Referrer-Policy en 'same-origin' o 'no-referrer' en las peticiones de recursos externos de avatares para evitar la fuga de URLs y parámetros de sesión a servidores externos.</span>
             
           <div class="suggestion-actions">
-            <button class="action-btn action-btn--accept" onclick="makeDecision('sf2o6y7', 'security', 'accept')">Aceptar</button>
-            <button class="action-btn action-btn--reject" onclick="makeDecision('sf2o6y7', 'security', 'reject')">Rechazar</button>
+            <button class="action-btn action-btn--accept" onclick="makeDecision('secqb3p', 'security', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('secqb3p', 'security', 'reject')">Rechazar</button>
           </div>
         
           </div>
@@ -555,11 +558,11 @@
         <li>
           <span class="bullet" style="color: inherit">•</span> 
           <div class="suggestion-item">
-            <span class="suggestion-text">Implementar la propiedad CSS <code>contain: layout style;</code> en los elementos <code>.topic-item</code> y <code>.ranking-item</code> para mejorar el rendimiento del rendering y reducir el tiempo de cálculo del layout del navegador.</span>
+            <span class="suggestion-text">Reducir el tamaño del bundle inicial extrayendo los estilos inline de la paleta personalizada de colores del DOM a una hoja de estilos dinámica e inyectada mediante un objeto blob CSS para evitar la invalidación de la caché de renderizado.</span>
             
           <div class="suggestion-actions">
-            <button class="action-btn action-btn--accept" onclick="makeDecision('smj8pih', 'frontend', 'accept')">Aceptar</button>
-            <button class="action-btn action-btn--reject" onclick="makeDecision('smj8pih', 'frontend', 'reject')">Rechazar</button>
+            <button class="action-btn action-btn--accept" onclick="makeDecision('skszsti', 'frontend', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('skszsti', 'frontend', 'reject')">Rechazar</button>
           </div>
         
           </div>
@@ -578,34 +581,11 @@
         <li>
           <span class="bullet" style="color: inherit">•</span> 
           <div class="suggestion-item">
-            <span class="suggestion-text">Ajustar el ancho máximo del selector de paletas de colores en móviles medianos (entre 320px y 375px) a <code>280px</code> para garantizar un centrado estético y uniforme.</span>
+            <span class="suggestion-text">Corregir el posicionamiento de la ventana modal del chat de soporte/ayuda en pantallas táctiles horizontales: Reducir su altura máxima a <code>70vh</code> en orientación landscape de dispositivos móviles de gama baja para asegurar que el input del teclado en pantalla no oculte los mensajes.</span>
             
           <div class="suggestion-actions">
-            <button class="action-btn action-btn--accept" onclick="makeDecision('stasqb0', 'responsive', 'accept')">Aceptar</button>
-            <button class="action-btn action-btn--reject" onclick="makeDecision('stasqb0', 'responsive', 'reject')">Rechazar</button>
-          </div>
-        
-          </div>
-        </li>
-      </ul>
-        </div>
-      </section>
-    
-      <section class="agent-card agent-card--ux">
-        <div class="agent-card__header">
-          <h2 class="agent-card__title">👥 Agente de Usabilidad y UX</h2>
-          <span class="agent-card__badge">Sugerencia</span>
-        </div>
-        <div class="agent-card__body">
-          <ul class="agent-card__list">
-        <li>
-          <span class="bullet" style="color: inherit">•</span> 
-          <div class="suggestion-item">
-            <span class="suggestion-text">Mejorar la visualización del input del chat en pantallas ultra pequeñas: Reducir ligeramente el tamaño de fuente del placeholder del campo de entrada de mensajes a <code>0.85rem</code> para evitar saltos de línea innecesarios.</span>
-            
-          <div class="suggestion-actions">
-            <button class="action-btn action-btn--accept" onclick="makeDecision('sladhdo', 'ux', 'accept')">Aceptar</button>
-            <button class="action-btn action-btn--reject" onclick="makeDecision('sladhdo', 'ux', 'reject')">Rechazar</button>
+            <button class="action-btn action-btn--accept" onclick="makeDecision('sofllw1', 'responsive', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('sofllw1', 'responsive', 'reject')">Rechazar</button>
           </div>
         
           </div>
@@ -624,11 +604,11 @@
         <li>
           <span class="bullet" style="color: inherit">•</span> 
           <div class="suggestion-item">
-            <span class="suggestion-text">Optimizar el flujo de cierre del drawer de perfil: Cerrar automáticamente el modal de perfil si el usuario abre directamente la sección de administración, evitando superposiciones de ventanas modales.</span>
+            <span class="suggestion-text">Mejorar el flujo de recuperación de contraseña: Si el usuario introduce credenciales erróneas tres veces seguidas en el modal de autenticación, mostrar un enlace de ayuda directa o reinicio en lugar de solo la alerta genérica de error.</span>
             
           <div class="suggestion-actions">
-            <button class="action-btn action-btn--accept" onclick="makeDecision('sqmn7hl', 'flows', 'accept')">Aceptar</button>
-            <button class="action-btn action-btn--reject" onclick="makeDecision('sqmn7hl', 'flows', 'reject')">Rechazar</button>
+            <button class="action-btn action-btn--accept" onclick="makeDecision('snsmqyt', 'flows', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('snsmqyt', 'flows', 'reject')">Rechazar</button>
           </div>
         
           </div>
@@ -647,11 +627,11 @@
         <li>
           <span class="bullet" style="color: inherit">•</span> 
           <div class="suggestion-item">
-            <span class="suggestion-text">Definir una directiva en <code>eslint</code> (o guías de estilo internas) para forzar la utilización exclusiva de plantillas de cadena (template literals) en lugar de concatenaciones de strings con el operador <code>+</code> en todas las utilidades de renderizado del DOM.</span>
+            <span class="suggestion-text">Definir un estándar de orden de declaración de clases CSS (ej. usando la convención BEM estricta o agrupamiento posicional) en todas las hojas de estilo del proyecto para simplificar las auditorías de diseño responsive.</span>
             
           <div class="suggestion-actions">
-            <button class="action-btn action-btn--accept" onclick="makeDecision('sewc6k9', 'standards', 'accept')">Aceptar</button>
-            <button class="action-btn action-btn--reject" onclick="makeDecision('sewc6k9', 'standards', 'reject')">Rechazar</button>
+            <button class="action-btn action-btn--accept" onclick="makeDecision('sxnp3d0', 'standards', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('sxnp3d0', 'standards', 'reject')">Rechazar</button>
           </div>
         
           </div>
@@ -670,11 +650,34 @@
         <li>
           <span class="bullet" style="color: inherit">•</span> 
           <div class="suggestion-item">
-            <span class="suggestion-text">Mejorar la accesibilidad del botón de scroll to top: Agregar el atributo semántico <code>aria-hidden="true"</code> a la flecha interna del botón para que los lectores de pantalla no lean caracteres vacíos o confusos.</span>
+            <span class="suggestion-text">Añadir metadatos de Open Graph (<code>og:title</code>, <code>og:description</code>, <code>og:image</code>) en el head de <code>index.html</code> para mejorar la indexación y la presentación visual del enlace del sitio al compartirlo en plataformas como Discord, WhatsApp o X.</span>
             
           <div class="suggestion-actions">
-            <button class="action-btn action-btn--accept" onclick="makeDecision('s5o7lbx', 'seo', 'accept')">Aceptar</button>
-            <button class="action-btn action-btn--reject" onclick="makeDecision('s5o7lbx', 'seo', 'reject')">Rechazar</button>
+            <button class="action-btn action-btn--accept" onclick="makeDecision('s9m6k6u', 'seo', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('s9m6k6u', 'seo', 'reject')">Rechazar</button>
+          </div>
+        
+          </div>
+        </li>
+      </ul>
+        </div>
+      </section>
+    
+      <section class="agent-card agent-card--polish">
+        <div class="agent-card__header">
+          <h2 class="agent-card__title">✨ Agente de Acabado y Detalles</h2>
+          <span class="agent-card__badge">Sugerencia</span>
+        </div>
+        <div class="agent-card__body">
+          <ul class="agent-card__list">
+        <li>
+          <span class="bullet" style="color: inherit">•</span> 
+          <div class="suggestion-item">
+            <span class="suggestion-text">Implementar transiciones de fundido de entrada/salida (fade in/out de <code>150ms</code>) al conmutar entre los filtros de la lista de rankings globales para suavizar el cambio de datos y mejorar la percepción de fluidez.</span>
+            
+          <div class="suggestion-actions">
+            <button class="action-btn action-btn--accept" onclick="makeDecision('sv532u6', 'polish', 'accept')">Aceptar</button>
+            <button class="action-btn action-btn--reject" onclick="makeDecision('sv532u6', 'polish', 'reject')">Rechazar</button>
           </div>
         
           </div>

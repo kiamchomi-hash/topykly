@@ -1,6 +1,8 @@
 import { renderAdminPanel } from "./ui/admin-panel.js";
 import { renderChat } from "./ui/chat.js";
 import { renderFeedback } from "./ui/feedback.js";
+import { renderFriendRequests } from "./ui/friend-requests.js";
+import { renderNotifications } from "./ui/notifications.js";
 import { renderPaletteModal } from "./ui/palette-modal.js";
 import { renderProfileModal } from "./ui/profile-modal.js";
 import { renderPublicProfileModal } from "./ui/public-profile-modal.js";
@@ -29,6 +31,8 @@ export function createRenderers({ state, dom, actions, responsive, closeTimerRef
     renderPublicProfileModal(state, dom);
     renderAdminPanel(state, dom);
     renderFeedback(state, dom);
+    renderFriendRequests(state, dom);
+    renderNotifications(state, dom);
     actions.syncAuthUi?.();
     responsive.updateLayoutMetrics();
   }

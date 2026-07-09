@@ -43,6 +43,7 @@ const REQUIRED_DOM_KEYS = [
   "authEmailInput",
   "authPasswordInput",
   "authPasswordButton",
+  "authRecoveryHelp",
   "profileModalBackdrop",
   "publicProfileModalBackdrop",
   "adminPanelButton",
@@ -89,6 +90,8 @@ const REQUIRED_DOM_KEYS = [
   "saveProfileButton",
   "closeProfileModalButton",
   "actionFeedback",
+  "friendRequestsPanel",
+  "notificationToasts",
   "paletteOptionGrid",
   "closePaletteModalButton",
   "chatTopicName",
@@ -128,15 +131,46 @@ const REQUIRED_DOM_KEYS = [
 ];
 
 const DOM_IDS = [
-  "themeToggle", "refreshButton", "reportTopicButton", "chatTitle", "messageForm",
-  "rankingPrev", "rankingCurrent", "rankingNext",
-  "drawerRankingPrev", "drawerRankingCurrent", "drawerRankingNext",
-  "drawerGlobalRankingPrev", "drawerGlobalRankingCurrent", "drawerGlobalRankingNext",
-  "drawerTopicRankingHeader", "drawerGlobalRankingHeader",
-  "drawerGlobalRankingPanel", "drawerTopicRankingPanel",
-  "openRightDrawer", "drawerBackdrop", "profileButton", "backToTopics",
-  "authTools", "friendRequestsButton", "notificationsButton", "messagesButton",
-  "authButton", "storeButton", "paletteButton", "adminPanelButton", "adminModalBackdrop", "adminModal", "adminPanelBody", "closeAdminModalButton", "themeToggleDesktopSlot", "themeToggleMobileSlot", "themeToggleDrawerSlot", "mobileTopbarMenu", "mobileDrawerPanels", "paletteModalBackdrop",
+  "themeToggle",
+  "refreshButton",
+  "reportTopicButton",
+  "chatTitle",
+  "messageForm",
+  "rankingPrev",
+  "rankingCurrent",
+  "rankingNext",
+  "drawerRankingPrev",
+  "drawerRankingCurrent",
+  "drawerRankingNext",
+  "drawerGlobalRankingPrev",
+  "drawerGlobalRankingCurrent",
+  "drawerGlobalRankingNext",
+  "drawerTopicRankingHeader",
+  "drawerGlobalRankingHeader",
+  "drawerGlobalRankingPanel",
+  "drawerTopicRankingPanel",
+  "openRightDrawer",
+  "drawerBackdrop",
+  "profileButton",
+  "backToTopics",
+  "authTools",
+  "friendRequestsButton",
+  "notificationsButton",
+  "messagesButton",
+  "authButton",
+  "storeButton",
+  "paletteButton",
+  "adminPanelButton",
+  "adminModalBackdrop",
+  "adminModal",
+  "adminPanelBody",
+  "closeAdminModalButton",
+  "themeToggleDesktopSlot",
+  "themeToggleMobileSlot",
+  "themeToggleDrawerSlot",
+  "mobileTopbarMenu",
+  "mobileDrawerPanels",
+  "paletteModalBackdrop",
   "authModalBackdrop",
   "authModal",
   "closeAuthModalButton",
@@ -151,6 +185,7 @@ const DOM_IDS = [
   "authEmailInput",
   "authPasswordInput",
   "authPasswordButton",
+  "authRecoveryHelp",
   "profileModalBackdrop",
   "publicProfileModalBackdrop",
   "adminPanelButton",
@@ -196,15 +231,38 @@ const DOM_IDS = [
   "skipProfileButton",
   "saveProfileButton",
   "closeProfileModalButton",
-  "actionFeedback", "paletteOptionGrid", "closePaletteModalButton",
-  "chatTopicName", "chatTopicDescription", "rankingsTitle",
-  "rankingScopeTabs", "rankingModeList", "rankingsGlyph",
-  "rankingScopeButton", "rankingScopeIcon", "rankingsEmpty",
-  "drawerRankingsTitle", "drawerRankingScopeTabs",
+  "actionFeedback",
+  "friendRequestsPanel",
+  "notificationToasts",
+  "paletteOptionGrid",
+  "closePaletteModalButton",
+  "chatTopicName",
+  "chatTopicDescription",
+  "rankingsTitle",
+  "rankingScopeTabs",
+  "rankingModeList",
+  "rankingsGlyph",
+  "rankingScopeButton",
+  "rankingScopeIcon",
+  "rankingsEmpty",
+  "drawerRankingsTitle",
+  "drawerRankingScopeTabs",
   "drawerRankingsGlyph",
-  "drawerRankingsEmpty", "topicTitleInput", "messageInput", "messageStream",
-  "topicList", "createTopicButton", "leftDrawerTopics", "userList",
-  "drawerUserList", "rankingList", "drawerRankingList", "drawerGlobalRankingList", "drawerTopicRankingList", "leftDrawer", "rightDrawer"
+  "drawerRankingsEmpty",
+  "topicTitleInput",
+  "messageInput",
+  "messageStream",
+  "topicList",
+  "createTopicButton",
+  "leftDrawerTopics",
+  "userList",
+  "drawerUserList",
+  "rankingList",
+  "drawerRankingList",
+  "drawerGlobalRankingList",
+  "drawerTopicRankingList",
+  "leftDrawer",
+  "rightDrawer"
 ];
 
 export function cacheDom() {
@@ -245,10 +303,14 @@ export function cacheDom() {
   domProxy.rankingCarousel = domProxy.rankingPrev?.closest(".ranking-carousel") ?? null;
   domProxy.drawerRankingsSection = domProxy.drawerRankingList?.closest(".drawer__section") ?? null;
   domProxy.drawerUsersSection = domProxy.drawerUserList?.closest(".drawer__section") ?? null;
-  domProxy.drawerRankingSwitch = domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
-  domProxy.drawerGlobalRankingSwitch = domProxy.drawerGlobalRankingPrev?.closest(".drawer-ranking__switch") ?? null;
-  domProxy.drawerTopicRankingSwitch = domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
-  domProxy.composerSubmitButton = domProxy.messageForm?.querySelector('button[type="submit"]') ?? null;
+  domProxy.drawerRankingSwitch =
+    domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
+  domProxy.drawerGlobalRankingSwitch =
+    domProxy.drawerGlobalRankingPrev?.closest(".drawer-ranking__switch") ?? null;
+  domProxy.drawerTopicRankingSwitch =
+    domProxy.drawerRankingPrev?.closest(".drawer-ranking__switch") ?? null;
+  domProxy.composerSubmitButton =
+    domProxy.messageForm?.querySelector('button[type="submit"]') ?? null;
 
   assertRequiredDom(domProxy);
   return domProxy;

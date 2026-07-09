@@ -11,6 +11,8 @@ import {
   syncRankingSkeletonHeights
 } from "./ranking-panel-state.js";
 
+const GLOBAL_RANKING_FADE_MS = 150;
+
 export function renderRankings(state, dom) {
   const activeRankingStep = getActiveRankingStep(state);
   const showTopicEmpty = state.rankingScope === "topic" && !state.selectedTopicId;
@@ -83,8 +85,16 @@ export function renderRankings(state, dom) {
     );
 
     showRankingList(dom);
-    renderIntoTargets([dom.rankingList], "scroll-list ranking-list", () =>
-      rankings.map((entry, index) => createRankingItem(entry, index, state.rankingScope))
+    renderRankingTarget(
+      dom.rankingList,
+      "scroll-list ranking-list",
+      getRankingFadeKey(state.rankingScope, activeRankingStep),
+      () => rankings.map((entry, index) => createRankingItem(entry, index, state.rankingScope)),
+      state.rankingScope === "global",
+      () => {
+        syncRankingListHeights(dom);
+        resetRankingScroll(dom);
+      }
     );
   }
 
@@ -99,8 +109,16 @@ export function renderRankings(state, dom) {
         : buildPostRankingEntries(state.topics, state.users, state.currentUserId, globalStep.metric, state.selectedTopicId, "global")
     );
     dom.drawerGlobalRankingList.hidden = false;
-    renderIntoTargets([dom.drawerGlobalRankingList], "scroll-list ranking-list", () =>
-      globalRankings.map((entry, index) => createRankingItem(entry, index, "global"))
+    renderRankingTarget(
+      dom.drawerGlobalRankingList,
+      "scroll-list ranking-list",
+      getRankingFadeKey("global", globalStep),
+      () => globalRankings.map((entry, index) => createRankingItem(entry, index, "global")),
+      true,
+      () => {
+        syncRankingListHeights(dom);
+        resetRankingScroll(dom);
+      }
     );
 
     // B. Render Topic List
@@ -141,4 +159,63 @@ export function renderRankings(state, dom) {
 
   syncRankingListHeights(dom);
   resetRankingScroll(dom);
+}
+
+function renderRankingTarget(target, className, key, buildNodes, shouldFade, onRendered) {
+  if (!target) {
+    return;
+  }
+
+  const nextKey = String(key);
+  const hasPreviousKey = typeof target.dataset.rankingFadeKey === "string";
+  const keyChanged = hasPreviousKey && target.dataset.rankingFadeKey !== nextKey;
+  const canFade = shouldFade && keyChanged && target.children.length > 0 && !prefersReducedMotion();
+
+  target.dataset.rankingFadeKey = nextKey;
+
+  if (!canFade) {
+    clearRankingFadeTimer(target);
+    target.classList.remove("is-ranking-fading");
+    renderIntoTargets([target], className, buildNodes);
+    onRendered?.();
+    return;
+  }
+
+  clearRankingFadeTimer(target);
+  target.classList.add("is-ranking-fading");
+  target.__rankingFadeTimer = setTimeout(() => {
+    renderIntoTargets([target], className, buildNodes);
+    onRendered?.();
+    scheduleAnimationFrame(() => {
+      target.classList.remove("is-ranking-fading");
+    });
+  }, GLOBAL_RANKING_FADE_MS);
+}
+
+function clearRankingFadeTimer(target) {
+  if (!target?.__rankingFadeTimer) {
+    return;
+  }
+
+  clearTimeout(target.__rankingFadeTimer);
+  target.__rankingFadeTimer = 0;
+}
+
+function getRankingFadeKey(scope, step) {
+  return `${scope}:${step.type}:${step.metric}:${step.index}`;
+}
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function scheduleAnimationFrame(callback) {
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(callback);
+    return;
+  }
+
+  setTimeout(callback, 0);
 }

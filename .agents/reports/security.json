@@ -1,30 +1,13 @@
 {
   "agentName": "Agente Auditor de Seguridad",
-  "status": "Mitigado",
-  "lastChecked": "2026-07-07T02:06:38.698Z",
+  "status": "Alerta",
+  "lastChecked": "2026-07-07T16:10:00.000Z",
   "findings": [
     {
-      "level": "info",
-      "message": "Se configuro la cabecera Strict-Transport-Security en vercel.json para forzar conexiones HTTPS durante un ano en produccion.",
-      "id": "hsts-production",
+      "level": "warning",
+      "message": "Configurar la directiva Referrer-Policy en 'same-origin' o 'no-referrer' en las peticiones de recursos externos de avatares para evitar la fuga de URLs y parámetros de sesión a servidores externos.",
+      "id": "secqb3p",
       "agent": "security"
     }
-  ],
-  "audit": {
-    "health": {
-      "status": "OK",
-      "latencyMs": 707
-    },
-    "headers": {
-      "xFrameOptions": "DENY",
-      "xContentTypeOptions": "nosniff",
-      "contentSecurityPolicy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com https://accounts.google.com",
-      "strictTransportSecurity": null
-    },
-    "ssl": {
-      "valid": true,
-      "daysRemaining": 85,
-      "expiry": "Sep 29 15:13:02 2026 GMT"
-    }
-  }
+  ]
 }

@@ -606,6 +606,18 @@ function initSchema(db) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      requester_id TEXT NOT NULL,
+      addressee_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(requester_id, addressee_id),
+      FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (addressee_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS moderation_actions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action_type TEXT NOT NULL,
@@ -734,6 +746,12 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS reports_status_created_idx
     ON reports(status, created_at DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS friend_requests_requester_idx
+    ON friend_requests(requester_id, status, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS friend_requests_addressee_idx
+    ON friend_requests(addressee_id, status, updated_at DESC);
 
     CREATE INDEX IF NOT EXISTS guest_ip_rate_limits_updated_idx
     ON guest_ip_rate_limits(updated_at);
@@ -1200,6 +1218,7 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", pers
 }
 
 function getFrontendUsers(db, viewerId, profileUserIds = []) {
+  const friendshipStatusByUserId = arguments[3] instanceof Map ? arguments[3] : new Map();
   const extraUserIds = [...new Set(profileUserIds.filter((userId) => userId && userId !== viewerId))];
   const extraUserFilter = extraUserIds.length ? ` OR id IN (${extraUserIds.map(() => "?").join(", ")})` : "";
 
@@ -1212,7 +1231,8 @@ function getFrontendUsers(db, viewerId, profileUserIds = []) {
   `).all(viewerId, ...extraUserIds, viewerId).map((user) => ({
     ...user,
     profileShowDescription: user.profileShowDescription !== 0,
-    profileShowJoinedAt: user.profileShowJoinedAt !== 0
+    profileShowJoinedAt: user.profileShowJoinedAt !== 0,
+    friendshipStatus: user.id === viewerId ? "self" : friendshipStatusByUserId.get(user.id) || "none"
   }));
 }
 
@@ -1443,6 +1463,106 @@ function getActiveTopicsForFrontend(db) {
   `).all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT);
 }
 
+function getFriendshipUserSummary(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    avatarUrl: row.avatar_url ?? null
+  };
+}
+
+function getFriendshipsForFrontend(db, viewerId) {
+  const empty = { incoming: [], outgoing: [], friends: [] };
+  if (!viewerId) {
+    return empty;
+  }
+
+  const viewerRow = db.prepare("SELECT id, type FROM users WHERE id = ?").get(viewerId);
+  if (!viewerRow || viewerRow.type !== "registered") {
+    return empty;
+  }
+
+  const incoming = db.prepare(`
+    SELECT users.id, users.name, users.avatar_url
+    FROM friend_requests
+    JOIN users ON users.id = friend_requests.requester_id
+    WHERE friend_requests.addressee_id = ?
+      AND friend_requests.status = 'pending'
+      AND users.status = 'active'
+    ORDER BY friend_requests.updated_at DESC, friend_requests.id DESC
+    LIMIT 50
+  `).all(viewerId).map(getFriendshipUserSummary);
+
+  const outgoing = db.prepare(`
+    SELECT users.id, users.name, users.avatar_url
+    FROM friend_requests
+    JOIN users ON users.id = friend_requests.addressee_id
+    WHERE friend_requests.requester_id = ?
+      AND friend_requests.status = 'pending'
+      AND users.status = 'active'
+    ORDER BY friend_requests.updated_at DESC, friend_requests.id DESC
+    LIMIT 50
+  `).all(viewerId).map(getFriendshipUserSummary);
+
+  const friends = db.prepare(`
+    SELECT users.id, users.name, users.avatar_url
+    FROM friend_requests
+    JOIN users ON users.id = CASE
+      WHEN friend_requests.requester_id = ? THEN friend_requests.addressee_id
+      ELSE friend_requests.requester_id
+    END
+    WHERE friend_requests.status = 'accepted'
+      AND (friend_requests.requester_id = ? OR friend_requests.addressee_id = ?)
+      AND users.status = 'active'
+    ORDER BY friend_requests.updated_at DESC, users.name ASC
+    LIMIT 80
+  `).all(viewerId, viewerId, viewerId).map(getFriendshipUserSummary);
+
+  return { incoming, outgoing, friends };
+}
+
+function getFriendshipStatusByUserId(friendships) {
+  const statusByUserId = new Map();
+  friendships.friends.forEach((user) => statusByUserId.set(user.id, "friend"));
+  friendships.incoming.forEach((user) => statusByUserId.set(user.id, "incoming-request"));
+  friendships.outgoing.forEach((user) => statusByUserId.set(user.id, "outgoing-request"));
+  return statusByUserId;
+}
+
+function getFriendRequestBetween(db, leftUserId, rightUserId) {
+  return db.prepare(`
+    SELECT *
+    FROM friend_requests
+    WHERE (requester_id = ? AND addressee_id = ?)
+       OR (requester_id = ? AND addressee_id = ?)
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 1
+  `).get(leftUserId, rightUserId, rightUserId, leftUserId);
+}
+
+function assertFriendTarget(db, viewerId, targetUserId) {
+  const normalizedTargetUserId = String(targetUserId || "").trim();
+  if (!normalizedTargetUserId) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Selecciona un usuario para agregar.");
+  }
+  if (normalizedTargetUserId === viewerId) {
+    throw new ApiError(400, "INVALID_FRIEND_TARGET", "No puedes agregarte a ti mismo.");
+  }
+
+  const target = db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedTargetUserId);
+  if (!target || target.type !== "registered" || target.status !== USER_STATUS_ACTIVE) {
+    throw new ApiError(404, "NOT_FOUND", "Usuario no disponible para amistad.");
+  }
+
+  return target;
+}
+
+function assertRegisteredFriendContext(db, context) {
+  assertContextCanParticipate(db, context);
+  if (context.viewer.type !== "registered") {
+    throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para agregar amigos.");
+  }
+}
 function buildFrontendPayload(db, context, selectedTopicId = null) {
   rebuildActiveTopicRanks(db);
 
@@ -1450,6 +1570,8 @@ function buildFrontendPayload(db, context, selectedTopicId = null) {
   const topicIds = new Set(activeTopicRows.map((row) => row.id));
   const topics = activeTopicRows.map((row) => hydrateTopic(db, row, { viewerId: context.viewer.id }));
   const reportSnapshot = getReportSnapshot(db, context.sessionId);
+  const friendships = getFriendshipsForFrontend(db, context.viewer.id);
+  const friendshipStatusByUserId = getFriendshipStatusByUserId(friendships);
   let resolvedSelectedTopicId = selectedTopicId && topicIds.has(selectedTopicId) ? selectedTopicId : null;
 
   if (selectedTopicId && !topicIds.has(selectedTopicId)) {
@@ -1468,7 +1590,11 @@ function buildFrontendPayload(db, context, selectedTopicId = null) {
   return {
     sessionId: context.sessionId,
     viewer: context.viewer,
-    users: getFrontendUsers(db, context.viewer.id, profileUserIds),
+    users: getFrontendUsers(db, context.viewer.id, profileUserIds).map((user) => ({
+      ...user,
+      friendshipStatus: user.id === context.viewer.id ? "self" : friendshipStatusByUserId.get(user.id) || "none"
+    })),
+    friendships,
     topics,
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,
@@ -2455,7 +2581,84 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
       });
     },
-    reportEntity(entityType, entityId, { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}) {
+    sendFriendRequest(targetUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredFriendContext(db, context);
+        const target = assertFriendTarget(db, context.viewer.id, targetUserId);
+        const nowIso = new Date().toISOString();
+        const existing = getFriendRequestBetween(db, context.viewer.id, target.id);
+
+        if (!existing) {
+          db.prepare(`
+            INSERT INTO friend_requests (requester_id, addressee_id, status, created_at, updated_at)
+            VALUES (?, ?, 'pending', ?, ?)
+          `).run(context.viewer.id, target.id, nowIso, nowIso);
+          return buildFrontendPayload(db, context, selectedTopicId);
+        }
+
+        if (existing.status === 'accepted') {
+          return buildFrontendPayload(db, context, selectedTopicId);
+        }
+
+        if (existing.status === 'pending' && existing.addressee_id === context.viewer.id) {
+          db.prepare(`
+            UPDATE friend_requests
+            SET status = 'accepted', updated_at = ?
+            WHERE id = ?
+          `).run(nowIso, existing.id);
+          return buildFrontendPayload(db, context, selectedTopicId);
+        }
+
+        if (existing.status === 'rejected') {
+          db.prepare(`
+            UPDATE friend_requests
+            SET requester_id = ?, addressee_id = ?, status = 'pending', updated_at = ?
+            WHERE id = ?
+          `).run(context.viewer.id, target.id, nowIso, existing.id);
+        }
+
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },
+    acceptFriendRequest(requesterUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredFriendContext(db, context);
+        const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
+        const nowIso = new Date().toISOString();
+        const result = db.prepare(`
+          UPDATE friend_requests
+          SET status = 'accepted', updated_at = ?
+          WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'
+        `).run(nowIso, requester.id, context.viewer.id);
+
+        if (!result.changes) {
+          throw new ApiError(404, "NOT_FOUND", "Solicitud de amistad no encontrada.");
+        }
+
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },
+    rejectFriendRequest(requesterUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredFriendContext(db, context);
+        const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
+        const nowIso = new Date().toISOString();
+        const result = db.prepare(`
+          UPDATE friend_requests
+          SET status = 'rejected', updated_at = ?
+          WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'
+        `).run(nowIso, requester.id, context.viewer.id);
+
+        if (!result.changes) {
+          throw new ApiError(404, "NOT_FOUND", "Solicitud de amistad no encontrada.");
+        }
+
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },    reportEntity(entityType, entityId, { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);

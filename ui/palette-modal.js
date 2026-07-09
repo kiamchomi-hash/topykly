@@ -34,17 +34,21 @@ function syncCustomPalettePicker(state, dom, option) {
   });
 }
 
-function createPreviewMarkup(mode, preview) {
-  return `
-    <span
-      class="palette-option__mode"
-      data-mode="${mode}"
+function createPreviewMarkup(mode, preview, { inlineStyles = true } = {}) {
+  const styleAttribute = inlineStyles
+    ? `
       style="
         --palette-preview-bg: ${preview.bg};
         --palette-preview-surface: ${preview.surface};
         --palette-preview-accent: ${preview.accent};
         --palette-preview-text: ${preview.text};
-      "
+      "`
+    : "";
+
+  return `
+    <span
+      class="palette-option__mode"
+      data-mode="${mode}"${styleAttribute}
     >
       <span class="palette-option__mode-label">${mode === "light" ? "Light" : "Dark"}</span>
       <span class="palette-option__sample" aria-hidden="true">
@@ -124,7 +128,6 @@ function createCustomPaletteMarkup(option, active) {
           type="button"
           aria-label="Abrir selector hexadecimal"
           data-open-custom-palette-picker
-          style="--palette-custom-preview:${option.hex};"
         >
           <span class="palette-option__color-swatch"></span>
           <input
@@ -154,8 +157,8 @@ function createCustomPaletteMarkup(option, active) {
         </label>
       </div>
       <span class="palette-option__modes">
-        ${createPreviewMarkup("light", option.previews.light)}
-        ${createPreviewMarkup("dark", option.previews.dark)}
+        ${createPreviewMarkup("light", option.previews.light, { inlineStyles: false })}
+        ${createPreviewMarkup("dark", option.previews.dark, { inlineStyles: false })}
       </span>
     </section>
   `;

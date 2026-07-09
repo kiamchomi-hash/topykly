@@ -1,4 +1,4 @@
-import { createMessageItem } from "../components.js";
+import { createMessageItem, createMessageSkeleton } from "../components.js";
 import { getSelectedTopic } from "../model.js";
 import { renderIntoTargets } from "./render-utils.js";
 
@@ -88,7 +88,7 @@ export function renderChat(state, dom) {
   const reportedMessageIds = new Set(state.reportedMessageIds || []);
   const isTopicReported = Boolean(topic && state.reportedTopicIds?.includes?.(topic.id));
 
-  syncChatComposer(topic, dom, isLoading);
+  syncChatComposer(topic, dom, isLoading, state.mobileView);
   syncTopicReportButton(topic, dom, isLoading, isTopicReported);
 
   if (!dom.messageStream) {
@@ -100,7 +100,18 @@ export function renderChat(state, dom) {
     chatHero.hidden = true;
   }
 
-  dom.messageStream.hidden = isLoading || !topic;
+  dom.messageStream.hidden = !isLoading && !topic;
+  dom.messageStream.setAttribute("aria-busy", String(isLoading));
+  if (isLoading) {
+    dom.messageStream.setAttribute("role", "status");
+    renderIntoTargets([dom.messageStream], "message-stream message-stream--loading", () =>
+      Array.from({ length: 4 }, (_, index) => createMessageSkeleton(index))
+    );
+    clearRenderedChatState(dom.messageStream);
+    return;
+  }
+
+  dom.messageStream.removeAttribute("role");
   if (!topic) {
     dom.messageStream.innerHTML = "";
     clearRenderedChatState(dom.messageStream);
@@ -150,6 +161,21 @@ function syncTopicReportButton(topic, dom, isLoading, isReported) {
   }
 }
 
+function getMessageBodyMeasuredScrollHeight(body) {
+  const openOverlays = Array.from(body.querySelectorAll(".message__action-menu:not([hidden]), .message__reaction-menu:not([hidden])"));
+  openOverlays.forEach((overlay) => {
+    overlay.hidden = true;
+  });
+
+  const measuredHeight = body.scrollHeight;
+
+  openOverlays.forEach((overlay) => {
+    overlay.hidden = false;
+  });
+
+  return measuredHeight;
+}
+
 function syncMessageCardHeights(messageStream) {
   const messageCards = messageStream.querySelectorAll(".message");
 
@@ -159,12 +185,17 @@ function syncMessageCardHeights(messageStream) {
       return;
     }
 
-    card.style.height = "auto";
-    card.style.minHeight = `${Math.max(84, body.scrollHeight)}px`;
+    const nextMinHeight = `${Math.max(84, getMessageBodyMeasuredScrollHeight(body))}px`;
+    if (card.style.height !== "auto") {
+      card.style.height = "auto";
+    }
+    if (card.style.minHeight !== nextMinHeight) {
+      card.style.minHeight = nextMinHeight;
+    }
   });
 }
 
-function syncChatComposer(topic, dom, isLoading) {
+function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
   const isCreatingTopic = !topic;
   const isCommentableTopic = !topic || topic.status === "active" || topic.status === "pinned";
   const topicTitleField = dom.topicTitleInput?.closest(".composer__field");
@@ -177,7 +208,7 @@ function syncChatComposer(topic, dom, isLoading) {
     topicTitleField.hidden = isLoading || !isCreatingTopic;
   }
   if (chatHeader) {
-    chatHeader.hidden = isLoading || isCreatingTopic;
+    chatHeader.hidden = isLoading || (isCreatingTopic && mobileView !== "chat");
   }
   if (chatPanel) {
     chatPanel.classList.toggle("panel--topic-create", !isLoading && isCreatingTopic);

@@ -1,8 +1,18 @@
 import { getSelectedTopic } from "./model.js";
 import { api, ApiError } from "./services/api.js";
+import { collectTopicNotifications, createNotificationStateUpdate } from "./ui/notifications.js";
 import { dispatch, reducers } from "./store-logic.js";
 
-export function createChatActions({ state, dom, render, refreshFeedbackMs = 750, apiClient = api, showFeedback = null }) {
+export function createChatActions({
+  state,
+  dom,
+  render,
+  refreshFeedbackMs = 750,
+  apiClient = api,
+  showFeedback = null,
+  isMobileViewport = null,
+  syncResponsiveView = null
+}) {
   let refreshFeedbackTimer = 0;
   let submitLockTimer = 0;
 
@@ -79,6 +89,32 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     trigger.setAttribute("aria-busy", String(isBusy));
   }
 
+  function getReactionScrollState(trigger) {
+    const stream = trigger?.closest?.(".message-stream");
+    if (!(stream instanceof HTMLElement)) {
+      return null;
+    }
+
+    return {
+      stream,
+      scrollTop: stream.scrollTop
+    };
+  }
+
+  function restoreReactionScroll(scrollState) {
+    if (!scrollState) {
+      return;
+    }
+
+    const applyScroll = () => {
+      scrollState.stream.scrollTop = scrollState.scrollTop;
+    };
+
+    applyScroll();
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(applyScroll);
+    }
+  }
   function requestReportReason(entityType) {
     if (typeof window === "undefined" || typeof window.prompt !== "function") {
       return "";
@@ -209,6 +245,10 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
 
   function createNewTopic() {
     dispatch(state, reducers.setSelectedTopic, null);
+    if (isMobileViewport?.()) {
+      dispatch(state, reducers.setMobileView, "chat");
+      syncResponsiveView?.();
+    }
     if (dom.topicTitleInput) {
       dom.topicTitleInput.value = "";
     }
@@ -232,13 +272,16 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     }
 
     const previousTopics = state.topics;
+    const reactionScrollState = getReactionScrollState(trigger);
     setReportTriggerState(trigger, true);
     dispatch(state, reducers.applyMessageReaction, { messageId, reactionType: "like" });
     render();
+    restoreReactionScroll(reactionScrollState);
 
     try {
       await syncBackendPayload(() => apiClient.toggleMessageLike(messageId, state.selectedTopicId));
       render();
+      restoreReactionScroll(reactionScrollState);
     } catch (error) {
       dispatch(state, reducers.restoreTopics, previousTopics);
       console.error(error);
@@ -246,6 +289,7 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     } finally {
       setReportTriggerState(trigger, false);
       render();
+      restoreReactionScroll(reactionScrollState);
     }
   }
 
@@ -255,13 +299,16 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     }
 
     const previousTopics = state.topics;
+    const reactionScrollState = getReactionScrollState(trigger);
     setReportTriggerState(trigger, true);
     dispatch(state, reducers.applyMessageReaction, { messageId, reactionType: "dislike" });
     render();
+    restoreReactionScroll(reactionScrollState);
 
     try {
       await syncBackendPayload(() => apiClient.toggleMessageDislike(messageId, state.selectedTopicId));
       render();
+      restoreReactionScroll(reactionScrollState);
     } catch (error) {
       dispatch(state, reducers.restoreTopics, previousTopics);
       console.error(error);
@@ -269,9 +316,59 @@ export function createChatActions({ state, dom, render, refreshFeedbackMs = 750,
     } finally {
       setReportTriggerState(trigger, false);
       render();
+      restoreReactionScroll(reactionScrollState);
     }
   }
 
+
+  function findMessageById(messageId) {
+    for (const topic of state.topics || []) {
+      const message = topic.messages?.find?.((entry) => entry.id === messageId);
+      if (message) {
+        return { topic, message };
+      }
+    }
+    return null;
+  }
+
+  function getUserName(userId) {
+    return state.users?.find?.((user) => user.id === userId)?.name || "Alguien";
+  }
+
+  function quoteMessage(messageId) {
+    const target = findMessageById(messageId);
+    const input = dom.messageInput;
+    if (!target || !input) {
+      return;
+    }
+
+    if (target.topic?.id && state.selectedTopicId !== target.topic.id) {
+      dispatch(state, reducers.setSelectedTopic, target.topic.id);
+    }
+
+    const author = getUserName(target.message.authorId);
+    const preview = String(target.message.text || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 140);
+    const quote = `> ${author}: ${preview}\n\n`;
+    input.value = input.value.trim()
+      ? `${quote}${input.value.trim()}`
+      : quote;
+    render();
+
+    if (isMobileViewport?.()) {
+      dispatch(state, reducers.setMobileView, "chat");
+      syncResponsiveView?.();
+    }
+
+    try {
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(input.value.length, input.value.length);
+    } catch {
+      input.focus?.();
+    }
+  }
   async function reportEntity(entityType, entityId, { trigger = null, reason = undefined } = {}) {
     const requestedReason = reason ?? requestReportReason(entityType);
     if (requestedReason === null) {

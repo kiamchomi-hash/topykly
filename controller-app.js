@@ -10,21 +10,30 @@ import { dispatch, reducers } from "./store-logic.js";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
 import { api } from "./services/api.js?v=20260702-sessioncookie";
+import {
+  collectTopicNotifications,
+  createNotificationStateUpdate,
+  getWebNotificationPermission,
+  showWebNotification
+} from "./ui/notifications.js";
 
-const LIVE_TOPIC_REFRESH_INTERVAL_MS = 0;
+const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;
+const FAKE_SOCIAL_PARAM_VALUES = new Set(["1", "true", "yes", "demo"]);
 
 function readBootstrapLocationParams() {
   if (typeof window === "undefined") {
     return {
       selectedTopicId: null,
-      authError: null
+      authError: null,
+      fakeSocial: false
     };
   }
 
   const url = new URL(window.location.href);
   return {
     selectedTopicId: url.searchParams.get("selectedTopicId") || null,
-    authError: url.searchParams.get("authError") || null
+    authError: url.searchParams.get("authError") || null,
+    fakeSocial: FAKE_SOCIAL_PARAM_VALUES.has(String(url.searchParams.get("fakeSocial") || "").trim().toLowerCase())
   };
 }
 
@@ -68,11 +77,182 @@ function clearBootstrapLocationParams() {
   window.history.replaceState({}, "", url.toString());
 }
 
-async function hydrateInitialData(render, initialSelectedTopicId = null) {
+function createFakeSocialPreview(payload, now = Date.now()) {
+  const users = Array.isArray(payload.users) ? payload.users : [];
+  const topics = Array.isArray(payload.topics) ? payload.topics : [];
+  const currentUser = users.find((user) => user.type === "registered") || users[0] || null;
+  const candidates = users.filter((user) => user.id !== currentUser?.id).slice(0, 9);
+  const summarizeUser = (user) => ({
+    id: user.id,
+    name: user.name,
+    avatarUrl: user.avatarUrl || null
+  });
+  const friendships = {
+    incoming: candidates.slice(0, 3).map(summarizeUser),
+    outgoing: candidates.slice(3, 5).map(summarizeUser),
+    friends: candidates.slice(5, 9).map(summarizeUser)
+  };
+  const statusByUserId = new Map([
+    ...friendships.incoming.map((user) => [user.id, "incoming-request"]),
+    ...friendships.outgoing.map((user) => [user.id, "outgoing-request"]),
+    ...friendships.friends.map((user) => [user.id, "friend"])
+  ]);
+  const viewer = currentUser
+    ? {
+        ...(payload.viewer || {}),
+        id: currentUser.id,
+        type: "registered",
+        displayName: currentUser.name,
+        nickname: currentUser.nickname || currentUser.name,
+        profilePending: false
+      }
+    : payload.viewer;
+  const previewTopics = Array.from({ length: 3 }, (_, index) => topics[index % Math.max(topics.length, 1)]).filter(Boolean);
+  const fallbackActors = ["Mora", "Leo", "Iara", "Nico", "Cami", "Santi", "Valen", "Juli", "Tomi"];
+  const fakeActors = Array.from({ length: 9 }, (_, index) => {
+    const user = candidates[index] || users[index] || null;
+    return {
+      id: user?.id || `fake-actor-${index + 1}`,
+      name: user?.name || fallbackActors[index] || `Usuario ${index + 1}`,
+      avatarUrl: user?.avatarUrl || null
+    };
+  });
+  const postLikeTopic = previewTopics[0];
+  const commentLikeTopic = previewTopics[1] || postLikeTopic;
+  const activityTopic = previewTopics[2] || postLikeTopic;
+  const notifications = [
+    ...fakeActors.slice(0, 5).map((actor, index) => ({
+      id: `fake-social-post-like-${index + 1}`,
+      kind: "post-like",
+      topicId: postLikeTopic.id,
+      messageId: `fake-post-like-${index + 1}`,
+      targetMessageId: `${postLikeTopic.id}-root`,
+      totalCount: 45,
+      actors: [actor],
+      title: "Likes en tu posteo",
+      body: `${actor.name} le dio like a tu posteo.`,
+      topicTitle: postLikeTopic.title || "Tema",
+      createdAt: now - index * 45_000,
+      read: index >= 3
+    })),
+    ...fakeActors.slice(5, 7).map((actor, index) => ({
+      id: `fake-social-comment-like-${index + 1}`,
+      kind: "comment-like",
+      topicId: commentLikeTopic.id,
+      messageId: `fake-comment-like-${index + 1}`,
+      targetMessageId: `${commentLikeTopic.id}-reply-1`,
+      totalCount: 2,
+      actors: [actor],
+      title: "Likes en tu comentario",
+      body: `${actor.name} le dio like a tu comentario.`,
+      topicTitle: commentLikeTopic.title || "Tema",
+      createdAt: now - (index + 5) * 45_000,
+      read: true
+    })),
+    ...fakeActors.slice(7, 9).map((actor, index) => ({
+      id: `fake-social-post-comment-${index + 1}`,
+      kind: "post-comment",
+      topicId: activityTopic.id,
+      messageId: `fake-social-comment-${index + 1}`,
+      targetMessageId: `${activityTopic.id}-root`,
+      totalCount: 2,
+      actors: [actor],
+      title: "Comentarios en tu posteo",
+      body: `${actor.name}: dejo una respuesta nueva en tu posteo.`,
+      topicTitle: activityTopic.title || "Tema",
+      createdAt: now - (index + 7) * 45_000,
+      read: index === 1
+    })),
+    {
+      id: "fake-social-quote-1",
+      kind: "quote",
+      topicId: activityTopic.id,
+      messageId: "fake-social-quote-1",
+      title: "Citaron tu comentario",
+      body: `${fakeActors[8]?.name || "Alguien"}: cito tu comentario para seguir la conversacion.`,
+      topicTitle: activityTopic.title || "Tema",
+      createdAt: now - 8 * 45_000,
+      read: true
+    }
+  ];
+
+  return {
+    payload: {
+      ...payload,
+      viewer,
+      users: users.map((user) => ({
+        ...user,
+        online: true,
+        friendshipStatus: user.id === viewer?.id ? "self" : statusByUserId.get(user.id) || user.friendshipStatus || "none"
+      })),
+      friendships
+    },
+    notifications
+  };
+}
+
+function createFakeSocialApiClient(baseApi, stateRef) {
+  let refreshCommentCount = 0;
+  return {
+    ...baseApi,
+    async refreshTopics(selectedTopicId = null) {
+      refreshCommentCount += 1;
+      const viewerId = stateRef.viewer?.id ?? stateRef.currentUserId ?? null;
+      const topics = Array.isArray(stateRef.topics) ? stateRef.topics : [];
+      const users = Array.isArray(stateRef.users) ? stateRef.users : [];
+      const targetTopic = topics.find((topic) => topic.authorId === viewerId) || topics[0] || null;
+      if (!targetTopic) {
+        return { viewer: stateRef.viewer, users, topics, friendships: stateRef.friendships };
+      }
+
+      const actor = users.find((user) => user.id !== viewerId) || { id: "fake-refresh-user", name: "Usuario fake" };
+      const createdAt = new Date(Date.now()).toISOString();
+      const comment = {
+        id: `fake-refresh-comment-${refreshCommentCount}`,
+        authorId: actor.id,
+        text: `Comentario fake de refresco ${refreshCommentCount}`,
+        kind: "user",
+        likes: 0,
+        isRoot: false,
+        createdAt,
+        timestamp: createdAt
+      };
+      const nextTopics = topics.map((topic) => topic.id === targetTopic.id
+        ? {
+            ...topic,
+            messages: [...(topic.messages || []), comment],
+            subtitle: comment.text,
+            commentCount: (topic.commentCount || Math.max(0, (topic.messages || []).length - 1)) + 1
+          }
+        : topic);
+
+      return {
+        viewer: stateRef.viewer,
+        users,
+        topics: nextTopics,
+        friendships: stateRef.friendships,
+        selectedTopicId: selectedTopicId || stateRef.selectedTopicId
+      };
+    }
+  };
+}
+
+async function hydrateInitialData(render, initialSelectedTopicId = null, { fakeSocial = false } = {}) {
   try {
     const payload = await api.fetchInitialData(initialSelectedTopicId ?? state.selectedTopicId);
-    dispatch(state, reducers.hydrateFromBackend, payload);
-    if (payload.viewer?.profilePending) {
+    const preview = fakeSocial ? createFakeSocialPreview(payload) : null;
+    const nextPayload = preview?.payload || payload;
+    dispatch(state, reducers.hydrateFromBackend, nextPayload);
+    dispatch(state, reducers.setWebNotificationsPermission, getWebNotificationPermission());
+    if (preview) {
+      dispatch(state, reducers.setFriendRequestsPanelOpen, false);
+      dispatch(state, reducers.addNotifications, {
+        notifications: preview.notifications,
+        notifiedMessageIds: preview.notifications.map((notification) => notification.messageId)
+      });
+      dispatch(state, reducers.setNotificationsPanelOpen, true);
+    }
+    if (nextPayload.viewer?.profilePending) {
       dispatch(state, reducers.setProfileModalOpen, true);
     }
   } catch (error) {
@@ -80,10 +260,9 @@ async function hydrateInitialData(render, initialSelectedTopicId = null) {
   }
   render();
 }
-
-function scheduleInitialDataHydration(render, initialSelectedTopicId = null) {
+function scheduleInitialDataHydration(render, initialSelectedTopicId = null, options = {}) {
   const applyData = () => {
-    hydrateInitialData(render, initialSelectedTopicId);
+    hydrateInitialData(render, initialSelectedTopicId, options);
   };
 
   if (typeof requestAnimationFrame === "function") {
@@ -112,7 +291,13 @@ export function createLiveTopicSync({
     inFlight = true;
     try {
       const payload = await apiClient.refreshTopics(state.selectedTopicId);
+      const notifications = collectTopicNotifications(state, payload);
       dispatch(state, reducers.hydrateFromBackend, payload);
+      const notificationStateUpdate = createNotificationStateUpdate(state, notifications);
+      if (notificationStateUpdate) {
+        dispatch(state, reducers.addNotifications, notificationStateUpdate);
+        notifications.forEach(showWebNotification);
+      }
       render();
       return true;
     } catch (error) {
@@ -160,7 +345,8 @@ export function bootstrap() {
     renderRef,
     syncResponsiveView: responsive.syncResponsiveView,
     isMobileViewport: responsive.isMobileViewport,
-    closeDrawers: () => closeDrawers(dom, responsive.isMobileViewport, getTransitionDurationMs, closeTimerRef)
+    closeDrawers: () => closeDrawers(dom, responsive.isMobileViewport, getTransitionDurationMs, closeTimerRef),
+    apiClient: bootstrapLocationParams.fakeSocial ? createFakeSocialApiClient(api, state) : api
   });
   const renderers = createRenderers({
     state,
@@ -227,6 +413,13 @@ export function bootstrap() {
     loginWithPassword: actions.loginWithPassword,
     registerWithPassword: actions.registerWithPassword,
     logout: actions.logout,
+    enableWebNotifications: actions.enableWebNotifications,
+    toggleFriendRequestsPanel: actions.toggleFriendRequestsPanel,
+    toggleNotificationsPanel: actions.toggleNotificationsPanel,
+    acceptFriendRequest: actions.acceptFriendRequest,
+    rejectFriendRequest: actions.rejectFriendRequest,
+    dismissNotification: actions.dismissNotification,
+    openNotificationTopic: actions.openNotificationTopic,
     backToTopics,
     onResize: handleResize,
     onWheel: responsive.handleScrollableWheel
@@ -237,9 +430,14 @@ export function bootstrap() {
   }
 
   clearBootstrapLocationParams();
-  scheduleInitialDataHydration(renderers.render, bootstrapLocationParams.selectedTopicId);
-  createLiveTopicSync({
-    state,
-    render: renderers.render
-  }).start();
+  scheduleInitialDataHydration(renderers.render, bootstrapLocationParams.selectedTopicId, {
+    fakeSocial: bootstrapLocationParams.fakeSocial
+  });
+  if (!bootstrapLocationParams.fakeSocial) {
+    createLiveTopicSync({
+      state,
+      render: renderers.render
+    }).start();
+  }
 }
+

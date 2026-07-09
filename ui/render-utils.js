@@ -84,14 +84,50 @@ function patchNode(existing, incoming) {
 }
 
 function patchElement(existing, incoming) {
+  const preserveOpenOverlay = shouldPreserveOpenOverlayState(existing, incoming);
+  const preserveExpandedTrigger = shouldPreserveExpandedTriggerState(existing, incoming);
   syncAttributes(existing, incoming);
   syncElementProperties(existing, incoming);
+  if (preserveOpenOverlay) {
+    existing.hidden = false;
+    existing.removeAttribute("hidden");
+  }
+  if (preserveExpandedTrigger) {
+    existing.setAttribute("aria-expanded", "true");
+  }
   patchChildren(existing, incoming);
+}
+
+function shouldPreserveOpenOverlayState(existing, incoming) {
+  if (existing.hidden || !incoming.hidden) {
+    return false;
+  }
+
+  return Boolean(
+    existing.dataset.messageMenu
+      || existing.dataset.messageReactionMenu
+      || existing.dataset.userMenu
+  );
+}
+
+function shouldPreserveExpandedTriggerState(existing, incoming) {
+  if (existing.getAttribute("aria-expanded") !== "true" || incoming.getAttribute("aria-expanded") !== "false") {
+    return false;
+  }
+
+  return Boolean(
+    existing.dataset.messageMenuTrigger
+      || existing.dataset.messageReactionTrigger
+      || existing.dataset.userMenuTrigger
+  );
 }
 
 function syncAttributes(existing, incoming) {
   Array.from(existing.attributes).forEach((attribute) => {
     if (!incoming.hasAttribute(attribute.name)) {
+      if (shouldPreserveMessageLayoutStyle(existing, attribute)) {
+        return;
+      }
       existing.removeAttribute(attribute.name);
     }
   });
@@ -101,6 +137,14 @@ function syncAttributes(existing, incoming) {
       existing.setAttribute(attribute.name, attribute.value);
     }
   });
+}
+
+function shouldPreserveMessageLayoutStyle(existing, attribute) {
+  if (attribute.name !== "style" || !existing.classList?.contains?.("message")) {
+    return false;
+  }
+
+  return /^height:\s*auto;\s*min-height:\s*\d+(?:\.\d+)?px;?$/i.test(attribute.value.trim());
 }
 
 function syncElementProperties(existing, incoming) {

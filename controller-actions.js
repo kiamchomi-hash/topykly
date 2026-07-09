@@ -12,6 +12,7 @@ import {
   parseHexColor,
   updateDocumentFavicon
 } from "./palettes.js";
+import { getWebNotificationPermission, requestWebNotificationPermission } from "./ui/notifications.js";
 
 function focusPaletteOption(dom, paletteId) {
   dom.paletteOptionGrid
@@ -96,14 +97,6 @@ function isInputLike(node) {
   return Boolean(node && typeof node === "object" && "value" in node && "dataset" in node);
 }
 
-function isStyleHost(node) {
-  if (typeof HTMLElement !== "undefined") {
-    return node instanceof HTMLElement;
-  }
-
-  return Boolean(node && typeof node === "object" && node.style && typeof node.style.setProperty === "function");
-}
-
 export function createActionHandlers({
   state,
   dom,
@@ -114,6 +107,7 @@ export function createActionHandlers({
 }) {
   let syncAuthUiRef = () => {};
   let feedbackTimer = 0;
+  dispatch(state, reducers.setWebNotificationsPermission, getWebNotificationPermission());
 
   function render() {
     renderRef.current();
@@ -150,6 +144,20 @@ export function createActionHandlers({
 
   async function getAuthStatus() {
     return api.getAuthStatus();
+  }
+
+  async function enableWebNotifications() {
+    const permission = await requestWebNotificationPermission();
+    dispatch(state, reducers.setWebNotificationsPermission, permission);
+    if (permission === "granted") {
+      showFeedback("Notificaciones del navegador activadas.");
+    } else if (permission === "denied") {
+      showFeedback("Las notificaciones estan bloqueadas en el navegador.", { kind: "error" });
+    } else if (permission === "unsupported") {
+      showFeedback("Este navegador no soporta notificaciones.", { kind: "error" });
+    }
+    render();
+    return permission;
   }
 
   function resolveSelectedTopicId(selectedTopicId = null) {
@@ -205,6 +213,7 @@ export function createActionHandlers({
   }
 
   async function openAdminPanel() {
+    dispatch(state, reducers.setProfileModalOpen, false);
     dispatch(state, reducers.setAdminPanelOpen, true);
     dispatch(state, reducers.setAdminDashboard, { loaded: false, reports: [], pendingAvatars: [] });
     render();
@@ -372,13 +381,6 @@ export function createActionHandlers({
         }
       });
 
-    dom.paletteOptionGrid
-      ?.querySelectorAll(".palette-option__color-preview")
-      ?.forEach((preview) => {
-        if (isStyleHost(preview)) {
-          preview.style.setProperty("--palette-custom-preview", normalized);
-        }
-      });
   }
 
   function toggleTheme() {
@@ -484,11 +486,57 @@ export function createActionHandlers({
     }
 
     if (action === "friend") {
-      flashTitle(`Solicitud de amistad para ${targetUser.name} lista para conectar`);
+      sendFriendRequest(userId);
       return;
     }
   }
 
+
+  function toggleFriendRequestsPanel(forceOpen = null) {
+    const nextOpen = forceOpen === null ? !state.isFriendRequestsPanelOpen : Boolean(forceOpen);
+    dispatch(state, reducers.setFriendRequestsPanelOpen, nextOpen);
+    render();
+  }
+
+  async function sendFriendRequest(userId) {
+    try {
+      const result = await api.sendFriendRequest(userId, resolveSelectedTopicId());
+      dispatch(state, reducers.hydrateFromBackend, result);
+      const targetUser = state.users.find((user) => user.id === userId);
+      showFeedback(targetUser?.friendshipStatus === "friend" ? "Amistad aceptada." : "Solicitud de amistad enviada.");
+      render();
+      return result;
+    } catch (error) {
+      showFeedback(error?.message || "No se pudo enviar la solicitud de amistad.", { kind: "error" });
+      return null;
+    }
+  }
+
+  async function acceptFriendRequest(userId) {
+    try {
+      const result = await api.acceptFriendRequest(userId, resolveSelectedTopicId());
+      dispatch(state, reducers.hydrateFromBackend, result);
+      showFeedback("Solicitud de amistad aceptada.");
+      render();
+      return result;
+    } catch (error) {
+      showFeedback(error?.message || "No se pudo aceptar la solicitud.", { kind: "error" });
+      return null;
+    }
+  }
+
+  async function rejectFriendRequest(userId) {
+    try {
+      const result = await api.rejectFriendRequest(userId, resolveSelectedTopicId());
+      dispatch(state, reducers.hydrateFromBackend, result);
+      showFeedback("Solicitud de amistad rechazada.");
+      render();
+      return result;
+    } catch (error) {
+      showFeedback(error?.message || "No se pudo rechazar la solicitud.", { kind: "error" });
+      return null;
+    }
+  }
   const rankingActions = createRankingActions({
     state,
     isMobileViewport,
@@ -496,9 +544,33 @@ export function createActionHandlers({
     render
   });
 
+
+  function toggleNotificationsPanel(forceOpen = null) {
+    const nextOpen = forceOpen === null ? !state.isNotificationsPanelOpen : Boolean(forceOpen);
+    dispatch(state, reducers.setNotificationsPanelOpen, nextOpen);
+    render();
+  }
+  function dismissNotification(notificationId) {
+    dispatch(state, reducers.dismissNotification, notificationId);
+    render();
+  }
+
+  function openNotificationTopic(topicId, notificationId = null) {
+    if (!topicId) {
+      return;
+    }
+
+    if (notificationId) {
+      dispatch(state, reducers.markNotificationRead, notificationId);
+    }
+    rankingActions.focusTopic(topicId);
+  }
+
   const chatActions = createChatActions({
     state,
     dom,
+    isMobileViewport,
+    syncResponsiveView,
     render,
     showFeedback
   });
@@ -519,6 +591,13 @@ export function createActionHandlers({
     logout,
     flashTitle,
     showFeedback,
+    enableWebNotifications,
+    toggleFriendRequestsPanel,
+    toggleNotificationsPanel,
+    acceptFriendRequest,
+    rejectFriendRequest,
+    dismissNotification,
+    openNotificationTopic,
     openProfileModal,
     closeProfileModal,
     skipProfileSetup,

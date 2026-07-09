@@ -13,10 +13,10 @@ export function renderTitles(state, dom) {
   }
 
   if (dom.chatTitle) {
-    dom.chatTitle.textContent = topic ? topic.title : "";
+    dom.chatTitle.textContent = topic ? topic.title : "Nuevo tema";
   }
   if (chatTitleWrapper) {
-    chatTitleWrapper.hidden = !topic;
+    chatTitleWrapper.hidden = !topic && state.mobileView !== "chat";
   }
 
   if (dom.chatTopicName) {

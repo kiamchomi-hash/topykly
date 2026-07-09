@@ -64,7 +64,8 @@ export function renderPublicProfileModal(state, dom) {
     dom.publicProfileName.textContent = user.nickname || user.name || "Usuario";
   }
 
-  setPublicProfileAvatar(dom.publicProfileAvatar, user.avatarPendingUrl || user.avatarUrl || "");
+  const publicAvatarUrl = isCurrentUser ? user.avatarPendingUrl || user.avatarUrl || "" : user.avatarUrl || "";
+  setPublicProfileAvatar(dom.publicProfileAvatar, publicAvatarUrl);
 
   const joinedDate = user.profileShowJoinedAt === false ? [] : formatJoinedDateParts(user.createdAt);
   const description = user.profileShowDescription === false ? "" : String(user.description || "").trim();

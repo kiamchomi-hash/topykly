@@ -6,8 +6,16 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "../services/auth-service.js";
-import { getRequestIp, isLocalDevLoginAllowed, shouldTrustProxy } from "../services/preview-server.js";
-import { createBackendStore, resolveDbConfig, shouldSeedDemoData } from "../services/backend-store.js";
+import {
+  getRequestIp,
+  isLocalDevLoginAllowed,
+  shouldTrustProxy
+} from "../services/preview-server.js";
+import {
+  createBackendStore,
+  resolveDbConfig,
+  shouldSeedDemoData
+} from "../services/backend-store.js";
 import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
 import { initialUsers, topicSeedData } from "../data.js";
@@ -49,6 +57,7 @@ import {
   DEFAULT_PALETTE_ID,
   getFaviconDataUrl,
   getCustomPaletteVars,
+  buildCustomPaletteStylesheetCss,
   normalizeHexColor,
   parseHexColor,
   PALETTE_OPTIONS,
@@ -59,7 +68,12 @@ import { createTopicItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
-import { formatJoinedDateParts, formatMessageTime, formatProfileJoinedDate } from "../ui/date-utils.js";
+import { collectTopicNotifications, createNotificationStateUpdate, groupNotificationsForDisplay } from "../ui/notifications.js";
+import {
+  formatJoinedDateParts,
+  formatMessageTime,
+  formatProfileJoinedDate
+} from "../ui/date-utils.js";
 import { renderTitles } from "../ui/titles.js";
 import { selectUsersViewModel } from "../features/users/selectors.js";
 
@@ -81,20 +95,40 @@ async function read(name) {
 }
 
 function createMockDocumentWithFavicon(appliedStyle = new Map()) {
+  const links = [];
   const faviconLink = { rel: "icon", href: "./favicon.svg" };
-
-  return {
+  const documentRef = {
     head: {
       appendChild(node) {
+        links.push(node);
         return node;
       }
     },
     createElement(tagName) {
-      return { tagName, rel: "", href: "" };
+      const element = {
+        tagName,
+        id: "",
+        rel: "",
+        href: "",
+        remove() {
+          const index = links.indexOf(this);
+          if (index >= 0) {
+            links.splice(index, 1);
+          }
+        }
+      };
+      Object.defineProperty(element, "dataset", {
+        value: {},
+        enumerable: true
+      });
+      return element;
     },
     querySelector(selector) {
       if (selector === "link[rel*='icon']") {
         return faviconLink;
+      }
+      if (selector === "#customPaletteStylesheet") {
+        return links.find((link) => link.id === "customPaletteStylesheet") || null;
       }
       return null;
     },
@@ -110,6 +144,8 @@ function createMockDocumentWithFavicon(appliedStyle = new Map()) {
       }
     }
   };
+  documentRef.documentElement.ownerDocument = documentRef;
+  return documentRef;
 }
 
 async function collectSourceFiles(dir) {
@@ -222,11 +258,17 @@ await (async () => {
       }
     };
 
-    assert.deepEqual(selectUsersViewModel(state).items.map((user) => user.id), ["u-other"]);
+    assert.deepEqual(
+      selectUsersViewModel(state).items.map((user) => user.id),
+      ["u-other"]
+    );
 
     state.viewer.profilePending = false;
 
-    assert.deepEqual(selectUsersViewModel(state).items.map((user) => user.id), ["u-current", "u-other"]);
+    assert.deepEqual(
+      selectUsersViewModel(state).items.map((user) => user.id),
+      ["u-current", "u-other"]
+    );
   });
   await test("buildTopics creates a topic per seed with rotating authors", () => {
     const users = buildUsers(initialUsers);
@@ -252,7 +294,9 @@ await (async () => {
   });
 
   await test("trimMessages preserves the root message and keeps the latest 29 replies", () => {
-    const messages = Array.from({ length: 35 }, (_, index) => createMessage("u1", `m${index}`, index, "user", Date.now(), index === 0));
+    const messages = Array.from({ length: 35 }, (_, index) =>
+      createMessage("u1", `m${index}`, index, "user", Date.now(), index === 0)
+    );
     const trimmed = trimMessages(messages, 30);
 
     assert.equal(trimmed.length, 30);
@@ -269,9 +313,15 @@ await (async () => {
       authorId: "u1",
       status: "active",
       visible: true,
-      messages: Array.from({ length: 30 }, (_, index) => createMessage("u1", `m${index}`, index, "user", Date.now(), index === 0))
+      messages: Array.from({ length: 30 }, (_, index) =>
+        createMessage("u1", `m${index}`, index, "user", Date.now(), index === 0)
+      )
     };
-    const nextMessage = createMessage("u2", "Este es el nuevo mensaje que debe quedar visible en el preview.", 0);
+    const nextMessage = createMessage(
+      "u2",
+      "Este es el nuevo mensaje que debe quedar visible en el preview.",
+      0
+    );
 
     const updatedTopic = appendMessageToTopic(baseTopic, nextMessage);
 
@@ -279,7 +329,10 @@ await (async () => {
     assert.equal(updatedTopic.messages[0].text, "m0");
     assert.equal(updatedTopic.messages[1].text, "m2");
     assert.equal(updatedTopic.messages[29].id, nextMessage.id);
-    assert.equal(updatedTopic.subtitle, "Este es el nuevo mensaje que debe quedar visible en el preview.");
+    assert.equal(
+      updatedTopic.subtitle,
+      "Este es el nuevo mensaje que debe quedar visible en el preview."
+    );
   });
 
   await test("prepareTopicFeed keeps 20 visible topics and caps the active feed at 40", () => {
@@ -322,7 +375,10 @@ await (async () => {
     assert.equal(nextTopics[0].id, newTopic.id);
     assert.equal(nextTopics[TOPIC_VISIBLE_LIMIT - 1].visible, true);
     assert.equal(nextTopics[TOPIC_VISIBLE_LIMIT].visible, false);
-    assert.equal(nextTopics.some((topic) => topic.id === "topic-40"), false);
+    assert.equal(
+      nextTopics.some((topic) => topic.id === "topic-40"),
+      false
+    );
   });
 
   await test("reviveTopicWithMessage brings hidden topics back to the top of the visible list", () => {
@@ -359,14 +415,24 @@ await (async () => {
           authorId: "u1",
           status: "active",
           visible: true,
-          messages: Array.from(
-            { length: index === 24 ? 30 : 1 },
-            (_, messageIndex) => createMessage("u1", `m${index + 1}-${messageIndex}`, messageIndex, "user", Date.now(), messageIndex === 0)
+          messages: Array.from({ length: index === 24 ? 30 : 1 }, (_, messageIndex) =>
+            createMessage(
+              "u1",
+              `m${index + 1}-${messageIndex}`,
+              messageIndex,
+              "user",
+              Date.now(),
+              messageIndex === 0
+            )
           )
         }))
       )
     };
-    const nextMessage = createMessage("u2", "Mensaje nuevo para sincronizar reducer y revivir el tema.", 0);
+    const nextMessage = createMessage(
+      "u2",
+      "Mensaje nuevo para sincronizar reducer y revivir el tema.",
+      0
+    );
 
     const nextState = reducers.addMessageToTopic(state, {
       topicId: "topic-25",
@@ -379,14 +445,21 @@ await (async () => {
     assert.equal(nextState.topics[0].messages[0].text, "m25-0");
     assert.equal(nextState.topics[0].messages[1].text, "m25-2");
     assert.equal(nextState.topics[0].messages[29].id, nextMessage.id);
-    assert.equal(nextState.topics[0].subtitle, "Mensaje nuevo para sincronizar reducer y revivir el tema.");
+    assert.equal(
+      nextState.topics[0].subtitle,
+      "Mensaje nuevo para sincronizar reducer y revivir el tema."
+    );
     assert.equal(getVisibleTopics(nextState.topics).length, TOPIC_VISIBLE_LIMIT);
   });
 
   await test("live topic sync hydrates remote activity in other topics", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
-    const remoteMessage = createMessage("u2", "Comentario remoto que debe aparecer sin refrescar la pagina.", 0);
+    const remoteMessage = createMessage(
+      "u2",
+      "Comentario remoto que debe aparecer sin refrescar la pagina.",
+      0
+    );
     const remoteTopics = reviveTopicWithMessage(topics, topics[1].id, remoteMessage);
     const state = {
       viewer: { id: "u1", type: "registered" },
@@ -467,18 +540,30 @@ await (async () => {
         createElementNS: (namespace, tagName) => new MockNode(tagName)
       };
 
-      const readTopicItem = createTopicItem({
-        id: "topic-read",
-        title: "Leido",
-        authorId: "u1",
-        messages: [ownMessage]
-      }, users, false, "u1", false);
-      const unreadTopicItem = createTopicItem({
-        id: "topic-unread",
-        title: "Nuevo",
-        authorId: "u1",
-        messages: [ownMessage, externalMessage]
-      }, users, false, "u1", true);
+      const readTopicItem = createTopicItem(
+        {
+          id: "topic-read",
+          title: "Leido",
+          authorId: "u1",
+          messages: [ownMessage]
+        },
+        users,
+        false,
+        "u1",
+        false
+      );
+      const unreadTopicItem = createTopicItem(
+        {
+          id: "topic-unread",
+          title: "Nuevo",
+          authorId: "u1",
+          messages: [ownMessage, externalMessage]
+        },
+        users,
+        false,
+        "u1",
+        true
+      );
       const readMeta = readTopicItem.children[1].children[1];
       const unreadMeta = unreadTopicItem.children[1].children[1];
       const readCount = readMeta.children[0];
@@ -501,21 +586,272 @@ await (async () => {
     const timestamp = new Date(2026, 0, 2, 3, 4, 5);
     const joinedAt = new Date(2026, 0, 2, 12, 0, 0);
 
-    assert.equal(formatMessageTime(timestamp), timestamp.toLocaleTimeString("es-AR", {
-      hour: "2-digit",
-      minute: "2-digit"
-    }));
-    assert.equal(formatProfileJoinedDate(joinedAt), `Registro: ${joinedAt.toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric"
-    })}`);
+    assert.equal(
+      formatMessageTime(timestamp),
+      timestamp.toLocaleTimeString("es-AR", {
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    );
+    assert.equal(
+      formatProfileJoinedDate(joinedAt),
+      `Registro: ${joinedAt.toLocaleDateString("es-AR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      })}`
+    );
     assert.deepEqual(formatJoinedDateParts(joinedAt), ["02", "01", "2026"]);
     assert.equal(formatMessageTime(""), "");
     assert.equal(formatProfileJoinedDate(""), "Fecha de registro no disponible");
     assert.deepEqual(formatJoinedDateParts(""), []);
   });
 
+  await test("collects mention and followed topic notifications from backend activity", () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const followedMessage = createMessage("u2", "Actualizacion para el tema seguido", 0);
+    const mentionMessage = createMessage("u3", "Ping @cami para revisar esto", 0);
+    const followedUpdate = reviveTopicWithMessage(topics, topics[1].id, followedMessage);
+    const mentionUpdate = reviveTopicWithMessage(followedUpdate, topics[2].id, mentionMessage);
+    const notifications = collectTopicNotifications(
+      {
+        viewer: { id: "u1", name: "Cami" },
+        currentUserId: "u1",
+        followedTopicIds: [topics[1].id],
+        notifiedMessageIds: [],
+        users,
+        topics
+      },
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users,
+        topics: mentionUpdate,
+        selectedTopicId: topics[0].id
+      },
+      1_700_000_001_000
+    );
+
+    assert.equal(notifications.length, 2);
+    assert.deepEqual([...notifications.map((notification) => notification.kind)].sort(), [
+      "followed-topic",
+      "mention"
+    ]);
+    assert.equal(
+      notifications.some(
+        (notification) =>
+          notification.kind === "followed-topic" && notification.topicId === topics[1].id
+      ),
+      true
+    );
+    assert.equal(
+      notifications.some(
+        (notification) => notification.kind === "mention" && notification.topicId === topics[2].id
+      ),
+      true
+    );
+  });
+
+  await test("first post comment uses root post-like notification without duplicate", () => {
+    const rootMessage = {
+      ...createMessage("u1", "Post original", 0, "user", 1_700_000_000_000, true),
+      id: "root-1",
+      likes: 4
+    };
+    const nextRootMessage = { ...rootMessage, likes: 5 };
+    const reply = {
+      ...createMessage("u2", "Primer comentario", 0, "user", 1_700_000_001_000),
+      id: "reply-1"
+    };
+    const previousTopic = {
+      id: "topic-1",
+      title: "Tema",
+      authorId: "u1",
+      messages: [rootMessage]
+    };
+    const nextTopic = {
+      ...previousTopic,
+      messages: [nextRootMessage, reply]
+    };
+
+    const notifications = collectTopicNotifications(
+      {
+        viewer: { id: "u1", name: "Cami" },
+        currentUserId: "u1",
+        followedTopicIds: [],
+        notifiedMessageIds: [],
+        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }],
+        topics: [previousTopic]
+      },
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }],
+        topics: [nextTopic],
+        selectedTopicId: "topic-1"
+      },
+      1_700_000_002_000
+    );
+
+    assert.deepEqual(notifications.map((notification) => notification.kind), ["post-like"]);
+  });
+
+  await test("later post comment suppresses duplicate root post-like notification", () => {
+    const rootMessage = {
+      ...createMessage("u1", "Post original", 0, "user", 1_700_000_000_000, true),
+      id: "root-1",
+      likes: 5
+    };
+    const existingReply = {
+      ...createMessage("u2", "Comentario previo", 0, "user", 1_700_000_001_000),
+      id: "reply-1"
+    };
+    const nextRootMessage = { ...rootMessage, likes: 6 };
+    const nextReply = {
+      ...createMessage("u3", "Otro comentario", 0, "user", 1_700_000_002_000),
+      id: "reply-2"
+    };
+    const previousTopic = {
+      id: "topic-1",
+      title: "Tema",
+      authorId: "u1",
+      messages: [rootMessage, existingReply]
+    };
+    const nextTopic = {
+      ...previousTopic,
+      messages: [nextRootMessage, existingReply, nextReply]
+    };
+
+    const notifications = collectTopicNotifications(
+      {
+        viewer: { id: "u1", name: "Cami" },
+        currentUserId: "u1",
+        followedTopicIds: [],
+        notifiedMessageIds: [],
+        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }, { id: "u3", name: "Leo" }],
+        topics: [previousTopic]
+      },
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }, { id: "u3", name: "Leo" }],
+        topics: [nextTopic],
+        selectedTopicId: "topic-1"
+      },
+      1_700_000_003_000
+    );
+
+    assert.deepEqual(notifications.map((notification) => notification.kind), ["post-comment"]);
+  });
+
+  await test("groups repeated like notifications for the same target", () => {
+    const grouped = groupNotificationsForDisplay([
+      {
+        id: "like-1",
+        kind: "post-like",
+        topicId: "topic-1",
+        messageId: "like-message-1",
+        targetMessageId: "message-1",
+        actors: [{ id: "u2", name: "Mora" }],
+        totalCount: 40,
+        topicTitle: "Tema",
+        createdAt: 10
+      },
+      {
+        id: "like-2",
+        kind: "post-like",
+        topicId: "topic-1",
+        messageId: "like-message-2",
+        targetMessageId: "message-1",
+        actors: [{ id: "u3", name: "Leo" }],
+        totalCount: 40,
+        topicTitle: "Tema",
+        createdAt: 11
+      },
+      {
+        id: "comment-1",
+        kind: "post-comment",
+        topicId: "topic-1",
+        messageId: "comment-1",
+        body: "Iara: respondi tu posteo",
+        topicTitle: "Tema",
+        createdAt: 9
+      }
+    ]);
+
+    assert.equal(grouped.length, 2);
+    assert.equal(grouped[0].kind, "post-like");
+    assert.equal(grouped[0].notificationIds.length, 2);
+    assert.equal(grouped[0].body, "Mora, Leo y 38 personas mas likearon tu posteo.");
+  });
+  await test("groups repeated post comments for the same post", () => {
+    const grouped = groupNotificationsForDisplay([
+      {
+        id: "comment-1",
+        kind: "post-comment",
+        topicId: "topic-1",
+        messageId: "comment-1",
+        targetMessageId: "topic-1-root",
+        actors: [{ id: "u2", name: "Iara" }],
+        totalCount: 3,
+        body: "Iara: primero",
+        topicTitle: "Tema",
+        createdAt: 12
+      },
+      {
+        id: "comment-2",
+        kind: "post-comment",
+        topicId: "topic-1",
+        messageId: "comment-2",
+        targetMessageId: "topic-1-root",
+        actors: [{ id: "u3", name: "Nico" }],
+        totalCount: 3,
+        body: "Nico: segundo",
+        topicTitle: "Tema",
+        createdAt: 13
+      }
+    ]);
+
+    assert.equal(grouped.length, 1);
+    assert.equal(grouped[0].kind, "post-comment");
+    assert.equal(grouped[0].notificationIds.length, 2);
+    assert.equal(grouped[0].body, "Iara, Nico y 1 persona mas comentaron tu posteo.");
+  });
+
+  await test("notification empty state uses illustrated outlined block", async () => {
+    const notificationSource = await read("ui/notifications.js");
+    const styles = await read("styles.css");
+
+    assert.ok(notificationSource.includes('document.createElement("section")'));
+    assert.ok(notificationSource.includes("notification-panel__empty-mascot"));
+    assert.ok(notificationSource.includes("Aun no hay comentarios"));
+    assert.ok(styles.includes(".notification-panel__empty"));
+    assert.ok(styles.includes("border: 1px dashed"));
+    assert.ok(styles.includes("background: var(--bg)"));
+    assert.ok(styles.includes(".notification-panel__empty-mascot"));
+    assert.ok(styles.includes("place-items: center"));
+    assert.ok(styles.includes("width: 76px"));
+  });
+
+  await test("notification state update deduplicates toasts and remembers message ids", () => {
+    const notification = {
+      id: "toast-mention-message-1",
+      kind: "mention",
+      topicId: "topic-1",
+      messageId: "message-1",
+      title: "Te mencionaron",
+      body: "Nadia: hola",
+      topicTitle: "Tema"
+    };
+    const update = createNotificationStateUpdate(
+      {
+        notifications: [notification],
+        notifiedMessageIds: []
+      },
+      [notification]
+    );
+
+    assert.equal(update.notifications.length, 1);
+    assert.deepEqual(update.notifiedMessageIds, ["message-1"]);
+  });
   await test("hydrate marks unread updates even for the open topic", () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -562,42 +898,51 @@ await (async () => {
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
     const sameAuthorMessage = createMessage("u1", "Nuevo desde otra ventana del mismo usuario", 0);
     const withOtherTopicUpdate = reviveTopicWithMessage(topics, topics[1].id, sameAuthorMessage);
-    const nextState = reducers.hydrateFromBackend({
-      viewer: { id: "u1", type: "registered" },
-      currentUserId: "u1",
-      selectedTopicId: topics[0].id,
-      activeConnectedUserId: null,
-      publicProfileUserId: null,
-      reportedTopicIds: [],
-      reportedMessageIds: [],
-      unreadTopicIds: [],
-      rankings: null,
-      topics,
-      users
-    }, {
-      viewer: { id: "u1", type: "registered" },
-      selectedTopicId: topics[0].id,
-      users,
-      topics: withOtherTopicUpdate,
-      reportedTopicIds: [],
-      reportedMessageIds: []
-    });
+    const nextState = reducers.hydrateFromBackend(
+      {
+        viewer: { id: "u1", type: "registered" },
+        currentUserId: "u1",
+        selectedTopicId: topics[0].id,
+        activeConnectedUserId: null,
+        publicProfileUserId: null,
+        reportedTopicIds: [],
+        reportedMessageIds: [],
+        unreadTopicIds: [],
+        rankings: null,
+        topics,
+        users
+      },
+      {
+        viewer: { id: "u1", type: "registered" },
+        selectedTopicId: topics[0].id,
+        users,
+        topics: withOtherTopicUpdate,
+        reportedTopicIds: [],
+        reportedMessageIds: []
+      }
+    );
 
     assert.deepEqual(nextState.unreadTopicIds, []);
   });
   await test("markTopicRead clears the selected topic after manual refresh", () => {
-    const nextState = reducers.markTopicRead({
-      unreadTopicIds: ["topic-1", "topic-2"]
-    }, "topic-1");
+    const nextState = reducers.markTopicRead(
+      {
+        unreadTopicIds: ["topic-1", "topic-2"]
+      },
+      "topic-1"
+    );
 
     assert.deepEqual(nextState.unreadTopicIds, ["topic-2"]);
   });
   await test("selecting a topic clears its unread marker", () => {
-    const nextState = reducers.setSelectedTopic({
-      selectedTopicId: "topic-1",
-      unreadTopicIds: ["topic-1", "topic-2"],
-      activeConnectedUserId: "u2"
-    }, "topic-2");
+    const nextState = reducers.setSelectedTopic(
+      {
+        selectedTopicId: "topic-1",
+        unreadTopicIds: ["topic-1", "topic-2"],
+        activeConnectedUserId: "u2"
+      },
+      "topic-2"
+    );
 
     assert.deepEqual(nextState.unreadTopicIds, ["topic-1"]);
     assert.equal(nextState.selectedTopicId, "topic-2");
@@ -606,18 +951,23 @@ await (async () => {
   await test("applyMessageReaction increments the visible message like optimistically", () => {
     const message = createMessage("u1", "Mensaje votable", 0);
     const state = {
-      topics: [{
-        id: "topic-like",
-        title: "Tema con like",
-        subtitle: "Mensaje votable",
-        authorId: "u1",
-        status: "active",
-        visible: true,
-        messages: [message]
-      }]
+      topics: [
+        {
+          id: "topic-like",
+          title: "Tema con like",
+          subtitle: "Mensaje votable",
+          authorId: "u1",
+          status: "active",
+          visible: true,
+          messages: [message]
+        }
+      ]
     };
 
-    const nextState = reducers.applyMessageReaction(state, { messageId: message.id, reactionType: "like" });
+    const nextState = reducers.applyMessageReaction(state, {
+      messageId: message.id,
+      reactionType: "like"
+    });
     const nextMessage = nextState.topics[0].messages[0];
 
     assert.equal(nextMessage.likes, 1);
@@ -627,7 +977,12 @@ await (async () => {
   });
 
   await test("createTopic builds a new topic from title and first message", () => {
-    const topic = createTopic("u1", "  Nuevo tema  ", "  Primer mensaje para abrir el hilo.  ", 1_700_000_000_000);
+    const topic = createTopic(
+      "u1",
+      "  Nuevo tema  ",
+      "  Primer mensaje para abrir el hilo.  ",
+      1_700_000_000_000
+    );
 
     assert.match(topic.id, /^topic-/);
     assert.equal(topic.title, "Nuevo tema");
@@ -643,12 +998,15 @@ await (async () => {
   });
 
   await test("backend can start without demo topics for real users", async () => {
-    await withTempStore((store) => {
-      const payload = store.bootstrap({ sessionId: "session-empty-demo" });
-      assert.equal(payload.topics.length, 0);
-      assert.equal(payload.users.length, 0);
-      assert.equal(payload.viewer.type, "guest");
-    }, { seedDemoData: false });
+    await withTempStore(
+      (store) => {
+        const payload = store.bootstrap({ sessionId: "session-empty-demo" });
+        assert.equal(payload.topics.length, 0);
+        assert.equal(payload.users.length, 0);
+        assert.equal(payload.viewer.type, "guest");
+      },
+      { seedDemoData: false }
+    );
     assert.equal(shouldSeedDemoData({ TOPYKLY_SEED_DEMO_DATA: "false" }), false);
     assert.equal(shouldSeedDemoData({ TOPYKLY_SEED_DEMO_DATA: "true" }, false), true);
   });
@@ -678,9 +1036,18 @@ await (async () => {
         authMode: "registered"
       });
 
-      assert.equal(payload.topics.some((topic) => topic.id === "topic-1"), false);
-      assert.equal(payload.users.some((user) => user.id === "u1"), false);
-      assert.equal(payload.topics.some((topic) => topic.id === realTopicId), true);
+      assert.equal(
+        payload.topics.some((topic) => topic.id === "topic-1"),
+        false
+      );
+      assert.equal(
+        payload.users.some((user) => user.id === "u1"),
+        false
+      );
+      assert.equal(
+        payload.topics.some((topic) => topic.id === realTopicId),
+        true
+      );
       assert.equal(payload.viewer.nickname, "Real_user");
     } finally {
       store.close();
@@ -698,7 +1065,10 @@ await (async () => {
       assert.match(payload.viewer.displayName, /^\*topy\d{2}$/);
       assert.equal(payload.topics.length, TOPIC_ACTIVE_LIMIT);
       assert.equal(payload.topics.filter((topic) => topic.visible).length, TOPIC_VISIBLE_LIMIT);
-      assert.equal(payload.users.some((user) => user.id === payload.viewer.id), false);
+      assert.equal(
+        payload.users.some((user) => user.id === payload.viewer.id),
+        false
+      );
     });
   });
 
@@ -727,17 +1097,25 @@ await (async () => {
       });
       const topicId = initial.topics[0].id;
 
-      assert.throws(() => store.createTopic({
-        sessionId: "session-guest-participates",
-        authMode: "guest",
-        title: "Tema invitado",
-        text: "No deberia publicarse."
-      }), (error) => error?.code === "LOGIN_REQUIRED");
-      assert.throws(() => store.addMessage(topicId, {
-        sessionId: "session-guest-participates",
-        authMode: "guest",
-        text: "Comentario invitado bloqueado"
-      }), (error) => error?.code === "LOGIN_REQUIRED");
+      assert.throws(
+        () =>
+          store.createTopic({
+            sessionId: "session-guest-participates",
+            authMode: "guest",
+            title: "Tema invitado",
+            text: "No deberia publicarse."
+          }),
+        (error) => error?.code === "LOGIN_REQUIRED"
+      );
+      assert.throws(
+        () =>
+          store.addMessage(topicId, {
+            sessionId: "session-guest-participates",
+            authMode: "guest",
+            text: "Comentario invitado bloqueado"
+          }),
+        (error) => error?.code === "LOGIN_REQUIRED"
+      );
 
       const diagnostics = store.getDiagnostics();
       assert.equal(diagnostics.users, initialUsers.length);
@@ -746,30 +1124,36 @@ await (async () => {
   });
 
   await test("backend lets the first real user create the first topic without seeds", async () => {
-    await withTempStore((store) => {
-      const registered = store.registerWithPassword({
-        sessionId: "session-first-real-user",
-        email: "first-real@example.com",
-        password: "password-segura",
-        nickname: "First_real"
-      });
-      assert.equal(registered.topics.length, 0);
-      assert.equal(registered.users.some((user) => user.nickname === "First_real"), true);
+    await withTempStore(
+      (store) => {
+        const registered = store.registerWithPassword({
+          sessionId: "session-first-real-user",
+          email: "first-real@example.com",
+          password: "password-segura",
+          nickname: "First_real"
+        });
+        assert.equal(registered.topics.length, 0);
+        assert.equal(
+          registered.users.some((user) => user.nickname === "First_real"),
+          true
+        );
 
-      const created = store.createTopic({
-        sessionId: "session-first-real-user",
-        title: "Primer tema real",
-        text: "Primer posteo creado por una cuenta real."
-      });
-      const topic = created.topics.find((entry) => entry.id === created.selectedTopicId);
+        const created = store.createTopic({
+          sessionId: "session-first-real-user",
+          title: "Primer tema real",
+          text: "Primer posteo creado por una cuenta real."
+        });
+        const topic = created.topics.find((entry) => entry.id === created.selectedTopicId);
 
-      assert.ok(topic);
-      assert.equal(topic.title, "Primer tema real");
-      assert.equal(topic.messages.length, 1);
-      assert.equal(topic.messages[0].authorId, created.viewer.id);
-      assert.equal(created.rankings.global.posts.comments[0].id, topic.id);
-      assert.equal(created.rankings.global.users.comments[0].title, "First_real");
-    }, { seedDemoData: false });
+        assert.ok(topic);
+        assert.equal(topic.title, "Primer tema real");
+        assert.equal(topic.messages.length, 1);
+        assert.equal(topic.messages[0].authorId, created.viewer.id);
+        assert.equal(created.rankings.global.posts.comments[0].id, topic.id);
+        assert.equal(created.rankings.global.users.comments[0].title, "First_real");
+      },
+      { seedDemoData: false }
+    );
   });
 
   await test("backend caps materialized guest storage for rotating report sessions", async () => {
@@ -811,7 +1195,7 @@ await (async () => {
       assert.equal(store.getDiagnostics().sessions, 2);
 
       const result = store.cleanupInactiveGuests({
-        nowMs: Date.now() + (8 * 24 * 60 * 60_000)
+        nowMs: Date.now() + 8 * 24 * 60 * 60_000
       });
 
       assert.equal(result.deletedSessions, 1);
@@ -859,7 +1243,8 @@ await (async () => {
       dbPath: path.join(rootDir, ".data", "topykly.sqlite"),
       dbPathSource: "default",
       storageConfigured: false,
-      storageWarning: "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
+      storageWarning:
+        "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
     });
 
     assert.deepEqual(resolveDbConfig(null, { TOPYKLY_DB_PATH: "/var/data/topykly.sqlite" }), {
@@ -895,7 +1280,10 @@ await (async () => {
           dbPath: store.dbPath,
           backupDir
         });
-        assert.equal(result.backupPath, path.join(backupDir, "topykly-2026-01-02T03-04-05-006Z.sqlite"));
+        assert.equal(
+          result.backupPath,
+          path.join(backupDir, "topykly-2026-01-02T03-04-05-006Z.sqlite")
+        );
         assert.equal(backupBytes.subarray(0, 15).toString("utf8"), "SQLite format 3");
         assert.equal(backupStore.getDiagnostics().users, initialUsers.length);
       } finally {
@@ -904,71 +1292,93 @@ await (async () => {
     });
   });
   await test("backend registers and logs in password users with nickname", async () => {
-    await withTempStore((store) => {
-      const registered = store.registerWithPassword({
-        sessionId: "session-password-register",
-        email: "Clave@Example.com",
-        password: "password-segura",
-        nickname: "Clave_user",
-        rotateSession: true
-      });
+    await withTempStore(
+      (store) => {
+        const registered = store.registerWithPassword({
+          sessionId: "session-password-register",
+          email: "Clave@Example.com",
+          password: "password-segura",
+          nickname: "Clave_user",
+          rotateSession: true
+        });
 
-      assert.notEqual(registered.sessionId, "session-password-register");
-      assert.equal(registered.viewer.type, "registered");
-      assert.equal(registered.viewer.email, "clave@example.com");
-      assert.equal(registered.viewer.nickname, "Clave_user");
-      assert.equal(registered.viewer.displayName, "Clave_user");
-      assert.equal(registered.viewer.profilePending, false);
-      assert.equal(store.refresh({ sessionId: "session-password-register" }).viewer.type, "guest");
-      assert.throws(() => store.registerWithPassword({
-        sessionId: "session-password-register-duplicate-email",
-        email: "clave@example.com",
-        password: "password-segura",
-        nickname: "otro_user"
-      }), (error) => error.code === "EMAIL_TAKEN");
-      assert.throws(() => store.registerWithPassword({
-        sessionId: "session-password-register-duplicate-nickname",
-        email: "otro@example.com",
-        password: "password-segura",
-        nickname: "CLAVE_USER"
-      }), (error) => error.code === "NICKNAME_TAKEN");
-      const compactName = store.registerWithPassword({
-        sessionId: "session-password-register-compact-name",
-        email: "compact-name@example.com",
-        password: "password-segura",
-        nickname: "COCOMORA"
-      });
-      const underscoredName = store.registerWithPassword({
-        sessionId: "session-password-register-underscored-name",
-        email: "underscored-name@example.com",
-        password: "password-segura",
-        nickname: "coco_MORA"
-      });
-      assert.equal(compactName.viewer.nickname, "Cocomora");
-      assert.equal(underscoredName.viewer.nickname, "Coco_mora");
-      assert.throws(() => store.registerWithPassword({
-        sessionId: "session-password-register-spaced-name",
-        email: "spaced-name@example.com",
-        password: "password-segura",
-        nickname: "Coco Mora"
-      }), (error) => error.code === "VALIDATION_ERROR");
-      assert.throws(() => store.loginWithPassword({
-        sessionId: "session-password-wrong",
-        email: "clave@example.com",
-        password: "incorrecta"
-      }), (error) => error.code === "INVALID_CREDENTIALS");
+        assert.notEqual(registered.sessionId, "session-password-register");
+        assert.equal(registered.viewer.type, "registered");
+        assert.equal(registered.viewer.email, "clave@example.com");
+        assert.equal(registered.viewer.nickname, "Clave_user");
+        assert.equal(registered.viewer.displayName, "Clave_user");
+        assert.equal(registered.viewer.profilePending, false);
+        assert.equal(
+          store.refresh({ sessionId: "session-password-register" }).viewer.type,
+          "guest"
+        );
+        assert.throws(
+          () =>
+            store.registerWithPassword({
+              sessionId: "session-password-register-duplicate-email",
+              email: "clave@example.com",
+              password: "password-segura",
+              nickname: "otro_user"
+            }),
+          (error) => error.code === "EMAIL_TAKEN"
+        );
+        assert.throws(
+          () =>
+            store.registerWithPassword({
+              sessionId: "session-password-register-duplicate-nickname",
+              email: "otro@example.com",
+              password: "password-segura",
+              nickname: "CLAVE_USER"
+            }),
+          (error) => error.code === "NICKNAME_TAKEN"
+        );
+        const compactName = store.registerWithPassword({
+          sessionId: "session-password-register-compact-name",
+          email: "compact-name@example.com",
+          password: "password-segura",
+          nickname: "COCOMORA"
+        });
+        const underscoredName = store.registerWithPassword({
+          sessionId: "session-password-register-underscored-name",
+          email: "underscored-name@example.com",
+          password: "password-segura",
+          nickname: "coco_MORA"
+        });
+        assert.equal(compactName.viewer.nickname, "Cocomora");
+        assert.equal(underscoredName.viewer.nickname, "Coco_mora");
+        assert.throws(
+          () =>
+            store.registerWithPassword({
+              sessionId: "session-password-register-spaced-name",
+              email: "spaced-name@example.com",
+              password: "password-segura",
+              nickname: "Coco Mora"
+            }),
+          (error) => error.code === "VALIDATION_ERROR"
+        );
+        assert.throws(
+          () =>
+            store.loginWithPassword({
+              sessionId: "session-password-wrong",
+              email: "clave@example.com",
+              password: "incorrecta"
+            }),
+          (error) => error.code === "INVALID_CREDENTIALS"
+        );
 
-      const loggedIn = store.loginWithPassword({
-        sessionId: "session-password-login",
-        email: "clave@example.com",
-        password: "password-segura",
-        rotateSession: true
-      });
-      assert.notEqual(loggedIn.sessionId, "session-password-login");
-      assert.equal(loggedIn.viewer.id, registered.viewer.id);
-      assert.equal(loggedIn.viewer.nickname, "Clave_user");
-      assert.equal(store.refresh({ sessionId: "session-password-login" }).viewer.type, "guest");
-    }, { seedDemoData: false });
+        const loggedIn = store.loginWithPassword({
+          sessionId: "session-password-login",
+          email: "clave@example.com",
+          password: "password-segura",
+          rotateSession: true
+        });
+        assert.notEqual(loggedIn.sessionId, "session-password-login");
+        assert.equal(loggedIn.viewer.id, registered.viewer.id);
+        assert.equal(loggedIn.viewer.nickname, "Clave_user");
+        assert.equal(store.refresh({ sessionId: "session-password-login" }).viewer.type, "guest");
+      },
+      { seedDemoData: false }
+    );
   });
   await test("backend login rotates the session and logout clears the rotated session", async () => {
     await withTempStore((store) => {
@@ -1019,6 +1429,51 @@ await (async () => {
     });
   });
 
+
+  await test("backend persists friend requests and accepted friendships", async () => {
+    await withTempStore((store) => {
+      const firstUser = store.login({ sessionId: "session-friend-u1", userId: "u1" });
+      const secondUser = store.login({ sessionId: "session-friend-u2", userId: "u2" });
+
+      const requested = store.sendFriendRequest("u2", {
+        sessionId: firstUser.sessionId,
+        selectedTopicId: firstUser.topics[0].id
+      });
+
+      assert.equal(requested.friendships.outgoing.length, 1);
+      assert.equal(requested.friendships.outgoing[0].id, "u2");
+      assert.equal(
+        requested.users.find((user) => user.id === "u2")?.friendshipStatus,
+        "outgoing-request"
+      );
+
+      const pendingForSecondUser = store.refresh({ sessionId: secondUser.sessionId });
+      assert.equal(pendingForSecondUser.friendships.incoming.length, 1);
+      assert.equal(pendingForSecondUser.friendships.incoming[0].id, "u1");
+      assert.equal(
+        pendingForSecondUser.users.find((user) => user.id === "u1")?.friendshipStatus,
+        "incoming-request"
+      );
+
+      const accepted = store.acceptFriendRequest("u1", {
+        sessionId: secondUser.sessionId
+      });
+
+      assert.equal(accepted.friendships.incoming.length, 0);
+      assert.equal(accepted.friendships.friends[0].id, "u1");
+      assert.equal(
+        accepted.users.find((user) => user.id === "u1")?.friendshipStatus,
+        "friend"
+      );
+
+      const refreshedFirstUser = store.refresh({ sessionId: firstUser.sessionId });
+      assert.equal(refreshedFirstUser.friendships.friends[0].id, "u2");
+      assert.equal(
+        refreshedFirstUser.users.find((user) => user.id === "u2")?.friendshipStatus,
+        "friend"
+      );
+    });
+  });
   await test("backend loginWithIdentity creates and reuses a registered user from the provider identity", async () => {
     await withTempStore((store) => {
       const initialPayload = store.loginWithIdentity({
@@ -1039,12 +1494,19 @@ await (async () => {
       assert.equal(initialPayload.viewer.avatarUrl, null);
       assert.equal(initialPayload.viewer.profilePending, true);
       assert.equal(initialPayload.viewer.profileSuggestedName, "Test User");
-      assert.equal(initialPayload.viewer.profileSuggestedAvatarUrl, "https://cdn.example.com/avatar.png");
-      assert.throws(() => store.createTopic({
-        sessionId: "session-oidc-1",
-        title: "Tema OAuth",
-        text: "Mensaje"
-      }), /Completa tu perfil/);
+      assert.equal(
+        initialPayload.viewer.profileSuggestedAvatarUrl,
+        "https://cdn.example.com/avatar.png"
+      );
+      assert.throws(
+        () =>
+          store.createTopic({
+            sessionId: "session-oidc-1",
+            title: "Tema OAuth",
+            text: "Mensaje"
+          }),
+        /Completa tu perfil/
+      );
 
       const completedPayload = store.updateProfile({
         sessionId: "session-oidc-1",
@@ -1067,10 +1529,14 @@ await (async () => {
         email: "duplicate-name@example.com",
         displayName: "Alias_elegido"
       });
-      assert.throws(() => store.updateProfile({
-        sessionId: "session-oidc-duplicate-name",
-        displayName: "alias_elegido"
-      }), (error) => error.code === "NICKNAME_TAKEN");
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-oidc-duplicate-name",
+            displayName: "alias_elegido"
+          }),
+        (error) => error.code === "NICKNAME_TAKEN"
+      );
 
       const secondPayload = store.loginWithIdentity({
         sessionId: "session-oidc-2",
@@ -1115,7 +1581,9 @@ await (async () => {
         targetType: "user",
         targetId: completedPayload.viewer.id
       });
-      const approvedUser = approvedPayload.users.find((user) => user.id === completedPayload.viewer.id);
+      const approvedUser = approvedPayload.users.find(
+        (user) => user.id === completedPayload.viewer.id
+      );
 
       const secondPayload = store.loginWithIdentity({
         sessionId: "session-oidc-preserve-2",
@@ -1241,22 +1709,40 @@ await (async () => {
       assert.equal(updated.viewer.description, "Descripcion breve del perfil");
       assert.equal(updated.viewer.profileShowDescription, false);
       assert.equal(updated.viewer.profileShowJoinedAt, false);
-      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.description, "Descripcion breve del perfil");
-      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.profileShowDescription, false);
-      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.profileShowJoinedAt, false);
+      assert.equal(
+        updated.users.find((user) => user.id === updated.viewer.id)?.description,
+        "Descripcion breve del perfil"
+      );
+      assert.equal(
+        updated.users.find((user) => user.id === updated.viewer.id)?.profileShowDescription,
+        false
+      );
+      assert.equal(
+        updated.users.find((user) => user.id === updated.viewer.id)?.profileShowJoinedAt,
+        false
+      );
       assert.equal(updated.viewer.avatarUrl, null);
       assert.match(updated.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.jpg$/);
       assert.doesNotMatch(updated.viewer.avatarPendingUrl, /^data:/);
       assert.equal(updated.viewer.avatarReviewStatus, "pending");
-      assert.equal(updated.users.find((user) => user.id === updated.viewer.id)?.avatarPendingUrl, updated.viewer.avatarPendingUrl);
-      const storedAvatar = await readFile(path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl)));
+      assert.equal(
+        updated.users.find((user) => user.id === updated.viewer.id)?.avatarPendingUrl,
+        updated.viewer.avatarPendingUrl
+      );
+      const storedAvatar = await readFile(
+        path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl))
+      );
       assert.equal(storedAvatar.toString("utf8"), "image");
-      assert.throws(() => store.registerWithPassword({
-        sessionId: "session-profile-duplicate-register",
-        email: "profile-duplicate@example.com",
-        password: "password-segura",
-        nickname: "nombre_nuevo"
-      }), (error) => error.code === "NICKNAME_TAKEN");
+      assert.throws(
+        () =>
+          store.registerWithPassword({
+            sessionId: "session-profile-duplicate-register",
+            email: "profile-duplicate@example.com",
+            password: "password-segura",
+            nickname: "nombre_nuevo"
+          }),
+        (error) => error.code === "NICKNAME_TAKEN"
+      );
 
       store.login({
         sessionId: "session-profile-moderator",
@@ -1280,15 +1766,27 @@ await (async () => {
       assert.equal(removedAvatar.viewer.avatarUrl, null);
       assert.equal(removedAvatar.viewer.avatarPendingUrl, null);
       assert.equal(removedAvatar.viewer.avatarReviewStatus, null);
-      assert.equal(removedAvatar.users.find((user) => user.id === updated.viewer.id)?.avatarUrl, null);
-      await assert.rejects(() => readFile(path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl))), /ENOENT/);
+      assert.equal(
+        removedAvatar.users.find((user) => user.id === updated.viewer.id)?.avatarUrl,
+        null
+      );
+      await assert.rejects(
+        () =>
+          readFile(
+            path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl))
+          ),
+        /ENOENT/
+      );
 
       const firstPendingAvatar = store.updateProfile({
         sessionId: "session-profile",
         displayName: "Nombre_nuevo",
         avatarDataUrl: "data:image/png;base64,b2xk"
       });
-      const firstPendingAvatarPath = path.join(store.avatarStorageDir, path.basename(firstPendingAvatar.viewer.avatarPendingUrl));
+      const firstPendingAvatarPath = path.join(
+        store.avatarStorageDir,
+        path.basename(firstPendingAvatar.viewer.avatarPendingUrl)
+      );
       const secondPendingAvatar = store.updateProfile({
         sessionId: "session-profile",
         displayName: "Nombre_nuevo",
@@ -1296,29 +1794,52 @@ await (async () => {
       });
       await assert.rejects(() => readFile(firstPendingAvatarPath), /ENOENT/);
       assert.equal(
-        (await readFile(path.join(store.avatarStorageDir, path.basename(secondPendingAvatar.viewer.avatarPendingUrl)))).toString("utf8"),
+        (
+          await readFile(
+            path.join(
+              store.avatarStorageDir,
+              path.basename(secondPendingAvatar.viewer.avatarPendingUrl)
+            )
+          )
+        ).toString("utf8"),
         "new"
       );
 
-      assert.throws(() => store.updateProfile({
-        sessionId: "session-profile-guest",
-        avatarDataUrl: "data:image/png;base64,aGVsbG8="
-      }), /Hace falta iniciar sesion/);
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile-guest",
+            avatarDataUrl: "data:image/png;base64,aGVsbG8="
+          }),
+        /Hace falta iniciar sesion/
+      );
 
-      assert.throws(() => store.updateProfile({
-        sessionId: "session-profile",
-        avatarDataUrl: "data:text/html;base64,PHNjcmlwdD4="
-      }), /PNG, JPG, WebP o GIF/);
-      const oversizedAvatar = Buffer.alloc((2 * 1024 * 1024) + 1).toString("base64");
-      assert.throws(() => store.updateProfile({
-        sessionId: "session-profile",
-        avatarDataUrl: `data:image/png;base64,${oversizedAvatar}`
-      }), /2 MB/);
-      assert.throws(() => store.updateProfile({
-        sessionId: "session-profile",
-        displayName: "Nombre_nuevo",
-        description: "x".repeat(181)
-      }), (error) => error.code === "VALIDATION_ERROR");
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile",
+            avatarDataUrl: "data:text/html;base64,PHNjcmlwdD4="
+          }),
+        /PNG, JPG, WebP o GIF/
+      );
+      const oversizedAvatar = Buffer.alloc(2 * 1024 * 1024 + 1).toString("base64");
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile",
+            avatarDataUrl: `data:image/png;base64,${oversizedAvatar}`
+          }),
+        /2 MB/
+      );
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile",
+            displayName: "Nombre_nuevo",
+            description: "x".repeat(181)
+          }),
+        (error) => error.code === "VALIDATION_ERROR"
+      );
     });
   });
 
@@ -1393,7 +1914,10 @@ await (async () => {
         assert.match(pendingPayload.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
 
         const dashboard = store.getAdminDashboard({ sessionId: "session-admin-oauth" });
-        assert.equal(dashboard.pendingAvatars.some((item) => item.userId === userPayload.viewer.id), true);
+        assert.equal(
+          dashboard.pendingAvatars.some((item) => item.userId === userPayload.viewer.id),
+          true
+        );
 
         const approved = store.applyModerationAction("approve_avatar", {
           sessionId: "session-admin-oauth",
@@ -1405,7 +1929,10 @@ await (async () => {
         assert.match(approvedUser.avatarUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
         assert.doesNotMatch(approvedUser.avatarUrl, /^data:/);
         assert.equal(approvedUser.avatarPendingUrl, null);
-        assert.equal(store.getAdminDashboard({ sessionId: "session-admin-oauth" }).pendingAvatars.length, 0);
+        assert.equal(
+          store.getAdminDashboard({ sessionId: "session-admin-oauth" }).pendingAvatars.length,
+          0
+        );
       });
     } finally {
       if (previousAdminEmails === undefined) {
@@ -1421,7 +1948,9 @@ await (async () => {
     let store = createBackendStore({ dbPath });
 
     function findMessage(payload, topicId, messageId) {
-      return payload.topics.find((entry) => entry.id === topicId).messages.find((entry) => entry.id === messageId);
+      return payload.topics
+        .find((entry) => entry.id === topicId)
+        .messages.find((entry) => entry.id === messageId);
     }
 
     try {
@@ -1449,14 +1978,22 @@ await (async () => {
       assert.equal(likedMessage.likedByViewer, true);
       assert.equal(likedMessage.dislikedByViewer, false);
 
-      assert.throws(() => store.toggleMessageLike(message.id, {
-        sessionId: "session-like-user",
-        selectedTopicId: topic.id
-      }), (error) => error?.code === "MESSAGE_REACTION_LOCKED");
-      assert.throws(() => store.toggleMessageDislike(message.id, {
-        sessionId: "session-like-user",
-        selectedTopicId: topic.id
-      }), (error) => error?.code === "MESSAGE_REACTION_LOCKED");
+      assert.throws(
+        () =>
+          store.toggleMessageLike(message.id, {
+            sessionId: "session-like-user",
+            selectedTopicId: topic.id
+          }),
+        (error) => error?.code === "MESSAGE_REACTION_LOCKED"
+      );
+      assert.throws(
+        () =>
+          store.toggleMessageDislike(message.id, {
+            sessionId: "session-like-user",
+            selectedTopicId: topic.id
+          }),
+        (error) => error?.code === "MESSAGE_REACTION_LOCKED"
+      );
 
       const reset = store.resetDailyMessageReactions({
         now: new Date(Date.now() + 36 * 60 * 60_000)
@@ -1492,43 +2029,46 @@ await (async () => {
     }
   });
   await test("backend hydrates persistent rankings from SQLite", async () => {
-    await withTempStore((store) => {
-      store.registerWithPassword({
-        sessionId: "session-ranking-author",
-        email: "ranking-author@example.com",
-        password: "password-segura",
-        nickname: "Ranking_author"
-      });
-      store.registerWithPassword({
-        sessionId: "session-ranking-voter",
-        email: "ranking-voter@example.com",
-        password: "password-segura",
-        nickname: "ranking_voter"
-      });
-      const created = store.createTopic({
-        sessionId: "session-ranking-author",
-        title: "Tema para ranking real",
-        text: "Primer comentario puntuable"
-      });
-      const topic = created.topics[0];
-      const message = topic.messages[0];
+    await withTempStore(
+      (store) => {
+        store.registerWithPassword({
+          sessionId: "session-ranking-author",
+          email: "ranking-author@example.com",
+          password: "password-segura",
+          nickname: "Ranking_author"
+        });
+        store.registerWithPassword({
+          sessionId: "session-ranking-voter",
+          email: "ranking-voter@example.com",
+          password: "password-segura",
+          nickname: "ranking_voter"
+        });
+        const created = store.createTopic({
+          sessionId: "session-ranking-author",
+          title: "Tema para ranking real",
+          text: "Primer comentario puntuable"
+        });
+        const topic = created.topics[0];
+        const message = topic.messages[0];
 
-      const liked = store.toggleMessageLike(message.id, {
-        sessionId: "session-ranking-voter",
-        selectedTopicId: topic.id
-      });
+        const liked = store.toggleMessageLike(message.id, {
+          sessionId: "session-ranking-voter",
+          selectedTopicId: topic.id
+        });
 
-      assert.equal(liked.rankings.global.posts.comments[0].id, topic.id);
-      assert.equal(liked.rankings.global.posts.comments[0].count, 1);
-      assert.equal(liked.rankings.global.posts.likes[0].id, topic.id);
-      assert.equal(liked.rankings.global.posts.likes[0].count, 1);
-      assert.equal(liked.rankings.global.users.comments[0].title, "Ranking_author");
-      assert.equal(liked.rankings.global.users.comments[0].count, 1);
-      assert.equal(liked.rankings.global.users.likes[0].title, "Ranking_author");
-      assert.equal(liked.rankings.global.users.likes[0].count, 1);
-      assert.equal(liked.rankings.topic.users.comments[0].title, "Ranking_author");
-      assert.equal(liked.rankings.topic.users.likes[0].title, "Ranking_author");
-    }, { seedDemoData: false });
+        assert.equal(liked.rankings.global.posts.comments[0].id, topic.id);
+        assert.equal(liked.rankings.global.posts.comments[0].count, 1);
+        assert.equal(liked.rankings.global.posts.likes[0].id, topic.id);
+        assert.equal(liked.rankings.global.posts.likes[0].count, 1);
+        assert.equal(liked.rankings.global.users.comments[0].title, "Ranking_author");
+        assert.equal(liked.rankings.global.users.comments[0].count, 1);
+        assert.equal(liked.rankings.global.users.likes[0].title, "Ranking_author");
+        assert.equal(liked.rankings.global.users.likes[0].count, 1);
+        assert.equal(liked.rankings.topic.users.comments[0].title, "Ranking_author");
+        assert.equal(liked.rankings.topic.users.likes[0].title, "Ranking_author");
+      },
+      { seedDemoData: false }
+    );
   });
   await test("backend reports persist per session and moderation can resolve topic and message reports", async () => {
     await withTempStore((store) => {
@@ -1537,7 +2077,9 @@ await (async () => {
         authMode: "guest"
       });
       const topicId = bootstrapPayload.topics[0].id;
-      const reportableMessageId = bootstrapPayload.topics[0].messages.find((message) => !message.isRoot)?.id;
+      const reportableMessageId = bootstrapPayload.topics[0].messages.find(
+        (message) => !message.isRoot
+      )?.id;
 
       assert.ok(reportableMessageId);
 
@@ -1584,9 +2126,12 @@ await (async () => {
 
       assert.ok(blockedTopic);
       assert.equal(blockedTopic.status, "blocked");
-      assert.equal(store.listReports({ sessionId: "session-moderator" }).reports.some((report) => (
-        report.entityType === "topic" && report.entityId === topicId
-      )), false);
+      assert.equal(
+        store
+          .listReports({ sessionId: "session-moderator" })
+          .reports.some((report) => report.entityType === "topic" && report.entityId === topicId),
+        false
+      );
 
       const afterDeletePayload = store.applyModerationAction("delete_message", {
         sessionId: "session-moderator",
@@ -1597,7 +2142,10 @@ await (async () => {
       const moderatedTopic = afterDeletePayload.topics.find((topic) => topic.id === topicId);
 
       assert.ok(moderatedTopic);
-      assert.equal(moderatedTopic.messages.some((message) => message.id === reportableMessageId), false);
+      assert.equal(
+        moderatedTopic.messages.some((message) => message.id === reportableMessageId),
+        false
+      );
       assert.equal(store.listReports({ sessionId: "session-moderator" }).reports.length, 0);
     });
   });
@@ -1680,9 +2228,12 @@ await (async () => {
         sessionId: "session-moderator"
       });
 
-      assert.equal(openReports.reports.some((report) => (
-        report.entityType === "user" && report.entityId === "u3"
-      )), true);
+      assert.equal(
+        openReports.reports.some(
+          (report) => report.entityType === "user" && report.entityId === "u3"
+        ),
+        true
+      );
 
       store.applyModerationAction("expel_user", {
         sessionId: "session-moderator",
@@ -1693,9 +2244,12 @@ await (async () => {
       openReports = store.listReports({
         sessionId: "session-moderator"
       });
-      assert.equal(openReports.reports.some((report) => (
-        report.entityType === "user" && report.entityId === "u3"
-      )), false);
+      assert.equal(
+        openReports.reports.some(
+          (report) => report.entityType === "user" && report.entityId === "u3"
+        ),
+        false
+      );
 
       store.applyModerationAction("mark_problematic", {
         sessionId: "session-moderator",
@@ -1708,9 +2262,14 @@ await (async () => {
       openReports = store.listReports({
         sessionId: "session-moderator"
       });
-      assert.equal(openReports.reports.some((report) => (
-        report.entityType === "message" && report.entityId === messageId.slice("message-".length)
-      )), true);
+      assert.equal(
+        openReports.reports.some(
+          (report) =>
+            report.entityType === "message" &&
+            report.entityId === messageId.slice("message-".length)
+        ),
+        true
+      );
     });
   });
 
@@ -1731,30 +2290,39 @@ await (async () => {
         targetId: "u1"
       });
 
-      assert.throws(() => {
-        store.createTopic({
-          sessionId: "session-expelled-user",
-          authMode: "registered",
-          title: "No entra",
-          text: "No entra"
-        });
-      }, (error) => error.code === "USER_EXPELLED");
+      assert.throws(
+        () => {
+          store.createTopic({
+            sessionId: "session-expelled-user",
+            authMode: "registered",
+            title: "No entra",
+            text: "No entra"
+          });
+        },
+        (error) => error.code === "USER_EXPELLED"
+      );
 
-      assert.throws(() => {
-        store.addMessage(topicId, {
-          sessionId: "session-expelled-user",
-          authMode: "registered",
-          text: "No comenta"
-        });
-      }, (error) => error.code === "USER_EXPELLED");
+      assert.throws(
+        () => {
+          store.addMessage(topicId, {
+            sessionId: "session-expelled-user",
+            authMode: "registered",
+            text: "No comenta"
+          });
+        },
+        (error) => error.code === "USER_EXPELLED"
+      );
 
-      assert.throws(() => {
-        store.reportEntity("topic", topicId, {
-          sessionId: "session-expelled-user",
-          authMode: "registered",
-          reason: "No reporta"
-        });
-      }, (error) => error.code === "USER_EXPELLED");
+      assert.throws(
+        () => {
+          store.reportEntity("topic", topicId, {
+            sessionId: "session-expelled-user",
+            authMode: "registered",
+            reason: "No reporta"
+          });
+        },
+        (error) => error.code === "USER_EXPELLED"
+      );
     });
   });
 
@@ -1806,7 +2374,10 @@ await (async () => {
       assert.equal(created.topics[0].title, "Tema backend");
       assert.equal(created.selectedTopicId, created.topics[0].id);
       assert.equal(created.topics[0].messages[0].isRoot, true);
-      assert.equal(created.topics.some((topic) => topic.id === displacedTopicId), false);
+      assert.equal(
+        created.topics.some((topic) => topic.id === displacedTopicId),
+        false
+      );
     });
   });
 
@@ -1886,13 +2457,16 @@ await (async () => {
         text: "Empuja la ventana activa"
       });
 
-      assert.throws(() => {
-        store.addMessage(expelledCandidateId, {
-          sessionId: "session-expel-comment",
-          authMode: "registered",
-          text: "No deberia entrar"
-        });
-      }, (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled");
+      assert.throws(
+        () => {
+          store.addMessage(expelledCandidateId, {
+            sessionId: "session-expel-comment",
+            authMode: "registered",
+            text: "No deberia entrar"
+          });
+        },
+        (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled"
+      );
 
       const activeTopicId = store.bootstrap({
         sessionId: "session-rate-bootstrap",
@@ -1905,13 +2479,16 @@ await (async () => {
         text: "Primer comentario"
       });
 
-      assert.throws(() => {
-        store.addMessage(activeTopicId, {
-          sessionId: "session-rate-b",
-          authMode: "registered",
-          text: "Segundo comentario demasiado rapido"
-        });
-      }, (error) => error.code === "RATE_LIMITED" && Number.isInteger(error.retryAfterSeconds));
+      assert.throws(
+        () => {
+          store.addMessage(activeTopicId, {
+            sessionId: "session-rate-b",
+            authMode: "registered",
+            text: "Segundo comentario demasiado rapido"
+          });
+        },
+        (error) => error.code === "RATE_LIMITED" && Number.isInteger(error.retryAfterSeconds)
+      );
     });
   });
 
@@ -1923,23 +2500,29 @@ await (async () => {
         ipAddress: "203.0.113.50"
       }).topics[0].id;
 
-      assert.throws(() => {
-        store.addMessage(activeTopicId, {
-          sessionId: "session-guest-ip-a",
-          authMode: "guest",
-          text: "Comentario guest bloqueado",
-          ipAddress: "203.0.113.50"
-        });
-      }, (error) => error.code === "LOGIN_REQUIRED");
-      assert.throws(() => {
-        store.createTopic({
-          sessionId: "session-guest-topic-ip-a",
-          authMode: "guest",
-          title: "Tema guest bloqueado",
-          text: "No deberia publicarse",
-          ipAddress: "203.0.113.52"
-        });
-      }, (error) => error.code === "LOGIN_REQUIRED");
+      assert.throws(
+        () => {
+          store.addMessage(activeTopicId, {
+            sessionId: "session-guest-ip-a",
+            authMode: "guest",
+            text: "Comentario guest bloqueado",
+            ipAddress: "203.0.113.50"
+          });
+        },
+        (error) => error.code === "LOGIN_REQUIRED"
+      );
+      assert.throws(
+        () => {
+          store.createTopic({
+            sessionId: "session-guest-topic-ip-a",
+            authMode: "guest",
+            title: "Tema guest bloqueado",
+            text: "No deberia publicarse",
+            ipAddress: "203.0.113.52"
+          });
+        },
+        (error) => error.code === "LOGIN_REQUIRED"
+      );
       assert.equal(store.getDiagnostics().sessions, 0);
     });
   });
@@ -1972,14 +2555,17 @@ await (async () => {
         reason: "Spam reiterado"
       });
 
-      assert.throws(() => {
-        store.addMessage(topicId, {
-          sessionId: "session-blocked-registered",
-        authMode: "registered",
-          text: "No deberia publicar",
-          ipAddress: "203.0.113.10"
-        });
-      }, (error) => error.code === "SESSION_BLOCKED");
+      assert.throws(
+        () => {
+          store.addMessage(topicId, {
+            sessionId: "session-blocked-registered",
+            authMode: "registered",
+            text: "No deberia publicar",
+            ipAddress: "203.0.113.10"
+          });
+        },
+        (error) => error.code === "SESSION_BLOCKED"
+      );
 
       const readOnlyPayload = store.openTopic(topicId, {
         sessionId: "session-blocked-registered",
@@ -1996,22 +2582,28 @@ await (async () => {
         reason: "Reincidencia"
       });
 
-      assert.throws(() => {
-        store.createTopic({
-          sessionId: "session-ip-blocked",
-          authMode: "guest",
-          title: "No entra",
-          text: "No entra",
-          ipAddress: "203.0.113.99"
-        });
-      }, (error) => error.code === "IP_BLOCKED");
+      assert.throws(
+        () => {
+          store.createTopic({
+            sessionId: "session-ip-blocked",
+            authMode: "guest",
+            title: "No entra",
+            text: "No entra",
+            ipAddress: "203.0.113.99"
+          });
+        },
+        (error) => error.code === "IP_BLOCKED"
+      );
 
-      assert.throws(() => {
-        store.login({
-          sessionId: "session-ip-login",
-          ipAddress: "203.0.113.99"
-        });
-      }, (error) => error.code === "IP_BLOCKED");
+      assert.throws(
+        () => {
+          store.login({
+            sessionId: "session-ip-login",
+            ipAddress: "203.0.113.99"
+          });
+        },
+        (error) => error.code === "IP_BLOCKED"
+      );
 
       const diagnostics = store.getDiagnostics();
 
@@ -2091,9 +2683,9 @@ await (async () => {
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
     const topicId = topics[0].id;
     const submittedMessage = createMessage("u1", "Nuevo comentario", 0, "user", 1_700_000_060_000);
-    const updatedTopics = topics.map((topic) => topic.id === topicId
-      ? { ...topic, messages: [...topic.messages, submittedMessage] }
-      : topic);
+    const updatedTopics = topics.map((topic) =>
+      topic.id === topicId ? { ...topic, messages: [...topic.messages, submittedMessage] } : topic
+    );
     const state = {
       viewer: { id: "u1", type: "registered" },
       topics,
@@ -2142,6 +2734,43 @@ await (async () => {
     assert.equal(messageStream.scrollTop, 640);
     assert.deepEqual(state.unreadTopicIds, []);
     assert.equal(renderCalls >= 2, true);
+  });
+  await test("create topic action opens the composer view on mobile", () => {
+    const state = {
+      selectedTopicId: "topic-1",
+      mobileView: "browse",
+      topics: [],
+      users: [],
+      unreadTopicIds: [],
+      followedTopicIds: []
+    };
+    const topicTitleInput = { value: "Titulo anterior", focus() {} };
+    const messageInput = { value: "Mensaje anterior" };
+    let renderCalls = 0;
+    let responsiveSyncCalls = 0;
+    const actions = createChatActions({
+      state,
+      dom: {
+        topicTitleInput,
+        messageInput
+      },
+      render: () => {
+        renderCalls += 1;
+      },
+      isMobileViewport: () => true,
+      syncResponsiveView: () => {
+        responsiveSyncCalls += 1;
+      }
+    });
+
+    actions.createNewTopic();
+
+    assert.equal(state.selectedTopicId, null);
+    assert.equal(state.mobileView, "chat");
+    assert.equal(topicTitleInput.value, "");
+    assert.equal(messageInput.value, "");
+    assert.equal(responsiveSyncCalls, 1);
+    assert.equal(renderCalls, 1);
   });
   await test("report action hydrates reported topic and message ids from backend payloads", async () => {
     const users = buildUsers(initialUsers);
@@ -2385,10 +3014,7 @@ await (async () => {
       shouldScrollChatToBottom(previousState, { ...previousState, lastMessageId: "m31" }, false),
       false
     );
-    assert.equal(
-      shouldScrollChatToBottom(previousState, { ...previousState }, true),
-      false
-    );
+    assert.equal(shouldScrollChatToBottom(previousState, { ...previousState }, true), false);
   });
 
   await test("chat layout helper only recalculates when rendered content or width changes", () => {
@@ -2401,8 +3027,14 @@ await (async () => {
 
     assert.equal(shouldSyncChatLayout(previousState, { ...previousState }), false);
     assert.equal(shouldSyncChatLayout(previousState, { ...previousState, width: 440 }), true);
-    assert.equal(shouldSyncChatLayout(previousState, { ...previousState, lastMessageId: "m31" }), true);
-    assert.equal(shouldSyncChatLayout(previousState, { ...previousState, topicId: "topic-2" }), true);
+    assert.equal(
+      shouldSyncChatLayout(previousState, { ...previousState, lastMessageId: "m31" }),
+      true
+    );
+    assert.equal(
+      shouldSyncChatLayout(previousState, { ...previousState, topicId: "topic-2" }),
+      true
+    );
   });
 
   await test("ranking builders summarise activity and handle empty topics", () => {
@@ -2506,7 +3138,20 @@ await (async () => {
     assert.equal(normalizeHexColor("#abc"), "#AABBCC");
     assert.equal(parseHexColor("#4a90e2"), "#4A90E2");
     assert.equal(parseHexColor("zzz"), null);
-    assert.equal(normalizeHexColor("invalid", DEFAULT_CUSTOM_PALETTE_HEX), DEFAULT_CUSTOM_PALETTE_HEX);
+    assert.equal(
+      normalizeHexColor("invalid", DEFAULT_CUSTOM_PALETTE_HEX),
+      DEFAULT_CUSTOM_PALETTE_HEX
+    );
+  });
+
+  await test("custom palette stylesheet css contains app vars and modal preview vars", () => {
+    const cssText = buildCustomPaletteStylesheetCss("4a90e2");
+
+    assert.match(cssText, /html\[data-theme="light"\]\[data-palette="custom"\]/);
+    assert.match(cssText, /html\[data-theme="dark"\]\[data-palette="custom"\]/);
+    assert.match(cssText, /--palette-custom-preview: #4A90E2;/);
+    assert.match(cssText, /\.palette-option__mode\[data-mode="light"\]/);
+    assert.match(cssText, /--palette-preview-accent:/);
   });
 
   await test("applyStoredTheme restores theme and palette from storage", () => {
@@ -2614,9 +3259,13 @@ await (async () => {
       assert.equal(state.paletteId, CUSTOM_PALETTE_ID);
       assert.equal(state.customPaletteHex, "#4A90E2");
       assert.equal(document.documentElement.dataset.palette, CUSTOM_PALETTE_ID);
+      const customStylesheet = document.querySelector("#customPaletteStylesheet");
       assert.match(document.querySelector("link[rel*='icon']").href, /^data:image\/svg\+xml/);
-      assert.equal(appliedStyle.get("--accent").startsWith("#"), true);
-      assert.equal(appliedStyle.has("--bg"), true);
+      assert.equal(appliedStyle.size, 0);
+      assert.equal(customStylesheet.tagName, "style");
+      assert.match(customStylesheet.textContent, /html\[data-theme="dark"\]\[data-palette="custom"\]/);
+      assert.match(customStylesheet.dataset.paletteCssSignature, /html\[data-theme="dark"\]\[data-palette="custom"\]/);
+      assert.match(customStylesheet.dataset.paletteCssSignature, /--accent:/);
     } finally {
       globalThis.localStorage = previousLocalStorage;
       globalThis.document = previousDocument;
@@ -2627,7 +3276,6 @@ await (async () => {
     const previousDocument = globalThis.document;
     const previousLocalStorage = globalThis.localStorage;
     const appliedStyle = new Map();
-    const previewStyle = new Map();
     let renderCount = 0;
 
     const hexInput = {
@@ -2639,14 +3287,6 @@ await (async () => {
       value: "#B25B33",
       dataset: {}
     };
-    const preview = {
-      style: {
-        setProperty(name, value) {
-          previewStyle.set(name, value);
-        }
-      }
-    };
-
     const state = {
       theme: "light",
       paletteId: CUSTOM_PALETTE_ID,
@@ -2674,9 +3314,6 @@ await (async () => {
           if (selector === "[data-custom-palette-picker]") {
             return [pickerInput];
           }
-          if (selector === ".palette-option__color-preview") {
-            return [preview];
-          }
           return [];
         }
       }
@@ -2686,19 +3323,7 @@ await (async () => {
       globalThis.localStorage = {
         setItem() {}
       };
-      globalThis.document = {
-        documentElement: {
-          dataset: {},
-          style: {
-            setProperty(name, value) {
-              appliedStyle.set(name, value);
-            },
-            removeProperty(name) {
-              appliedStyle.delete(name);
-            }
-          }
-        }
-      };
+      globalThis.document = createMockDocumentWithFavicon(appliedStyle);
 
       const handlers = createActionHandlers({
         state,
@@ -2725,8 +3350,12 @@ await (async () => {
       assert.equal(hexInput.defaultValue, "#4A90E2");
       assert.equal(hexInput.dataset.lastValid, "#4A90E2");
       assert.equal(pickerInput.value, "#4A90E2");
-      assert.equal(previewStyle.get("--palette-custom-preview"), "#4A90E2");
-      assert.equal(appliedStyle.has("--accent"), true);
+      assert.equal(appliedStyle.size, 0);
+      assert.match(document.querySelector("#customPaletteStylesheet").textContent, /--palette-custom-preview: #4A90E2;/);
+      assert.match(
+        document.querySelector("#customPaletteStylesheet").dataset.paletteCssSignature,
+        /--palette-custom-preview: #4A90E2;/
+      );
     } finally {
       globalThis.document = previousDocument;
       globalThis.localStorage = previousLocalStorage;
@@ -2748,9 +3377,7 @@ await (async () => {
       currentUserId: "u1",
       activeConnectedUserId: null,
       topics: [],
-      users: [
-        { id: "u1", name: "Coco Mora", online: true }
-      ]
+      users: [{ id: "u1", name: "Coco Mora", online: true }]
     };
 
     let renderCount = 0;
@@ -2828,9 +3455,8 @@ await (async () => {
     const closePaletteModalButton = new FakeButton();
     const paletteModalBackdrop = createTarget();
     const paletteOptionGrid = createTarget();
-    paletteOptionGrid.querySelector = (selector) => (
-      selector === "[data-custom-palette-picker]" ? pickerInput : null
-    );
+    paletteOptionGrid.querySelector = (selector) =>
+      selector === "[data-custom-palette-picker]" ? pickerInput : null;
 
     const dom = {
       themeToggle: createTarget(),
@@ -2904,7 +3530,9 @@ await (async () => {
   await test("getFaviconDataUrl changes only the favicon background color by palette", () => {
     const darkCoastIcon = decodeURIComponent(getFaviconDataUrl("dark", "coast").split(",")[1]);
     const lightEmberIcon = decodeURIComponent(getFaviconDataUrl("light", "ember").split(",")[1]);
-    const customIcon = decodeURIComponent(getFaviconDataUrl("light", CUSTOM_PALETTE_ID, "#4A90E2").split(",")[1]);
+    const customIcon = decodeURIComponent(
+      getFaviconDataUrl("light", CUSTOM_PALETTE_ID, "#4A90E2").split(",")[1]
+    );
     const customAccent = getCustomPaletteVars("#4A90E2", "light")["--accent"];
 
     assert.match(darkCoastIcon, /fill="#58a6ac"/i);
@@ -2986,12 +3614,19 @@ await (async () => {
     assert.equal(getRequestIp(req, {}), "127.0.0.1");
     assert.equal(getRequestIp(req, { TOPYKLY_TRUST_PROXY: "false" }), "127.0.0.1");
     assert.equal(getRequestIp(req, { TOPYKLY_TRUST_PROXY: "true" }), "203.0.113.8");
-    assert.equal(getRequestIp({ ...req, headers: { "x-forwarded-for": "198.51.100.7, 198.51.100.8" } }, { TOPYKLY_TRUST_PROXY: "yes" }), "198.51.100.7");
+    assert.equal(
+      getRequestIp(
+        { ...req, headers: { "x-forwarded-for": "198.51.100.7, 198.51.100.8" } },
+        { TOPYKLY_TRUST_PROXY: "yes" }
+      ),
+      "198.51.100.7"
+    );
   });
 
   await test("production headers restrict unused device permissions", async () => {
     const vercelConfig = JSON.parse(await read("vercel.json"));
-    const globalHeaders = vercelConfig.headers.find((entry) => entry.source === "/(.*)")?.headers || [];
+    const globalHeaders =
+      vercelConfig.headers.find((entry) => entry.source === "/(.*)")?.headers || [];
     const permissionsPolicy = globalHeaders.find((header) => header.key === "Permissions-Policy");
 
     assert.deepEqual(permissionsPolicy, {
@@ -3037,9 +3672,18 @@ await (async () => {
   });
   await test("auth callback errors resolve to visible feedback messages", () => {
     assert.equal(getAuthErrorFeedbackMessage("access_denied"), "Inicio de sesion cancelado.");
-    assert.equal(getAuthErrorFeedbackMessage("AUTH_FLOW_EXPIRED"), "La solicitud de inicio de sesion expiro. Intentalo de nuevo.");
-    assert.equal(getAuthErrorFeedbackMessage("invalid_auth_callback"), "No se pudo validar el inicio de sesion. Intentalo de nuevo.");
-    assert.equal(getAuthErrorFeedbackMessage("unknown_error"), "No se pudo completar el inicio de sesion.");
+    assert.equal(
+      getAuthErrorFeedbackMessage("AUTH_FLOW_EXPIRED"),
+      "La solicitud de inicio de sesion expiro. Intentalo de nuevo."
+    );
+    assert.equal(
+      getAuthErrorFeedbackMessage("invalid_auth_callback"),
+      "No se pudo validar el inicio de sesion. Intentalo de nuevo."
+    );
+    assert.equal(
+      getAuthErrorFeedbackMessage("unknown_error"),
+      "No se pudo completar el inicio de sesion."
+    );
   });
 
   await test("api login redirects through the browser when external auth is configured", async () => {
@@ -3450,7 +4094,12 @@ await (async () => {
         async registerWithPassword(payload) {
           registeredPayload = payload;
           state.viewer = { id: "u-new", type: "registered" };
-          return { viewer: state.viewer, selectedTopicId: payload.selectedTopicId, users: [], topics: [] };
+          return {
+            viewer: state.viewer,
+            selectedTopicId: payload.selectedTopicId,
+            users: [],
+            topics: []
+          };
         }
       });
 
@@ -3471,6 +4120,173 @@ await (async () => {
     }
   });
 
+  await test("auth modal shows recovery help after three invalid password attempts", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousConsoleError = console.error;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.textContent = "";
+        this.value = "";
+        this.classList = createClassList();
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        return selector === ".button-label" ? this.label : null;
+      }
+
+      querySelectorAll() {
+        return [];
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {}
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const authStatus = new FakeElement();
+    const authRecoveryHelp = new FakeElement();
+    authRecoveryHelp.hidden = true;
+    const state = {
+      viewer: { id: "guest-invalid-password", type: "guest" },
+      selectedTopicId: "topic-auth"
+    };
+    let loginAttempts = 0;
+
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      openRightDrawer: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      themeToggleDesktopSlot: new FakeElement(),
+      themeToggleMobileSlot: new FakeElement(),
+      themeToggleDrawerSlot: new FakeElement(),
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      messagesButton: new FakeElement(),
+      authButton,
+      authTools: new FakeElement(),
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
+      authStatus,
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
+      authRecoveryHelp,
+      closeAuthModalButton: new FakeElement()
+    };
+    dom.authLoginModeButton.dataset.authMode = "login";
+    dom.authRegisterModeButton.dataset.authMode = "register";
+    dom.authEmailInput.value = "user@example.com";
+    dom.authPasswordInput.value = "wrong-password";
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      console.error = () => {};
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        state,
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {},
+        async getAuthStatus() {
+          return { turnstile: { configured: false, siteKey: null } };
+        },
+        async loginWithPassword() {
+          loginAttempts += 1;
+          const error = new Error("Email o contrasena incorrectos.");
+          error.code = "INVALID_CREDENTIALS";
+          throw error;
+        }
+      });
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        dom.authPasswordForm.dispatch("submit");
+        await flushAsyncEvents();
+        await flushAsyncEvents();
+        assert.equal(authRecoveryHelp.hidden, true);
+      }
+
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(loginAttempts, 3);
+      assert.equal(authRecoveryHelp.hidden, false);
+      assert.match(authStatus.textContent, /enlace de recuperacion/);
+
+      dom.authPasswordInput.dispatch("input");
+      assert.equal(authRecoveryHelp.hidden, true);
+      assert.equal(authStatus.hidden, true);
+    } finally {
+      console.error = previousConsoleError;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
   await test("auth modal lazy-loads Turnstile script only after login interaction", async () => {
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
@@ -3563,59 +4379,62 @@ await (async () => {
         }
       };
 
-      bindTopbarActionEvents({
-        themeToggle: new FakeElement(),
-        refreshButton: new FakeElement(),
-        messageForm: new FakeElement(),
-        profileButton: new FakeElement(),
-        openRightDrawer: new FakeElement(),
-        backToTopics: new FakeElement(),
-        storeButton: new FakeElement(),
-        paletteButton: new FakeElement(),
-        themeToggleDesktopSlot: new FakeElement(),
-        themeToggleMobileSlot: new FakeElement(),
-        themeToggleDrawerSlot: new FakeElement(),
-        closePaletteModalButton: new FakeElement(),
-        paletteModalBackdrop: new FakeElement(),
-        paletteOptionGrid: new FakeElement(),
-        createTopicButton: new FakeElement(),
-        friendRequestsButton: new FakeElement(),
-        notificationsButton: new FakeElement(),
-        messagesButton: new FakeElement(),
-        authButton,
-        authTools: new FakeElement(),
-        authModalBackdrop: new FakeElement(),
-        authModal: new FakeElement(),
-        authGoogleButton: new FakeElement(),
-        authTurnstile,
-        authTurnstileToken: { value: "" },
-        authPasswordForm: new FakeElement(),
-        authLoginModeButton: new FakeElement(),
-        authRegisterModeButton: new FakeElement(),
-        authNicknameInput: new FakeElement(),
-        authEmailInput: new FakeElement(),
-        authPasswordInput: new FakeElement(),
-        authPasswordButton: new FakeElement(),
-        closeAuthModalButton: new FakeElement()
-      }, {
-        toggleTheme() {},
-        refreshCurrentTopic() {},
-        submitMessage() {},
-        flashTitle() {},
-        state: { viewer: { id: "guest-lazy-turnstile", type: "guest" } },
-        async getAuthStatus() {
-          return { turnstile: { configured: true, siteKey: "site-key" } };
+      bindTopbarActionEvents(
+        {
+          themeToggle: new FakeElement(),
+          refreshButton: new FakeElement(),
+          messageForm: new FakeElement(),
+          profileButton: new FakeElement(),
+          openRightDrawer: new FakeElement(),
+          backToTopics: new FakeElement(),
+          storeButton: new FakeElement(),
+          paletteButton: new FakeElement(),
+          themeToggleDesktopSlot: new FakeElement(),
+          themeToggleMobileSlot: new FakeElement(),
+          themeToggleDrawerSlot: new FakeElement(),
+          closePaletteModalButton: new FakeElement(),
+          paletteModalBackdrop: new FakeElement(),
+          paletteOptionGrid: new FakeElement(),
+          createTopicButton: new FakeElement(),
+          friendRequestsButton: new FakeElement(),
+          notificationsButton: new FakeElement(),
+          messagesButton: new FakeElement(),
+          authButton,
+          authTools: new FakeElement(),
+          authModalBackdrop: new FakeElement(),
+          authModal: new FakeElement(),
+          authGoogleButton: new FakeElement(),
+          authTurnstile,
+          authTurnstileToken: { value: "" },
+          authPasswordForm: new FakeElement(),
+          authLoginModeButton: new FakeElement(),
+          authRegisterModeButton: new FakeElement(),
+          authNicknameInput: new FakeElement(),
+          authEmailInput: new FakeElement(),
+          authPasswordInput: new FakeElement(),
+          authPasswordButton: new FakeElement(),
+          closeAuthModalButton: new FakeElement()
         },
-        backToTopics() {},
-        openPaletteModal() {},
-        closePaletteModal() {},
-        updateCustomPaletteHex() {
-          return true;
-        },
-        randomizeCustomPalette() {},
-        selectPalette() {},
-        createNewTopic() {}
-      });
+        {
+          toggleTheme() {},
+          refreshCurrentTopic() {},
+          submitMessage() {},
+          flashTitle() {},
+          state: { viewer: { id: "guest-lazy-turnstile", type: "guest" } },
+          async getAuthStatus() {
+            return { turnstile: { configured: true, siteKey: "site-key" } };
+          },
+          backToTopics() {},
+          openPaletteModal() {},
+          closePaletteModal() {},
+          updateCustomPaletteHex() {
+            return true;
+          },
+          randomizeCustomPalette() {},
+          selectPalette() {},
+          createNewTopic() {}
+        }
+      );
 
       assert.equal(appendedScripts.length, 0);
       assert.equal(renderCalls, 0);
@@ -3626,7 +4445,10 @@ await (async () => {
 
       assert.equal(appendedScripts.length, 1);
       assert.equal(appendedScripts[0].id, "turnstile-script");
-      assert.equal(appendedScripts[0].src, "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit");
+      assert.equal(
+        appendedScripts[0].src,
+        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+      );
       assert.equal(appendedScripts[0].async, true);
       assert.equal(appendedScripts[0].defer, true);
       assert.equal(renderCalls, 1);
@@ -3730,65 +4552,68 @@ await (async () => {
         }
       };
 
-      bindTopbarActionEvents({
-        themeToggle: new FakeElement(),
-        refreshButton: new FakeElement(),
-        messageForm: new FakeElement(),
-        profileButton: new FakeElement(),
-        openRightDrawer: new FakeElement(),
-        backToTopics: new FakeElement(),
-        storeButton: new FakeElement(),
-        paletteButton: new FakeElement(),
-        themeToggleDesktopSlot: new FakeElement(),
-        themeToggleMobileSlot: new FakeElement(),
-        closePaletteModalButton: new FakeElement(),
-        paletteModalBackdrop: new FakeElement(),
-        paletteOptionGrid: new FakeElement(),
-        createTopicButton: new FakeElement(),
-        friendRequestsButton: new FakeElement(),
-        notificationsButton: new FakeElement(),
-        messagesButton: new FakeElement(),
-        authButton,
-        authTools: new FakeElement(),
-        authModalBackdrop: new FakeElement(),
-        authModal: new FakeElement(),
-        authGoogleButton,
-        authTurnstile,
-        authTurnstileToken,
-        authPasswordForm: new FakeElement(),
-      authLoginModeButton: new FakeElement(),
-      authRegisterModeButton: new FakeElement(),
-      authNicknameInput: new FakeElement(),
-      authEmailInput: new FakeElement(),
-      authPasswordInput: new FakeElement(),
-      authPasswordButton: new FakeElement(),
-        closeAuthModalButton: new FakeElement()
-      }, {
-        toggleTheme() {},
-        refreshCurrentTopic() {},
-        submitMessage() {},
-        flashTitle() {},
-        state,
-        async getAuthStatus() {
-          return { configured: true, turnstile: { configured: true, siteKey: "site-key" } };
+      bindTopbarActionEvents(
+        {
+          themeToggle: new FakeElement(),
+          refreshButton: new FakeElement(),
+          messageForm: new FakeElement(),
+          profileButton: new FakeElement(),
+          openRightDrawer: new FakeElement(),
+          backToTopics: new FakeElement(),
+          storeButton: new FakeElement(),
+          paletteButton: new FakeElement(),
+          themeToggleDesktopSlot: new FakeElement(),
+          themeToggleMobileSlot: new FakeElement(),
+          closePaletteModalButton: new FakeElement(),
+          paletteModalBackdrop: new FakeElement(),
+          paletteOptionGrid: new FakeElement(),
+          createTopicButton: new FakeElement(),
+          friendRequestsButton: new FakeElement(),
+          notificationsButton: new FakeElement(),
+          messagesButton: new FakeElement(),
+          authButton,
+          authTools: new FakeElement(),
+          authModalBackdrop: new FakeElement(),
+          authModal: new FakeElement(),
+          authGoogleButton,
+          authTurnstile,
+          authTurnstileToken,
+          authPasswordForm: new FakeElement(),
+          authLoginModeButton: new FakeElement(),
+          authRegisterModeButton: new FakeElement(),
+          authNicknameInput: new FakeElement(),
+          authEmailInput: new FakeElement(),
+          authPasswordInput: new FakeElement(),
+          authPasswordButton: new FakeElement(),
+          closeAuthModalButton: new FakeElement()
         },
-        async login({ turnstileToken = "" } = {}) {
-          loginCalls += 1;
-          receivedTurnstileToken = turnstileToken;
-          state.viewer = { id: "u1", type: "registered" };
-          return { viewer: state.viewer };
-        },
-        async logout() {},
-        backToTopics() {},
-        openPaletteModal() {},
-        closePaletteModal() {},
-        updateCustomPaletteHex() {
-          return true;
-        },
-        randomizeCustomPalette() {},
-        selectPalette() {},
-        createNewTopic() {}
-      });
+        {
+          toggleTheme() {},
+          refreshCurrentTopic() {},
+          submitMessage() {},
+          flashTitle() {},
+          state,
+          async getAuthStatus() {
+            return { configured: true, turnstile: { configured: true, siteKey: "site-key" } };
+          },
+          async login({ turnstileToken = "" } = {}) {
+            loginCalls += 1;
+            receivedTurnstileToken = turnstileToken;
+            state.viewer = { id: "u1", type: "registered" };
+            return { viewer: state.viewer };
+          },
+          async logout() {},
+          backToTopics() {},
+          openPaletteModal() {},
+          closePaletteModal() {},
+          updateCustomPaletteHex() {
+            return true;
+          },
+          randomizeCustomPalette() {},
+          selectPalette() {},
+          createNewTopic() {}
+        }
+      );
 
       authButton.dispatch("click");
       await flushAsyncEvents();
@@ -3938,16 +4763,24 @@ await (async () => {
     const paletteTarget = new FakeElement();
     paletteTarget.dataset.mobileTopbarAction = "palette";
     paletteTarget.textContent = "Paletas";
-    const menuButtons = [menuProfileButton, homeButton, paletteTarget, usersPanelButton, rankingPanelButton, menuAuthButton];
-    mobileTopbarMenu.querySelector = (selector) => (
-      selector === "#mobileDrawerSearch" ? searchInput : null
-    );
-    mobileTopbarMenu.querySelectorAll = (selector) => (
-      selector === "[data-mobile-drawer-panel]" ? [usersPanelButton, rankingPanelButton]
-        : selector === "[data-auth-private]" ? [menuProfileButton, menuAuthButton]
-          : selector === ".drawer-action-button" ? menuButtons
-            : []
-    );
+    const menuButtons = [
+      menuProfileButton,
+      homeButton,
+      paletteTarget,
+      usersPanelButton,
+      rankingPanelButton,
+      menuAuthButton
+    ];
+    mobileTopbarMenu.querySelector = (selector) =>
+      selector === "#mobileDrawerSearch" ? searchInput : null;
+    mobileTopbarMenu.querySelectorAll = (selector) =>
+      selector === "[data-mobile-drawer-panel]"
+        ? [usersPanelButton, rankingPanelButton]
+        : selector === "[data-auth-private]"
+          ? [menuProfileButton, menuAuthButton]
+          : selector === ".drawer-action-button"
+            ? menuButtons
+            : [];
     drawerUsersSection.querySelector = () => backButton;
     drawerRankingsSection.querySelector = () => backButton;
     const flashCalls = [];
@@ -4265,61 +5098,64 @@ await (async () => {
         }
       };
 
-      bindTopbarActionEvents({
-        themeToggle: new FakeElement(),
-        refreshButton: new FakeElement(),
-        messageForm: new FakeElement(),
-        profileButton: new FakeElement(),
-        openRightDrawer: new FakeElement(),
-        backToTopics: new FakeElement(),
-        storeButton: new FakeElement(),
-        paletteButton: new FakeElement(),
-        themeToggleDesktopSlot: new FakeElement(),
-        themeToggleMobileSlot: new FakeElement(),
-        closePaletteModalButton: new FakeElement(),
-        paletteModalBackdrop: new FakeElement(),
-        paletteOptionGrid: new FakeElement(),
-        createTopicButton: new FakeElement(),
-        friendRequestsButton: new FakeElement(),
-        notificationsButton: new FakeElement(),
-        messagesButton: new FakeElement(),
-        authButton,
-        authTools: new FakeElement(),
-        authModalBackdrop: new FakeElement(),
-        authModal: new FakeElement(),
-        authGoogleButton,
-        authTurnstile: new FakeElement(),
-        authTurnstileToken: { value: "" },
-        authPasswordForm: new FakeElement(),
-      authLoginModeButton: new FakeElement(),
-      authRegisterModeButton: new FakeElement(),
-      authNicknameInput: new FakeElement(),
-      authEmailInput: new FakeElement(),
-      authPasswordInput: new FakeElement(),
-      authPasswordButton: new FakeElement(),
-        closeAuthModalButton: new FakeElement()
-      }, {
-        toggleTheme() {},
-        refreshCurrentTopic() {},
-        submitMessage() {},
-        flashTitle(message) {
-          flashCalls.push(message);
+      bindTopbarActionEvents(
+        {
+          themeToggle: new FakeElement(),
+          refreshButton: new FakeElement(),
+          messageForm: new FakeElement(),
+          profileButton: new FakeElement(),
+          openRightDrawer: new FakeElement(),
+          backToTopics: new FakeElement(),
+          storeButton: new FakeElement(),
+          paletteButton: new FakeElement(),
+          themeToggleDesktopSlot: new FakeElement(),
+          themeToggleMobileSlot: new FakeElement(),
+          closePaletteModalButton: new FakeElement(),
+          paletteModalBackdrop: new FakeElement(),
+          paletteOptionGrid: new FakeElement(),
+          createTopicButton: new FakeElement(),
+          friendRequestsButton: new FakeElement(),
+          notificationsButton: new FakeElement(),
+          messagesButton: new FakeElement(),
+          authButton,
+          authTools: new FakeElement(),
+          authModalBackdrop: new FakeElement(),
+          authModal: new FakeElement(),
+          authGoogleButton,
+          authTurnstile: new FakeElement(),
+          authTurnstileToken: { value: "" },
+          authPasswordForm: new FakeElement(),
+          authLoginModeButton: new FakeElement(),
+          authRegisterModeButton: new FakeElement(),
+          authNicknameInput: new FakeElement(),
+          authEmailInput: new FakeElement(),
+          authPasswordInput: new FakeElement(),
+          authPasswordButton: new FakeElement(),
+          closeAuthModalButton: new FakeElement()
         },
-        state,
-        async login() {
-          return { redirected: true };
-        },
-        async logout() {},
-        backToTopics() {},
-        openPaletteModal() {},
-        closePaletteModal() {},
-        updateCustomPaletteHex() {
-          return true;
-        },
-        randomizeCustomPalette() {},
-        selectPalette() {},
-        createNewTopic() {}
-      });
+        {
+          toggleTheme() {},
+          refreshCurrentTopic() {},
+          submitMessage() {},
+          flashTitle(message) {
+            flashCalls.push(message);
+          },
+          state,
+          async login() {
+            return { redirected: true };
+          },
+          async logout() {},
+          backToTopics() {},
+          openPaletteModal() {},
+          closePaletteModal() {},
+          updateCustomPaletteHex() {
+            return true;
+          },
+          randomizeCustomPalette() {},
+          selectPalette() {},
+          createNewTopic() {}
+        }
+      );
 
       authButton.dispatch("click");
       await flushAsyncEvents();
@@ -4433,11 +5269,22 @@ await (async () => {
     const renderUtils = await read("ui/render-utils.js");
     assert.doesNotMatch(renderUtils, /outerHTML/);
     assert.match(renderUtils, /function patchElement\(existing, incoming\)/);
+    assert.match(renderUtils, /shouldPreserveOpenOverlayState/);
+    assert.match(
+      renderUtils,
+      /existing\.dataset\.messageMenu[\s\S]*existing\.dataset\.messageReactionMenu[\s\S]*existing\.dataset\.userMenu/
+    );
     assert.match(renderUtils, /function patchChildren\(existing, incoming\)/);
     const previewServer = await read("services/preview-server.js");
     const backendStore = await read("services/backend-store.js");
-    assert.match(previewServer, /const authLoginResponse = await authService\.createLoginResponse[\s\S]*await authService\.validateTurnstile/);
-    assert.match(previewServer, /if \(authLoginResponse\) \{[\s\S]*sendJson\(res, 200, authLoginResponse\.payload/);
+    assert.match(
+      previewServer,
+      /const authLoginResponse = await authService\.createLoginResponse[\s\S]*await authService\.validateTurnstile/
+    );
+    assert.match(
+      previewServer,
+      /if \(authLoginResponse\) \{[\s\S]*sendJson\(res, 200, authLoginResponse\.payload/
+    );
     assert.match(previewServer, /segments\.some\(\(segment\) => segment\.startsWith\("\."\)\)/);
     assert.match(previewServer, /PUBLIC_SERVICE_MODULES/);
     assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES/);
@@ -4445,11 +5292,18 @@ await (async () => {
     assert.match(previewServer, /segments\[0\] === "services"/);
     assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES\.has\(segments\[0\] \|\| ""\)/);
     assert.match(previewServer, /path\.relative\(root, absolutePath\)/);
-    assert.match(previewServer, /relativePath\.startsWith\("\.\."\) \|\| path\.isAbsolute\(relativePath\)/);
+    assert.match(
+      previewServer,
+      /relativePath\.startsWith\("\.\."\) \|\| path\.isAbsolute\(relativePath\)/
+    );
     assert.match(previewServer, /"X-Content-Type-Options": "nosniff"/);
     assert.match(previewServer, /"X-Frame-Options": "DENY"/);
-    assert.match(previewServer, /"Permissions-Policy": "camera=\(\), microphone=\(\), geolocation=\(\)"/);
+    assert.match(
+      previewServer,
+      /"Permissions-Policy": "camera=\(\), microphone=\(\), geolocation=\(\)"/
+    );
     assert.match(previewServer, /"Content-Security-Policy"/);
+    assert.match(previewServer, /base-uri 'self'/);
     assert.match(previewServer, /frame-ancestors 'none'/);
     assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: false \}\)/);
     assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: extension === "\.html" \}\)/);
@@ -4470,14 +5324,25 @@ await (async () => {
     assert.match(backendStore, /profile_show_description AS profileShowDescription/);
     assert.match(backendStore, /profile_show_joined_at AS profileShowJoinedAt/);
     assert.match(backendStore, /function getFrontendUsers\(db, viewerId, profileUserIds = \[\]\)/);
-    assert.match(backendStore, /users: getFrontendUsers\(db, context\.viewer\.id, profileUserIds\)/);
+    assert.match(
+      backendStore,
+      /users: getFrontendUsers\(db, context\.viewer\.id, profileUserIds\)/
+    );
     assert.match(previewServer, /"Retry-After": String\(result.retryAfterSeconds\)/);
-    assert.match(previewServer, /if \(!enforceHttpRateLimit\(res, httpRateLimitBuckets, req, url, httpRateLimitConfig\)\)/);
-    assert.match(previewServer, /setInterval\(\(\) => runGuestCleanup\(store, log\), guestCleanupIntervalMs\)/);
+    assert.match(
+      previewServer,
+      /if \(!enforceHttpRateLimit\(res, httpRateLimitBuckets, req, url, httpRateLimitConfig\)\)/
+    );
+    assert.match(
+      previewServer,
+      /setInterval\(\(\) => runGuestCleanup\(store, log\), guestCleanupIntervalMs\)/
+    );
     assert.match(previewServer, /clearInterval\(guestCleanupTimer\)/);
     const vercelConfig = await read("vercel.json");
     assert.match(vercelConfig, /"key": "Permissions-Policy"/);
     assert.match(vercelConfig, /"value": "camera=\(\), microphone=\(\), geolocation=\(\)"/);
+    assert.match(vercelConfig, /"key": "Content-Security-Policy"/);
+    assert.match(vercelConfig, /base-uri 'self'/);
     const drawers = await read("ui/drawers.js");
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
@@ -4493,7 +5358,10 @@ await (async () => {
     assert.match(html, /id="topicTitleInput"/);
     assert.match(html, /id="topicTitleInput"[\s\S]*aria-label="Titulo del nuevo tema"/);
     assert.match(html, /id="chatTitle"/);
-    assert.match(html, /class="panel__header-title"[\s\S]*id="backToTopics"[\s\S]*aria-label="Volver a temas"[\s\S]*id="chatTitle"/);
+    assert.match(
+      html,
+      /class="panel__header-title"[\s\S]*id="backToTopics"[\s\S]*aria-label="Volver a temas"[\s\S]*id="chatTitle"/
+    );
     assert.match(html, /id="reportTopicButton"/);
     assert.match(html, /icon-button--refresh/);
     assert.match(html, /id="leftDrawerTopics"/);
@@ -4501,7 +5369,10 @@ await (async () => {
     assert.match(html, /id="backToTopics"/);
     assert.match(html, /placeholder="Escribe aqui\.\.\."/);
     assert.match(html, /id="messageInput"[\s\S]*aria-label="Mensaje del chat"/);
-    assert.match(html, /<button class="primary-button" type="submit" aria-label="Enviar mensaje al chat">/);
+    assert.match(
+      html,
+      /<button class="primary-button" type="submit" aria-label="Enviar mensaje al chat">/
+    );
     assert.match(html, /<p class="panel__kicker">Menú<\/p>/);
     assert.match(html, /id="rankingPrev"/);
     assert.match(html, /id="rankingCurrent"/);
@@ -4521,46 +5392,112 @@ await (async () => {
     assert.match(html, /class="palette-modal__body"/);
     assert.match(html, /id="paletteOptionGrid"/);
     assert.match(html, /id="authGoogleButton"[\s\S]*id="authPasswordForm"/);
+    assert.match(html, /data-auth-mode="register">Crear cuenta<\/button>/);
+    assert.match(html, /Nombre de Usuario[\s\S]*id="authNicknameInput"/);
+    assert.match(html, /Email[\s\S]*id="authEmailInput"[\s\S]*required/);
+    assert.match(html, /Contraseña[\s\S]*id="authPasswordInput"[\s\S]*required/);
+    assert.match(html, /class="auth-field-error-marker"[\s\S]*>\*<\/span>/);
+    assert.doesNotMatch(html, /id="auth(?:Nickname|Email|Password)Input"[^>]*placeholder=/);
     assert.match(html, /<h2 class="profile-modal__title">Perfil<\/h2>/);
-    assert.match(html, /<meta name="description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil\." \/>/);
-    assert.match(html, /id="profileNameSection"[\s\S]*data-editing="false"[\s\S]*id="profileAvatarPreview"/);
-    assert.match(html, /id="profileNameEditButton"[\s\S]*aria-label="Editar nombre visible"[\s\S]*data-profile-section-edit="name"/);
+    assert.match(
+      html,
+      /<meta name="description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil\." \/>/
+    );
+    assert.match(
+      html,
+      /id="profileNameSection"[\s\S]*data-editing="false"[\s\S]*id="profileAvatarPreview"/
+    );
+    assert.match(
+      html,
+      /id="profileNameEditButton"[\s\S]*aria-label="Editar nombre visible"[\s\S]*data-profile-section-edit="name"/
+    );
     assert.match(html, /id="profileNameFeedback"/);
     assert.match(html, /id="profileNameInput"[\s\S]*readonly/);
-    assert.match(html, /id="profileDescriptionEditButton"[\s\S]*aria-label="Editar descripción"[\s\S]*data-profile-section-edit="description"/);
+    assert.match(
+      html,
+      /id="profileDescriptionEditButton"[\s\S]*aria-label="Editar descripción"[\s\S]*data-profile-section-edit="description"/
+    );
     assert.match(html, /id="profileDescriptionInput"[\s\S]*maxlength="180"[\s\S]*readonly/);
     assert.doesNotMatch(html, /id="profileDescriptionInput"[\s\S]*rows=/);
     assert.match(html, /id="profileAvatarPreview"[\s\S]*aria-label="Cambiar avatar"/);
-    assert.match(html, /<img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" width="320" height="320" \/>/);
+    assert.match(
+      html,
+      /<img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" width="320" height="320" \/>[\s\S]*<span class="profile-avatar-crop__window" aria-hidden="true"><\/span>/
+    );
     assert.match(html, /id="profileJoinedAtText"/);
-    assert.match(html, /id="profileJoinedAtVisibilityButton"[\s\S]*data-profile-visibility="joinedAt"/);
-    assert.match(html, /id="profileDescriptionVisibilityButton"[\s\S]*data-profile-visibility="description"/);
+    assert.match(
+      html,
+      /id="profileJoinedAtVisibilityButton"[\s\S]*data-profile-visibility="joinedAt"/
+    );
+    assert.match(
+      html,
+      /id="profileDescriptionVisibilityButton"[\s\S]*data-profile-visibility="description"/
+    );
     assert.match(html, /id="profileAvatarPickButton"[\s\S]*Elegir avatar/);
-    assert.doesNotMatch(html, /Foto de perfil|Elegir foto|<span>Avatar<\/span>|id="profileAvatarEditButton"/);
+    assert.doesNotMatch(
+      html,
+      /Foto de perfil|Elegir foto|<span>Avatar<\/span>|id="profileAvatarEditButton"/
+    );
     assert.match(html, /id="skipProfileButton"[\s\S]*>Cancelar<\/button>/);
-    assert.doesNotMatch(html, /Puedes completar esto ahora|Quitar seleccion|id="profileAvatarClearButton"/);
+    assert.doesNotMatch(
+      html,
+      /Puedes completar esto ahora|Quitar seleccion|id="profileAvatarClearButton"/
+    );
     assert.doesNotMatch(html, /id="paletteModalTitle"/);
-    assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/);
-    assert.match(html, /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/);
+    assert.match(
+      html,
+      /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/
+    );
+    assert.match(
+      html,
+      /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/
+    );
     assert.doesNotMatch(html, /challenges\.cloudflare\.com\/turnstile\/v0\/api\.js/);
-    assert.match(html, /integrity="sha384-DY3umZptOgjUNshBFbvu1\+3RVFPoD1\/CgGcc1yyJ77\/aFOJ7jtN4BORnz\/D\/xF0n"/);
-    assert.match(html, /integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmXNaoRDWmHnRTutomMnUySX9hqDgVQVcvMdc"/);
+    assert.match(
+      html,
+      /integrity="sha384-DY3umZptOgjUNshBFbvu1\+3RVFPoD1\/CgGcc1yyJ77\/aFOJ7jtN4BORnz\/D\/xF0n"/
+    );
+    assert.match(
+      html,
+      /integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmXNaoRDWmHnRTutomMnUySX9hqDgVQVcvMdc"/
+    );
     assert.match(html, /crossorigin="anonymous"/);
-    assert.match(html, /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/);
-    assert.match(html, /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/);
+    assert.match(
+      html,
+      /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/
+    );
+    assert.match(
+      html,
+      /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/
+    );
     assert.match(html, /const authState = "logged-out";/);
     assert.match(html, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(html, /document\.documentElement\.dataset\.authState = authState/);
-    assert.match(html, /document\.documentElement\.classList\.toggle\("is-mobile-viewport", mobile\)/);
-    assert.match(html, /document\.documentElement\.classList\.toggle\("is-desktop-viewport", !mobile\)/);
-    assert.match(styles, /html\[data-auth-state="logged-out"\] \[data-auth-private\]\s*\{[\s\S]*display:\s*none !important;/);
+    assert.match(
+      html,
+      /document\.documentElement\.classList\.toggle\("is-mobile-viewport", mobile\)/
+    );
+    assert.match(
+      html,
+      /document\.documentElement\.classList\.toggle\("is-desktop-viewport", !mobile\)/
+    );
+    assert.match(
+      styles,
+      /html\[data-auth-state="logged-out"\] \[data-auth-private\]\s*\{[\s\S]*display:\s*none !important;/
+    );
     assert.match(html, /id="authGoogleButton"[\s\S]*id="authTurnstile"/);
     assert.doesNotMatch(html, /Resend|Google ya esta disponible|auth-modal__note/);
     assert.match(html, /id="authTools"[\s\S]*hidden/);
     assert.match(html, /data-auth-private/);
     assert.match(html, /id="mobileTopbarMenu"/);
-    assert.match(html, /data-mobile-topbar-action="profile"[\s\S]*class="drawer-action-button__label">Perfil/);
-    assert.match(html, /data-mobile-topbar-action="home"[\s\S]*class="drawer-action-button__label">Inicio/);
+    assert.match(
+      html,
+      /data-mobile-topbar-action="profile"[\s\S]*class="drawer-action-button__label">Perfil/
+    );
+    assert.match(
+      html,
+      /data-mobile-topbar-action="home"[\s\S]*class="drawer-action-button__label">Inicio/
+    );
     assert.match(html, /class="drawer-action-button__icon"/);
     assert.match(html, /id="mobileDrawerSearch"[\s\S]*type="text"/);
     assert.match(html, /id="mobileDrawerPanels" hidden/);
@@ -4568,8 +5505,14 @@ await (async () => {
     assert.match(html, /id="themeToggleMobileSlot"/);
     assert.match(html, /id="themeToggleTemplate"/);
     assert.match(html, /id="paletteButton"[\s\S]*id="themeToggleDesktopSlot"/);
-    assert.match(html, /data-mobile-topbar-action="palette"[\s\S]*data-mobile-topbar-action="store"[\s\S]*class="drawer-action-button__label">Tienda/);
-    assert.match(html, /id="themeToggleMobileSlot"[\s\S]*class="drawer-theme-slot"[\s\S]*id="themeToggleDrawerSlot"/);
+    assert.match(
+      html,
+      /data-mobile-topbar-action="palette"[\s\S]*data-mobile-topbar-action="store"[\s\S]*class="drawer-action-button__label">Tienda/
+    );
+    assert.match(
+      html,
+      /id="themeToggleMobileSlot"[\s\S]*class="drawer-theme-slot"[\s\S]*id="themeToggleDrawerSlot"/
+    );
     assert.match(html, /id="profileButton"[\s\S]*class="profile-button__avatar"/);
     assert.match(html, /id="publicProfileModalBackdrop"/);
     assert.match(html, /public-profile-modal__description-label">DESCRIPCIÓN<\/p>/);
@@ -4602,269 +5545,1005 @@ await (async () => {
     assert.match(html, /<h3>Usuarios conectados<\/h3>/);
     assert.match(html, /<h3 id="rankingsTitle">Ranking<\/h3>/);
     assert.match(html, /<h3 id="drawerRankingsTitle">Ranking<\/h3>/);
-    assert.doesNotMatch(html, /createTopicForm|mobileCreateTopicForm|Nuevo tema|Ordenados por presencia/);
+    assert.doesNotMatch(
+      html,
+      /createTopicForm|mobileCreateTopicForm|Nuevo tema|Ordenados por presencia/
+    );
     assert.match(data, /"Caf\u00e9 de madrugada"/);
     assert.match(data, /"Moderaci\u00f3n"/);
-    assert.match(styles, /\.topic-item__title,\s*\.topic-item__meta\s*\{[\s\S]*text-overflow:\s*ellipsis;/);
+    assert.match(
+      styles,
+      /\.topic-item__title,\s*\.topic-item__meta\s*\{[\s\S]*text-overflow:\s*ellipsis;/
+    );
     assert.match(styles, /\.topic-item\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
-    assert.match(styles, /\.workspace\s*\{[\s\S]*grid-template-columns:\s*minmax\(275px,\s*1fr\)\s*minmax\(0,\s*1\.78fr\)\s*minmax\(275px,\s*1fr\);/);
+    assert.match(
+      styles,
+      /\.workspace\s*\{[\s\S]*grid-template-columns:\s*minmax\(275px,\s*1fr\)\s*minmax\(0,\s*1\.78fr\)\s*minmax\(275px,\s*1fr\);/
+    );
     assert.match(styles, /\.topbar__auth-tools\[hidden\]\s*\{[\s\S]*display:\s*none;/);
-    assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-item__title\s*\{[\s\S]*font-size:\s*0\.98rem;/);
+    assert.match(
+      styles,
+      /html\.is-desktop-viewport \.panel--topics \.topic-item__title\s*\{[\s\S]*font-size:\s*0\.98rem;/
+    );
     assert.match(styles, /\.brand-mark__icon\s*\{[\s\S]*color:\s*var\(--accent\);/);
     assert.match(styles, /\.brand-mark__icon-base\s*\{[\s\S]*fill:\s*currentColor;/);
-    assert.match(styles, /\.brand-mark__icon-stroke\s*\{[\s\S]*stroke:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /:root\s*\{[\s\S]*--ranking-badge-border:\s*color-mix\(in srgb,\s*#f2b97a 62%,\s*var\(--line\)\);/);
+    assert.match(
+      styles,
+      /\.brand-mark__icon-stroke\s*\{[\s\S]*stroke:\s*var\(--button-fill-text\);/
+    );
+    assert.match(
+      styles,
+      /:root\s*\{[\s\S]*--ranking-badge-border:\s*color-mix\(in srgb,\s*#f2b97a 62%,\s*var\(--line\)\);/
+    );
     assert.match(styles, /:root\s*\{[\s\S]*--button-fill-bg:\s*var\(--accent-strong\);/);
     assert.match(styles, /html\[data-theme="light"\]\[data-palette="coast"\]\s*\{/);
-    assert.match(styles, /html\[data-theme="light"\]\[data-palette="coast"\]\s*\{[\s\S]*--surface:\s*rgba\(205,\s*228,\s*232,\s*0\.86\);[\s\S]*--surface-strong:\s*rgba\(197,\s*221,\s*226,\s*0\.95\);/);
-    assert.match(styles, /\.panel__header-title\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*gap:\s*10px;[\s\S]*min-width:\s*0;/);
+    assert.match(
+      styles,
+      /html\[data-theme="light"\]\[data-palette="coast"\]\s*\{[\s\S]*--surface:\s*rgba\(205,\s*228,\s*232,\s*0\.86\);[\s\S]*--surface-strong:\s*rgba\(197,\s*221,\s*226,\s*0\.95\);/
+    );
+    assert.match(
+      styles,
+      /\.panel__header-title\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*gap:\s*10px;[\s\S]*min-width:\s*0;/
+    );
     assert.match(styles, /\.chat-header__back\s*\{[\s\S]*display:\s*none;[\s\S]*flex:\s*none;/);
-    assert.match(styles, /\.palette-modal-backdrop\s*\{[\s\S]*position:\s*fixed;[\s\S]*z-index:\s*40;/);
+    assert.match(
+      styles,
+      /\.palette-modal-backdrop\s*\{[\s\S]*position:\s*fixed;[\s\S]*z-index:\s*40;/
+    );
     assert.match(styles, /\.palette-modal__header\s*\{[\s\S]*justify-content:\s*flex-end;/);
-    assert.match(styles, /\.palette-modal\s*\{[\s\S]*position:\s*relative;[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[\s\S]*overflow:\s*hidden;/);
-    assert.match(styles, /\.palette-modal__body\s*\{[\s\S]*overflow:\s*auto;[\s\S]*padding-right:\s*4px;/);
-    assert.match(styles, /\.palette-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
-    assert.match(styles, /\.palette-grid__featured\s*\{[\s\S]*grid-column:\s*1 \/ -1;[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
-    assert.match(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
-    assert.match(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid__featured\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
-    assert.doesNotMatch(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid\s*\{[\s\S]*overflow-x:\s*auto;/);
-    assert.doesNotMatch(styles, /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-modal__body::before,/);
-    assert.match(styles, /\.palette-option\s*\{[\s\S]*padding:\s*12px;[\s\S]*border-radius:\s*14px;[\s\S]*transition:\s*[\s\S]*border-color 180ms ease,[\s\S]*background-color 180ms ease,[\s\S]*box-shadow 180ms ease;/);
-    assert.match(styles, /\.palette-option:hover,\s*\.palette-option:focus-visible\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 72%,\s*var\(--line\)\);[\s\S]*box-shadow:/);
-    assert.doesNotMatch(styles, /\.palette-option:hover,\s*\.palette-option:focus-visible\s*\{[^}]*transform:/);
-    assert.match(styles, /\.palette-option\.is-active\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 88%,\s*var\(--line\)\);[\s\S]*box-shadow:/);
+    assert.match(
+      styles,
+      /\.palette-modal\s*\{[\s\S]*position:\s*relative;[\s\S]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);[\s\S]*overflow:\s*hidden;/
+    );
+    assert.match(
+      styles,
+      /\.palette-modal__body\s*\{[\s\S]*overflow:\s*auto;[\s\S]*padding-right:\s*4px;/
+    );
+    assert.match(
+      styles,
+      /\.palette-grid\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/
+    );
+    assert.match(
+      styles,
+      /\.palette-grid__featured\s*\{[\s\S]*grid-column:\s*1 \/ -1;[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid\s*\{[\s\S]*grid-template-columns:\s*1fr;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid__featured\s*\{[\s\S]*grid-template-columns:\s*1fr;/
+    );
+    assert.match(
+      styles,
+      /@media \(min-width:\s*320px\) and \(max-width:\s*375px\)\s*\{[\s\S]*\.palette-modal\s*\{[\s\S]*max-width:\s*280px;/
+    );
+    assert.doesNotMatch(
+      styles,
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-grid\s*\{[\s\S]*overflow-x:\s*auto;/
+    );
+    assert.doesNotMatch(
+      styles,
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*\.palette-modal__body::before,/
+    );
+    assert.match(
+      styles,
+      /\.palette-option\s*\{[\s\S]*padding:\s*12px;[\s\S]*border-radius:\s*14px;[\s\S]*transition:\s*[\s\S]*border-color 180ms ease,[\s\S]*background-color 180ms ease,[\s\S]*box-shadow 180ms ease;/
+    );
+    assert.match(
+      styles,
+      /\.palette-option:hover,\s*\.palette-option:focus-visible\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 72%,\s*var\(--line\)\);[\s\S]*box-shadow:/
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.palette-option:hover,\s*\.palette-option:focus-visible\s*\{[^}]*transform:/
+    );
+    assert.match(
+      styles,
+      /\.palette-option\.is-active\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 88%,\s*var\(--line\)\);[\s\S]*box-shadow:/
+    );
     assert.match(styles, /\.palette-option--action\s*\{[\s\S]*place-content:\s*center;/);
-    assert.match(styles, /\.palette-option__controls\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\);/);
-    assert.match(styles, /\.palette-option--custom \.palette-option__modes\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
-    assert.match(styles, /\.palette-option__sample-layout\s*\{[\s\S]*grid-template-columns:\s*0\.85fr 1\.2fr 0\.9fr;/);
+    assert.match(
+      styles,
+      /\.palette-option__controls\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\);/
+    );
+    assert.match(
+      styles,
+      /\.palette-option--custom \.palette-option__modes\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/
+    );
+    assert.match(
+      styles,
+      /\.palette-option__sample-layout\s*\{[\s\S]*grid-template-columns:\s*0\.85fr 1\.2fr 0\.9fr;/
+    );
     assert.match(styles, /\.palette-option__sample-bubble--accent\s*\{/);
     assert.match(styles, /\.palette-option__color-preview\s*\{/);
-    assert.match(styles, /\.palette-option__color-preview:hover,\s*\.palette-option__color-preview:focus-visible,\s*\.palette-option__color-preview:focus-within\s*\{[\s\S]*box-shadow:/);
-    assert.match(styles, /\.palette-option__color-swatch\s*\{[\s\S]*var\(--palette-custom-preview\)/);
-    assert.match(styles, /\.palette-option__color-picker-input\s*\{[\s\S]*position:\s*absolute;[\s\S]*opacity:\s*0;/);
+    assert.match(
+      styles,
+      /\.palette-option__color-preview:hover,\s*\.palette-option__color-preview:focus-visible,\s*\.palette-option__color-preview:focus-within\s*\{[\s\S]*box-shadow:/
+    );
+    assert.match(
+      styles,
+      /\.palette-option__color-swatch\s*\{[\s\S]*var\(--palette-custom-preview\)/
+    );
+    assert.match(
+      styles,
+      /\.palette-option__color-picker-input\s*\{[\s\S]*position:\s*absolute;[\s\S]*opacity:\s*0;/
+    );
     assert.match(styles, /\.clr-clear\s*\{[\s\S]*display:\s*none !important;/);
-    assert.match(styles, /\.clr-picker\s*\{[\s\S]*grid-template-areas:\s*[\s\S]*"actions actions";/);
-    assert.match(styles, /\.palette-picker__actions\s*\{[\s\S]*grid-template-columns:\s*1fr;[\s\S]*align-items:\s*stretch;/);
-    assert.match(styles, /\.palette-picker__dismiss-button,\s*\.palette-picker__actions \.clr-close\s*\{[\s\S]*min-height:\s*40px;/);
-    assert.match(styles, /\.palette-picker__actions \.clr-close\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);/);
+    assert.match(
+      styles,
+      /\.clr-picker\s*\{[\s\S]*grid-template-areas:\s*[\s\S]*"actions actions";/
+    );
+    assert.match(
+      styles,
+      /\.palette-picker__actions\s*\{[\s\S]*grid-template-columns:\s*1fr;[\s\S]*align-items:\s*stretch;/
+    );
+    assert.match(
+      styles,
+      /\.palette-picker__dismiss-button,\s*\.palette-picker__actions \.clr-close\s*\{[\s\S]*min-height:\s*40px;/
+    );
+    assert.match(
+      styles,
+      /\.palette-picker__actions \.clr-close\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);/
+    );
     assert.match(styles, /\.palette-option__hex-label\s*\{/);
     assert.match(styles, /\.palette-option__hex-input\s*\{[\s\S]*text-transform:\s*uppercase;/);
     assert.match(styles, /\.palette-option__sample-surface\s*\{[\s\S]*min-height:\s*68px;/);
-    assert.match(styles, /--palette-modal-scrollbar-thumb:\s*color-mix\(in srgb,\s*var\(--accent\) 74%,\s*var\(--bg\) 26%\);/);
-    assert.match(styles, /\.palette-modal__body::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--palette-modal-scrollbar-thumb\);/);
-    assert.match(styles, /html\[data-custom-picker-open="false"\] \.clr-picker\s*\{[\s\S]*display:\s*none !important;/);
-    assert.match(styles, /html\[data-theme="dark"\]\s*\{[\s\S]*--ranking-badge-border:\s*color-mix\(in srgb,\s*#f2b97a 62%,\s*var\(--line\)\);/);
-    assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton,\s*[\s\S]*#themeToggle,\s*[\s\S]*#paletteButton,\s*[\s\S]*#contactAdminButton\s*\{[\s\S]*color:\s*#000;/);
-    assert.match(styles, /#profileButton\s*\{[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*0 14px 0 0;[\s\S]*gap:\s*0;[\s\S]*border-radius:\s*0;/);
-    assert.match(styles, /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/);
-    assert.match(styles, /\.profile-button__avatar\s*\{[\s\S]*width:\s*42px;[\s\S]*height:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/);
+    assert.match(
+      styles,
+      /--palette-modal-scrollbar-thumb:\s*color-mix\(in srgb,\s*var\(--accent\) 74%,\s*var\(--bg\) 26%\);/
+    );
+    assert.match(
+      styles,
+      /\.palette-modal__body::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--palette-modal-scrollbar-thumb\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-custom-picker-open="false"\] \.clr-picker\s*\{[\s\S]*display:\s*none !important;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="dark"\]\s*\{[\s\S]*--ranking-badge-border:\s*color-mix\(in srgb,\s*#f2b97a 62%,\s*var\(--line\)\);/
+    );
+    assert.match(
+      styles,
+      /html:not\(\[data-theme="dark"\]\) #profileButton,\s*[\s\S]*#themeToggle,\s*[\s\S]*#paletteButton,\s*[\s\S]*#contactAdminButton\s*\{[\s\S]*color:\s*#000;/
+    );
+    assert.match(
+      styles,
+      /#profileButton\s*\{[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*0 14px 0 0;[\s\S]*gap:\s*0;[\s\S]*border-radius:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html:not\(\[data-theme="dark"\]\) #profileButton \.button-label,\s*[\s\S]*#paletteButton \.theme-toggle__label,\s*[\s\S]*#contactAdminButton \.button-label\s*\{[\s\S]*color:\s*#000;/
+    );
+    assert.match(
+      styles,
+      /\.profile-button__avatar\s*\{[\s\S]*width:\s*42px;[\s\S]*height:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/
+    );
     assert.match(styles, /\.profile-modal\s*\{[\s\S]*width:\s*min\(920px,\s*100%\);/);
-    assert.match(styles, /\.profile-modal\s*\{[\s\S]*scrollbar-gutter:\s*stable;[\s\S]*scrollbar-color:\s*var\(--profile-modal-scrollbar-thumb\) var\(--profile-modal-scrollbar-track\);/);
-    assert.match(styles, /\.profile-modal::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--profile-modal-scrollbar-thumb\);[\s\S]*border:\s*3px solid var\(--profile-modal-scrollbar-track\);[\s\S]*border-radius:\s*999px;/);
+    assert.match(
+      styles,
+      /\.profile-modal\s*\{[\s\S]*scrollbar-gutter:\s*stable;[\s\S]*scrollbar-color:\s*var\(--profile-modal-scrollbar-thumb\) var\(--profile-modal-scrollbar-track\);/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal::-webkit-scrollbar-thumb\s*\{[\s\S]*border:\s*3px solid var\(--profile-modal-scrollbar-track\);[\s\S]*border-radius:\s*999px;[\s\S]*background:\s*var\(--profile-modal-scrollbar-thumb\);/
+    );
     assert.match(styles, /\.profile-modal__header\s*\{[\s\S]*padding:\s*16px 24px 14px;/);
     assert.match(styles, /\.profile-modal__title\s*\{[\s\S]*font-size:\s*1\.45rem;/);
     assert.match(styles, /\.profile-modal__actions\s*\{[\s\S]*padding:\s*11px 24px;/);
-    assert.match(styles, /\.profile-modal__actions \.primary-button,[\s\S]*\.profile-modal__actions \.text-button\s*\{[\s\S]*min-height:\s*38px;/);
-    assert.match(styles, /\.profile-modal__body\s*\{[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/);
-    assert.match(styles, /\.profile-modal__preview\s*\{[\s\S]*grid-row:\s*2;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/);
+    assert.match(
+      styles,
+      /\.profile-modal__actions \.primary-button,[\s\S]*\.profile-modal__actions \.text-button\s*\{[\s\S]*min-height:\s*38px;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__body\s*\{[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__preview\s*\{[\s\S]*grid-row:\s*2;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/
+    );
     assert.match(styles, /\.profile-modal__field--name\s*\{[\s\S]*grid-row:\s*1;/);
-    assert.match(styles, /\.profile-modal__field--avatar\s*\{[\s\S]*grid-row:\s*4;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/);
-    assert.match(styles, /\.profile-modal__joined\s*\{[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/);
-    assert.match(styles, /\.profile-modal__visibility-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/);
-    assert.match(styles, /\.profile-modal__field--description\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 4;/);
-    assert.match(styles, /\.profile-modal__field input,\s*\.profile-modal__field textarea\s*\{[\s\S]*max-width:\s*100%;[\s\S]*overflow-x:\s*hidden;/);
-    assert.match(styles, /\.profile-modal__field textarea,\s*\.public-profile-modal__description\s*\{[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*word-break:\s*break-word;/);
-    assert.match(styles, /\.profile-modal__field--description textarea\s*\{[\s\S]*height:\s*100%;[\s\S]*max-height:\s*none;/);
-    assert.match(styles, /\.profile-modal__field-heading\s*\{[\s\S]*justify-content:\s*space-between;/);
-    assert.match(styles, /\.profile-modal__edit-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/);
-    assert.match(styles, /\.profile-modal__edit-button:hover,[\s\S]*\.profile-modal__edit-button:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--accent-soft\) 38%, var\(--surface-strong\)\);/);
-    assert.match(styles, /\.profile-modal__field\.is-editing \.profile-modal__edit-button\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--accent\) 34%, var\(--surface-strong\)\);[\s\S]*color:\s*var\(--accent-strong\);/);
+    assert.match(
+      styles,
+      /\.profile-modal__field--avatar\s*\{[\s\S]*grid-row:\s*4;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__joined\s*\{[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__visibility-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__field--description\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 4;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__field input,\s*\.profile-modal__field textarea\s*\{[\s\S]*max-width:\s*100%;[\s\S]*overflow-x:\s*hidden;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__field textarea,\s*\.public-profile-modal__description\s*\{[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*word-break:\s*break-word;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__field--description textarea\s*\{[\s\S]*height:\s*100%;[\s\S]*max-height:\s*none;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__field-heading\s*\{[\s\S]*justify-content:\s*space-between;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__edit-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__edit-button:hover,[\s\S]*\.profile-modal__edit-button:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--accent-soft\) 38%, var\(--surface-strong\)\);/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__field\.is-editing \.profile-modal__edit-button\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--accent\) 34%, var\(--surface-strong\)\);[\s\S]*color:\s*var\(--accent-strong\);/
+    );
     assert.match(styles, /\.profile-modal__edit-button:active\s*\{[\s\S]*transform:\s*none;/);
-    assert.match(styles, /\.profile-modal__edit-button--inside:active\s*\{[\s\S]*transform:\s*translateY\(-50%\);/);
+    assert.match(
+      styles,
+      /\.profile-modal__edit-button--inside:active\s*\{[\s\S]*transform:\s*translateY\(-50%\);/
+    );
     assert.match(styles, /\.profile-modal__input-shell\s*\{[\s\S]*position:\s*relative;/);
     assert.match(styles, /\.profile-modal__edit-button--inside\s*\{[\s\S]*right:\s*6px;/);
-    assert.match(styles, /\.profile-modal__file-button\s*\{[\s\S]*justify-content:\s*center;[\s\S]*background:\s*color-mix\(in srgb, var\(--accent-soft\) 72%, var\(--surface-strong\)\);/);
-    assert.match(styles, /\.profile-modal__edit-button svg\s*\{[\s\S]*fill:\s*none;[\s\S]*stroke:\s*currentColor;[\s\S]*stroke-width:\s*2;/);
+    assert.match(
+      styles,
+      /\.profile-modal__file-button\s*\{[\s\S]*justify-content:\s*center;[\s\S]*background:\s*color-mix\(in srgb, var\(--accent-soft\) 72%, var\(--surface-strong\)\);/
+    );
+    assert.match(
+      styles,
+      /\.profile-modal__edit-button svg\s*\{[\s\S]*fill:\s*none;[\s\S]*stroke:\s*currentColor;[\s\S]*stroke-width:\s*2;/
+    );
     assert.match(styles, /@media \(max-width:\s*920px\)/);
-    assert.match(styles, /\.profile-avatar-crop-backdrop\s*\{[\s\S]*z-index:\s*95;[\s\S]*backdrop-filter:\s*blur\(8px\);/);
-    assert.match(styles, /\.profile-avatar-crop__frame\s*\{[\s\S]*aspect-ratio:\s*1;[\s\S]*touch-action:\s*none;/);
-    assert.match(styles, /\.public-profile-modal-backdrop\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--bg\) 12%, transparent\);[\s\S]*backdrop-filter:\s*blur\(5px\);/);
+    assert.match(
+      styles,
+      /\.profile-avatar-crop-backdrop\s*\{[\s\S]*z-index:\s*95;[\s\S]*backdrop-filter:\s*blur\(8px\);/
+    );
+    assert.match(
+      styles,
+      /\.profile-avatar-crop__frame\s*\{[\s\S]*--profile-avatar-crop-window-size:[\s\S]*aspect-ratio:\s*1;[\s\S]*touch-action:\s*none;/
+    );
+    assert.match(
+      styles,
+      /\.profile-avatar-crop__window\s*\{[\s\S]*width:\s*var\(--profile-avatar-crop-window-size\);[\s\S]*box-shadow:/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal-backdrop\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--bg\) 12%, transparent\);[\s\S]*backdrop-filter:\s*blur\(5px\);/
+    );
     assert.match(styles, /\.public-profile-modal\s*\{[\s\S]*background:\s*var\(--bg\);/);
-    assert.match(styles, /\.public-profile-modal \.profile-modal__header,[\s\S]*\.public-profile-modal \.public-profile-modal__actions\s*\{[\s\S]*background:\s*var\(--bg\);/);
-    assert.match(styles, /\.public-profile-modal__body\s*\{[\s\S]*grid-template-columns:\s*minmax\(220px, 260px\) minmax\(0, 1fr\);[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/);
-    assert.match(styles, /\.public-profile-modal__avatar\s*\{[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*image-rendering:\s*auto;/);
-    assert.match(styles, /\.public-profile-modal__meta\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 3;[\s\S]*grid-template-rows:\s*auto minmax\(0, 1fr\);/);
-    assert.match(styles, /\.public-profile-modal__description-label\s*\{[\s\S]*border-bottom:\s*0;[\s\S]*font-weight:\s*950;[\s\S]*text-align:\s*center;/);
-    assert.match(styles, /\.public-profile-modal__description\s*\{[\s\S]*min-height:\s*100%;[\s\S]*height:\s*100%;[\s\S]*border:\s*1px solid var\(--line-strong\);[\s\S]*border-radius:\s*0 0 8px 8px;/);
-    assert.match(styles, /\.public-profile-modal__joined\s*\{[\s\S]*grid-template-columns:\s*repeat\(3, 1fr\);[\s\S]*overflow:\s*hidden;[\s\S]*border:\s*1px solid/);
-    assert.match(styles, /\.public-profile-modal__joined span \+ span\s*\{[\s\S]*border-left:\s*1px solid/);
-    assert.match(styles, /\.public-profile-modal__cafes\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*align-self:\s*stretch;/);
-    assert.match(styles, /\.public-profile-modal__cafes ul\s*\{[\s\S]*grid-template-rows:\s*repeat\(3, minmax\(0, 1fr\)\);/);
-    assert.match(styles, /\.public-profile-modal__cafes li\s*\{[\s\S]*display:\s*flex;[\s\S]*text-overflow:\s*ellipsis;/);
-    assert.match(styles, /\.public-profile-modal__actions\s*\{[\s\S]*margin:\s*8px -28px -28px;[\s\S]*padding:\s*11px 24px;/);
-    assert.match(styles, /html\[data-theme\] \.topic-item:hover,[\s\S]*html\[data-theme\] #topicList \.topic-item:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 86%,\s*var\(--accent\) 14%\);/);
-    assert.match(styles, /html\[data-theme\] \.topic-item\.is-active,[\s\S]*html\[data-theme\] #topicList \.topic-item\.is-active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 76%,\s*var\(--accent\) 24%\);/);
-    assert.match(styles, /html\[data-theme\] \.topic-item\.is-active:hover,[\s\S]*html\[data-theme\] #topicList \.topic-item\.is-active:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 70%,\s*var\(--accent\) 30%\);/);
-    assert.doesNotMatch(styles, /#(?:efd8c7|e5bfa7|2a201d|252b33|1f3035|263020|342421|252d3d)/i);    assert.match(styles, /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/);
-    assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-item__avatar\s*\{[\s\S]*width:\s*76px;[\s\S]*height:\s*76px;/);
-    assert.match(styles, /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/);
-    assert.match(styles, /@media \(max-width:\s*319px\)\s*\{[\s\S]*\.auth-modal-backdrop\s*\{[\s\S]*padding:\s*8px;[\s\S]*\.auth-modal__body\s*\{[\s\S]*padding:\s*10px 12px;[\s\S]*\.auth-email-form__field input,\s*\.auth-email-submit\s*\{[\s\S]*min-height:\s*40px;/);
-    assert.match(styles, /\.theme-toggle-slot\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;/);
+    assert.match(
+      styles,
+      /\.public-profile-modal \.profile-modal__header,[\s\S]*\.public-profile-modal \.public-profile-modal__actions\s*\{[\s\S]*background:\s*var\(--bg\);/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__body\s*\{[\s\S]*grid-template-columns:\s*minmax\(220px, 260px\) minmax\(0, 1fr\);[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__avatar\s*\{[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*image-rendering:\s*auto;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__meta\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 3;[\s\S]*grid-template-rows:\s*auto minmax\(0, 1fr\);/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__description-label\s*\{[\s\S]*border-bottom:\s*0;[\s\S]*font-weight:\s*950;[\s\S]*text-align:\s*center;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__description\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*100%;[\s\S]*border:\s*1px solid var\(--line-strong\);[\s\S]*border-radius:\s*0 0 8px 8px;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__joined\s*\{[\s\S]*grid-template-columns:\s*repeat\(3, 1fr\);[\s\S]*overflow:\s*hidden;[\s\S]*border:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__joined span \+ span\s*\{[\s\S]*border-left:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__cafes\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*align-self:\s*stretch;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__cafes ul\s*\{[\s\S]*grid-template-rows:\s*repeat\(3, minmax\(0, 1fr\)\);/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__cafes li\s*\{[\s\S]*display:\s*flex;[\s\S]*text-overflow:\s*ellipsis;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__actions\s*\{[\s\S]*margin:\s*8px -28px -28px;[\s\S]*padding:\s*11px 24px;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme\] \.topic-item:hover,[\s\S]*html\[data-theme\] #topicList \.topic-item:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 86%,\s*var\(--accent\) 14%\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme\] \.topic-item\.is-active,[\s\S]*html\[data-theme\] #topicList \.topic-item\.is-active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 76%,\s*var\(--accent\) 24%\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme\] \.topic-item\.is-active:hover,[\s\S]*html\[data-theme\] #topicList \.topic-item\.is-active:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 70%,\s*var\(--accent\) 30%\);/
+    );
+    assert.doesNotMatch(styles, /#(?:efd8c7|e5bfa7|2a201d|252b33|1f3035|263020|342421|252d3d)/i);
+    assert.match(
+      styles,
+      /\.topic-item__avatar\s*\{[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*align-self:\s*center;[\s\S]*border-top:\s*1px solid[\s\S]*border-left:\s*1px solid[\s\S]*border-bottom:\s*1px solid[\s\S]*border-right:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /html\.is-desktop-viewport \.panel--topics \.topic-item__avatar\s*\{[\s\S]*width:\s*76px;[\s\S]*height:\s*76px;/
+    );
+    assert.match(
+      styles,
+      /#authButton \.button-label\s*\{[\s\S]*font-weight:\s*950;[\s\S]*letter-spacing:\s*0\.01em;/
+    );
+    assert.match(
+      styles,
+      /\.auth-modal\s*\{[\s\S]*display:\s*grid;[\s\S]*box-sizing:\s*border-box;[\s\S]*overflow:\s*hidden;[\s\S]*height:\s*min\(540px, calc\(100vh - 40px\)\);/
+    );
+    assert.match(
+      styles,
+      /\.auth-modal__body\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*scrollbar-color:\s*var\(--palette-modal-scrollbar-thumb\) var\(--palette-modal-scrollbar-track\);[\s\S]*scrollbar-width:\s*thin;/
+    );
+    assert.match(
+      styles,
+      /\.auth-modal__body::-webkit-scrollbar-track\s*\{[\s\S]*background:\s*var\(--palette-modal-scrollbar-track\);/
+    );
+    assert.match(
+      styles,
+      /\.auth-modal__body::-webkit-scrollbar-thumb\s*\{[\s\S]*border:\s*2px solid var\(--palette-modal-scrollbar-track\);[\s\S]*background:\s*var\(--palette-modal-scrollbar-thumb\);/
+    );
+    assert.match(
+      styles,
+      /\.auth-modal__body::-webkit-scrollbar-thumb:hover\s*\{[\s\S]*background:\s*var\(--palette-modal-scrollbar-thumb-hover\);/
+    );
+    assert.match(
+      styles,
+      /\.auth-email-form\s*\{[\s\S]*display:\s*flex;[\s\S]*flex:\s*1 0 286px;[\s\S]*min-height:\s*286px;/
+    );
+    assert.match(
+      styles,
+      /\.auth-email-submit\s*\{[\s\S]*order:\s*4;[\s\S]*margin-top:\s*auto;/
+    );
+    assert.match(
+      styles,
+      /\.auth-email-form:not\(\[data-auth-mode="register"\]\) \.auth-email-form__field\[for="authEmailInput"\]\s*\{[\s\S]*margin-top:\s*auto;/
+    );
+    assert.match(
+      styles,
+      /\.auth-mode-tabs\s*\{[\s\S]*grid-template-columns:\s*1fr 1fr;[\s\S]*border-radius:\s*8px;/
+    );
+    assert.match(
+      styles,
+      /\.auth-mode-tabs__button\s*\{[\s\S]*min-height:\s*34px;[\s\S]*border-radius:\s*6px;/
+    );
+    assert.match(
+      styles,
+      /\.auth-field-error-marker\s*\{[\s\S]*display:\s*none;[\s\S]*color:\s*#ef4444;/
+    );
+    assert.match(
+      styles,
+      /\.auth-email-form__field\.is-invalid \.auth-field-error-marker\s*\{[\s\S]*display:\s*inline;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*319px\)\s*\{[\s\S]*\.auth-modal-backdrop\s*\{[\s\S]*padding:\s*8px;[\s\S]*\.auth-modal__body\s*\{[\s\S]*padding:\s*10px 12px;[\s\S]*\.auth-email-form__field input,\s*\.auth-email-submit\s*\{[\s\S]*min-height:\s*40px;/
+    );
+    assert.match(
+      styles,
+      /\.theme-toggle-slot\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;/
+    );
     assert.match(styles, /\.theme-toggle-slot:empty\s*\{[\s\S]*display:\s*none;/);
-    assert.match(styles, /\.theme-switch\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*78px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*3px;[\s\S]*border-radius:\s*999px;/);
-    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch\s*\{[\s\S]*border:\s*1px solid var\(--button-ghost-border\);[\s\S]*background:\s*var\(--button-ghost-bg\);/);
-    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch:hover,\s*#themeToggleDesktopSlot \.theme-switch:active\s*\{[\s\S]*background:\s*var\(--button-ghost-bg-hover\);[\s\S]*border-color:\s*var\(--button-ghost-border\);/);
-    assert.match(styles, /#themeToggleDesktopSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleDrawerSlot \.theme-switch:focus-visible\s*\{[\s\S]*outline:\s*2px solid color-mix/);
-    assert.match(styles, /\.message\s*\{[\s\S]*position:\s*relative;[\s\S]*padding:\s*0 0 0 84px;[\s\S]*min-height:\s*84px;[\s\S]*border-radius:\s*0;/);
-    assert.match(styles, /\.message \+ \.message::before\s*\{[\s\S]*top:\s*0;[\s\S]*left:\s*0;[\s\S]*right:\s*0;[\s\S]*height:\s*1px;/);
-    assert.match(styles, /\.message \+ \.message \.message__avatar\s*\{[\s\S]*border-top:\s*1px solid/);
-    assert.match(styles, /\.message__avatar\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*0;[\s\S]*left:\s*0;[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*border-right:\s*1px solid/);
-    assert.match(styles, /\.message__body\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*padding:\s*14px;/);
+    assert.match(
+      styles,
+      /\.theme-switch\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*78px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding:\s*3px;[\s\S]*border-radius:\s*999px;/
+    );
+    assert.match(
+      styles,
+      /#themeToggleDesktopSlot \.theme-switch\s*\{[\s\S]*border:\s*1px solid var\(--button-ghost-border\);[\s\S]*background:\s*var\(--button-ghost-bg\);/
+    );
+    assert.match(
+      styles,
+      /#themeToggleDesktopSlot \.theme-switch:hover,\s*#themeToggleDesktopSlot \.theme-switch:active\s*\{[\s\S]*border-color:\s*var\(--button-ghost-border\);[\s\S]*background:\s*var\(--button-ghost-bg-hover\);/
+    );
+    assert.match(
+      styles,
+      /#themeToggleDesktopSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleDrawerSlot \.theme-switch:focus-visible\s*\{[\s\S]*outline:\s*2px solid color-mix/
+    );
+    assert.match(
+      styles,
+      /\.message\s*\{[\s\S]*position:\s*relative;[\s\S]*padding:\s*0 0 0 84px;[\s\S]*min-height:\s*84px;[\s\S]*border-radius:\s*0;/
+    );
+    assert.match(
+      styles,
+      /\.message \+ \.message::before\s*\{[\s\S]*top:\s*0;[\s\S]*left:\s*84px;[\s\S]*right:\s*0;[\s\S]*height:\s*0;[\s\S]*border-top:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /\.message \+ \.message \.message__avatar\s*\{[\s\S]*border-top:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /\.message__avatar\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*0;[\s\S]*left:\s*0;[\s\S]*width:\s*84px;[\s\S]*height:\s*84px;[\s\S]*min-height:\s*84px;[\s\S]*border-right:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /\.message__body\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*padding:\s*14px;/
+    );
     assert.match(styles, /\.message__meta\s*\{[\s\S]*justify-content:\s*space-between;/);
     assert.match(styles, /\.message__time\s*\{[\s\S]*margin-left:\s*auto;/);
     assert.match(styles, /\.panel__title-inline--ranking\s*\{[\s\S]*justify-content:\s*center;/);
-    assert.match(styles, /\.rankings-section\.is-ranking-scrollable \.ranking-list,\s*[\s\S]*overflow:\s*auto;/);
-    assert.match(styles, /\.rankings-section\.is-ranking-scrollable \.ranking-list,\s*[\s\S]*height:\s*100%;/);
-    assert.match(styles, /\.rankings-section\.is-ranking-scrollable \.ranking-list,\s*[\s\S]*max-height:\s*100%;/);
-    assert.match(styles, /\.rankings-section\.is-ranking-scrollable \.ranking-item,\s*[\s\S]*min-height:\s*var\(--ranking-skeleton-item-height,\s*34px\);/);
-    assert.match(styles, /\.ranking-content,\s*\.drawer-ranking-content\s*\{[\s\S]*position:\s*relative;[\s\S]*overflow:\s*hidden;[\s\S]*--ranking-bottom-mask:\s*0px;/);
-    assert.match(styles, /\.ranking-content::after,\s*\.drawer-ranking-content::after\s*\{[\s\S]*height:\s*var\(--ranking-bottom-mask\);/);
-    assert.doesNotMatch(styles, /\.panel__body--drawer-rankings\.is-topic-selected \.ranking-item--rank-1 \.ranking-item__badge--topic/);
-    assert.doesNotMatch(styles, /\.panel__body--drawer-rankings\.is-topic-selected \.ranking-item--rank-2 \.ranking-item__badge--topic/);
-    assert.doesNotMatch(styles, /\.panel__body--drawer-rankings\.is-topic-selected \.ranking-item--rank-3 \.ranking-item__badge--topic/);
-    assert.match(styles, /\.ranking-item__badge\s*\{[\s\S]*border:\s*1px solid var\(--ranking-badge-border\);/);
-    assert.doesNotMatch(styles, /\.ranking-item--global\.ranking-item--rank-1 \.ranking-item__badge\s*\{/);
-    assert.doesNotMatch(styles, /\.ranking-item--global\.ranking-item--rank-2 \.ranking-item__badge\s*\{/);
-    assert.doesNotMatch(styles, /\.ranking-item--global\.ranking-item--rank-3 \.ranking-item__badge\s*\{/);
-    assert.match(styles, /\.panel__body--drawer-rankings\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/);
-    assert.match(styles, /\.ranking-scope-tabs\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*1fr\);[\s\S]*border-radius:\s*0;/);
-    assert.match(styles, /\.ranking-carousel\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\) 44px;[\s\S]*gap:\s*0;[\s\S]*padding:\s*0;[\s\S]*border-radius:\s*0;/);
-    assert.match(styles, /\.ranking-carousel__nav:hover,\s*\.ranking-carousel__nav:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent-soft\) 26%,\s*transparent\);[\s\S]*transform:\s*none;/);
-    assert.match(styles, /\.ranking-carousel__nav:active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent-soft\) 38%,\s*transparent\);/);
-    assert.match(styles, /html:not\(\[data-theme="dark"\]\) \.ranking-carousel__nav:hover,\s*html:not\(\[data-theme="dark"\]\) \.ranking-carousel__nav:focus-visible\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);/);
-    assert.match(styles, /html:not\(\[data-theme="dark"\]\) \.ranking-carousel__nav:active\s*\{[\s\S]*background:\s*var\(--button-fill-bg-hover\);/);
-    assert.match(styles, /html\[data-theme="dark"\] \.ranking-carousel__nav:hover,\s*html\[data-theme="dark"\] \.ranking-carousel__nav:focus-visible\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);/);
-    assert.match(styles, /html\[data-theme="dark"\] \.ranking-carousel__nav:active\s*\{[\s\S]*background:\s*var\(--button-fill-bg-hover\);/);
-    assert.match(styles, /\.ranking-carousel__current:hover,\s*\.ranking-carousel__current:focus-visible\s*\{[\s\S]*transform:\s*none;/);
+    assert.match(
+      styles,
+      /\.rankings-section\.is-ranking-scrollable \.ranking-list,\s*[\s\S]*overflow:\s*auto;/
+    );
+    assert.match(
+      styles,
+      /\.ranking-list\s*\{[\s\S]*opacity:\s*1;[\s\S]*transition:\s*opacity 150ms ease;/
+    );
+    assert.match(styles, /\.ranking-list\.is-ranking-fading\s*\{[\s\S]*opacity:\s*0;/);
+    assert.match(
+      styles,
+      /\.rankings-section\.is-ranking-scrollable \.ranking-list,\s*[\s\S]*height:\s*100%;/
+    );
+    assert.match(
+      styles,
+      /\.rankings-section\.is-ranking-scrollable \.ranking-list,\s*[\s\S]*max-height:\s*100%;/
+    );
+    assert.match(
+      styles,
+      /\.rankings-section\.is-ranking-scrollable \.ranking-item,\s*[\s\S]*min-height:\s*var\(--ranking-skeleton-item-height,\s*34px\);/
+    );
+    assert.match(
+      styles,
+      /\.ranking-content,\s*\.drawer-ranking-content\s*\{[\s\S]*--ranking-bottom-mask:\s*0px;[\s\S]*position:\s*relative;[\s\S]*overflow:\s*hidden;/
+    );
+    assert.match(
+      styles,
+      /\.ranking-content::after,\s*\.drawer-ranking-content::after\s*\{[\s\S]*height:\s*var\(--ranking-bottom-mask\);/
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.panel__body--drawer-rankings\.is-topic-selected \.ranking-item--rank-1 \.ranking-item__badge--topic/
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.panel__body--drawer-rankings\.is-topic-selected \.ranking-item--rank-2 \.ranking-item__badge--topic/
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.panel__body--drawer-rankings\.is-topic-selected \.ranking-item--rank-3 \.ranking-item__badge--topic/
+    );
+    assert.match(
+      styles,
+      /\.ranking-item__badge\s*\{[\s\S]*border:\s*1px solid var\(--ranking-badge-border\);/
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.ranking-item--global\.ranking-item--rank-1 \.ranking-item__badge\s*\{/
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.ranking-item--global\.ranking-item--rank-2 \.ranking-item__badge\s*\{/
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.ranking-item--global\.ranking-item--rank-3 \.ranking-item__badge\s*\{/
+    );
+    assert.match(
+      styles,
+      /\.panel__body--drawer-rankings\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/
+    );
+    assert.match(
+      styles,
+      /\.ranking-scope-tabs\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*1fr\);[\s\S]*border-radius:\s*0;/
+    );
+    assert.match(
+      styles,
+      /\.ranking-carousel\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\) 44px;[\s\S]*gap:\s*0;[\s\S]*padding:\s*0;[\s\S]*border-radius:\s*0;/
+    );
+    assert.match(
+      styles,
+      /\.ranking-carousel__nav:hover,\s*\.ranking-carousel__nav:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent-soft\) 26%,\s*transparent\);[\s\S]*transform:\s*none;/
+    );
+    assert.match(
+      styles,
+      /\.ranking-carousel__nav:active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent-soft\) 38%,\s*transparent\);/
+    );
+    assert.match(
+      styles,
+      /html:not\(\[data-theme="dark"\]\) \.ranking-carousel__nav:hover,\s*html:not\(\[data-theme="dark"\]\) \.ranking-carousel__nav:focus-visible\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);/
+    );
+    assert.match(
+      styles,
+      /html:not\(\[data-theme="dark"\]\) \.ranking-carousel__nav:active\s*\{[\s\S]*background:\s*var\(--button-fill-bg-hover\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="dark"\] \.ranking-carousel__nav:hover,\s*html\[data-theme="dark"\] \.ranking-carousel__nav:focus-visible\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="dark"\] \.ranking-carousel__nav:active\s*\{[\s\S]*background:\s*var\(--button-fill-bg-hover\);/
+    );
+    assert.match(
+      styles,
+      /\.ranking-carousel__current:hover,\s*\.ranking-carousel__current:focus-visible\s*\{[\s\S]*transform:\s*none;/
+    );
     assert.match(styles, /\.ranking-scope-tabs__button\s*\{[\s\S]*text-transform:\s*uppercase;/);
-    assert.match(styles, /html\[data-theme="light"\]\[data-palette="default"\] \.ranking-scope-tabs\s*\{[\s\S]*background:\s*#fff;[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 56%,\s*var\(--line\)\);/);
-    assert.match(styles, /html\[data-theme="light"\]\[data-palette="default"\] \.ranking-scope-tabs__button\.is-active[\s\S]*box-shadow:\s*inset 0 -2px 0 var\(--accent\);/);
-    assert.match(styles, /html\[data-theme="light"\]:not\(\[data-palette="default"\]\) \.ranking-scope-tabs\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 92%,\s*var\(--accent-soft\) 8%\);/);
-    assert.match(styles, /html\[data-theme="light"\]:not\(\[data-palette="default"\]\) \.ranking-scope-tabs__button\.is-active[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 74%,\s*var\(--accent-soft\) 26%\);/);
-    assert.match(styles, /html:not\(\[data-theme="dark"\]\) \.ranking-label__main\s*\{[\s\S]*color:\s*var\(--text\);/);
-    assert.match(styles, /html\[data-theme="dark"\] #rankingCurrent,\s*[\s\S]*background:\s*var\(--button-fill-bg\);[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*gap:\s*0;[\s\S]*width:\s*44px;[\s\S]*min-width:\s*44px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding-block:\s*0;[\s\S]*padding-inline:\s*0;[\s\S]*border-radius:\s*999px;[\s\S]*flex:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*display:\s*inline;/);
-    assert.match(styles, /html\.is-mobile-viewport #storeButton \.button-label\s*\{[\s\S]*display:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport #authButton\s*\{[\s\S]*min-width:\s*0;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding-block:\s*0;[\s\S]*padding-inline:\s*10px;[\s\S]*align-items:\s*center;[\s\S]*font-size:\s*0\.78rem;[\s\S]*letter-spacing:\s*0;/);
-    assert.match(styles, /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*font-weight:\s*900;[\s\S]*letter-spacing:\s*0;[\s\S]*-webkit-text-stroke:\s*0\.2px currentColor;/);
-    assert.match(styles, /#themeToggleMobileSlot \.theme-switch,\s*#themeToggleDrawerSlot \.theme-switch\s*\{[\s\S]*border:\s*2px solid color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);/);
-    assert.match(styles, /#themeToggleMobileSlot \.theme-switch:hover,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:active,\s*#themeToggleDrawerSlot \.theme-switch:hover,\s*#themeToggleDrawerSlot \.theme-switch:focus-visible,\s*#themeToggleDrawerSlot \.theme-switch:active\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);/);
-    assert.match(styles, /\.theme-switch__track\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*border-radius:\s*999px;[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 88%,\s*var\(--accent-soft\) 12%\);[\s\S]*overflow:\s*hidden;/);
-    assert.match(styles, /\.theme-switch__icons\s*\{[\s\S]*display:\s*block;[\s\S]*pointer-events:\s*none;/);
-    assert.match(styles, /\.theme-switch__icon\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*50%;[\s\S]*width:\s*14px;[\s\S]*height:\s*14px;[\s\S]*opacity:\s*0\.96;[\s\S]*transform:\s*translateY\(-50%\);[\s\S]*z-index:\s*2;/);
+    assert.match(
+      styles,
+      /html\[data-theme="light"\]\[data-palette="default"\] \.ranking-scope-tabs\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 56%,\s*var\(--line\)\);[\s\S]*background:\s*#fff;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\]\[data-palette="default"\] \.ranking-scope-tabs__button\.is-active[\s\S]*box-shadow:\s*inset 0 -2px 0 var\(--accent\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\]:not\(\[data-palette="default"\]\) \.ranking-scope-tabs\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 92%,\s*var\(--accent-soft\) 8%\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\]:not\(\[data-palette="default"\]\) \.ranking-scope-tabs__button\.is-active[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 74%,\s*var\(--accent-soft\) 26%\);/
+    );
+    assert.match(
+      styles,
+      /html:not\(\[data-theme="dark"\]\) \.ranking-label__main\s*\{[\s\S]*color:\s*var\(--text\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="dark"\] #rankingCurrent,\s*[\s\S]*background:\s*var\(--button-fill-bg\);[\s\S]*color:\s*var\(--button-fill-text\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*gap:\s*0;[\s\S]*width:\s*44px;[\s\S]*min-width:\s*44px;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding-block:\s*0;[\s\S]*padding-inline:\s*0;[\s\S]*border-radius:\s*999px;[\s\S]*flex:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*display:\s*inline;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #storeButton \.button-label\s*\{[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #authButton\s*\{[\s\S]*align-items:\s*center;[\s\S]*flex:\s*none;[\s\S]*max-width:\s*104px;[\s\S]*min-width:\s*0;[\s\S]*height:\s*44px;[\s\S]*min-height:\s*44px;[\s\S]*padding-block:\s*0;[\s\S]*padding-inline:\s*8px;[\s\S]*font-size:\s*0\.72rem;[\s\S]*letter-spacing:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #authButton \.button-label\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;[\s\S]*font-weight:\s*900;[\s\S]*letter-spacing:\s*0;/
+    );
+    assert.match(
+      styles,
+      /#themeToggleMobileSlot \.theme-switch,\s*#themeToggleDrawerSlot \.theme-switch\s*\{[\s\S]*border:\s*2px solid color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);/
+    );
+    assert.match(
+      styles,
+      /#themeToggleMobileSlot \.theme-switch:hover,\s*#themeToggleMobileSlot \.theme-switch:focus-visible,\s*#themeToggleMobileSlot \.theme-switch:active,\s*#themeToggleDrawerSlot \.theme-switch:hover,\s*#themeToggleDrawerSlot \.theme-switch:focus-visible,\s*#themeToggleDrawerSlot \.theme-switch:active\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent\) 58%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 78%,\s*var\(--accent-soft\) 22%\);/
+    );
+    assert.match(
+      styles,
+      /\.theme-switch__track\s*\{[\s\S]*position:\s*relative;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*border-radius:\s*999px;[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 88%,\s*var\(--accent-soft\) 12%\);[\s\S]*overflow:\s*hidden;/
+    );
+    assert.match(
+      styles,
+      /\.theme-switch__icons\s*\{[\s\S]*display:\s*block;[\s\S]*pointer-events:\s*none;/
+    );
+    assert.match(
+      styles,
+      /\.theme-switch__icon\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*50%;[\s\S]*z-index:\s*2;[\s\S]*width:\s*14px;[\s\S]*height:\s*14px;[\s\S]*opacity:\s*0\.96;[\s\S]*transform:\s*translateY\(-50%\);/
+    );
     assert.match(styles, /\.theme-switch__icon--light\s*\{[\s\S]*left:\s*10px;/);
     assert.match(styles, /\.theme-switch__icon--dark\s*\{[\s\S]*right:\s*10px;/);
     assert.doesNotMatch(styles, /\.theme-switch__icon--dark svg\s*\{/);
-    assert.match(styles, /\.theme-switch__thumb\s*\{[\s\S]*left:\s*0;[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*transform:\s*translateY\(-50%\);[\s\S]*transition:[\s\S]*left 180ms ease,[\s\S]*z-index:\s*1;/);
-    assert.match(styles, /html\[data-theme="dark"\] \.theme-switch__thumb\s*\{[\s\S]*left:\s*calc\(100% - 34px\);/);
+    assert.match(
+      styles,
+      /\.theme-switch__thumb\s*\{[\s\S]*left:\s*0;[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*transform:\s*translateY\(-50%\);[\s\S]*transition:[\s\S]*left 180ms ease,[\s\S]*z-index:\s*1;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="dark"\] \.theme-switch__thumb\s*\{[\s\S]*left:\s*calc\(100% - 34px\);/
+    );
     assert.match(styles, /html\[data-theme="light"\] \.theme-switch__thumb\s*\{[\s\S]*left:\s*0;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*2;[\s\S]*justify-content:\s*flex-end;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*max-width:\s*calc\(100vw - 132px\);[\s\S]*overflow:\s*hidden;[\s\S]*white-space:\s*nowrap;/);
-    assert.match(styles, /html\.is-mobile-viewport\[data-auth-state="logged-in"\] #authButton\s*\{[\s\S]*display:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport \.topbar__auth-tools\s*\{[\s\S]*display:\s*none;/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\) auto;[\s\S]*gap:\s*8px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.topbar__group--right\s*\{[\s\S]*grid-column:\s*3;[\s\S]*justify-content:\s*flex-end;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*position:\s*static;[\s\S]*grid-column:\s*2;[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*100%;[\s\S]*max-width:\s*100%;[\s\S]*overflow:\s*hidden;[\s\S]*white-space:\s*nowrap;[\s\S]*transform:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport\[data-auth-state="logged-in"\] #authButton\s*\{[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.topbar__auth-tools\s*\{[\s\S]*display:\s*none;/
+    );
     assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat\s*\{[\s\S]*gap:\s*10px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.panel__header--chat \.chat-header__back\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;[\s\S]*min-width:\s*40px;[\s\S]*min-height:\s*40px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*font-size:\s*1rem;[\s\S]*white-space:\s*nowrap;/);
-    assert.match(styles, /html\.is-mobile-viewport \.brand-mark__che,\s*html\.is-mobile-viewport \.brand-mark__trend\s*\{[\s\S]*display:\s*inline;/);
-    assert.match(styles, /html\.is-mobile-viewport \.brand-mark__icon\s*\{[\s\S]*width:\s*2\.25rem;[\s\S]*height:\s*2\.25rem;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-stack\s*\{[\s\S]*flex-direction:\s*column;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__header\s*\{[\s\S]*position:\s*relative;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]\s*\{[\s\S]*background:\s*var\(--button-fill-bg\);[\s\S]*border-color:\s*var\(--button-fill-border\);[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\] > span\s*\{[\s\S]*display:\s*grid;[\s\S]*place-items:\s*center;[\s\S]*transform:\s*translateY\(-0\.5px\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:hover,\s*html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*#c63834 62%,\s*var\(--accent-strong\) 38%\);[\s\S]*transform:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px minmax\(0,\s*1fr\) 20px;[\s\S]*justify-content:\s*flex-start;[\s\S]*gap:\s*12px;[\s\S]*min-width:\s*0;[\s\S]*overflow:\s*hidden;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__icon\s*\{[\s\S]*width:\s*20px;[\s\S]*height:\s*20px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button__label\s*\{[\s\S]*display:\s*block;[\s\S]*justify-self:\s*center;[\s\S]*width:\s*min\(112px,\s*100%\);[\s\S]*max-width:\s*100%;[\s\S]*overflow:\s*hidden;[\s\S]*text-align:\s*center;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth \.drawer-action-button__label\s*\{[\s\S]*padding-left:\s*14px;[\s\S]*text-align:\s*left;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-search__field\s*\{[\s\S]*position:\s*relative;[\s\S]*display:\s*block;[\s\S]*min-height:\s*52px;[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*0;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-search__input\s*\{[\s\S]*display:\s*block;[\s\S]*width:\s*100%;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*52px;[\s\S]*border:\s*0 !important;[\s\S]*border-radius:\s*0 !important;[\s\S]*padding:\s*0 14px 0 46px;[\s\S]*box-shadow:\s*none !important;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button\.is-search-hidden\s*\{[\s\S]*display:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--store\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 76%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent\) 72%,\s*var\(--surface-strong\) 28%\);[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--store \.drawer-action-button__icon\s*\{[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--store:hover,\s*html\.is-mobile-viewport \.drawer-action-button--store:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 78%,\s*var\(--surface-strong\) 22%\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-theme-slot\s*\{[\s\S]*justify-content:\s*flex-end;[\s\S]*margin-top:\s*14px;/);
-    assert.match(styles, /@media \(max-width:\s*380px\)\s*\{[\s\S]*html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*left:\s*50%;[\s\S]*max-width:\s*calc\(100vw - 168px\);/);
-    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*display:\s*none;/);
-    assert.match(styles, /@media \(max-width:\s*430px\)\s*\{[\s\S]*html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*none;/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.panel__header--chat \.chat-header__back\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*width:\s*40px;[\s\S]*min-width:\s*40px;[\s\S]*height:\s*40px;[\s\S]*min-height:\s*40px;/
+    );
+    assert.match(
+      styles,
+      /@media \(orientation:\s*landscape\) and \(pointer:\s*coarse\)\s*\{[\s\S]*html\.is-mobile-viewport \.panel--chat\s*\{[\s\S]*max-height:\s*70vh;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.brand-mark\s*\{[\s\S]*display:\s*inline-flex;[\s\S]*font-size:\s*1rem;[\s\S]*white-space:\s*nowrap;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.brand-mark__che,\s*html\.is-mobile-viewport \.brand-mark__trend\s*\{[\s\S]*display:\s*inline;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.brand-mark__icon\s*\{[\s\S]*width:\s*2\.25rem;[\s\S]*height:\s*2\.25rem;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-stack\s*\{[\s\S]*flex-direction:\s*column;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__header\s*\{[\s\S]*position:\s*relative;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]\s*\{[\s\S]*border-color:\s*var\(--button-fill-border\);[\s\S]*color:\s*var\(--button-fill-text\);[\s\S]*background:\s*var\(--button-fill-bg\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\] > span\s*\{[\s\S]*display:\s*grid;[\s\S]*place-items:\s*center;[\s\S]*transform:\s*translateY\(-0\.5px\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__header \.drawer-close-icon svg\s*\{[\s\S]*display:\s*block;[\s\S]*width:\s*1\.18rem;[\s\S]*height:\s*1\.18rem;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:hover,\s*html\.is-mobile-viewport \.drawer__header \[data-close-drawer="right"\]:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*#c63834 62%,\s*var\(--accent-strong\) 38%\);[\s\S]*transform:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-columns:\s*20px minmax\(0,\s*1fr\) 20px;[\s\S]*justify-content:\s*flex-start;[\s\S]*gap:\s*12px;[\s\S]*min-width:\s*0;[\s\S]*overflow:\s*hidden;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button__icon\s*\{[\s\S]*width:\s*20px;[\s\S]*height:\s*20px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button__label\s*\{[\s\S]*display:\s*block;[\s\S]*justify-self:\s*center;[\s\S]*width:\s*min\(112px,\s*100%\);[\s\S]*max-width:\s*100%;[\s\S]*overflow:\s*hidden;[\s\S]*text-align:\s*center;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button--auth \.drawer-action-button__label\s*\{[\s\S]*justify-self:\s*center;[\s\S]*text-align:\s*center;[\s\S]*animation:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-search__field\s*\{[\s\S]*position:\s*relative;[\s\S]*display:\s*block;[\s\S]*min-height:\s*52px;[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-search__input\s*\{[\s\S]*display:\s*block;[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;[\s\S]*height:\s*100%;[\s\S]*min-height:\s*52px;[\s\S]*padding:\s*0 14px 0 46px;[\s\S]*border:\s*0 !important;[\s\S]*border-radius:\s*0 !important;[\s\S]*box-shadow:\s*none !important;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button\.is-search-hidden\s*\{[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button--store\s*\{[\s\S]*border-color:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 76%,\s*var\(--line\)\);[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent\) 72%,\s*var\(--surface-strong\) 28%\);[\s\S]*color:\s*var\(--button-fill-text\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button--store \.drawer-action-button__icon\s*\{[\s\S]*color:\s*var\(--button-fill-text\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button--store:hover,\s*html\.is-mobile-viewport \.drawer-action-button--store:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--accent-strong\) 78%,\s*var\(--surface-strong\) 22%\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-theme-slot\s*\{[\s\S]*justify-content:\s*flex-end;[\s\S]*margin-top:\s*14px;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*380px\)\s*\{[\s\S]*html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*gap:\s*6px;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.topbar__title\s*\{[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*430px\)\s*\{[\s\S]*html\.is-mobile-viewport #storeButton\s*\{[\s\S]*display:\s*none;/
+    );
     assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__back\s*\{/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth\s*\{[\s\S]*margin-top:\s*10px;[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth \.drawer-action-button__icon\s*\{[\s\S]*color:\s*var\(--button-fill-text\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-action-button--auth:hover,\s*html\.is-mobile-viewport \.drawer-action-button--auth:focus-visible\s*\{/);
-    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer\s*\{[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;[\s\S]*position:\s*absolute;[\s\S]*left:\s*12px;[\s\S]*top:\s*50%;[\s\S]*transform:\s*translateY\(-50%\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer:hover,\s*html\.is-mobile-viewport \.mobile-right-drawer:focus-visible,\s*html\.is-mobile-viewport \.mobile-right-drawer:active\s*\{[\s\S]*background:\s*transparent;[\s\S]*transform:\s*translateY\(-50%\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;/);
-    assert.match(styles, /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon svg\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;[\s\S]*stroke-width:\s*2\.6;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panels\[hidden\],\s*[\s\S]*display:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer\s*\{[\s\S]*width:\s*min\(84vw,\s*360px\);[\s\S]*max-width:\s*calc\(100vw - 52px\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button--auth\s*\{[\s\S]*margin-top:\s*10px;[\s\S]*color:\s*var\(--button-fill-text\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button--auth \.drawer-action-button__icon\s*\{[\s\S]*color:\s*var\(--button-fill-text\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-action-button--auth:hover,\s*html\.is-mobile-viewport \.drawer-action-button--auth:focus-visible\s*\{/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-right-drawer\s*\{[\s\S]*position:\s*absolute;[\s\S]*top:\s*50%;[\s\S]*left:\s*12px;[\s\S]*z-index:\s*1;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;[\s\S]*border:\s*0;[\s\S]*box-shadow:\s*none;[\s\S]*color:\s*var\(--text\);[\s\S]*background:\s*transparent;[\s\S]*transform:\s*translateY\(-50%\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-right-drawer:hover,\s*html\.is-mobile-viewport \.mobile-right-drawer:focus-visible,\s*html\.is-mobile-viewport \.mobile-right-drawer:active\s*\{[\s\S]*background:\s*transparent;[\s\S]*transform:\s*translateY\(-50%\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-right-drawer \.icon-button__icon svg\s*\{[\s\S]*width:\s*2\.1rem;[\s\S]*height:\s*2\.1rem;[\s\S]*stroke-width:\s*2\.6;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-mobile-panels\[hidden\],\s*[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer\s*\{[\s\S]*width:\s*min\(84vw,\s*360px\);[\s\S]*max-width:\s*calc\(100vw - 52px\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*grid-template-rows:\s*auto auto minmax\(0,\s*1fr\);/
+    );
     assert.match(styles, /html\.is-mobile-viewport \.drawer__brand\s*\{[\s\S]*gap:\s*12px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__brand-icon\s*\{[\s\S]*width:\s*2rem;[\s\S]*height:\s*2rem;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__brand \.brand-mark\s*\{[\s\S]*font-size:\s*1\.05rem;[\s\S]*white-space:\s*nowrap;/);
-    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand\s*\{[\s\S]*inset:\s*0 50px 0 42px;[\s\S]*gap:\s*5px;/);
-    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand-icon\s*\{[\s\S]*width:\s*1\.45rem;[\s\S]*height:\s*1\.45rem;/);
-    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark\s*\{[\s\S]*display:\s*grid;[\s\S]*font-size:\s*0\.7rem;[\s\S]*white-space:\s*normal;/);
-    assert.match(styles, /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark__che,\s*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark__trend\s*\{[\s\S]*display:\s*block;/);
-    assert.match(styles, /@media \(max-width:\s*216px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand\s*\{[\s\S]*display:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header,\s*html\.is-mobile-viewport \.drawer-ranking__header\s*\{[\s\S]*grid-template-columns:\s*40px minmax\(0,\s*1fr\) 40px;[\s\S]*gap:\s*12px;[\s\S]*margin-bottom:\s*12px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header::after,\s*html\.is-mobile-viewport \.drawer-ranking__header::after\s*\{[\s\S]*grid-column:\s*3;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-mobile-panel__header h3,\s*html\.is-mobile-viewport \.drawer-ranking__header h3\s*\{[\s\S]*justify-content:\s*center;[\s\S]*text-align:\s*center;/);
-    assert.match(styles, /html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header\s*\{[\s\S]*padding-inline:\s*14px;/);
-    assert.match(styles, /html\.is-mobile-viewport #drawerRankingsSection \.drawer-ranking__header\s*\{[\s\S]*padding-inline:\s*16px;/);
-    assert.match(styles, /html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header h3::before,\s*html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header h3::after,\s*html\.is-mobile-viewport \.drawer--right \.drawer-ranking__header h3::before,\s*html\.is-mobile-viewport \.drawer--right \.drawer-ranking__header h3::after\s*\{[\s\S]*content:\s*none;[\s\S]*display:\s*none;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-ranking__header \.panel__title-inline\s*\{[\s\S]*position:\s*static;[\s\S]*width:\s*100% !important;[\s\S]*justify-content:\s*center;[\s\S]*padding-inline:\s*0;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*left:\s*0;[\s\S]*right:\s*auto;[\s\S]*transform:\s*translateX\(-100%\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer-backdrop\s*\{[\s\S]*background:\s*rgba\(6,\s*10,\s*16,\s*0\.46\);[\s\S]*backdrop-filter:\s*blur\(3px\);/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__section--half\s*\{[\s\S]*padding:\s*12px 10px 18px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__section--mobile-panel\s*\{[\s\S]*gap:\s*0;/);
-    assert.match(styles, /html\.is-mobile-viewport \.drawer__section--mobile-panel \+ \.drawer__section--mobile-panel\s*\{[\s\S]*padding-top:\s*12px;[\s\S]*border-top:\s*0;/);
-    assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings\s*\{[\s\S]*gap:\s*0;[\s\S]*padding-top:\s*0;/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__brand-icon\s*\{[\s\S]*width:\s*2rem;[\s\S]*height:\s*2rem;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__brand \.brand-mark\s*\{[\s\S]*font-size:\s*1\.05rem;[\s\S]*white-space:\s*nowrap;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand\s*\{[\s\S]*inset:\s*0 50px 0 42px;[\s\S]*gap:\s*5px;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand-icon\s*\{[\s\S]*width:\s*1\.45rem;[\s\S]*height:\s*1\.45rem;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark\s*\{[\s\S]*display:\s*grid;[\s\S]*font-size:\s*0\.7rem;[\s\S]*white-space:\s*normal;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*300px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark__che,\s*html\.is-mobile-viewport \.drawer__header \.drawer__brand \.brand-mark__trend\s*\{[\s\S]*display:\s*block;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width:\s*216px\)\s*\{[\s\S]*html\.is-mobile-viewport \.drawer__header \.drawer__brand\s*\{[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-mobile-panel__header,\s*html\.is-mobile-viewport \.drawer-ranking__header\s*\{[\s\S]*grid-template-columns:\s*40px minmax\(0,\s*1fr\) 40px;[\s\S]*gap:\s*12px;[\s\S]*margin-bottom:\s*12px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-mobile-panel__header::after,\s*html\.is-mobile-viewport \.drawer-ranking__header::after\s*\{[\s\S]*grid-column:\s*3;[\s\S]*width:\s*40px;[\s\S]*height:\s*40px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-mobile-panel__header h3,\s*html\.is-mobile-viewport \.drawer-ranking__header h3\s*\{[\s\S]*justify-content:\s*center;[\s\S]*text-align:\s*center;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header\s*\{[\s\S]*padding-inline:\s*14px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #drawerRankingsSection \.drawer-ranking__header\s*\{[\s\S]*padding-inline:\s*16px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header h3::before,\s*html\.is-mobile-viewport #drawerUsersSection \.drawer-mobile-panel__header h3::after,\s*html\.is-mobile-viewport \.drawer--right \.drawer-ranking__header h3::before,\s*html\.is-mobile-viewport \.drawer--right \.drawer-ranking__header h3::after\s*\{[\s\S]*content:\s*none;[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-ranking__header \.panel__title-inline\s*\{[\s\S]*position:\s*static;[\s\S]*width:\s*100% !important;[\s\S]*justify-content:\s*center;[\s\S]*padding-inline:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer--right\s*\{[\s\S]*right:\s*auto;[\s\S]*left:\s*0;[\s\S]*transform:\s*translateX\(-100%\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer-backdrop\s*\{[\s\S]*background:\s*rgba\(6,\s*10,\s*16,\s*0\.46\);[\s\S]*backdrop-filter:\s*blur\(3px\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__section--half\s*\{[\s\S]*padding:\s*12px 10px 18px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__section--mobile-panel\s*\{[\s\S]*gap:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.drawer__section--mobile-panel \+ \.drawer__section--mobile-panel\s*\{[\s\S]*padding-top:\s*12px;[\s\S]*border-top:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.panel__body--drawer-rankings\s*\{[\s\S]*gap:\s*0;[\s\S]*padding-top:\s*0;/
+    );
     assert.match(styles, /html\.is-mobile-viewport #drawerUserList\s*\{[\s\S]*padding-top:\s*0;/);
-    assert.match(styles, /html\.is-mobile-viewport \.panel__body--drawer-rankings \.drawer-ranking-content,\s*[\s\S]*margin-top:\s*12px;/);
-    assert.match(styles, /@media \(max-height:\s*720px\)\s*\{[\s\S]*html\.is-desktop-viewport\s*\{[\s\S]*--ranking-row-height:\s*29px;[\s\S]*--ranking-list-gap:\s*7px;[\s\S]*--ranking-list-padding-y:\s*8px;/);
-    assert.match(styles, /\.ranking-mode-list__option\s*\{[\s\S]*grid-template-columns:\s*2rem minmax\(0,\s*1fr\);/);
-    assert.match(styles, /\.ranking-mode-list__option\.is-active::before\s*\{[\s\S]*width:\s*12px;/);
-    assert.match(styles, /\.user-item\[data-connected-user-id\]:hover,\s*\.user-item\[data-connected-user-id\]:focus-within\s*\{/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.panel__body--drawer-rankings \.drawer-ranking-content,\s*[\s\S]*margin-top:\s*12px;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-height:\s*720px\)\s*\{[\s\S]*html\.is-desktop-viewport\s*\{[\s\S]*--ranking-row-height:\s*29px;[\s\S]*--ranking-list-gap:\s*7px;[\s\S]*--ranking-list-padding-y:\s*8px;/
+    );
+    assert.match(
+      styles,
+      /\.ranking-mode-list__option\s*\{[\s\S]*grid-template-columns:\s*2rem minmax\(0,\s*1fr\);/
+    );
+    assert.match(
+      styles,
+      /\.ranking-mode-list__option\.is-active::before\s*\{[\s\S]*width:\s*12px;/
+    );
+    assert.match(
+      styles,
+      /\.user-item\[data-connected-user-id\]:hover,\s*\.user-item\[data-connected-user-id\]:focus-within\s*\{/
+    );
     assert.match(styles, /\.user-item\[data-connected-user-id\]:active\s*\{/);
     assert.match(styles, /\.user-item\.is-active\s*\{/);
     assert.match(styles, /\.topic-list\s*\{[\s\S]*grid-auto-rows:\s*84px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-list\s*\{[\s\S]*gap:\s*12px;/);
-    assert.match(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item::after\s*\{[\s\S]*border-top:\s*1px solid color-mix\(in srgb,\s*var\(--accent\) 62%,\s*var\(--line-strong\)\);/);
-    assert.doesNotMatch(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item\s*\{\s*border-top:\s*0;/);
-    assert.doesNotMatch(styles, /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item::after\s*\{\s*border-top:\s*0;/);
-    assert.match(styles, /html\.is-desktop-viewport \.panel--topics \.topic-list\s*\{[\s\S]*grid-auto-rows:\s*76px;/);
-    assert.match(styles, /\.topic-item\.is-active \.topic-item__avatar\s*\{[\s\S]*border-color:\s*inherit;/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-list\s*\{[\s\S]*gap:\s*12px;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.scroll-list\s*\{[^}]*padding:\s*10px 4px 40px 0;[^}]*scrollbar-gutter:\s*stable;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item__avatar\s*\{[^}]*margin-left:\s*-1px;[^}]*border-left:\s*0;/
+    );
+    assert.doesNotMatch(
+      styles,
+      /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.scroll-list\s*\{[^}]*scrollbar-gutter:\s*stable both-edges;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item::after\s*\{[\s\S]*border-top:\s*1px solid color-mix\(in srgb,\s*var\(--accent\) 62%,\s*var\(--line-strong\)\);/
+    );
+    assert.doesNotMatch(
+      styles,
+      /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item\s*\{\s*border-top:\s*0;/
+    );
+    assert.doesNotMatch(
+      styles,
+      /html\.is-mobile-viewport \.mobile-topic-stage__view--list \.topic-item \+ \.topic-item::after\s*\{\s*border-top:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\.is-desktop-viewport \.panel--topics \.topic-list\s*\{[\s\S]*grid-auto-rows:\s*76px;/
+    );
+    assert.match(
+      styles,
+      /\.topic-item\.is-active \.topic-item__avatar\s*\{[\s\S]*border-color:\s*inherit;/
+    );
     assert.match(styles, /\.user-item__trigger\s*\{/);
-    assert.match(styles, /\.user-item__trigger:focus-visible,\s*\.user-item__action:focus-visible,\s*\.user-item__menu-button:focus-visible\s*\{/);
-    assert.match(styles, /html\[data-theme="light"\]\.is-desktop-viewport \.panel--topics \.topics-panel__list-frame\s*\{[\s\S]*border:\s*1px solid/);
-    assert.match(styles, /html\[data-theme="light"\] \.panel--chat,\s*html\[data-theme="light"\] \.panel--users-rankings\s*\{[\s\S]*border:\s*1px solid[\s\S]*box-shadow:\s*none;[\s\S]*backdrop-filter:\s*none;/);
-    assert.match(styles, /html\[data-theme="light"\] \.panel--chat\s*\{[\s\S]*border-top:\s*1px solid[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-top-right-radius:\s*0;[\s\S]*background:\s*var\(--surface-strong\);/);
-    assert.match(styles, /html\[data-theme="light"\] \.panel--chat\.panel--topic-create\s*\{[\s\S]*border-top:\s*0;/);
-    assert.match(styles, /html\[data-theme="light"\] \.panel--chat \.panel__header\s*\{[\s\S]*border-bottom:\s*1px solid/);
-    assert.match(styles, /html\[data-theme="light"\] \.topic-item,\s*html\[data-theme="light"\] \.user-item,\s*html\[data-theme="light"\] \.ranking-item\s*\{[\s\S]*border-color:\s*color-mix/);
-    assert.match(styles, /html\[data-theme="light"\] \.ranking-carousel,\s*html\[data-theme="light"\] \.drawer-ranking__switch\s*\{[\s\S]*border-color:\s*color-mix/);
-    assert.match(styles, /html\[data-theme="light"\] \.composer\s*\{[\s\S]*border-top:\s*1px solid/);
-    assert.match(styles, /input,\s*textarea\s*\{[\s\S]*box-sizing:\s*border-box;[\s\S]*padding:\s*0\.92rem 1rem;/);
-    assert.match(styles, /textarea\s*\{[\s\S]*max-height:\s*10rem;[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*hidden;[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb\) transparent;/);
-    assert.match(styles, /textarea::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--scrollbar-thumb\);[\s\S]*border-radius:\s*999px;[\s\S]*background-clip:\s*content-box;/);
+    assert.match(
+      styles,
+      /\.user-item__trigger:focus-visible,\s*\.user-item__action:focus-visible,\s*\.user-item__menu-button:focus-visible\s*\{/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\]\.is-desktop-viewport \.panel--topics \.topics-panel__list-frame\s*\{[\s\S]*border:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.panel--chat,\s*html\[data-theme="light"\] \.panel--users-rankings\s*\{[\s\S]*border:\s*1px solid[\s\S]*box-shadow:\s*none;[\s\S]*backdrop-filter:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.panel--chat\s*\{[\s\S]*border-top:\s*1px solid[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-top-right-radius:\s*0;[\s\S]*background:\s*var\(--surface-strong\);/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.panel--chat\.panel--topic-create\s*\{[\s\S]*border-top:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.panel--chat \.panel__header\s*\{[\s\S]*border-bottom:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.topic-item,\s*html\[data-theme="light"\] \.user-item,\s*html\[data-theme="light"\] \.ranking-item\s*\{[\s\S]*border-color:\s*color-mix/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.ranking-carousel,\s*html\[data-theme="light"\] \.drawer-ranking__switch\s*\{[\s\S]*border-color:\s*color-mix/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.composer\s*\{[\s\S]*border-top:\s*1px solid/
+    );
+    assert.match(
+      styles,
+      /input,\s*textarea\s*\{[\s\S]*box-sizing:\s*border-box;[\s\S]*padding:\s*0\.92rem 1rem;/
+    );
+    assert.match(
+      styles,
+      /textarea\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*hidden;[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*max-height:\s*10rem;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb\) transparent;/
+    );
+    assert.match(
+      styles,
+      /textarea::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--scrollbar-thumb\);[\s\S]*border-radius:\s*999px;[\s\S]*background-clip:\s*content-box;/
+    );
     assert.match(styles, /textarea\.is-scrollable\s*\{[\s\S]*overflow-y:\s*auto;/);
-    assert.match(styles, /#messageInput:not\(\.is-scrollable\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*0;[\s\S]*height:\s*0;/);
-    assert.match(styles, /input::placeholder,\s*textarea::placeholder\s*\{[\s\S]*color:\s*color-mix\(in srgb,\s*var\(--accent\) 28%,\s*var\(--text-soft\)\);[\s\S]*opacity:\s*1;/);
-    assert.match(styles, /html\[data-theme="light"\] \.composer input,\s*html\[data-theme="light"\] \.composer textarea\s*\{[\s\S]*border:\s*1px solid color-mix/);
-    assert.match(styles, /html\[data-theme="light"\] \.composer--topic-create input,\s*html\[data-theme="light"\] \.composer--topic-create textarea\s*\{[\s\S]*border-radius:\s*0;/);
-    assert.match(styles, /html\[data-theme="light"\] \.message \+ \.message::before\s*\{[\s\S]*height:\s*1px;/);
-    assert.match(styles, /html\[data-theme="light"\] \.rankings-section\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top:\s*1px solid/);
+    assert.match(
+      styles,
+      /#messageInput:not\(\.is-scrollable\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*0;[\s\S]*height:\s*0;/
+    );
+    assert.match(
+      styles,
+      /input::placeholder,\s*textarea::placeholder\s*\{[\s\S]*color:\s*color-mix\(in srgb,\s*var\(--accent\) 28%,\s*var\(--text-soft\)\);[\s\S]*opacity:\s*1;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.composer input,\s*html\[data-theme="light"\] \.composer textarea\s*\{[\s\S]*border:\s*1px solid color-mix/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.composer--topic-create input,\s*html\[data-theme="light"\] \.composer--topic-create textarea\s*\{[\s\S]*border-radius:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.message \+ \.message::before\s*\{[\s\S]*height:\s*1px;/
+    );
+    assert.match(
+      styles,
+      /html\[data-theme="light"\] \.rankings-section\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top:\s*1px solid/
+    );
     assert.match(app, /from "\.\/controller\.js\?v=20260702-sessioncookie"/);
     assert.match(components, /createProfileAvatar/);
     assert.match(components, /message__avatar/);
@@ -4878,8 +6557,14 @@ await (async () => {
     assert.match(components, /message__like-button/);
     assert.match(components, /message__like-button--positive/);
     assert.match(components, /message__like-button--negative/);
-    assert.match(components, /const likeScore = \(message\.likes \?\? 0\) - \(message\.dislikes \?\? 0\);/);
-    assert.match(components, /const likeLabel = likeScore > 0 \? `\+\$\{likeScore\}` : String\(likeScore\);/);
+    assert.match(
+      components,
+      /const likeScore = \(message\.likes \?\? 0\) - \(message\.dislikes \?\? 0\);/
+    );
+    assert.match(
+      components,
+      /const likeLabel = likeScore > 0 \? `\+\$\{likeScore\}` : String\(likeScore\);/
+    );
     assert.doesNotMatch(components, /`Like/);
     assert.doesNotMatch(components, /Te gusta/);
     assert.match(components, /message__action-menu/);
@@ -4899,7 +6584,10 @@ await (async () => {
     assert.match(components, /user-item__trigger/);
     assert.match(components, /aria-pressed/);
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
-    assert.match(controller, /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260702-sessioncookie";/);
+    assert.match(
+      controller,
+      /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260702-sessioncookie";/
+    );
     assert.match(controllerApp, /from "\.\/ui\/transition-utils\.js"/);
     assert.match(controllerTheme, /export function applyStoredTheme/);
     assert.match(controllerTheme, /topykly-palette/);
@@ -4915,20 +6603,42 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
     assert.match(controllerApp, /from "\.\/controller-render\.js"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
-    assert.match(controllerApp, /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/);
-    assert.match(controllerApp, /bindPageEvents\(dom, \{[\s\S]*state: actions\.state,[\s\S]*setAuthUiSync: actions\.setAuthUiSync,/);
+    assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;/);
+    assert.match(
+      controllerApp,
+      /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/
+    );
+    assert.match(
+      controllerApp,
+      /bindPageEvents\(dom, \{[\s\S]*state: actions\.state,[\s\S]*setAuthUiSync: actions\.setAuthUiSync,/
+    );
     assert.match(controllerApp, /toggleMessageLike:\s*actions\.toggleMessageLike/);
     assert.match(controllerApp, /toggleMessageDislike:\s*actions\.toggleMessageDislike/);
-    assert.match(controllerApp, /openAdminPanel: actions\.openAdminPanel,[\s\S]*closeAdminPanel: actions\.closeAdminPanel,[\s\S]*applyAdminAction: actions\.applyAdminAction,/);
+    assert.match(
+      controllerApp,
+      /openAdminPanel: actions\.openAdminPanel,[\s\S]*closeAdminPanel: actions\.closeAdminPanel,[\s\S]*applyAdminAction: actions\.applyAdminAction,/
+    );
     assert.match(controllerApp, /closePublicProfileModal: actions\.closePublicProfileModal/);
-    assert.doesNotMatch(controllerApp, /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/);
+    assert.doesNotMatch(
+      controllerApp,
+      /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/
+    );
     assert.match(actions, /from "\.\/services\/api\.js\?v=20260702-sessioncookie"/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
     assert.match(actions, /openPaletteModal/);
-    assert.match(actions, /function resetPaletteModalScroll\(dom\)\s*\{[\s\S]*body\.scrollTop = 0;[\s\S]*body\.scrollLeft = 0;/);
-    assert.match(actions, /function focusPaletteModalStart\(dom\)\s*\{[\s\S]*preventScroll:\s*true[\s\S]*resetPaletteModalScroll\(dom\);[\s\S]*requestAnimationFrame/);
-    assert.match(actions, /function openPaletteModal\(\)\s*\{[\s\S]*state\.isPaletteModalOpen = true;[\s\S]*render\(\);[\s\S]*focusPaletteModalStart\(dom\);[\s\S]*\}/);
+    assert.match(
+      actions,
+      /function resetPaletteModalScroll\(dom\)\s*\{[\s\S]*body\.scrollTop = 0;[\s\S]*body\.scrollLeft = 0;/
+    );
+    assert.match(
+      actions,
+      /function focusPaletteModalStart\(dom\)\s*\{[\s\S]*preventScroll:\s*true[\s\S]*resetPaletteModalScroll\(dom\);[\s\S]*requestAnimationFrame/
+    );
+    assert.match(
+      actions,
+      /function openPaletteModal\(\)\s*\{[\s\S]*state\.isPaletteModalOpen = true;[\s\S]*render\(\);[\s\S]*focusPaletteModalStart\(dom\);[\s\S]*\}/
+    );
     assert.match(actions, /closePaletteModal/);
     assert.match(actions, /selectPalette/);
     assert.match(actions, /ensureCustomPaletteActive/);
@@ -4960,11 +6670,17 @@ await (async () => {
     assert.match(chat, /No se pueden enviar mensajes en este tema cerrado/);
     assert.match(chatActions, /Inicia sesion o crea una cuenta para participar/);
     assert.match(chatActions, /Motivo del reporte del usuario/);
+    assert.match(chatActions, /function getReactionScrollState\(trigger\)/);
+    assert.match(chatActions, /restoreReactionScroll\(reactionScrollState\);/);
     assert.match(rankings, /renderRankings/);
     assert.match(rankings, /Selecciona un tema para ver su actividad real/);
     assert.match(rankings, /getActiveRankingStep/);
     assert.match(rankings, /syncRankingListHeights/);
     assert.match(rankings, /syncRankingSkeletonHeights/);
+    assert.match(rankings, /const GLOBAL_RANKING_FADE_MS = 150;/);
+    assert.match(rankings, /function renderRankingTarget/);
+    assert.match(rankings, /setTimeout\(\(\) => \{[\s\S]*renderIntoTargets\(\[target\]/);
+    assert.match(rankings, /is-ranking-fading/);
     assert.match(rankingPanelState, /export function syncRankingListHeights/);
     assert.match(rankingPanelState, /export function syncRankingSkeletonHeights/);
     assert.match(rankingPanelState, /export function clearRankingListHeights/);
@@ -4990,12 +6706,30 @@ await (async () => {
     assert.doesNotMatch(paletteModal, /palette-option__description/);
     assert.match(icons, /image\.width = 84;[\s\S]*image\.height = 84;/);
     assert.match(icons, /size: AVATAR_INTRINSIC_SIZE/);
-    assert.match(sharedBaseComponents, /svg\.setAttribute\("width", "84"\);[\s\S]*svg\.setAttribute\("height", "84"\);/);
-    assert.match(topbarActionEvents, /image\.width = 42;[\s\S]*image\.height = 42;[\s\S]*image\.loading = "lazy";/);
-    assert.match(topbarActionEvents, /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*dom\.profileAvatarPreview\.append\(image\)/);
-    assert.match(profileModal, /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*image\.loading = "lazy";/);
-    assert.match(publicProfileModal, /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*image\.loading = "eager";/);
-    assert.match(adminPanel, /image\.width = 64;[\s\S]*image\.height = 64;[\s\S]*image\.loading = "lazy";/);
+    assert.match(
+      sharedBaseComponents,
+      /svg\.setAttribute\("width", "84"\);[\s\S]*svg\.setAttribute\("height", "84"\);/
+    );
+    assert.match(
+      topbarActionEvents,
+      /image\.width = 42;[\s\S]*image\.height = 42;[\s\S]*image\.loading = "lazy";/
+    );
+    assert.match(
+      topbarActionEvents,
+      /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*dom\.profileAvatarPreview\.append\(image\)/
+    );
+    assert.match(
+      profileModal,
+      /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*image\.loading = "lazy";/
+    );
+    assert.match(
+      publicProfileModal,
+      /image\.width = 232;[\s\S]*image\.height = 232;[\s\S]*image\.loading = "eager";/
+    );
+    assert.match(
+      adminPanel,
+      /image\.width = 64;[\s\S]*image\.height = 64;[\s\S]*image\.loading = "lazy";/
+    );
     assert.match(publicProfileModal, /export function renderPublicProfileModal/);
     assert.match(publicProfileModal, /createdAt/);
     assert.match(publicProfileModal, /formatJoinedDateParts/);
@@ -5005,23 +6739,35 @@ await (async () => {
     assert.match(publicProfileModal, /document\.createElement\("span"\)/);
     assert.match(publicProfileModal, /profileShowDescription/);
     assert.match(publicProfileModal, /profileShowJoinedAt/);
-    assert.match(publicProfileModal, /avatarPendingUrl \|\| user\.avatarUrl/);
+    assert.match(publicProfileModal, /const publicAvatarUrl = isCurrentUser \? user\.avatarPendingUrl \|\| user\.avatarUrl \|\| "" : user\.avatarUrl \|\| "";/);
     assert.match(publicProfileModal, /getRecentUserCafes/);
-    assert.match(publicProfileModal, /Últimos temas/);
+    assert.match(publicProfileModal, /\u00daltimos temas/);
     assert.match(publicProfileModal, /publicProfileRecentCafes/);
     assert.match(publicProfileModal, /publicProfileDescription/);
     assert.match(publicProfileModal, /publicProfileJoinedAt/);
     assert.match(publicProfileModal, /publicProfileActions\.hidden = isCurrentUser/);
     assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isCurrentUser/);
-    assert.doesNotMatch(publicProfileModal, /comment|comentario|likes received|likesRecibidos|online|estado/i);
+    assert.doesNotMatch(
+      publicProfileModal,
+      /comment|comentario|likes received|likesRecibidos|online|estado/i
+    );
     assert.match(titles, /renderTitles/);
     assert.match(topics, /renderTopics/);
     assert.match(topics, /const isLoading = !state\.viewer/);
-    assert.match(topics, /createEmptyState\("Todavia no hay temas"/);
+    assert.match(topics, /if \(!topics\.length\) \{\s*return \[\];\s*\}/);
     assert.match(users, /renderUsers/);
     assert.match(users, /const isLoading = !state\.viewer/);
-    assert.match(users, /createEmptyState\("Sin usuarios todavia"/);
+    assert.match(users, /if \(!ordered\.length\) \{\s*return \[\];\s*\}/);
     assert.match(chat, /const isLoading = !state\.viewer/);
+    assert.match(components, /export function createMessageSkeleton/);
+    assert.match(chat, /createMessageSkeleton/);
+    assert.match(chat, /message-stream message-stream--loading/);
+    assert.match(chat, /messageStream\.setAttribute\("aria-busy", String\(isLoading\)\)/);
+    assert.match(chat, /messageStream\.setAttribute\("role", "status"\)/);
+    assert.match(chat, /messageStream\.removeAttribute\("role"\)/);
+    assert.match(styles, /\.message--skeleton/);
+    assert.match(styles, /@keyframes chat-skeleton-settle/);
+    assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
     assert.match(domModule, /export function cacheDom/);
     assert.match(domModule, /chatTitle/);
     assert.match(domModule, /topicTitleInput/);
@@ -5042,15 +6788,35 @@ await (async () => {
     assert.match(eventsModule, /syncComposerTextareaHeight/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
-    assert.match(eventsModule, /messageForm\.addEventListener\("submit", handlers\.submitMessage\)/);
-    assert.match(eventsModule, /messageInput\.addEventListener\("input", \(\) => \{[\s\S]*syncComposerTextareaHeight\(dom\.messageInput\);/);
+    assert.match(
+      eventsModule,
+      /messageForm\.addEventListener\("submit", handlers\.submitMessage\)/
+    );
+    assert.match(
+      eventsModule,
+      /messageInput\.addEventListener\("input", \(\) => \{[\s\S]*syncComposerTextareaHeight\(dom\.messageInput\);/
+    );
     assert.match(chat, /export function syncComposerTextareaHeight/);
     assert.match(chat, /classList\.toggle\(\s*"is-scrollable"/);
     assert.match(previewServer, /const topicId = segments\[2\] \|\| "";/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
+    assert.match(chat, /function getMessageBodyMeasuredScrollHeight\(body\)/);
+    assert.match(chat, /if \(card\.style\.minHeight !== nextMinHeight\)/);
+    assert.match(chat, /\.message__action-menu:not\(\[hidden\]\), \.message__reaction-menu:not\(\[hidden\]\)/);
+    assert.match(
+      styles,
+      /\.message__reaction-menu\s*\{[\s\S]*display:\s*grid;[\s\S]*min-width:\s*112px;/
+    );
+    assert.match(
+      styles,
+      /\.message__reaction-menu \.message__action-menu-button\s*\{[\s\S]*min-width:\s*0;[\s\S]*border-bottom:\s*1px solid/
+    );
     assert.match(chat, /syncTopicReportButton/);
     assert.match(chat, /chatHero\.hidden = true;/);
-    assert.doesNotMatch(chat, /if \(shouldSyncChatLayout\(previousRenderState,\s*nextRenderState\)\)\s*\{[\s\S]*syncMessageCardHeights\(dom\.messageStream\);/);
+    assert.doesNotMatch(
+      chat,
+      /if \(shouldSyncChatLayout\(previousRenderState,\s*nextRenderState\)\)\s*\{[\s\S]*syncMessageCardHeights\(dom\.messageStream\);/
+    );
     assert.match(eventsModule, /activateConnectedUser/);
     assert.match(eventsModule, /profileAvatarCropModal/);
     assert.match(eventsModule, /closePublicProfileModal/);
@@ -5059,6 +6825,8 @@ await (async () => {
     assert.match(eventsModule, /data-connected-user-id/);
     assert.match(eventsModule, /data-user-action/);
     assert.match(renderUtils, /renderIntoTargets/);
+    assert.match(renderUtils, /function shouldPreserveMessageLayoutStyle/);
+    assert.match(renderUtils, /existing\.classList\?\.contains\?\.\("message"\)/);
     assert.match(drawers, /getTransitionDurationMs/);
     assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260702-sessioncookie"/);
     assert.match(topbar, /bindTopbarEvents/);
@@ -5072,10 +6840,19 @@ await (async () => {
     assert.match(topbarActionEvents, /CUSTOM_PALETTE_ID/);
     assert.match(topbarActionEvents, /const PROFILE_AVATAR_SOURCE_MAX_BYTES = 8 \* 1024 \* 1024;/);
     assert.match(topbarActionEvents, /const PROFILE_AVATAR_CROP_SIZE = 1024;/);
-    assert.match(topbarActionEvents, /addListener\(dom\.profileAvatarPreview, "click", openProfileAvatarPicker\)/);
+    assert.match(topbarActionEvents, /const PROFILE_AVATAR_CROP_PREVIEW_SIZE = 256;/);
+    assert.match(
+      topbarActionEvents,
+      /addListener\(dom\.profileAvatarPreview, "click", openProfileAvatarPicker\)/
+    );
     assert.match(topbarActionEvents, /setProfileSectionEditing\(dom, section, !isEditing\)/);
-    assert.match(topbarActionEvents, /addListener\(dom\.profileNameEditButton, "click", \(\) => toggleProfileSection\("name"\)\)/);
+    assert.match(
+      topbarActionEvents,
+      /addListener\(dom\.profileNameEditButton, "click", \(\) => toggleProfileSection\("name"\)\)/
+    );
     assert.match(topbarActionEvents, /let profileAvatarCropState = null;/);
+    assert.match(topbarActionEvents, /getProfileAvatarCropPreviewSize/);
+    assert.match(topbarActionEvents, /state\.offsetX \* outputRatio/);
     assert.match(topbarActionEvents, /canvas\.toDataURL\("image\/jpeg", 0\.88\)/);
     assert.match(topbarActionEvents, /bindPickerLifecycle/);
     assert.match(topbarActionEvents, /bindPickerActionButtons/);
@@ -5087,16 +6864,29 @@ await (async () => {
     assert.match(topbarActionEvents, /syncAuthUi/);
     assert.match(topbarActionEvents, /handlers\.setAuthUiSync\?\.\(syncAuthUi\)/);
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
-    assert.match(topbarActionEvents, /document\.documentElement\.dataset\.authState = isLoggedIn\(\) \? "logged-in" : "logged-out"/);
-    assert.match(topbarActionEvents, /await handlers\.login\?\.\(\{ turnstileToken, selectedTopicId: getPendingAuthTopicId\(\) \}\)/);
+    assert.match(
+      topbarActionEvents,
+      /document\.documentElement\.dataset\.authState = isLoggedIn\(\) \? "logged-in" : "logged-out"/
+    );
+    assert.match(
+      topbarActionEvents,
+      /await handlers\.login\?\.\(\{ turnstileToken, selectedTopicId: getPendingAuthTopicId\(\) \}\)/
+    );
     assert.match(topbarActionEvents, /await handlers\.logout\?\.\(\)/);
     assert.match(topbarActionEvents, /dom\.authTools\.hidden = !loggedIn/);
     assert.match(topbarActionEvents, /setLoggedIn/);
     assert.match(topbarActionEvents, /addListener\(dom\.authButton,\s*"click"/);
     assert.match(topbarActionEvents, /dom\.authButton\.hidden = isMobile && loggedIn/);
-    assert.match(topbarActionEvents, /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/);
+    assert.match(
+      topbarActionEvents,
+      /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/
+    );
     assert.match(topbarActionEvents, /target\.dataset\.mobileTopbarAction === "auth"/);
     assert.match(topbarActionEvents, /Toca de nuevo para cerrar sesion/);
+    assert.match(topbarActionEvents, /function validateAuthPasswordFields/);
+    assert.match(topbarActionEvents, /dom\.authPasswordForm\.dataset\.authMode = authPasswordMode/);
+    assert.match(topbarActionEvents, /setAuthFieldInvalid\(dom\.authNicknameInput, true\)/);
+    assert.match(topbarActionEvents, /setAuthStatusMessage\("Revisa los campos marcados\.", "error"\)/);
     assert.match(topbarActionEvents, /requestLogoutConfirmation\(\)/);
     assert.match(topbarActionEvents, /data-mobile-topbar-action/);
     assert.match(topbarActionEvents, /setMobileDrawerPanel/);
@@ -5123,7 +6913,3 @@ await (async () => {
   console.error(error);
   process.exitCode = 1;
 });
-
-
-
-

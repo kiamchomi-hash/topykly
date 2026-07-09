@@ -1,4 +1,4 @@
-import { createEmptyState, createTopicItem, createTopicSkeleton } from "../components.js";
+import { createTopicItem, createTopicSkeleton } from "../components.js";
 import { getVisibleTopics, TOPIC_VISIBLE_LIMIT } from "../model.js";
 import { renderIntoTargets } from "./render-utils.js";
 
@@ -12,7 +12,7 @@ export function renderTopics(state, dom, onFocusTopic) {
     }
 
     if (!topics.length) {
-      return [createEmptyState("Todavia no hay temas", "Crea el primer tema para abrir la comunidad.")];
+      return [];
     }
 
     return topics.map((topic) => {

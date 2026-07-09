@@ -111,6 +111,11 @@ function normalizeBackendPayload(payload) {
     selectedTopicId: payload.selectedTopicId ?? null,
     reportedTopicIds: Array.isArray(payload.reportedTopicIds) ? payload.reportedTopicIds : [],
     reportedMessageIds: Array.isArray(payload.reportedMessageIds) ? payload.reportedMessageIds : [],
+    friendships: payload.friendships || {
+      incoming: [],
+      outgoing: [],
+      friends: []
+    },
     users: buildUsers(payload.users || []),
     topics: Array.isArray(payload.topics) ? payload.topics.map(normalizeTopic) : []
   };
@@ -233,6 +238,26 @@ export const api = {
     });
   },
 
+  async sendFriendRequest(userId, selectedTopicId = null) {
+    return request(`/api/friends/${encodeURIComponent(userId)}/request`, {
+      method: "POST",
+      body: { selectedTopicId }
+    });
+  },
+
+  async acceptFriendRequest(userId, selectedTopicId = null) {
+    return request(`/api/friends/${encodeURIComponent(userId)}/accept`, {
+      method: "POST",
+      body: { selectedTopicId }
+    });
+  },
+
+  async rejectFriendRequest(userId, selectedTopicId = null) {
+    return request(`/api/friends/${encodeURIComponent(userId)}/reject`, {
+      method: "POST",
+      body: { selectedTopicId }
+    });
+  },
   async getAdminDashboard(searchParams = {}) {
     return readApiPayload("/api/admin/dashboard", { searchParams });
   },

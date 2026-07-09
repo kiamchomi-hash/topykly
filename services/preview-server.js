@@ -476,6 +476,27 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+
+    if (req.method === "POST" && url.pathname.startsWith("/api/friends/")) {
+      const segments = url.pathname.split("/").filter(Boolean);
+      const userId = segments[2] || "";
+      const action = segments[3] || "";
+      const body = await readJsonBody(req);
+      const methodByAction = {
+        request: "sendFriendRequest",
+        accept: "acceptFriendRequest",
+        reject: "rejectFriendRequest"
+      };
+      const storeMethod = methodByAction[action];
+      if (!storeMethod || typeof store[storeMethod] !== "function") {
+        throw new ApiError(404, "NOT_FOUND", "Ruta API no encontrada.");
+      }
+      sendBackendPayload(res, req, authService, 200, store[storeMethod](userId, {
+        ...context,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
       sendJson(res, 200, store.getAdminDashboard({
         ...context,

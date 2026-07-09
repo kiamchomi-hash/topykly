@@ -102,6 +102,7 @@ try {
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.equal(response.headers.get("x-frame-options"), "DENY");
     assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
+    assert.match(response.headers.get("content-security-policy") || "", /base-uri 'self'/);
     assert.match(response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
     assert.match(response.headers.get("content-security-policy") || "", /upgrade-insecure-requests/);
     assert.match(response.headers.get("content-security-policy") || "", /script-src 'self' 'unsafe-inline' https:\/\/cdn\.jsdelivr\.net https:\/\/challenges\.cloudflare\.com/);

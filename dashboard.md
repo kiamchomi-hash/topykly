@@ -1,31 +1,33 @@
 # 📊 Dashboard de Salud y Seguridad: TOPYKLY
 
-*Último chequeo:* `2026-07-07T01:45:10.525Z`
+*Último chequeo:* `2026-07-07T19:23:35.028Z`
 
 ## 👑 Agente Coordinador
 *   Se detectaron alertas críticas de salud o seguridad que requieren revisión.
 
 ## 🛡️ Agente Auditor de Seguridad
-*   Configurar la directiva <code>base-uri 'self'</code> en la cabecera CSP para evitar ataques de inyección de etiquetas base que alteren las rutas de los archivos estáticos.
+*   Configurar la directiva Referrer-Policy en 'same-origin' o 'no-referrer' en las peticiones de recursos externos de avatares para evitar la fuga de URLs y parámetros de sesión a servidores externos.
 
 ## 🧪 Agente QA Tester
 
 ## 📐 Agente Arquitecto / Refactorización
 
 ## 🎨 Agente Revisor de Frontend
-*   Implementar la propiedad CSS <code>contain: layout style;</code> en los elementos <code>.topic-item</code> y <code>.ranking-item</code> para mejorar el rendimiento del rendering y reducir el tiempo de cálculo del layout del navegador.
+*   Reducir el tamaño del bundle inicial extrayendo los estilos inline de la paleta personalizada de colores del DOM a una hoja de estilos dinámica e inyectada mediante un objeto blob CSS para evitar la invalidación de la caché de renderizado.
 
 ## 📱 Agente de Pruebas Responsive
-*   Ajustar el ancho máximo del selector de paletas de colores en móviles medianos (entre 320px y 375px) a <code>280px</code> para garantizar un centrado estético y uniforme.
+*   Corregir el posicionamiento de la ventana modal del chat de soporte/ayuda en pantallas táctiles horizontales: Reducir su altura máxima a <code>70vh</code> en orientación landscape de dispositivos móviles de gama baja para asegurar que el input del teclado en pantalla no oculte los mensajes.
 
 ## 👥 Agente de Usabilidad y UX
-*   Mejorar la visualización del input del chat en pantallas ultra pequeñas: Reducir ligeramente el tamaño de fuente del placeholder del campo de entrada de mensajes a <code>0.85rem</code> para evitar saltos de línea innecesarios.
 
 ## ⚡ Agente de Flujos de Usabilidad
-*   Optimizar el flujo de cierre del drawer de perfil: Cerrar automáticamente el modal de perfil si el usuario abre directamente la sección de administración, evitando superposiciones de ventanas modales.
+*   Mejorar el flujo de recuperación de contraseña: Si el usuario introduce credenciales erróneas tres veces seguidas en el modal de autenticación, mostrar un enlace de ayuda directa o reinicio en lugar de solo la alerta genérica de error.
 
 ## 🎓 Agente de Estándares y Mentoría
-*   Definir una directiva en <code>eslint</code> (o guías de estilo internas) para forzar la utilización exclusiva de plantillas de cadena (template literals) en lugar de concatenaciones de strings con el operador <code>+</code> en todas las utilidades de renderizado del DOM.
+*   Definir un estándar de orden de declaración de clases CSS (ej. usando la convención BEM estricta o agrupamiento posicional) en todas las hojas de estilo del proyecto para simplificar las auditorías de diseño responsive.
 
 ## 🚀 Agente de SEO y Rendimiento
-*   Mejorar la accesibilidad del botón de scroll to top: Agregar el atributo semántico <code>aria-hidden="true"</code> a la flecha interna del botón para que los lectores de pantalla no lean caracteres vacíos o confusos.
+*   Añadir metadatos de Open Graph (<code>og:title</code>, <code>og:description</code>, <code>og:image</code>) en el head de <code>index.html</code> para mejorar la indexación y la presentación visual del enlace del sitio al compartirlo en plataformas como Discord, WhatsApp o X.
+
+## ✨ Agente de Acabado y Detalles
+*   Implementar transiciones de fundido de entrada/salida (fade in/out de <code>150ms</code>) al conmutar entre los filtros de la lista de rankings globales para suavizar el cambio de datos y mejorar la percepción de fluidez.

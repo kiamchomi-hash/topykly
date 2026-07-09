@@ -82,6 +82,7 @@ export const reducers = {
     const nextPublicProfileUserId = payload.users.some((user) => user.id === state.publicProfileUserId)
       ? state.publicProfileUserId
       : null;
+    const nextTopicIds = new Set(payload.topics.map((topic) => topic.id));
 
     return {
       ...state,
@@ -90,9 +91,15 @@ export const reducers = {
       reportedTopicIds: payload.reportedTopicIds ?? state.reportedTopicIds ?? [],
       reportedMessageIds: payload.reportedMessageIds ?? state.reportedMessageIds ?? [],
       rankings: payload.rankings ?? state.rankings ?? null,
+      friendships: payload.friendships ?? state.friendships ?? {
+        incoming: [],
+        outgoing: [],
+        friends: []
+      },
       users: payload.users,
       topics: payload.topics,
       unreadTopicIds: getUnreadTopicIdsAfterHydration(state, payload),
+      followedTopicIds: (state.followedTopicIds ?? []).filter((topicId) => nextTopicIds.has(topicId)),
       selectedTopicId: nextSelectedTopicId,
       activeConnectedUserId: nextActiveConnectedUserId,
       publicProfileUserId: nextPublicProfileUserId
@@ -114,6 +121,9 @@ export const reducers = {
     ...state,
     selectedTopicId,
     unreadTopicIds: (state.unreadTopicIds ?? []).filter((topicId) => topicId !== selectedTopicId),
+    followedTopicIds: selectedTopicId
+      ? [...new Set([...(state.followedTopicIds ?? []), selectedTopicId])]
+      : state.followedTopicIds ?? [],
     // Reset message flow state if needed
     activeConnectedUserId: null
   }),
@@ -140,7 +150,10 @@ export const reducers = {
 
   addMessageToTopic: (state, { topicId, message }) => ({
     ...state,
-    topics: reviveTopicWithMessage(state.topics, topicId, message)
+    topics: reviveTopicWithMessage(state.topics, topicId, message),
+    followedTopicIds: topicId
+      ? [...new Set([...(state.followedTopicIds ?? []), topicId])]
+      : state.followedTopicIds ?? []
   }),
 
   applyMessageReaction: (state, { messageId, reactionType }) => ({
@@ -181,12 +194,16 @@ export const reducers = {
     ...state,
     topics: insertTopicAtTop(state.topics, topic),
     unreadTopicIds: (state.unreadTopicIds ?? []).filter((topicId) => topicId !== topic.id),
+    followedTopicIds: [...new Set([...(state.followedTopicIds ?? []), topic.id])],
     selectedTopicId: topic.id
   }),
 
   markTopicRead: (state, topicId) => ({
     ...state,
-    unreadTopicIds: (state.unreadTopicIds ?? []).filter((unreadTopicId) => unreadTopicId !== topicId)
+    unreadTopicIds: (state.unreadTopicIds ?? []).filter((unreadTopicId) => unreadTopicId !== topicId),
+    followedTopicIds: topicId
+      ? [...new Set([...(state.followedTopicIds ?? []), topicId])]
+      : state.followedTopicIds ?? []
   }),
 
   incrementRefreshCount: (state) => ({
@@ -204,6 +221,16 @@ export const reducers = {
     isProfileModalOpen
   }),
 
+  setFriendRequestsPanelOpen: (state, isFriendRequestsPanelOpen) => ({
+    ...state,
+    isFriendRequestsPanelOpen
+  }),
+
+  setNotificationsPanelOpen: (state, isNotificationsPanelOpen) => ({
+    ...state,
+    isNotificationsPanelOpen
+  }),
+
   setAdminPanelOpen: (state, isAdminPanelOpen) => ({
     ...state,
     isAdminPanelOpen
@@ -217,6 +244,35 @@ export const reducers = {
   setFeedback: (state, feedback) => ({
     ...state,
     feedback
+  }),
+
+  addNotifications: (state, { notifications, notifiedMessageIds }) => ({
+    ...state,
+    notifications,
+    notifiedMessageIds
+  }),
+
+  dismissNotification: (state, notificationId) => ({
+    ...state,
+    notifications: (state.notifications ?? []).filter((notification) => notification.id !== notificationId)
+  }),
+
+  markNotificationRead: (state, notificationIds) => {
+    const ids = new Set(String(notificationIds || "").split(",").map((id) => id.trim()).filter(Boolean));
+    if (!ids.size) {
+      return state;
+    }
+    return {
+      ...state,
+      notifications: (state.notifications ?? []).map((notification) => ids.has(notification.id)
+        ? { ...notification, read: true }
+        : notification)
+    };
+  },
+
+  setWebNotificationsPermission: (state, permission) => ({
+    ...state,
+    webNotificationsPermission: permission
   })
 };
 

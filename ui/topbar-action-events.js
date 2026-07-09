@@ -4,8 +4,11 @@ import { dispatch, reducers } from "../store-logic.js";
 const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 const PROFILE_AVATAR_CROP_SIZE = 1024;
-const PROFILE_AVATAR_CROP_EDGE_GUARD = 2;
+const PROFILE_AVATAR_CROP_PREVIEW_SIZE = 256;
 const PROFILE_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const AUTH_RECOVERY_HELP_THRESHOLD = 3;
+const AUTH_EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const AUTH_NICKNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]{2,23}$/;
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled]):not([tabindex='-1'])",
@@ -25,6 +28,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   let turnstileScriptPromise = null;
   let turnstileWidgetId = null;
   let authPasswordMode = "login";
+  let failedPasswordLoginAttempts = 0;
   let pendingAuthTopicId = null;
   let turnstileRequired = false;
   let pendingTurnstileToken = null;
@@ -123,7 +127,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    const avatarUrl = handlers.state?.viewer?.avatarUrl || "";
+    const avatarUrl = handlers.state?.viewer?.avatarPendingUrl || handlers.state?.viewer?.avatarUrl || "";
     if (avatar.dataset.avatarUrl === avatarUrl) {
       return;
     }
@@ -709,8 +713,109 @@ export function bindTopbarActionEvents(dom, handlers) {
     dom.authStatus.hidden = !normalized;
     dom.authStatus.dataset.statusKind = normalized ? kind : "off";
   }
+  function setAuthRecoveryHelpVisible(isVisible) {
+    if (dom.authRecoveryHelp) {
+      dom.authRecoveryHelp.hidden = !isVisible;
+    }
+  }
+
+  function resetAuthRecoveryHelp() {
+    failedPasswordLoginAttempts = 0;
+    setAuthRecoveryHelpVisible(false);
+  }
+
+  function setAuthFieldInvalid(input, isInvalid) {
+    if (!input) {
+      return;
+    }
+
+    input.setAttribute?.("aria-invalid", String(Boolean(isInvalid)));
+    const field = typeof input.closest === "function"
+      ? input.closest(".auth-email-form__field")
+      : null;
+    field?.classList?.toggle?.("is-invalid", Boolean(isInvalid));
+  }
+
+  function resetAuthFieldValidation() {
+    [dom.authNicknameInput, dom.authEmailInput, dom.authPasswordInput].forEach((input) => {
+      setAuthFieldInvalid(input, false);
+    });
+  }
+
+  function markAuthErrorFields(error) {
+    const code = String(error?.code || "").toUpperCase();
+    const message = String(error?.message || "").toLowerCase();
+    let marked = false;
+
+    if (authPasswordMode === "login" && code === "INVALID_CREDENTIALS") {
+      setAuthFieldInvalid(dom.authEmailInput, true);
+      setAuthFieldInvalid(dom.authPasswordInput, true);
+      return;
+    }
+
+    if (code === "NICKNAME_TAKEN" || message.includes("nickname")) {
+      setAuthFieldInvalid(dom.authNicknameInput, true);
+      marked = true;
+    }
+    if (message.includes("email")) {
+      setAuthFieldInvalid(dom.authEmailInput, true);
+      marked = true;
+    }
+    if (message.includes("contrasena") || message.includes("contraseña")) {
+      setAuthFieldInvalid(dom.authPasswordInput, true);
+      marked = true;
+    }
+
+    if (!marked && code === "VALIDATION_ERROR") {
+      setAuthFieldInvalid(dom.authEmailInput, true);
+      setAuthFieldInvalid(dom.authPasswordInput, true);
+      if (authPasswordMode === "register") {
+        setAuthFieldInvalid(dom.authNicknameInput, true);
+      }
+    }
+  }
+
+  function validateAuthPasswordFields() {
+    resetAuthFieldValidation();
+    const isRegister = authPasswordMode === "register";
+    const email = String(dom.authEmailInput?.value || "").trim();
+    const password = String(dom.authPasswordInput?.value || "");
+    const nickname = String(dom.authNicknameInput?.value || "").trim();
+    let isValid = true;
+
+    if (isRegister && !AUTH_NICKNAME_PATTERN.test(nickname)) {
+      setAuthFieldInvalid(dom.authNicknameInput, true);
+      isValid = false;
+    }
+    if (!AUTH_EMAIL_PATTERN.test(email)) {
+      setAuthFieldInvalid(dom.authEmailInput, true);
+      isValid = false;
+    }
+    if (password.length < 8) {
+      setAuthFieldInvalid(dom.authPasswordInput, true);
+      isValid = false;
+    }
+
+    return isValid;
+  }
+
+  function registerAuthPasswordFailure(error) {
+    const isCredentialFailure = authPasswordMode === "login" && error?.code === "INVALID_CREDENTIALS";
+    if (!isCredentialFailure) {
+      return false;
+    }
+
+    failedPasswordLoginAttempts += 1;
+    const shouldShowHelp = failedPasswordLoginAttempts >= AUTH_RECOVERY_HELP_THRESHOLD;
+    setAuthRecoveryHelpVisible(shouldShowHelp);
+    return shouldShowHelp;
+  }
   function syncAuthPasswordMode() {
     const isRegister = authPasswordMode === "register";
+    if (dom.authPasswordForm) {
+      dom.authPasswordForm.dataset.authMode = authPasswordMode;
+    }
+
     [dom.authLoginModeButton, dom.authRegisterModeButton].forEach((button) => {
       if (!button) {
         return;
@@ -740,6 +845,8 @@ export function bindTopbarActionEvents(dom, handlers) {
   function setAuthPasswordMode(nextMode) {
     authPasswordMode = nextMode === "register" ? "register" : "login";
     resetTurnstileToken();
+    resetAuthRecoveryHelp();
+    resetAuthFieldValidation();
     setAuthStatusMessage();
     syncAuthPasswordMode();
   }
@@ -771,6 +878,8 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     pendingAuthTopicId = handlers.state?.selectedTopicId ?? null;
+    resetAuthRecoveryHelp();
+    resetAuthFieldValidation();
     setAuthStatusMessage();
     setAuthModalOpen(true);
     await syncTurnstile();
@@ -779,6 +888,8 @@ export function bindTopbarActionEvents(dom, handlers) {
   function closeAuthModal() {
     pendingAuthTopicId = null;
     resetTurnstileToken();
+    resetAuthRecoveryHelp();
+    resetAuthFieldValidation();
     setAuthStatusMessage();
     setAuthModalOpen(false);
   }
@@ -805,6 +916,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
     }
+
 
     authPending = true;
     syncAuthUi();
@@ -960,6 +1072,11 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
+    if (!validateAuthPasswordFields()) {
+      setAuthStatusMessage("Revisa los campos marcados.", "error");
+      return;
+    }
+
     authPending = true;
     syncAuthUi();
     setAuthButtonPending(dom.authPasswordButton, true, "Verificando...");
@@ -979,13 +1096,18 @@ export function bindTopbarActionEvents(dom, handlers) {
         : await handlers.loginWithPassword?.(payload);
 
       if (authResult) {
+        resetAuthRecoveryHelp();
         setAuthStatusMessage();
         closeAuthModal();
         handlers.flashTitle(authPasswordMode === "register" ? "Cuenta creada" : "Sesion iniciada");
       }
     } catch (error) {
       console.error(error);
-      const message = error?.message || "No se pudo completar el acceso";
+      markAuthErrorFields(error);
+      const showRecoveryHelp = registerAuthPasswordFailure(error);
+      const message = showRecoveryHelp
+        ? "No pudimos entrar con esos datos. Usa el enlace de recuperacion si olvidaste tu clave."
+        : error?.message || "No se pudo completar el acceso";
       setAuthStatusMessage(message, "error");
       handlers.flashTitle(message);
     } finally {
@@ -993,6 +1115,15 @@ export function bindTopbarActionEvents(dom, handlers) {
       setAuthButtonPending(dom.authPasswordButton, false);
       syncAuthUi();
     }
+  });
+  [dom.authNicknameInput, dom.authEmailInput, dom.authPasswordInput].forEach((node) => {
+    addListener(node, "input", () => {
+      setAuthFieldInvalid(node, false);
+      if (failedPasswordLoginAttempts > 0) {
+        resetAuthRecoveryHelp();
+        setAuthStatusMessage();
+      }
+    });
   });
   addListener(typeof window !== "undefined" ? window : null, "keydown", (event) => {
     if (event.key === "Escape" && dom.profileAvatarCropBackdrop && !dom.profileAvatarCropBackdrop.hidden) {
@@ -1007,11 +1138,11 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
 
   addListener(dom.friendRequestsButton, "click", () => {
-    handlers.flashTitle("Solicitudes de amistad abiertas");
+    handlers.toggleFriendRequestsPanel?.();
   });
 
   addListener(dom.notificationsButton, "click", () => {
-    handlers.flashTitle("Notificaciones abiertas");
+    handlers.toggleNotificationsPanel?.();
   });
 
   addListener(dom.messagesButton, "click", () => {
@@ -1150,13 +1281,20 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     const state = profileAvatarCropState;
-    const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
+    const previewSize = getProfileAvatarCropPreviewSize();
+    const scale = previewSize / Math.min(state.width, state.height) * state.zoom;
     const scaledWidth = state.width * scale;
     const scaledHeight = state.height * scale;
-    const maxX = Math.max(0, (scaledWidth - PROFILE_AVATAR_CROP_SIZE) / 2);
-    const maxY = Math.max(0, (scaledHeight - PROFILE_AVATAR_CROP_SIZE) / 2);
+    const maxX = Math.max(0, (scaledWidth - previewSize) / 2);
+    const maxY = Math.max(0, (scaledHeight - previewSize) / 2);
     state.offsetX = Math.max(-maxX, Math.min(maxX, state.offsetX));
     state.offsetY = Math.max(-maxY, Math.min(maxY, state.offsetY));
+  }
+
+  function getProfileAvatarCropPreviewSize() {
+    const cropWindow = dom.profileAvatarCropFrame?.querySelector?.(".profile-avatar-crop__window");
+    const bounds = cropWindow?.getBoundingClientRect?.();
+    return bounds?.width || PROFILE_AVATAR_CROP_PREVIEW_SIZE;
   }
 
   function syncProfileAvatarCropImage() {
@@ -1166,12 +1304,12 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     clampProfileAvatarCropOffset();
     const state = profileAvatarCropState;
-    const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
-    dom.profileAvatarCropImage.style.width = `${state.width * scale + PROFILE_AVATAR_CROP_EDGE_GUARD * 2}px`;
-    dom.profileAvatarCropImage.style.height = `${state.height * scale + PROFILE_AVATAR_CROP_EDGE_GUARD * 2}px`;
+    const previewSize = getProfileAvatarCropPreviewSize();
+    const scale = previewSize / Math.min(state.width, state.height) * state.zoom;
+    dom.profileAvatarCropImage.style.width = `${state.width * scale}px`;
+    dom.profileAvatarCropImage.style.height = `${state.height * scale}px`;
     dom.profileAvatarCropImage.style.transform = `translate(-50%, -50%) translate(${state.offsetX}px, ${state.offsetY}px)`;
   }
-
   function loadProfileAvatarImage(dataUrl) {
     return new Promise((resolve, reject) => {
       const image = new Image();
@@ -1218,20 +1356,16 @@ export function bindTopbarActionEvents(dom, handlers) {
       return "";
     }
 
+    const previewSize = getProfileAvatarCropPreviewSize();
+    const outputRatio = PROFILE_AVATAR_CROP_SIZE / previewSize;
     const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
     const scaledWidth = state.width * scale;
     const scaledHeight = state.height * scale;
-    const dx = (PROFILE_AVATAR_CROP_SIZE - scaledWidth) / 2 + state.offsetX;
-    const dy = (PROFILE_AVATAR_CROP_SIZE - scaledHeight) / 2 + state.offsetY;
+    const dx = (PROFILE_AVATAR_CROP_SIZE - scaledWidth) / 2 + state.offsetX * outputRatio;
+    const dy = (PROFILE_AVATAR_CROP_SIZE - scaledHeight) / 2 + state.offsetY * outputRatio;
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
-    context.drawImage(
-      state.image,
-      dx - PROFILE_AVATAR_CROP_EDGE_GUARD,
-      dy - PROFILE_AVATAR_CROP_EDGE_GUARD,
-      scaledWidth + PROFILE_AVATAR_CROP_EDGE_GUARD * 2,
-      scaledHeight + PROFILE_AVATAR_CROP_EDGE_GUARD * 2
-    );
+    context.drawImage(state.image, dx, dy, scaledWidth, scaledHeight);
 
     return canvas.toDataURL("image/jpeg", 0.88);
   }

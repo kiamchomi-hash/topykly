@@ -1,4 +1,4 @@
-import { createEmptyState, createUserItem, createUserSkeleton } from "../components.js";
+import { createUserItem, createUserSkeleton } from "../components.js";
 import { renderIntoTargets } from "./render-utils.js";
 
 export function renderUsers(state, dom) {
@@ -19,7 +19,7 @@ export function renderUsers(state, dom) {
     }
 
     if (!ordered.length) {
-      return [createEmptyState("Sin usuarios todavia", "Los perfiles reales apareceran cuando la gente se registre.")];
+      return [];
     }
 
     return ordered.map((user) => createUserItem(user, state.currentUserId, state.activeConnectedUserId));
