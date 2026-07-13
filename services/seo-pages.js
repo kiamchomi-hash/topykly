@@ -322,7 +322,7 @@ export function renderNotFoundPage() {
     description: "",
     robotsMeta: "noindex,follow",
     bodyHtml: `<h1 class="seo-title">Página no encontrada</h1>
-      <p>El contenido que buscás no existe o dejó de estar disponible.</p>
+      <p>El contenido que buscas no existe o dejó de estar disponible.</p>
       <a class="seo-cta" href="/">Abrir TOPYKLY</a>`
   });
 }

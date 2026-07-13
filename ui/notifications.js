@@ -348,7 +348,8 @@ export function createNotificationStateUpdate(state, notifications) {
   const notificationIds = new Set();
   const normalizedNotifications = notifications.map((notification) => ({
     ...notification,
-    read: Boolean(notification.read)
+    read: Boolean(notification.read),
+    seen: Boolean(notification.seen || notification.read || state.isNotificationsPanelOpen)
   }));
   const nextNotifications = [...normalizedNotifications, ...(state.notifications || [])]
     .filter((notification) => {
@@ -387,14 +388,48 @@ function positionNotificationPanel(panel, button) {
     // Anchor button hidden (mobile viewport): fall back to the CSS default position.
     panel.style.removeProperty("--notification-panel-width");
     panel.style.removeProperty("--notification-panel-right");
+    panel.style.removeProperty("--notification-panel-left");
     panel.style.removeProperty("--notification-panel-top");
+    panel.style.removeProperty("--notification-panel-bottom");
     return;
   }
 
   const gap = 10;
   const viewportPadding = 12;
-  const panelWidth = Math.min(400, Math.max(292, window.innerWidth - viewportPadding * 2));
   const right = Math.max(viewportPadding, window.innerWidth - rect.right);
+  const isMobileFloatingButton = document.documentElement?.classList?.contains("is-mobile-viewport");
+
+  if (isMobileFloatingButton) {
+    const panelWidth = Math.min(420, Math.max(292, window.innerWidth - viewportPadding * 2));
+    const buttonCenterX = rect.left + rect.width / 2;
+    const buttonCenterY = rect.top + rect.height / 2;
+    panel.style.setProperty("--notification-panel-width", `${panelWidth}px`);
+
+    if (buttonCenterX <= window.innerWidth / 2) {
+      const left = Math.min(
+        window.innerWidth - panelWidth - viewportPadding,
+        Math.max(viewportPadding, rect.left)
+      );
+      panel.style.setProperty("--notification-panel-left", `${left}px`);
+      panel.style.removeProperty("--notification-panel-right");
+    } else {
+      panel.style.setProperty("--notification-panel-right", `${right}px`);
+      panel.style.removeProperty("--notification-panel-left");
+    }
+
+    if (buttonCenterY <= window.innerHeight / 2) {
+      const top = Math.max(viewportPadding, rect.bottom + gap);
+      panel.style.setProperty("--notification-panel-top", `${top}px`);
+      panel.style.removeProperty("--notification-panel-bottom");
+    } else {
+      const bottom = Math.max(viewportPadding, window.innerHeight - rect.top + gap);
+      panel.style.removeProperty("--notification-panel-top");
+      panel.style.setProperty("--notification-panel-bottom", `${bottom}px`);
+    }
+    return;
+  }
+
+  const panelWidth = Math.min(420, Math.max(292, window.innerWidth - viewportPadding * 2));
   const top = Math.min(
     window.innerHeight - viewportPadding,
     Math.max(viewportPadding, rect.bottom + gap)
@@ -402,22 +437,36 @@ function positionNotificationPanel(panel, button) {
 
   panel.style.setProperty("--notification-panel-width", `${panelWidth}px`);
   panel.style.setProperty("--notification-panel-right", `${right}px`);
+  panel.style.removeProperty("--notification-panel-left");
   panel.style.setProperty("--notification-panel-top", `${top}px`);
+  panel.style.removeProperty("--notification-panel-bottom");
 }
 
-function createNotificationPanelHeader() {
+function createNotificationPanelHeader(notifications) {
   const header = document.createElement("header");
   header.className = "notification-panel__header";
   header.dataset.id = "header";
-  const title = document.createElement("h1");
+
+  const heading = document.createElement("div");
+  heading.className = "notification-panel__heading";
+
+  const title = document.createElement("h2");
   title.className = "notification-panel__title";
   title.textContent = "Notificaciones";
+
+  const unreadCount = notifications.filter((notification) => !notification.read).length;
+  const subtitle = document.createElement("span");
+  subtitle.className = "notification-panel__subtitle";
+  subtitle.textContent = unreadCount ? `${unreadCount} sin abrir` : "Actividad reciente";
+
   const closeButton = document.createElement("button");
   closeButton.className = "notification-panel__close";
   closeButton.type = "button";
   closeButton.setAttribute("aria-label", "Cerrar notificaciones");
   closeButton.dataset.closeNotifications = "true";
-  header.append(title, closeButton);
+
+  heading.append(title, subtitle);
+  header.append(heading, closeButton);
   return header;
 }
 
@@ -448,7 +497,7 @@ const EASTER_EGGS = [
     id: "cocacola",
     name: "Coca-Cola",
     hex: "#F40009",
-    title: "Destapá la felicidad (pero no hay notificaciones)",
+    title: "Destapa la felicidad (pero no hay notificaciones)",
     draw: (accentColor) => `
       <svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M30 82c6 3 30 3 36 0" stroke="rgba(0,0,0,0.15)" stroke-width="4" stroke-linecap="round" />
@@ -472,7 +521,7 @@ const EASTER_EGGS = [
     id: "pepsi",
     name: "Pepsi",
     hex: "#003087",
-    title: "Tomá Topy-Pepsi (aunque sigas sin notificaciones)",
+    title: "Toma Topy-Pepsi (aunque sigas sin notificaciones)",
     draw: (accentColor) => `
       <svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M28 82c8 3 32 3 40 0" stroke="rgba(0,0,0,0.15)" stroke-width="4" stroke-linecap="round" />
@@ -502,7 +551,7 @@ const EASTER_EGGS = [
     id: "mcdonalds",
     name: "McDonald's",
     hex: "#FFC72C",
-    title: "Me encanta... ver que no tenés notificaciones",
+    title: "Me encanta... ver que no tienes notificaciones",
     draw: (accentColor) => `
       <svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M26 82c8 3 36 3 44 0" stroke="rgba(0,0,0,0.15)" stroke-width="4" stroke-linecap="round" />
@@ -620,7 +669,7 @@ const EASTER_EGGS = [
     id: "apple",
     name: "Apple",
     hex: "#FFFFFF",
-    title: "Pensá diferente (cero notificaciones)",
+    title: "Piensa diferente (cero notificaciones)",
     draw: (accentColor) => `
       <svg viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path class="notification-panel__empty-shadow" d="M27 78c7 4 34 4 42 0" />
@@ -1127,6 +1176,33 @@ function appendNotificationBody(parent, notification) {
   appendDefaultBody(parent, notification);
 }
 
+function formatNotificationAge(createdAt, now = Date.now()) {
+  const timestamp = new Date(createdAt).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+
+  const elapsedMinutes = Math.max(0, Math.floor((now - timestamp) / 60_000));
+  if (elapsedMinutes < 1) {
+    return "Ahora";
+  }
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes} min`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours} h`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) {
+    return `${elapsedDays} d`;
+  }
+
+  return new Intl.DateTimeFormat("es", { day: "numeric", month: "short" }).format(timestamp);
+}
+
 function createToast(notification) {
   const node = document.createElement("button");
   node.className = `notification-toast notification-toast--${notification.kind} ${notification.read ? "notification-toast--read" : "notification-toast--unread"}`;
@@ -1147,8 +1223,21 @@ function createToast(notification) {
   appendNotificationBody(body, notification);
 
   const meta = document.createElement("span");
-  meta.className = "notification-toast__topic";
-  meta.textContent = notification.topicTitle;
+  meta.className = "notification-toast__meta";
+
+  const topic = document.createElement("span");
+  topic.className = "notification-toast__topic";
+  topic.textContent = notification.topicTitle || "Actividad";
+
+  const age = formatNotificationAge(notification.createdAt);
+  meta.append(topic);
+  if (age) {
+    const time = document.createElement("time");
+    time.className = "notification-toast__time";
+    time.dateTime = new Date(notification.createdAt).toISOString();
+    time.textContent = age;
+    meta.append(time);
+  }
 
   text.append(body, meta);
   node.append(marker, text);
@@ -1162,9 +1251,14 @@ function syncNotificationButton(state, dom) {
   }
 
   const notifications = state.notifications || [];
-  const notificationCount = notifications.filter((notification) => !notification.read).length;
+  const notificationCount = notifications.filter((notification) => !notification.read && !notification.seen).length;
   const permission = state.webNotificationsPermission || getWebNotificationPermission();
   button.setAttribute("aria-expanded", String(Boolean(state.isNotificationsPanelOpen)));
+  if (typeof document !== "undefined" && document.documentElement?.classList?.contains("is-mobile-viewport")) {
+    button.setAttribute("aria-description", "Puedes arrastrar este botón para moverlo");
+  } else {
+    button.removeAttribute?.("aria-description");
+  }
   button.setAttribute("title", notificationCount ? `${notificationCount} notificaciones` : "Notificaciones");
   button.dataset.notificationPermission = permission;
   if (notificationCount > 0) {
@@ -1195,7 +1289,7 @@ export function renderNotifications(state, dom) {
   body.append(
     ...(groupedNotifications.length ? groupedNotifications.map(createToast) : [createNotificationEmptyState(state)])
   );
-  reconcile(node, [createNotificationPanelHeader(), body]);
+  reconcile(node, [createNotificationPanelHeader(notifications), body]);
 }
 
 export function getWebNotificationPermission() {

@@ -322,6 +322,7 @@ export function createLiveTopicSync({
     inFlight = true;
     try {
       const payload = await apiClient.refreshTopics(state.selectedTopicId);
+      const previousModerationCount = state.pendingModerationCount || 0;
       const collected = collectTopicNotifications(state, payload);
       const viewer = payload.viewer ?? state.viewer;
       const notifications = viewer?.notificationsFriendsOnly
@@ -332,6 +333,15 @@ export function createLiveTopicSync({
       if (notificationStateUpdate) {
         dispatch(state, reducers.addNotifications, notificationStateUpdate);
         notifications.forEach(showWebNotification);
+      }
+      if (
+        state.viewer?.isAdmin &&
+        state.isAdminPanelOpen &&
+        (payload.pendingModerationCount || 0) !== previousModerationCount &&
+        typeof apiClient.getAdminDashboard === "function"
+      ) {
+        const dashboard = await apiClient.getAdminDashboard();
+        dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
       }
       render();
       return true;
@@ -449,6 +459,7 @@ export function bootstrap() {
     showFeedback: actions.showFeedback,
     openAdminPanel: actions.openAdminPanel,
     closeAdminPanel: actions.closeAdminPanel,
+    setAdminSection: actions.setAdminSection,
     applyAdminAction: actions.applyAdminAction,
     saveProfile: actions.saveProfile,
     selectPalette: actions.selectPalette,
@@ -501,4 +512,3 @@ export function bootstrap() {
     }).start();
   }
 }
-

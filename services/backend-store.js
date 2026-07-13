@@ -57,6 +57,12 @@ const USER_STATUS_ACTIVE = "active";
 const USER_STATUS_EXPELLED = "expelled";
 const REPORT_STATUS_OPEN = "open";
 const REPORT_STATUS_RESOLVED = "resolved";
+const PROGRESSIVE_SANCTION_STEPS = [
+  { hours: 24, label: "24 horas" },
+  { hours: 72, label: "3 dias" },
+  { hours: 168, label: "7 dias" },
+  { hours: null, label: "Permanente" }
+];
 const GUEST_DISPLAY_NAME = "*topy";
 const GUEST_SESSION_TTL_MS = 7 * 24 * 60 * 60_000;
 const GUEST_SESSION_MAX_PER_IP = 25;
@@ -66,6 +72,7 @@ const MESSAGE_REACTION_RESET_META_KEY = "message_reactions_reset_day";
 const PRESENCE_ONLINE_WINDOW_MS = 20_000;
 const PRESENCE_ACCUMULATION_CAP_SECONDS = 30;
 const PRESENCE_RESET_META_KEY = "connected_hours_reset_day";
+const CONSECUTIVE_COMMENT_DELAY_MS = 5 * 60_000;
 const EXTRA_TOPIC_SEEDS = [
   ["Guardia tardia", "Hilo tranquilo para quien entra despues de hora."],
   ["Objetivos cortos", "Lista rapida de pendientes y mini retos."],
@@ -575,6 +582,29 @@ function getRateLimitConfig(viewerType) {
     createTopicMs: 2 * 60 * 60_000,
     postMessageMs: 5 * 60_000
   };
+}
+
+function formatRetryDelay(retryAfterSeconds) {
+  if (retryAfterSeconds < 60) {
+    return `${retryAfterSeconds} ${retryAfterSeconds === 1 ? "segundo" : "segundos"}`;
+  }
+
+  const minutes = Math.ceil(retryAfterSeconds / 60);
+  return `${minutes} ${minutes === 1 ? "minuto" : "minutos"}`;
+}
+
+function createRateLimitMessage(kind, retryAfterSeconds) {
+  const remaining = formatRetryDelay(retryAfterSeconds);
+
+  if (kind === "create-topic") {
+    return `Tienes que esperar ${remaining} para crear otro posteo.`;
+  }
+
+  if (kind === "consecutive-comment") {
+    return `El último comentario de este tema es tuyo. Puedes volver a comentar en ${remaining}.`;
+  }
+
+  return `Tienes que esperar ${remaining} entre comentarios.`;
 }
 
 function withTransaction(db, task) {
@@ -1288,6 +1318,7 @@ function mapViewerRow(row, sessionRow) {
     rateLimits: {
       createTopicMs: rateLimits.createTopicMs,
       postMessageMs: rateLimits.postMessageMs,
+      consecutiveCommentMs: CONSECUTIVE_COMMENT_DELAY_MS,
       lastTopicAt,
       lastMessageAt
     }
@@ -2000,7 +2031,7 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   }
 
   let pendingModerationCount = 0;
-  if (context.viewer.role === "admin") {
+  if (context.viewer.isAdmin) {
     const reportsCount = db.prepare(`
       SELECT COUNT(*) AS count
       FROM reports
@@ -2037,8 +2068,8 @@ function assertRateLimit(lastAtIso, viewerType, fieldName) {
   const now = Date.now();
   const limits = getRateLimitConfig(viewerType);
   const config = fieldName === "last_topic_at"
-    ? { waitMs: limits.createTopicMs, code: "RATE_LIMITED", message: "Todavia no puedes crear otro tema." }
-    : { waitMs: limits.postMessageMs, code: "RATE_LIMITED", message: "Todavia no puedes comentar de nuevo." };
+    ? { waitMs: limits.createTopicMs, kind: "create-topic" }
+    : { waitMs: limits.postMessageMs, kind: "comment" };
 
   if (!lastAtIso) {
     return;
@@ -2046,8 +2077,38 @@ function assertRateLimit(lastAtIso, viewerType, fieldName) {
 
   const nextAllowedAt = new Date(lastAtIso).getTime() + config.waitMs;
   if (nextAllowedAt > now) {
-    throw new ApiError(429, config.code, config.message, {
-      retryAfterSeconds: computeRetryAfterSeconds(nextAllowedAt, now)
+    const retryAfterSeconds = computeRetryAfterSeconds(nextAllowedAt, now);
+    throw new ApiError(429, "RATE_LIMITED", createRateLimitMessage(config.kind, retryAfterSeconds), {
+      retryAfterSeconds,
+      rateLimitKind: config.kind
+    });
+  }
+}
+
+function assertConsecutiveCommentRateLimit(db, context, topicId) {
+  if (context.viewer.type !== "registered") {
+    return;
+  }
+
+  const latestComment = db.prepare(`
+    SELECT author_id, created_at
+    FROM messages
+    WHERE topic_id = ? AND kind = 'user' AND is_root = 0
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(topicId);
+
+  if (!latestComment || latestComment.author_id !== context.viewer.id) {
+    return;
+  }
+
+  const now = Date.now();
+  const nextAllowedAt = new Date(latestComment.created_at).getTime() + CONSECUTIVE_COMMENT_DELAY_MS;
+  if (nextAllowedAt > now) {
+    const retryAfterSeconds = computeRetryAfterSeconds(nextAllowedAt, now);
+    throw new ApiError(429, "RATE_LIMITED", createRateLimitMessage("consecutive-comment", retryAfterSeconds), {
+      retryAfterSeconds,
+      rateLimitKind: "consecutive-comment"
     });
   }
 }
@@ -2766,6 +2827,105 @@ function recordModerationAction(db, {
   `).run(actionType, targetType, targetId, actorUserId, reason, metadataJson, createdAt);
 }
 
+function parseModerationMetadata(metadataJson) {
+  try {
+    const parsed = JSON.parse(metadataJson || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function getUserSanctionHistory(db, userId) {
+  const rows = db.prepare(`
+    SELECT id, action_type, reason, metadata_json, created_at
+    FROM moderation_actions
+    WHERE target_type = 'user' AND target_id = ? AND action_type IN ('expel_user', 'restore_user')
+    ORDER BY id ASC
+  `).all(userId);
+  const restoredIds = new Set();
+
+  rows.forEach((row) => {
+    if (row.action_type !== "restore_user") {
+      return;
+    }
+    const restoredActionId = Number(parseModerationMetadata(row.metadata_json).restoredActionId);
+    if (Number.isInteger(restoredActionId) && restoredActionId > 0) {
+      restoredIds.add(restoredActionId);
+    }
+  });
+
+  const sanctions = rows
+    .filter((row) => row.action_type === "expel_user" && !restoredIds.has(Number(row.id)))
+    .map((row) => ({
+      id: Number(row.id),
+      reason: row.reason || "",
+      createdAt: row.created_at,
+      metadata: parseModerationMetadata(row.metadata_json)
+    }));
+
+  return {
+    sanctions,
+    activeSanction: sanctions.at(-1) || null
+  };
+}
+
+function getNextProgressiveSanction(db, userId) {
+  const history = getUserSanctionHistory(db, userId);
+  const index = Math.min(history.sanctions.length, PROGRESSIVE_SANCTION_STEPS.length - 1);
+  const step = PROGRESSIVE_SANCTION_STEPS[index];
+  return {
+    stage: index + 1,
+    hours: step.hours,
+    label: step.label
+  };
+}
+
+function getUserSanctionSummary(db, userId) {
+  const history = getUserSanctionHistory(db, userId);
+  const next = getNextProgressiveSanction(db, userId);
+  const userRow = db.prepare("SELECT status, banned_until FROM users WHERE id = ?").get(userId);
+  const active = Boolean(
+    userRow && (
+      userRow.status === USER_STATUS_EXPELLED ||
+      (userRow.banned_until && new Date(userRow.banned_until).getTime() > Date.now())
+    )
+  );
+  return {
+    active,
+    priorCount: history.sanctions.length,
+    nextStage: next.stage,
+    nextHours: next.hours,
+    nextLabel: next.label
+  };
+}
+
+function listActiveSanctions(db) {
+  const nowIso = new Date().toISOString();
+  return db.prepare(`
+    SELECT id, name, status, banned_until
+    FROM users
+    WHERE type = 'registered'
+      AND (status = ? OR (banned_until IS NOT NULL AND banned_until > ?))
+    ORDER BY updated_at DESC, id ASC
+  `).all(USER_STATUS_EXPELLED, nowIso).map((row) => {
+    const history = getUserSanctionHistory(db, row.id);
+    const active = history.activeSanction;
+    const metadata = active?.metadata || {};
+    return {
+      userId: row.id,
+      name: row.name,
+      kind: row.status === USER_STATUS_EXPELLED ? "permanent" : "temporary",
+      bannedUntil: row.banned_until || null,
+      sanctionId: active?.id || null,
+      stage: Number(metadata.stage) || null,
+      label: metadata.label || (row.status === USER_STATUS_EXPELLED ? "Permanente" : "Temporal"),
+      reason: active?.reason || "",
+      appliedAt: active?.createdAt || null
+    };
+  });
+}
+
 function resolveReportsForEntity(db, entityType, entityId, resolvedAt) {
   db.prepare(`
     UPDATE reports
@@ -2855,7 +3015,8 @@ function attachReportTargets(db, items) {
         authorId: row.author_id,
         authorName: row.author_name || "Usuario eliminado",
         topicId: row.topic_id,
-        topicTitle: row.topic_title || "Tema eliminado"
+        topicTitle: row.topic_title || "Tema eliminado",
+        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
       });
     });
   }
@@ -2872,7 +3033,8 @@ function attachReportTargets(db, items) {
         kind: "topic",
         title: row.title || "Tema eliminado",
         authorId: row.author_id,
-        authorName: row.author_name || "Usuario eliminado"
+        authorName: row.author_name || "Usuario eliminado",
+        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
       });
     });
   }
@@ -2887,7 +3049,8 @@ function attachReportTargets(db, items) {
       userTargets.set(String(row.id), {
         kind: "user",
         name: row.name || "Usuario eliminado",
-        status: row.status
+        status: row.status,
+        sanction: getUserSanctionSummary(db, row.id)
       });
     });
   }
@@ -3803,11 +3966,12 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredContextCanPost(db, context);
-        const lastMessageAt = getContextActivityAt(db, context, "last_message_at");
-        assertRateLimit(lastMessageAt, context.viewer.type, "last_message_at");
         const normalizedText = validateMessageInput(text);
         const topicRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(topicId);
         assertCommentableTopic(topicRow);
+        assertConsecutiveCommentRateLimit(db, context, topicId);
+        const lastMessageAt = getContextActivityAt(db, context, "last_message_at");
+        assertRateLimit(lastMessageAt, context.viewer.type, "last_message_at");
 
         const nowIso = new Date().toISOString();
         const messageResult = db.prepare(`
@@ -4017,7 +4181,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           reports: reportPageResult.items,
           reportPagination: reportPageResult.pagination,
           pendingAvatars: avatarPageResult.items,
-          avatarPagination: avatarPageResult.pagination
+          avatarPagination: avatarPageResult.pagination,
+          activeSanctions: listActiveSanctions(db)
         };
       });
     },
@@ -4113,23 +4278,67 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
         }
 
+        if (normalizedActionType === "dismiss_report") {
+          const normalizedTargetType = String(targetType || "").trim();
+          if (!["message", "topic", "user"].includes(normalizedTargetType)) {
+            throw new ApiError(400, "INVALID_MODERATION_TARGET", "Tipo de reporte no soportado.");
+          }
+          const normalizedTargetId = normalizedTargetType === "message"
+            ? normalizeMessageEntityId(targetId)
+            : String(targetId || "").trim();
+          if (!normalizedTargetId) {
+            throw new ApiError(400, "INVALID_MODERATION_TARGET", "El objetivo del reporte es obligatorio.");
+          }
+          resolveReportsForEntity(db, normalizedTargetType, normalizedTargetId, nowIso);
+          recordModerationAction(db, {
+            actionType: normalizedActionType,
+            targetType: normalizedTargetType,
+            targetId: normalizedTargetId,
+            actorUserId: context.viewer.id,
+            reason: normalizedReason || "Reporte descartado",
+            createdAt: nowIso
+          });
+
+          return buildFrontendPayload(db, context, selectedTopicId);
+        }
+
         if (normalizedActionType === "expel_user") {
           const userRow = assertExistingUser(db, targetId);
           const normalizedUserId = userRow.id;
           if (userRow.type !== "registered") {
             throw new ApiError(409, "INVALID_MODERATION_TARGET", "Solo se expulsa a usuarios registrados en esta etapa.");
           }
+          if (canModerate(userRow)) {
+            throw new ApiError(409, "INVALID_MODERATION_TARGET", "No se puede sancionar a otro moderador desde esta cola.");
+          }
+          const hasActiveTemporaryBan = Boolean(
+            userRow.banned_until && new Date(userRow.banned_until).getTime() > Date.now()
+          );
+          if (userRow.status === USER_STATUS_EXPELLED || hasActiveTemporaryBan) {
+            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario ya tiene una sancion activa.");
+          }
 
           let bannedUntil = null;
           let status = USER_STATUS_EXPELLED;
+          let sanctionStage = null;
+          let sanctionLabel = "Permanente";
+          let resolvedBanHours = banHours;
 
-          if (banHours !== null && banHours !== "permanent" && banHours !== "") {
-            const hours = Number(banHours);
+          if (banHours === "progressive") {
+            const nextSanction = getNextProgressiveSanction(db, normalizedUserId);
+            sanctionStage = nextSanction.stage;
+            sanctionLabel = nextSanction.label;
+            resolvedBanHours = nextSanction.hours === null ? "permanent" : nextSanction.hours;
+          }
+
+          if (resolvedBanHours !== null && resolvedBanHours !== "permanent" && resolvedBanHours !== "") {
+            const hours = Number(resolvedBanHours);
             if (Number.isFinite(hours) && hours > 0) {
               const date = new Date(nowIso);
               date.setHours(date.getHours() + hours);
               bannedUntil = date.toISOString();
               status = USER_STATUS_ACTIVE;
+              sanctionLabel = sanctionStage ? sanctionLabel : `${hours} horas`;
             }
           }
 
@@ -4144,7 +4353,49 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
             targetType: "user",
             targetId: normalizedUserId,
             actorUserId: context.viewer.id,
-            reason: bannedUntil ? `Suspension por ${banHours} horas` : (normalizedReason || "Ban permanente"),
+            reason: normalizedReason || (bannedUntil ? `Suspension por ${sanctionLabel}` : "Ban permanente"),
+            metadataJson: JSON.stringify({
+              stage: sanctionStage,
+              label: sanctionLabel,
+              banHours: bannedUntil ? Number(resolvedBanHours) : null,
+              bannedUntil,
+              permanent: !bannedUntil
+            }),
+            createdAt: nowIso
+          });
+
+          return buildFrontendPayload(db, context, selectedTopicId);
+        }
+
+        if (normalizedActionType === "restore_user") {
+          const userRow = assertExistingUser(db, targetId);
+          if (userRow.type !== "registered") {
+            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Solo se restituyen usuarios registrados.");
+          }
+          const hasActiveTemporaryBan = Boolean(
+            userRow.banned_until && new Date(userRow.banned_until).getTime() > Date.now()
+          );
+          if (userRow.status !== USER_STATUS_EXPELLED && !hasActiveTemporaryBan) {
+            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario no tiene una sancion activa.");
+          }
+
+          const activeSanction = getUserSanctionHistory(db, userRow.id).activeSanction;
+          db.prepare(`
+            UPDATE users
+            SET status = ?, banned_until = NULL, updated_at = ?
+            WHERE id = ?
+          `).run(USER_STATUS_ACTIVE, nowIso, userRow.id);
+          recordModerationAction(db, {
+            actionType: normalizedActionType,
+            targetType: "user",
+            targetId: userRow.id,
+            actorUserId: context.viewer.id,
+            reason: normalizedReason || "Sancion anulada por moderacion",
+            metadataJson: JSON.stringify({
+              restoredActionId: activeSanction?.id || null,
+              previousStatus: userRow.status,
+              previousBannedUntil: userRow.banned_until || null
+            }),
             createdAt: nowIso
           });
 

@@ -20,6 +20,36 @@
                             "message":  "Los usuarios invitados ya no exponen fecha de registro, redes, temas, amistad ni reporte: al abrir su perfil desde Usuarios conectados se muestra un aviso compacto sin acciones.",
                             "id":  "guest-profile-notice-only",
                             "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "Los bloqueos de publicacion explican en una sola frase si corresponde esperar para crear otro posteo, porque el ultimo comentario del tema es propio o por el intervalo entre comentarios, sin repetir la causa al indicar el tiempo restante.",
+                            "id":  "clear-publishing-delay-feedback",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "Al cambiar de posteo se elimina el rango de texto seleccionado antes de renderizar el nuevo contenido, evitando que la seleccion arrastrada persista sobre el siguiente posteo.",
+                            "id":  "clear-text-selection-on-post-change",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "La moderacion se divide en Reportes, Fotos y Sanciones; los reportes se agrupan a su vez por comentarios, temas y usuarios para reducir errores de contexto.",
+                            "id":  "moderation-work-queues",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "Las sanciones se aplican con una escala visible de 24 horas, 3 dias, 7 dias y permanente, sin prompts ambiguos, y una segunda confirmacion protege las acciones criticas.",
+                            "id":  "progressive-sanction-flow",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "La seccion de sanciones activas permite anular una decision incorrecta y conserva el historial de auditoria; el contador de reportes se actualiza durante el sondeo en vivo sin abrir el panel.",
+                            "id":  "sanction-restoration-and-live-reports",
+                            "agent":  "flows"
                         }
                     ]
 }

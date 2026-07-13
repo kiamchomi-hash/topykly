@@ -547,6 +547,56 @@ await (async () => {
     assert.deepEqual(state.unreadTopicIds, [topics[1].id]);
   });
 
+  await test("live topic sync refreshes an open admin queue when its pending count changes", async () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const state = {
+      viewer: { id: "u2", type: "registered", isAdmin: true },
+      isAdminPanelOpen: true,
+      pendingModerationCount: 0,
+      adminDashboard: { loaded: true, reports: [], pendingAvatars: [] },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      topics,
+      users,
+      currentUserId: "u2",
+      selectedTopicId: topics[0].id
+    };
+    let dashboardCalls = 0;
+    const sync = createLiveTopicSync({
+      state,
+      render() {},
+      intervalMs: 0,
+      apiClient: {
+        async refreshTopics(selectedTopicId) {
+          return {
+            viewer: state.viewer,
+            users,
+            topics,
+            selectedTopicId,
+            pendingModerationCount: 2
+          };
+        },
+        async getAdminDashboard() {
+          dashboardCalls += 1;
+          return {
+            reports: [{ id: 1 }, { id: 2 }],
+            reportPagination: { total: 2 },
+            pendingAvatars: [],
+            avatarPagination: { total: 0 },
+            activeSanctions: []
+          };
+        }
+      }
+    });
+
+    assert.equal(await sync.refreshNow(), true);
+    assert.equal(dashboardCalls, 1);
+    assert.equal(state.pendingModerationCount, 2);
+    assert.equal(state.adminDashboard.loaded, true);
+    assert.equal(state.adminDashboard.reports.length, 2);
+  });
+
   await test("mergeLiveTopics reducer preserves topic order while hydrateFromBackend adopts backend order", () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -1027,7 +1077,7 @@ await (async () => {
     assert.equal(grouped[0].body, "Iara, Nico y 1 persona mas comentaron tu posteo.");
   });
 
-  await test("notification empty state uses illustrated outlined block", async () => {
+  await test("notification empty state uses a quiet illustrated layout", async () => {
     const notificationSource = await read("ui/notifications.js");
     const styles = await read("styles.css");
 
@@ -1035,11 +1085,10 @@ await (async () => {
     assert.ok(notificationSource.includes("notification-panel__empty-mascot"));
     assert.ok(notificationSource.includes("Aun no hay comentarios"));
     assert.ok(styles.includes(".notification-panel__empty"));
-    assert.ok(styles.includes("border: 1px dashed"));
-    assert.ok(styles.includes("background: var(--bg)"));
+    assert.ok(styles.includes("background: transparent"));
     assert.ok(styles.includes(".notification-panel__empty-mascot"));
     assert.ok(styles.includes("place-items: center"));
-    assert.ok(styles.includes("width: 76px"));
+    assert.ok(styles.includes("width: 72px"));
   });
 
   await test("notification empty state custom and brand/satirical mascots", () => {
@@ -1153,7 +1202,18 @@ await (async () => {
     );
 
     assert.equal(update.notifications.length, 1);
+    assert.equal(update.notifications[0].seen, false);
     assert.deepEqual(update.notifiedMessageIds, ["message-1"]);
+
+    const visibleUpdate = createNotificationStateUpdate(
+      {
+        isNotificationsPanelOpen: true,
+        notifications: [],
+        notifiedMessageIds: []
+      },
+      [{ ...notification, id: "toast-visible-message-1" }]
+    );
+    assert.equal(visibleUpdate.notifications[0].seen, true);
   });
   await test("hydrate marks unread updates even for the open topic", () => {
     const users = buildUsers(initialUsers);
@@ -3497,6 +3557,183 @@ await (async () => {
     });
   });
 
+  await test("backend applies progressive sanctions and can restore an incorrect permanent sanction", async () => {
+    await withTempStore(async (store) => {
+      store.login({
+        sessionId: "session-progressive-moderator",
+        userId: "u2"
+      });
+
+      store.applyModerationAction("expel_user", {
+        sessionId: "session-progressive-moderator",
+        targetType: "user",
+        targetId: "u3",
+        banHours: "progressive"
+      });
+
+      let dashboard = store.getAdminDashboard({
+        sessionId: "session-progressive-moderator"
+      });
+      let sanction = dashboard.activeSanctions.find((item) => item.userId === "u3");
+      assert.equal(sanction.kind, "temporary");
+      assert.equal(sanction.stage, 1);
+      assert.equal(sanction.label, "24 horas");
+
+      store.applyModerationAction("restore_user", {
+        sessionId: "session-progressive-moderator",
+        targetType: "user",
+        targetId: "u3"
+      });
+      dashboard = store.getAdminDashboard({
+        sessionId: "session-progressive-moderator"
+      });
+      assert.equal(dashboard.activeSanctions.some((item) => item.userId === "u3"), false);
+
+      store.applyModerationAction("expel_user", {
+        sessionId: "session-progressive-moderator",
+        targetType: "user",
+        targetId: "u3",
+        banHours: "progressive"
+      });
+      dashboard = store.getAdminDashboard({
+        sessionId: "session-progressive-moderator"
+      });
+      sanction = dashboard.activeSanctions.find((item) => item.userId === "u3");
+      assert.equal(sanction.stage, 1);
+      assert.equal(sanction.label, "24 horas");
+
+      store.applyModerationAction("restore_user", {
+        sessionId: "session-progressive-moderator",
+        targetType: "user",
+        targetId: "u3"
+      });
+      for (let index = 0; index < 3; index += 1) {
+        store.applyModerationAction("expel_user", {
+          sessionId: "session-progressive-moderator",
+          targetType: "user",
+          targetId: "u3",
+          banHours: 0.000001
+        });
+        await new Promise((resolve) => setTimeout(resolve, 8));
+      }
+
+      store.applyModerationAction("expel_user", {
+        sessionId: "session-progressive-moderator",
+        targetType: "user",
+        targetId: "u3",
+        banHours: "progressive"
+      });
+      dashboard = store.getAdminDashboard({
+        sessionId: "session-progressive-moderator"
+      });
+      sanction = dashboard.activeSanctions.find((item) => item.userId === "u3");
+      assert.equal(sanction.kind, "permanent");
+      assert.equal(sanction.stage, 4);
+      assert.equal(sanction.label, "Permanente");
+
+      store.applyModerationAction("restore_user", {
+        sessionId: "session-progressive-moderator",
+        targetType: "user",
+        targetId: "u3"
+      });
+      dashboard = store.getAdminDashboard({
+        sessionId: "session-progressive-moderator"
+      });
+      assert.equal(dashboard.activeSanctions.some((item) => item.userId === "u3"), false);
+    });
+  });
+
+  await test("backend publishes pending moderation counts to admins during live refreshes", async () => {
+    await withTempStore((store) => {
+      const topicId = store.bootstrap({
+        sessionId: "session-live-report-source"
+      }).topics[0].id;
+      store.login({
+        sessionId: "session-live-report-admin",
+        userId: "u2"
+      });
+      store.reportEntity("topic", topicId, {
+        sessionId: "session-live-report-source",
+        reason: "Necesita revision"
+      });
+
+      const adminPayload = store.bootstrap({
+        sessionId: "session-live-report-admin",
+        authMode: "registered"
+      });
+      assert.equal(adminPayload.viewer.isAdmin, true);
+      assert.equal(adminPayload.pendingModerationCount, 1);
+    });
+  });
+
+  await test("backend explains the 30 minute, own-comment and 10 second publishing delays", async () => {
+    await withTempStore((store) => {
+      const firstSessionId = "session-clear-delay-first";
+      const secondSessionId = "session-clear-delay-second";
+      const firstUser = store.registerWithPassword({
+        sessionId: firstSessionId,
+        email: "clear-delay-first@example.com",
+        password: "password-segura",
+        nickname: "Clear_delay_first"
+      });
+      const topicId = firstUser.topics[0].id;
+
+      store.createTopic({
+        sessionId: firstSessionId,
+        title: "Primer posteo con delay",
+        text: "Activa el limite entre posteos."
+      });
+
+      assert.throws(
+        () => store.createTopic({
+          sessionId: firstSessionId,
+          title: "Segundo posteo demasiado pronto",
+          text: "Debe explicar el delay de treinta minutos."
+        }),
+        (error) => error.code === "RATE_LIMITED"
+          && error.rateLimitKind === "create-topic"
+          && /esperar 30 minutos para crear otro posteo/i.test(error.message)
+      );
+
+      store.addMessage(topicId, {
+        sessionId: firstSessionId,
+        text: "Primer comentario del usuario."
+      });
+
+      assert.throws(
+        () => store.addMessage(topicId, {
+          sessionId: firstSessionId,
+          text: "Comentario consecutivo demasiado pronto."
+        }),
+        (error) => error.code === "RATE_LIMITED"
+          && error.rateLimitKind === "consecutive-comment"
+          && /último comentario.*tuyo/i.test(error.message)
+          && /volver a comentar en 5 minutos/i.test(error.message)
+      );
+
+      store.registerWithPassword({
+        sessionId: secondSessionId,
+        email: "clear-delay-second@example.com",
+        password: "password-segura",
+        nickname: "Clear_delay_second"
+      });
+      store.addMessage(topicId, {
+        sessionId: secondSessionId,
+        text: "Comentario de otro usuario."
+      });
+
+      assert.throws(
+        () => store.addMessage(topicId, {
+          sessionId: firstSessionId,
+          text: "Comentario dentro de los diez segundos."
+        }),
+        (error) => error.code === "RATE_LIMITED"
+          && error.rateLimitKind === "comment"
+          && /esperar 10 segundos entre comentarios/i.test(error.message)
+      );
+    });
+  });
+
   await test("backend rejects guest publishing without materializing guest state", async () => {
     await withTempStore((store) => {
       const activeTopicId = store.bootstrap({
@@ -4580,7 +4817,11 @@ await (async () => {
       isNotificationsPanelOpen: false,
       isFriendRequestsPanelOpen: false,
       friendRequestsTab: "friends",
-      friendRequestsLimits: { incoming: 20, outgoing: 10 }
+      friendRequestsLimits: { incoming: 20, outgoing: 10 },
+      notifications: [
+        { id: "notification-1", read: false, seen: false },
+        { id: "notification-2", read: true, seen: true }
+      ]
     };
 
     const handlers = createActionHandlers({
@@ -4601,6 +4842,8 @@ await (async () => {
 
     handlers.toggleNotificationsPanel();
     assert.equal(state.isNotificationsPanelOpen, true);
+    assert.equal(state.notifications[0].seen, true);
+    assert.equal(state.notifications[0].read, false);
 
     handlers.toggleFriendRequestsPanel();
     assert.equal(state.isFriendRequestsPanelOpen, true);
@@ -4626,8 +4869,35 @@ await (async () => {
     assert.match(friendRequests, /row\.dataset\.id = String\(user\.id\);/);
 
     assert.match(notifications, /import \{ reconcile \} from "\.\/render-utils\.js";/);
-    assert.match(notifications, /reconcile\(node, \[createNotificationPanelHeader\(\), body\]\);/);
+    assert.match(notifications, /reconcile\(node, \[createNotificationPanelHeader\(notifications\), body\]\);/);
     assert.doesNotMatch(notifications, /replaceChildren/);
+  });
+
+  await test("mobile exposes notifications as a safe-area floating action", async () => {
+    const notifications = await read("ui/notifications.js");
+    const topbarActionEvents = await read("ui/topbar-action-events.js");
+    const styles = await read("styles.css");
+
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.topbar__auth-tools:not\(\[hidden\]\)\s*\{[\s\S]*display:\s*contents;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*background:\s*var\(--surface-strong\);[\s\S]*backdrop-filter:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport #notificationsButton\s*\{[\s\S]*position:\s*fixed;[\s\S]*right:\s*calc\(16px \+ env\(safe-area-inset-right\)\);[\s\S]*bottom:\s*calc\(16px \+ env\(safe-area-inset-bottom\)\);[\s\S]*left:\s*auto;[\s\S]*width:\s*52px;[\s\S]*height:\s*52px;/
+    );
+    assert.match(styles, /#notificationsButton\[data-drag-position="true"\]\s*\{[\s\S]*--notifications-fab-top/);
+    assert.match(styles, /bottom:\s*var\(--notification-panel-bottom,/);
+    assert.match(styles, /left:\s*var\(--notification-panel-left,/);
+    assert.match(notifications, /panel\.style\.setProperty\("--notification-panel-bottom", `\$\{bottom\}px`\);/);
+    assert.match(topbarActionEvents, /MOBILE_NOTIFICATIONS_POSITION_KEY/);
+    assert.match(topbarActionEvents, /addListener\(dom\.notificationsButton, "pointerdown", beginNotificationsButtonDrag\);/);
+    assert.match(topbarActionEvents, /Math\.hypot\(deltaX, deltaY\) < 6/);
+    assert.match(topbarActionEvents, /saveNotificationsButtonPosition\(notificationsDragState\.position\);/);
   });
 
   await test("applyAdminAction requires a second confirming click for destructive actions", async () => {
@@ -4712,6 +4982,9 @@ await (async () => {
       users: [{ id: "u1", name: "Coco Mora", online: true }]
     };
     const removedClasses = [];
+    const originalGetSelection = globalThis.getSelection;
+    let removedSelectionRanges = 0;
+    let selectionClearedBeforeNextRender = false;
     const messageInput = {
       value: "> @Sergio\n> Mensaje\n\n",
       scrollTop: 12,
@@ -4728,7 +5001,13 @@ await (async () => {
         refreshButton: null,
         paletteOptionGrid: null
       },
-      renderRef: { current() {} },
+      renderRef: {
+        current() {
+          if (state.selectedTopicId === "topic-2") {
+            selectionClearedBeforeNextRender = removedSelectionRanges === 1;
+          }
+        }
+      },
       syncResponsiveView() {},
       isMobileViewport() {
         return false;
@@ -4736,14 +5015,31 @@ await (async () => {
       closeDrawers() {}
     });
 
-    handlers.focusTopic("topic-1");
-    assert.equal(messageInput.value, "> @Sergio\n> Mensaje\n\n");
+    globalThis.getSelection = () => ({
+      removeAllRanges() {
+        removedSelectionRanges += 1;
+      }
+    });
 
-    handlers.focusTopic("topic-2");
-    assert.equal(state.selectedTopicId, "topic-2");
-    assert.equal(messageInput.value, "");
-    assert.equal(messageInput.scrollTop, 0);
-    assert.deepEqual(removedClasses, ["is-scrollable"]);
+    try {
+      handlers.focusTopic("topic-1");
+      assert.equal(messageInput.value, "> @Sergio\n> Mensaje\n\n");
+      assert.equal(removedSelectionRanges, 0);
+
+      handlers.focusTopic("topic-2");
+      assert.equal(state.selectedTopicId, "topic-2");
+      assert.equal(messageInput.value, "");
+      assert.equal(messageInput.scrollTop, 0);
+      assert.deepEqual(removedClasses, ["is-scrollable"]);
+      assert.equal(removedSelectionRanges, 1);
+      assert.equal(selectionClearedBeforeNextRender, true);
+    } finally {
+      if (originalGetSelection) {
+        globalThis.getSelection = originalGetSelection;
+      } else {
+        delete globalThis.getSelection;
+      }
+    }
   });
   await test("custom palette picker opens only after Coloris emits open", async () => {
     const topbarActionEvents = await read("ui/topbar-action-events.js");
@@ -5857,6 +6153,35 @@ await (async () => {
       getAuthErrorFeedbackMessage("unknown_error"),
       "No se pudo completar el inicio de sesion."
     );
+  });
+
+  await test("api keeps the live pending moderation count in normalized payloads", async () => {
+    const previousFetch = globalThis.fetch;
+    const previousWindow = globalThis.window;
+    const previousLocalStorage = globalThis.localStorage;
+
+    try {
+      globalThis.window = { location: { origin: "http://127.0.0.1:4173" } };
+      globalThis.localStorage = { removeItem() {} };
+      globalThis.fetch = async () => ({
+        ok: true,
+        async json() {
+          return {
+            viewer: { id: "u2", type: "registered", isAdmin: true },
+            users: [],
+            topics: [],
+            pendingModerationCount: 7
+          };
+        }
+      });
+
+      const payload = await api.refreshTopics();
+      assert.equal(payload.pendingModerationCount, 7);
+    } finally {
+      globalThis.fetch = previousFetch;
+      globalThis.window = previousWindow;
+      globalThis.localStorage = previousLocalStorage;
+    }
   });
 
   await test("api login redirects through the browser when external auth is configured", async () => {
@@ -7671,6 +7996,11 @@ await (async () => {
       assert.equal(resetCalls, 0);
       assert.equal(renderOptions.appearance, "interaction-only");
       assert.equal(renderOptions.execution, "execute");
+      assert.equal(authTurnstile.dataset.turnstileMode, "silent");
+      renderOptions["before-interactive-callback"]();
+      assert.equal(authTurnstile.dataset.turnstileMode, "interactive");
+      renderOptions["after-interactive-callback"]();
+      assert.equal(authTurnstile.dataset.turnstileMode, "silent");
       assert.equal(loginCalls, 1);
       assert.equal(receivedTurnstileToken, "turnstile-token");
       assert.equal(authTurnstile.hidden, false);
@@ -8409,6 +8739,27 @@ await (async () => {
       const hit = MOJIBAKE_PATTERNS.find((pattern) => text.includes(pattern));
       if (hit) {
         offenders.push(`${path.relative(rootDir, file)} => ${JSON.stringify(hit)}`);
+      }
+    }
+
+    assert.equal(offenders.length, 0, offenders.join("\n"));
+  });
+
+  await test("user-facing copy uses neutral Spanish instead of regional voseo", async () => {
+    const userFacingFiles = [
+      "services/backend-store.js",
+      "services/seo-pages.js",
+      "ui/notifications.js",
+      "terms.html"
+    ];
+    const voseoPattern = /\b(?:aceptás|autorizás|buscás|conservás|debés|detectás|destapá|escribí|pensá|podés|publicás|respetá|sos|tenés|tomá|volvé)\b/giu;
+    const offenders = [];
+
+    for (const file of userFacingFiles) {
+      const text = await read(file);
+      const matches = [...text.matchAll(voseoPattern)].map((match) => match[0]);
+      if (matches.length) {
+        offenders.push(`${file} => ${matches.join(", ")}`);
       }
     }
 

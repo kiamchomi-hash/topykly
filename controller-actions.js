@@ -18,11 +18,18 @@ const ADMIN_ACTION_FEEDBACK = {
   approve_avatar: "Foto aprobada",
   reject_avatar: "Foto rechazada",
   delete_message: "Comentario eliminado",
-  expel_user: "Usuario sancionado"
+  dismiss_report: "Reporte descartado",
+  block_topic: "Tema bloqueado",
+  expel_user: "Sancion progresiva aplicada",
+  restore_user: "Sancion anulada; el usuario recupero el acceso"
 };
 
-const DESTRUCTIVE_ADMIN_ACTIONS = new Set(["delete_message", "expel_user"]);
+const DESTRUCTIVE_ADMIN_ACTIONS = new Set(["delete_message", "block_topic", "expel_user", "restore_user"]);
 const ADMIN_CONFIRM_WINDOW_MS = 4000;
+
+export function clearDocumentTextSelection(selection = globalThis.getSelection?.()) {
+  selection?.removeAllRanges?.();
+}
 
 function focusPaletteOption(dom, paletteId) {
   dom.paletteOptionGrid
@@ -274,7 +281,7 @@ export function createActionHandlers({
   async function openAdminPanel() {
     dispatch(state, reducers.setProfileModalOpen, false);
     dispatch(state, reducers.setAdminPanelOpen, true);
-    dispatch(state, reducers.setAdminDashboard, { loaded: false, reports: [], pendingAvatars: [] });
+    dispatch(state, reducers.setAdminDashboard, { loaded: false, reports: [], pendingAvatars: [], activeSanctions: [] });
     render();
 
     try {
@@ -283,7 +290,7 @@ export function createActionHandlers({
     } catch (error) {
       console.error(error);
       showFeedback(error?.message || "No se pudo cargar administración.", { kind: "error" });
-      dispatch(state, reducers.setAdminDashboard, { loaded: true, reports: [], pendingAvatars: [] });
+      dispatch(state, reducers.setAdminDashboard, { loaded: true, reports: [], pendingAvatars: [], activeSanctions: [] });
     }
     render();
   }
@@ -297,6 +304,15 @@ export function createActionHandlers({
     dispatch(state, reducers.setAdminConfirmAction, null);
     render();
     dom.adminPanelButton?.focus?.();
+  }
+
+  function setAdminSection(adminSection) {
+    if (!["reports", "avatars", "sanctions"].includes(adminSection)) {
+      return;
+    }
+    dispatch(state, reducers.setAdminSection, adminSection);
+    dispatch(state, reducers.setAdminConfirmAction, null);
+    render();
   }
 
   function closePublicProfileModal() {
@@ -330,39 +346,13 @@ export function createActionHandlers({
       dispatch(state, reducers.setAdminConfirmAction, null);
     }
 
-    let banHours = null;
-    if (actionType === "expel_user") {
-      const response = prompt(
-        "Ingresa la cantidad de horas para la suspensión (ej. 24, 48) o escribe 'permanente' para un ban permanente:",
-        "permanente"
-      );
-      if (response === null) {
-        render();
-        return;
-      }
-      const trimmed = response.trim().toLowerCase();
-      if (trimmed === "permanente" || trimmed === "") {
-        banHours = "permanent";
-      } else {
-        const hours = Number(trimmed);
-        if (isNaN(hours) || hours <= 0) {
-          showFeedback("Por favor ingresa un número de horas válido o 'permanente'.", { kind: "error" });
-          render();
-          return;
-        }
-        banHours = hours;
-      }
-    }
+    const banHours = actionType === "expel_user" ? "progressive" : null;
 
     try {
       await api.applyModerationAction(actionType, targetType, targetId, "", state.selectedTopicId, banHours);
       const dashboard = await api.getAdminDashboard();
       dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
-      showFeedback(
-        actionType === "expel_user"
-          ? (banHours === "permanent" ? "Usuario expulsado permanentemente" : `Usuario suspendido por ${banHours} horas`)
-          : (ADMIN_ACTION_FEEDBACK[actionType] || "Acción aplicada")
-      );
+      showFeedback(ADMIN_ACTION_FEEDBACK[actionType] || "Accion aplicada");
     } catch (error) {
       console.error(error);
       showFeedback(error?.message || "No se pudo aplicar la acción.", { kind: "error" });
@@ -868,6 +858,9 @@ export function createActionHandlers({
 
   function focusTopic(topicId) {
     const previousTopicId = state.selectedTopicId || null;
+    if ((topicId || null) !== previousTopicId) {
+      clearDocumentTextSelection();
+    }
     rankingActions.focusTopic(topicId);
     if ((topicId || null) !== previousTopicId) {
       clearMessageComposerDraft();
@@ -928,6 +921,7 @@ export function createActionHandlers({
     closePublicProfileModal,
     openAdminPanel,
     closeAdminPanel,
+    setAdminSection,
     applyAdminAction,
     saveProfile,
     toggleTheme,

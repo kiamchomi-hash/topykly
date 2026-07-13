@@ -319,12 +319,22 @@ export const reducers = {
 
   setNotificationsPanelOpen: (state, isNotificationsPanelOpen) => ({
     ...state,
-    isNotificationsPanelOpen
+    isNotificationsPanelOpen,
+    notifications: isNotificationsPanelOpen
+      ? (state.notifications ?? []).map((notification) => notification.seen
+        ? notification
+        : { ...notification, seen: true })
+      : state.notifications
   }),
 
   setAdminPanelOpen: (state, isAdminPanelOpen) => ({
     ...state,
     isAdminPanelOpen
+  }),
+
+  setAdminSection: (state, adminSection) => ({
+    ...state,
+    adminSection
   }),
 
   setAdminDashboard: (state, adminDashboard) => {
@@ -377,7 +387,7 @@ export const reducers = {
     return {
       ...state,
       notifications: (state.notifications ?? []).map((notification) => ids.has(notification.id)
-        ? { ...notification, read: true }
+        ? { ...notification, read: true, seen: true }
         : notification)
     };
   },

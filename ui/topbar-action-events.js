@@ -13,6 +13,7 @@ const AUTH_CODE_PATTERN = /^\d{6}$/;
 const AUTH_MINIMUM_AGE = MINIMUM_REGISTRATION_AGE;
 const AUTH_TERMS_VERSION = "2026-07-10";
 const AUTH_RESEND_COOLDOWN_MS = 60000;
+const MOBILE_NOTIFICATIONS_POSITION_KEY = "topykly-mobile-notifications-position-v1";
 const AUTH_RESEND_DEFAULT_LABEL = "Reenviar código";
 
 const FOCUSABLE_SELECTOR = [
@@ -54,6 +55,8 @@ export function bindTopbarActionEvents(dom, handlers) {
   let oidcCompletionPrompted = false;
   let authAccountLinkMode = false;
   let authAccountLinkRequested = handlers.initialAuthAction === "link-account";
+  let notificationsDragState = null;
+  let suppressNotificationsClick = false;
   globalThis.__topyklyAuthControllerReady = true;
   syncAuthUi();
   populateAuthBirthYearOptions();
@@ -67,6 +70,137 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     node.addEventListener?.(type, listener, options);
+  }
+
+  function isMobileNotificationsLayout() {
+    return Boolean(document.documentElement?.classList?.contains("is-mobile-viewport"));
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function getNotificationsDragBounds(button = dom.notificationsButton) {
+    const padding = 12;
+    const width = button?.offsetWidth || 52;
+    const height = button?.offsetHeight || 52;
+    return {
+      minLeft: padding,
+      maxLeft: Math.max(padding, (window.innerWidth || width + padding * 2) - width - padding),
+      minTop: padding,
+      maxTop: Math.max(padding, (window.innerHeight || height + padding * 2) - height - padding)
+    };
+  }
+
+  function applyNotificationsButtonPosition(left, top) {
+    const button = dom.notificationsButton;
+    if (!button?.style?.setProperty) {
+      return null;
+    }
+    const bounds = getNotificationsDragBounds(button);
+    const nextLeft = clampNumber(left, bounds.minLeft, bounds.maxLeft);
+    const nextTop = clampNumber(top, bounds.minTop, bounds.maxTop);
+    button.style.setProperty("--notifications-fab-left", `${nextLeft}px`);
+    button.style.setProperty("--notifications-fab-top", `${nextTop}px`);
+    button.dataset.dragPosition = "true";
+    return { left: nextLeft, top: nextTop, bounds };
+  }
+
+  function saveNotificationsButtonPosition(position) {
+    if (!position) {
+      return;
+    }
+    const horizontalRange = Math.max(1, position.bounds.maxLeft - position.bounds.minLeft);
+    const verticalRange = Math.max(1, position.bounds.maxTop - position.bounds.minTop);
+    const value = {
+      x: (position.left - position.bounds.minLeft) / horizontalRange,
+      y: (position.top - position.bounds.minTop) / verticalRange
+    };
+    try {
+      globalThis.localStorage?.setItem?.(MOBILE_NOTIFICATIONS_POSITION_KEY, JSON.stringify(value));
+    } catch {
+      // Storage can be unavailable in private browsing; dragging still works for this session.
+    }
+  }
+
+  function restoreNotificationsButtonPosition() {
+    const button = dom.notificationsButton;
+    if (!button?.style?.setProperty || typeof window === "undefined") {
+      return;
+    }
+    try {
+      const saved = JSON.parse(globalThis.localStorage?.getItem?.(MOBILE_NOTIFICATIONS_POSITION_KEY) || "null");
+      if (!Number.isFinite(saved?.x) || !Number.isFinite(saved?.y)) {
+        return;
+      }
+      const bounds = getNotificationsDragBounds(button);
+      applyNotificationsButtonPosition(
+        bounds.minLeft + clampNumber(saved.x, 0, 1) * (bounds.maxLeft - bounds.minLeft),
+        bounds.minTop + clampNumber(saved.y, 0, 1) * (bounds.maxTop - bounds.minTop)
+      );
+    } catch {
+      // Ignore malformed or unavailable local state and keep the lower-left default.
+    }
+  }
+
+  function beginNotificationsButtonDrag(event) {
+    const button = dom.notificationsButton;
+    if (!button || !isMobileNotificationsLayout() || (event.button ?? 0) !== 0 || event.isPrimary === false) {
+      return;
+    }
+    const rect = button.getBoundingClientRect?.();
+    if (!rect) {
+      return;
+    }
+    notificationsDragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
+      moved: false,
+      position: null
+    };
+    button.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveNotificationsButton(event) {
+    const button = dom.notificationsButton;
+    if (!button || !notificationsDragState || event.pointerId !== notificationsDragState.pointerId) {
+      return;
+    }
+    const deltaX = event.clientX - notificationsDragState.startX;
+    const deltaY = event.clientY - notificationsDragState.startY;
+    if (!notificationsDragState.moved && Math.hypot(deltaX, deltaY) < 6) {
+      return;
+    }
+    if (!notificationsDragState.moved) {
+      notificationsDragState.moved = true;
+      handlers.toggleNotificationsPanel?.(false);
+    }
+    event.preventDefault?.();
+    button.dataset.dragging = "true";
+    notificationsDragState.position = applyNotificationsButtonPosition(
+      notificationsDragState.startLeft + deltaX,
+      notificationsDragState.startTop + deltaY
+    );
+  }
+
+  function finishNotificationsButtonDrag(event) {
+    const button = dom.notificationsButton;
+    if (!button || !notificationsDragState || event.pointerId !== notificationsDragState.pointerId) {
+      return;
+    }
+    button.releasePointerCapture?.(event.pointerId);
+    delete button.dataset.dragging;
+    if (notificationsDragState.moved) {
+      suppressNotificationsClick = true;
+      saveNotificationsButtonPosition(notificationsDragState.position);
+      setTimeout(() => {
+        suppressNotificationsClick = false;
+      }, 0);
+    }
+    notificationsDragState = null;
   }
 
   function scheduleOpen(task) {
@@ -669,16 +803,30 @@ export function bindTopbarActionEvents(dom, handlers) {
       sitekey: siteKey,
       appearance: "interaction-only",
       execution: "execute",
+      "before-interactive-callback"() {
+        dom.authTurnstile.dataset.turnstileMode = "interactive";
+      },
+      "after-interactive-callback"() {
+        dom.authTurnstile.dataset.turnstileMode = "silent";
+      },
       callback(token) {
+        dom.authTurnstile.dataset.turnstileMode = "silent";
         storeTurnstileToken(token);
       },
       "expired-callback"() {
+        dom.authTurnstile.dataset.turnstileMode = "silent";
         resetTurnstileToken();
         settlePendingTurnstile(new Error("La verificacion expiro. Intentalo de nuevo."));
       },
       "error-callback"() {
+        dom.authTurnstile.dataset.turnstileMode = "silent";
         resetTurnstileToken();
         settlePendingTurnstile(new Error("No pudimos verificarte. Intentalo de nuevo."));
+      },
+      "timeout-callback"() {
+        dom.authTurnstile.dataset.turnstileMode = "silent";
+        resetTurnstileToken();
+        settlePendingTurnstile(new Error("La verificacion esta tardando. Intentalo de nuevo."));
       }
     });
   }
@@ -1905,7 +2053,19 @@ export function bindTopbarActionEvents(dom, handlers) {
     handlers.toggleFriendRequestsPanel?.();
   });
 
+  restoreNotificationsButtonPosition();
+  addListener(dom.notificationsButton, "pointerdown", beginNotificationsButtonDrag);
+  addListener(dom.notificationsButton, "pointermove", moveNotificationsButton);
+  addListener(dom.notificationsButton, "pointerup", finishNotificationsButtonDrag);
+  addListener(dom.notificationsButton, "pointercancel", finishNotificationsButtonDrag);
+  addListener(typeof window !== "undefined" ? window : null, "resize", restoreNotificationsButtonPosition);
   addListener(dom.notificationsButton, "click", (event) => {
+    if (suppressNotificationsClick) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      suppressNotificationsClick = false;
+      return;
+    }
     event?.stopPropagation();
     handlers.toggleNotificationsPanel?.();
   });
@@ -2028,7 +2188,14 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   });
   addListener(dom.adminPanelBody, "click", (event) => {
-    const target = resolveEventElement(event)?.closest?.("[data-admin-action]") ?? null;
+    const eventTarget = resolveEventElement(event);
+    const sectionTarget = eventTarget?.closest?.("[data-admin-section]") ?? null;
+    if (sectionTarget instanceof HTMLElement) {
+      handlers.setAdminSection?.(sectionTarget.dataset.adminSection);
+      return;
+    }
+
+    const target = eventTarget?.closest?.("[data-admin-action]") ?? null;
     if (!(target instanceof HTMLElement)) {
       return;
     }

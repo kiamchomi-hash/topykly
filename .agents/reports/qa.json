@@ -1,13 +1,13 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-13T19:48:06.304Z",
+  "lastChecked": "2026-07-13T18:31:22.5455734-03:00",
   "tests": [
     {
       "name": "unit and integration suite",
       "command": "npm test",
       "status": "passed",
-      "summary": "all tests passed, including stable and varied profanity censor masks"
+      "summary": "all tests passed, including progressive sanctions, restoration, live moderation counts and admin queue refresh coverage"
     },
     {
       "name": "HTTP smoke suite",
@@ -17,9 +17,21 @@
     },
     {
       "name": "diff validation",
-      "command": "git diff --check -- profanity-filter.js tests/run.mjs",
+      "command": "git diff --check",
       "status": "passed",
       "summary": "no whitespace errors"
+    },
+    {
+      "name": "auth modal layout",
+      "command": "playwright-cli geometry check",
+      "status": "passed",
+      "summary": "off and silent Turnstile states keep a 0px height and the auth tabs fixed at the same vertical position"
+    },
+    {
+      "name": "admin moderation flow",
+      "command": "playwright-cli desktop and 390px mobile checks",
+      "status": "passed",
+      "summary": "pending badge, report grouping, sanctions tab, restoration confirmation, solid surfaces and responsive navigation verified"
     }
   ]
 }

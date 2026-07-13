@@ -131,13 +131,26 @@ async function syncTurnstile() {
     sitekey: siteKey,
     appearance: "interaction-only",
     execution: "execute",
+    "before-interactive-callback"() {
+      container.dataset.turnstileMode = "interactive";
+    },
+    "after-interactive-callback"() {
+      container.dataset.turnstileMode = "silent";
+    },
     callback(token) {
+      container.dataset.turnstileMode = "silent";
       storeTurnstileToken(token);
     },
     "expired-callback"() {
+      container.dataset.turnstileMode = "silent";
       resetTurnstileToken();
     },
     "error-callback"() {
+      container.dataset.turnstileMode = "silent";
+      resetTurnstileToken();
+    },
+    "timeout-callback"() {
+      container.dataset.turnstileMode = "silent";
       resetTurnstileToken();
     }
   });

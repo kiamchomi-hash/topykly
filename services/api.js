@@ -7,6 +7,7 @@ export class ApiError extends Error {
     this.code = details.code || "API_ERROR";
     this.status = details.status || 500;
     this.retryAfterSeconds = details.retryAfterSeconds ?? null;
+    this.rateLimitKind = details.rateLimitKind ?? null;
     this.topicStatus = details.topicStatus ?? null;
   }
 }
@@ -58,6 +59,7 @@ async function request(pathname, { method = "GET", body, searchParams } = {}) {
       code: errorPayload.code,
       status: response.status,
       retryAfterSeconds: errorPayload.retryAfterSeconds,
+      rateLimitKind: errorPayload.rateLimitKind,
       topicStatus: errorPayload.topicStatus
     });
   }
@@ -80,6 +82,7 @@ async function readApiPayload(pathname, { method = "GET", body, searchParams } =
       code: errorPayload.code,
       status: response.status,
       retryAfterSeconds: errorPayload.retryAfterSeconds,
+      rateLimitKind: errorPayload.rateLimitKind,
       topicStatus: errorPayload.topicStatus
     });
   }
@@ -116,6 +119,9 @@ function normalizeBackendPayload(payload) {
       outgoing: [],
       friends: []
     },
+    pendingModerationCount: Number.isFinite(payload.pendingModerationCount)
+      ? payload.pendingModerationCount
+      : 0,
     users: buildUsers(payload.users || []),
     topics: Array.isArray(payload.topics) ? payload.topics.map(normalizeTopic) : []
   };

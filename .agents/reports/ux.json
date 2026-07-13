@@ -1,6 +1,13 @@
 {
   "agentName": "Agente de Usabilidad y UX",
-  "status": "Estable",
-  "lastChecked": "2026-07-07T16:10:00.000Z",
-  "findings": []
+  "status": "Corregido",
+  "lastChecked": "2026-07-13T00:00:00.000Z",
+  "findings": [
+    {
+      "level": "fix",
+      "message": "Se unifico el texto visible en español neutro: se retiraron conjugaciones de voseo de los delays de publicacion, terminos, paginas SEO y estados vacios de notificaciones.",
+      "id": "neutral-spanish-copy",
+      "agent": "ux"
+    }
+  ]
 }
