@@ -1,3 +1,5 @@
+import { reconcile } from "./render-utils.js";
+
 function createFriendAvatar(user) {
   const avatar = document.createElement("span");
   avatar.className = "friend-request-panel__avatar";
@@ -36,6 +38,7 @@ export function splitFriendsByPresence(friends, state) {
 function createFriendRow(user, actions = [], presence = null) {
   const row = document.createElement("article");
   row.className = "friend-request-panel__row";
+  row.dataset.id = String(user.id);
   row.dataset.friendUserId = user.id;
 
   const identity = document.createElement("div");
@@ -96,6 +99,7 @@ function createEmptyState(title, copy) {
 function createPresenceGroupTitle(label, count, presence) {
   const heading = document.createElement("h3");
   heading.className = "friend-request-panel__group-title";
+  heading.dataset.id = `group-${presence}`;
   heading.dataset.presence = presence;
   heading.textContent = label;
   const badge = document.createElement("span");
@@ -229,6 +233,7 @@ export function renderFriendRequests(state, dom) {
 
   const header = document.createElement("header");
   header.className = "friend-request-panel__header";
+  header.dataset.id = "header";
   const title = document.createElement("h1");
   title.className = "friend-request-panel__title";
   title.textContent = "Amigos";
@@ -244,6 +249,7 @@ export function renderFriendRequests(state, dom) {
   panel.dataset.activeTab = activeTab;
   const tabsContainer = document.createElement("div");
   tabsContainer.className = "friend-request-panel__tabs";
+  tabsContainer.dataset.id = "tabs";
 
   const tabsData = [
     { id: "incoming", label: "Recibidas", count: friendships.incoming?.length || 0, isIncoming: true },
@@ -300,32 +306,7 @@ export function renderFriendRequests(state, dom) {
     activeSection = createFriendsSection(friendships.friends || [], state);
   }
 
-  const lastTab = panel.dataset.lastTab || "";
-  const lastOpen = panel.dataset.lastOpen === "true";
-  const currentTab = activeTab;
-  const currentOpen = Boolean(state.isFriendRequestsPanelOpen);
+  activeSection.dataset.id = `section-${activeTab}`;
 
-  let savedScrollTop = 0;
-  if (currentOpen && lastOpen && currentTab === lastTab) {
-    const listEl = panel.querySelector(".friend-request-panel__list");
-    if (listEl) {
-      savedScrollTop = listEl.scrollTop;
-    }
-  }
-
-  panel.dataset.lastTab = currentTab;
-  panel.dataset.lastOpen = String(currentOpen);
-
-  panel.replaceChildren(
-    header,
-    tabsContainer,
-    activeSection
-  );
-
-  if (savedScrollTop > 0) {
-    const listEl = panel.querySelector(".friend-request-panel__list");
-    if (listEl) {
-      listEl.scrollTop = savedScrollTop;
-    }
-  }
+  reconcile(panel, [header, tabsContainer, activeSection]);
 }

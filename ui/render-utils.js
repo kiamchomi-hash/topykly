@@ -18,7 +18,7 @@ export function renderIntoTargets(targets, className, buildNodes) {
  * It preserves existing nodes to maintain state (focus, scroll, etc.)
  * and patches attributes/text/children without serializing DOM trees.
  */
-function reconcile(parent, newNodes) {
+export function reconcile(parent, newNodes) {
   const currentNodes = Array.from(parent.children);
   const currentById = new Map();
 
