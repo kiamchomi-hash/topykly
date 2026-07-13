@@ -5053,6 +5053,64 @@ await (async () => {
     }
   });
 
+  await test("preview server removes agent endpoints and blocks internal static files", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-static-"));
+    let preview = null;
+
+    try {
+      preview = startPreviewServer({
+        port: 0,
+        host: "127.0.0.1",
+        log() {},
+        dbPath: path.join(tempDir, "preview.sqlite")
+      });
+      if (!preview.server.listening) {
+        await new Promise((resolve, reject) => {
+          preview.server.once("listening", resolve);
+          preview.server.once("error", reject);
+        });
+      }
+
+      const address = preview.server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+
+      for (const agentPath of ["/api/agents/run", "/api/agents/pause", "/api/agents/status", "/api/agents/decision"]) {
+        const response = await fetch(`${origin}${agentPath}`);
+        assert.equal(response.status, 404, `${agentPath} should not exist`);
+        const payload = await response.json();
+        assert.equal(payload.error?.code, "NOT_FOUND");
+      }
+
+      for (const blockedPath of [
+        "/dashboard.html",
+        "/server.err.log",
+        "/server.out.log",
+        "/task.md",
+        "/GEMINI.md",
+        "/node_modules/prettier/package.json",
+        "/output/playwright/notifications-panel-reconcile.png",
+        "/features/shared/components/base.js",
+        "/local-server.cjs",
+        "/vercel.json"
+      ]) {
+        const response = await fetch(`${origin}${blockedPath}`);
+        assert.equal(response.status, 400, `${blockedPath} should be blocked`);
+        await response.arrayBuffer();
+      }
+
+      const allowedResponse = await fetch(`${origin}/terms.html`);
+      assert.equal(allowedResponse.status, 200);
+      await allowedResponse.arrayBuffer();
+    } finally {
+      if (preview) {
+        const closed = new Promise((resolve) => preview.server.once("close", resolve));
+        preview.close();
+        await closed;
+      }
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   await test("client auth surface has no direct password registration bypass", async () => {
     const apiSource = await read("services/api.js");
     const actionsSource = await read("controller-actions.js");

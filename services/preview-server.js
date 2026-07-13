@@ -36,12 +36,20 @@ const PUBLIC_SERVICE_MODULES = new Set([
 ]);
 const PROTECTED_STATIC_DIRECTORIES = new Set([
   "scripts",
-  "tests"
+  "tests",
+  "node_modules",
+  "output",
+  "features"
 ]);
 const PROTECTED_STATIC_ROOT_FILES = new Set([
   "package.json",
-  "package-lock.json"
+  "package-lock.json",
+  "dashboard.html",
+  "local-server.cjs",
+  "dev-server.cjs",
+  "vercel.json"
 ]);
+const PROTECTED_STATIC_EXTENSIONS = new Set([".log", ".md", ".sqlite", ".env"]);
 
 function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) {
@@ -308,6 +316,10 @@ function safeFilePathFromUrl(urlPathname) {
     return null;
   }
   if (segments.length === 1 && PROTECTED_STATIC_ROOT_FILES.has(segments[0] || "")) {
+    return null;
+  }
+  const lastSegment = segments[segments.length - 1] || "";
+  if (PROTECTED_STATIC_EXTENSIONS.has(path.extname(lastSegment).toLowerCase())) {
     return null;
   }
   const normalized = path.normalize(requestedPath).replace(/^(\.\.[/\\])+/, "");
@@ -1003,80 +1015,6 @@ export function startPreviewServer({
           return;
         }
         await handleAuthCallback(store, authService, req, res, url);
-        return;
-      }
-
-      if (url.pathname === "/api/agents/pause") {
-        const flagPath = path.join(root, ".agents", "paused.flag");
-        fs.writeFileSync(flagPath, "1", "utf8");
-        sendJson(res, 200, { success: true, message: "Paused" }, {
-          headers: { "Access-Control-Allow-Origin": "*" }
-        });
-        return;
-      }
-
-      if (url.pathname === "/api/agents/status") {
-        const flagPath = path.join(root, ".agents", "running.flag");
-        const running = fs.existsSync(flagPath);
-        sendJson(res, 200, { running }, {
-          headers: { "Access-Control-Allow-Origin": "*" }
-        });
-        return;
-      }
-
-      if (url.pathname === "/api/agents/decision") {
-        const id = url.searchParams.get("id");
-        const agent = url.searchParams.get("agent");
-        const action = url.searchParams.get("action");
-        
-        if (id && agent && action) {
-          const decisionsPath = path.join(root, ".agents", "decisions.json");
-          let decisions = { suggestions: {} };
-          if (fs.existsSync(decisionsPath)) {
-            try {
-              decisions = JSON.parse(fs.readFileSync(decisionsPath, "utf8"));
-            } catch {}
-          }
-          decisions.suggestions[id] = {
-            agent,
-            decision: action,
-            timestamp: new Date().toISOString()
-          };
-           fs.writeFileSync(decisionsPath, JSON.stringify(decisions, null, 2), "utf8");
-          
-          // Regenerate the dashboard HTML instantly using --render-only flag
-          const scriptPath = path.join(root, ".agents", "scripts", "orchestrate.mjs");
-          try {
-             const { execSync } = await import("node:child_process");
-            execSync(`node "${scriptPath}" --render-only`, { cwd: root });
-          } catch (e) {
-            console.error("Error regenerating dashboard on decision:", e);
-            fs.writeFileSync(path.join(root, ".agents", "server_exec.log"), e.stack || String(e), "utf8");
-          }
-
-          sendJson(res, 200, { success: true }, {
-            headers: { "Access-Control-Allow-Origin": "*" }
-          });
-          return;
-        }
-        sendJson(res, 400, { error: "Missing parameters" }, {
-          headers: { "Access-Control-Allow-Origin": "*" }
-        });
-        return;
-      }
-
-      if (url.pathname === "/api/agents/run") {
-        const flagPath = path.join(root, ".agents", "paused.flag");
-        if (fs.existsSync(flagPath)) {
-          fs.unlinkSync(flagPath);
-        }
-        const scriptPath = path.join(root, ".agents", "scripts", "orchestrate.mjs");
-        import("node:child_process").then(({ exec }) => {
-          exec(`node "${scriptPath}"`);
-        });
-        sendJson(res, 200, { success: true, message: "Running" }, {
-          headers: { "Access-Control-Allow-Origin": "*" }
-        });
         return;
       }
 
