@@ -4218,6 +4218,13 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         throw new ApiError(400, "INVALID_MODERATION_ACTION", "Accion de moderacion no soportada.");
       });
     },
+    getDiagnosticsForViewer({ sessionId, authMode, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertModerator(context.viewerRow);
+        return this.getDiagnostics();
+      });
+    },
     getDiagnostics() {
       const topics = db.prepare("SELECT COUNT(*) AS count FROM topics").get()?.count ?? 0;
       const messages = db.prepare("SELECT COUNT(*) AS count FROM messages").get()?.count ?? 0;

@@ -5101,6 +5101,11 @@ await (async () => {
       const allowedResponse = await fetch(`${origin}/terms.html`);
       assert.equal(allowedResponse.status, 200);
       await allowedResponse.arrayBuffer();
+
+      const diagnosticsResponse = await fetch(`${origin}/api/diagnostics`);
+      assert.equal(diagnosticsResponse.status, 403);
+      const diagnosticsPayload = await diagnosticsResponse.json();
+      assert.equal(diagnosticsPayload.error?.code, "MODERATOR_REQUIRED");
     } finally {
       if (preview) {
         const closed = new Promise((resolve) => preview.server.once("close", resolve));

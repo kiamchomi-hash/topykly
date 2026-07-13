@@ -702,7 +702,7 @@ async function handleApiRequest(store, authService, req, res, url) {
     }
 
     if (req.method === "GET" && url.pathname === "/api/diagnostics") {
-      sendJson(res, 200, store.getDiagnostics());
+      sendJson(res, 200, store.getDiagnosticsForViewer(context));
       return;
     }
 
