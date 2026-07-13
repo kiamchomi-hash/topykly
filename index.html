@@ -618,15 +618,6 @@
             </div>
             <textarea id="profileDescriptionInput" maxlength="180" placeholder="Cuenta algo breve sobre ti" readonly></textarea>
           </div>
-          <div class="profile-modal__joined" id="profileIndexableSection">
-            <span class="profile-modal__joined-info">
-              <span class="profile-modal__joined-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-              </span>
-              <span class="profile-modal__joined-text">Perfil en buscadores</span>
-            </span>
-            <button class="profile-modal__visibility-button" id="profileIndexableVisibilityButton" type="button" aria-label="Ocultar perfil de buscadores" aria-pressed="false" data-visible="true" data-profile-visibility="indexable"></button>
-          </div>
           <div class="profile-modal__bottom-row">
             <div class="profile-modal__field profile-modal__field--social" id="profileSocialSection">
               <span class="profile-modal__social-legend">Redes sociales</span>
@@ -739,45 +730,86 @@
           </button>
         </div>
         <div class="settings-modal__body">
-          <div class="settings-modal__option">
-            <div class="settings-modal__option-text">
-              <span class="settings-modal__option-title">Likes anónimos</span>
-              <span class="settings-modal__option-copy">Tu nombre no se muestra cuando das like a un posteo o comentario.</span>
-            </div>
-            <button class="settings-switch" id="settingsLikesAnonymousToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="likesAnonymous" aria-label="Likes anónimos">
-              <span class="settings-switch__thumb" aria-hidden="true"></span>
-            </button>
-          </div>
-          <div class="settings-modal__option">
-            <div class="settings-modal__option-text">
-              <span class="settings-modal__option-title">Filtrar insultos</span>
-              <span class="settings-modal__option-copy">Censura malas palabras (español e inglés) en mensajes y títulos.</span>
-            </div>
-            <button class="settings-switch" id="settingsFilterProfanityToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="filterProfanity" aria-label="Filtrar insultos">
-              <span class="settings-switch__thumb" aria-hidden="true"></span>
-            </button>
-          </div>
-          <div class="settings-modal__option">
-            <div class="settings-modal__option-text">
-              <span class="settings-modal__option-title">Notificaciones solo de amigos</span>
-              <span class="settings-modal__option-copy">Solo verás notificaciones de la actividad de tus amigos.</span>
-            </div>
-            <button class="settings-switch" id="settingsFriendsOnlyToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="notificationsFriendsOnly" aria-label="Notificaciones solo de amigos">
-              <span class="settings-switch__thumb" aria-hidden="true"></span>
-            </button>
-          </div>
-          <div class="settings-modal__danger">
-            <p class="settings-modal__danger-title">Eliminar cuenta</p>
-            <p class="settings-modal__danger-copy">Se cierra tu sesión y tus datos personales se eliminan de forma permanente.</p>
-            <button class="text-button settings-modal__danger-button" id="settingsDeleteAccountButton" type="button">Eliminar cuenta</button>
-            <div class="settings-modal__danger-confirm" id="settingsDeleteConfirmRow" hidden>
-              <p class="settings-modal__danger-copy">¿Seguro? Esta acción no se puede deshacer.</p>
-              <div class="settings-modal__danger-actions">
-                <button class="text-button" id="settingsDeleteCancelButton" type="button">Cancelar</button>
-                <button class="primary-button settings-modal__danger-confirm-button" id="settingsDeleteConfirmButton" type="button">Eliminar definitivamente</button>
+          <section class="settings-modal__group" aria-label="Privacidad">
+            <h3 class="settings-modal__group-title">Privacidad</h3>
+            <div class="settings-modal__card">
+              <div class="settings-modal__option">
+                <span class="settings-modal__option-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+                </span>
+                <div class="settings-modal__option-text">
+                  <span class="settings-modal__option-title">Likes anónimos</span>
+                  <span class="settings-modal__option-copy">Tu nombre no se muestra cuando das like a un posteo o comentario.</span>
+                </div>
+                <button class="settings-switch" id="settingsLikesAnonymousToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="likesAnonymous" aria-label="Likes anónimos">
+                  <span class="settings-switch__thumb" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="settings-modal__option">
+                <span class="settings-modal__option-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+                </span>
+                <div class="settings-modal__option-text">
+                  <span class="settings-modal__option-title">Perfil en buscadores</span>
+                  <span class="settings-modal__option-copy">Tu perfil público puede aparecer en Google y otros buscadores.</span>
+                </div>
+                <button class="settings-switch" id="settingsProfileIndexableToggle" type="button" role="switch" aria-checked="true" data-setting-toggle="profileIndexable" aria-label="Perfil en buscadores">
+                  <span class="settings-switch__thumb" aria-hidden="true"></span>
+                </button>
               </div>
             </div>
-          </div>
+          </section>
+          <section class="settings-modal__group" aria-label="Contenido y notificaciones">
+            <h3 class="settings-modal__group-title">Contenido y notificaciones</h3>
+            <div class="settings-modal__card">
+              <div class="settings-modal__option">
+                <span class="settings-modal__option-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3l7 3v5c0 4.6-3 8.1-7 10-4-1.9-7-5.4-7-10V6Z"/><path d="M9 12l2 2 4-4"/></svg>
+                </span>
+                <div class="settings-modal__option-text">
+                  <span class="settings-modal__option-title">Filtrar insultos</span>
+                  <span class="settings-modal__option-copy">Censura malas palabras (español e inglés) en mensajes y títulos.</span>
+                </div>
+                <button class="settings-switch" id="settingsFilterProfanityToggle" type="button" role="switch" aria-checked="true" data-setting-toggle="filterProfanity" aria-label="Filtrar insultos">
+                  <span class="settings-switch__thumb" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="settings-modal__option">
+                <span class="settings-modal__option-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+                </span>
+                <div class="settings-modal__option-text">
+                  <span class="settings-modal__option-title">Notificaciones solo de amigos</span>
+                  <span class="settings-modal__option-copy">Solo verás notificaciones de la actividad de tus amigos.</span>
+                </div>
+                <button class="settings-switch" id="settingsFriendsOnlyToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="notificationsFriendsOnly" aria-label="Notificaciones solo de amigos">
+                  <span class="settings-switch__thumb" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+          </section>
+          <section class="settings-modal__group" aria-label="Cuenta">
+            <h3 class="settings-modal__group-title settings-modal__group-title--danger">Cuenta</h3>
+            <div class="settings-modal__card settings-modal__danger">
+              <div class="settings-modal__option settings-modal__option--danger">
+                <span class="settings-modal__option-icon settings-modal__option-icon--danger" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg>
+                </span>
+                <div class="settings-modal__option-text">
+                  <span class="settings-modal__option-title">Eliminar cuenta</span>
+                  <span class="settings-modal__option-copy">Se cierra tu sesión y tus datos personales se eliminan de forma permanente.</span>
+                </div>
+                <button class="text-button settings-modal__danger-button" id="settingsDeleteAccountButton" type="button">Eliminar</button>
+              </div>
+              <div class="settings-modal__danger-confirm" id="settingsDeleteConfirmRow" hidden>
+                <p class="settings-modal__danger-copy">¿Seguro? Esta acción no se puede deshacer.</p>
+                <div class="settings-modal__danger-actions">
+                  <button class="text-button" id="settingsDeleteCancelButton" type="button">Cancelar</button>
+                  <button class="primary-button settings-modal__danger-confirm-button" id="settingsDeleteConfirmButton" type="button">Eliminar definitivamente</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
     </div>
@@ -815,19 +847,19 @@
             <p class="public-profile-modal__username" id="publicProfileUsername">@usuario</p>
           </div>
           <div class="public-profile-modal__header-actions">
-            <button class="icon-button icon-button--compact public-profile-modal__copy-link" id="publicProfileCopyLinkButton" type="button" data-profile-nickname="" aria-label="Copiar enlace del perfil" title="Copiar enlace del perfil" hidden>
-              <span class="modal-close-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                </svg>
-              </span>
-            </button>
             <button class="icon-button icon-button--compact public-profile-modal__report" id="publicProfileReportButton" type="button" data-report-entity-type="user" data-report-entity-id="" aria-label="Reportar usuario" title="Reportar usuario">
               <span class="modal-close-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
                   <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
                   <path d="M4 22v-7"></path>
+                </svg>
+              </span>
+            </button>
+            <button class="icon-button icon-button--compact public-profile-modal__copy-link" id="publicProfileCopyLinkButton" type="button" data-profile-nickname="" aria-label="Copiar enlace del perfil" title="Copiar enlace del perfil" hidden>
+              <span class="modal-close-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                 </svg>
               </span>
             </button>

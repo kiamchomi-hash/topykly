@@ -5225,6 +5225,14 @@ await (async () => {
       assert.equal(allowedResponse.status, 200);
       await allowedResponse.arrayBuffer();
 
+      const seoModuleResponse = await fetch(`${origin}/services/seo-pages.js`);
+      assert.equal(seoModuleResponse.status, 200, "seo-pages.js debe ser servible (lo importa controller-render.js)");
+      await seoModuleResponse.arrayBuffer();
+
+      const backendModuleResponse = await fetch(`${origin}/services/backend-store.js`);
+      assert.notEqual(backendModuleResponse.status, 200);
+      await backendModuleResponse.arrayBuffer();
+
       const diagnosticsResponse = await fetch(`${origin}/api/diagnostics`);
       assert.equal(diagnosticsResponse.status, 403);
       const diagnosticsPayload = await diagnosticsResponse.json();
@@ -9853,6 +9861,12 @@ await (async () => {
     assert.match(publicProfileModal, /joinedAtContainer.hidden = !joinedDate.length/);
     assert.match(publicProfileModal, /publicProfileCopyLinkButton\.hidden = !canShareProfile/);
     assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isCurrentUser/);
+    assert.match(html, /id="publicProfileReportButton"[\s\S]*id="publicProfileCopyLinkButton"/);
+    assert.match(renderController, /export function getAppLocationPath/);
+    assert.match(renderController, /return `\/u\/\$\{encodeURIComponent\(profileUser\.nickname\)\}`;/);
+    assert.match(renderController, /return topicPath\(topic\);/);
+    assert.match(renderController, /window\.history\.replaceState/);
+    assert.match(renderController, /syncLocationWithState\(state\);/);
     assert.match(publicProfileModal, /profileShowSocial/);
     assert.match(publicProfileModal, /publicProfileSocial/);
     assert.match(publicProfileModal, /createSocialLinkButton/);
@@ -10071,6 +10085,7 @@ await (async () => {
       "settingsModal",
       "closeSettingsModalButton",
       "settingsLikesAnonymousToggle",
+      "settingsProfileIndexableToggle",
       "settingsFilterProfanityToggle",
       "settingsFriendsOnlyToggle",
       "settingsDeleteAccountButton",
@@ -10298,14 +10313,34 @@ await (async () => {
       });
       const voterName = voterPayload.viewer.displayName;
 
+      // El filtro de insultos arranca activado por defecto.
+      assert.equal(voterPayload.viewer.filterProfanity, true);
+
       const updated = store.updateSettings({
         sessionId: "session-settings-voter",
-        filterProfanity: true,
+        filterProfanity: false,
         notificationsFriendsOnly: true
       });
-      assert.equal(updated.viewer.filterProfanity, true);
+      assert.equal(updated.viewer.filterProfanity, false);
       assert.equal(updated.viewer.notificationsFriendsOnly, true);
       assert.equal(updated.viewer.likesAnonymous, false);
+
+      // La visibilidad en buscadores se guarda desde configuracion.
+      const optedOut = store.updateSettings({
+        sessionId: "session-settings-voter",
+        profileIndexable: false
+      });
+      assert.equal(optedOut.viewer.profileIndexable, false);
+      const keptOptOut = store.updateSettings({
+        sessionId: "session-settings-voter",
+        likesAnonymous: false
+      });
+      assert.equal(keptOptOut.viewer.profileIndexable, false);
+      const optedIn = store.updateSettings({
+        sessionId: "session-settings-voter",
+        profileIndexable: true
+      });
+      assert.equal(optedIn.viewer.profileIndexable, true);
 
       const created = store.createTopic({
         sessionId: "session-settings-author",

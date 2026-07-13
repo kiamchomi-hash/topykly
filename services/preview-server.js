@@ -43,7 +43,8 @@ const mime = {
 const PUBLIC_SERVICE_MODULES = new Set([
   "api.js",
   "drawer-service.js",
-  "palette-service.js"
+  "palette-service.js",
+  "seo-pages.js"
 ]);
 const PROTECTED_STATIC_DIRECTORIES = new Set([
   "scripts",
@@ -641,6 +642,7 @@ async function handleApiRequest(store, authService, req, res, url) {
         likesAnonymous: typeof body.likesAnonymous === "boolean" ? body.likesAnonymous : null,
         filterProfanity: typeof body.filterProfanity === "boolean" ? body.filterProfanity : null,
         notificationsFriendsOnly: typeof body.notificationsFriendsOnly === "boolean" ? body.notificationsFriendsOnly : null,
+        profileIndexable: typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
         selectedTopicId: body.selectedTopicId ?? null
       }));
       return;
