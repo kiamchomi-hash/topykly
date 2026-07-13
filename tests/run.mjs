@@ -20,6 +20,12 @@ import {
   shouldSeedDemoData,
   TERMS_VERSION
 } from "../services/backend-store.js";
+import {
+  escapeHtml,
+  renderTopicPage,
+  resolvePublicOrigin,
+  slugify
+} from "../services/seo-pages.js";
 import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
 import { composeReportReason, REPORT_REASONS } from "../report-reasons.js";
@@ -5211,6 +5217,149 @@ await (async () => {
       assert.equal(preflightResponse.status, 204);
       assert.equal(preflightResponse.headers.get("access-control-allow-origin"), null);
       await preflightResponse.arrayBuffer();
+    } finally {
+      if (preview) {
+        const closed = new Promise((resolve) => preview.server.once("close", resolve));
+        preview.close();
+        await closed;
+      }
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  await test("seo page helpers escape user content and build stable slugs", () => {
+    assert.equal(
+      escapeHtml(`<script>alert("x")</script> & 'fin'`),
+      "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;fin&#39;"
+    );
+    assert.equal(slugify("¿Qué opinan del fútbol argentino?"), "que-opinan-del-futbol-argentino");
+    assert.equal(slugify("   ---   "), "");
+    assert.equal(slugify("a".repeat(120)).length <= 60, true);
+    assert.equal(resolvePublicOrigin({}), "https://topykly.com");
+    assert.equal(resolvePublicOrigin({ TOPYKLY_PUBLIC_ORIGIN: "https://example.com/base/" }), "https://example.com");
+
+    const xssTopic = {
+      id: "topic-xss",
+      title: `<script>alert(1)</script>`,
+      createdAt: "2026-07-01T10:00:00.000Z",
+      lastActivityAt: "2026-07-02T10:00:00.000Z",
+      isExpelled: false,
+      isBlocked: false,
+      isThin: false,
+      author: { name: `<img src=x onerror=alert(2)>`, nickname: null, type: "guest" },
+      messages: [
+        {
+          text: `"><script>alert(3)</script>`,
+          kind: "user",
+          likes: 2,
+          isRoot: true,
+          createdAt: "2026-07-01T10:00:00.000Z",
+          authorName: "Autor",
+          authorNickname: null,
+          authorType: "guest"
+        }
+      ],
+      relatedTopics: [{ id: "topic-rel", title: `<b>otro</b>` }],
+      commentCount: 4,
+      likeCount: 2
+    };
+    const html = renderTopicPage(xssTopic, { origin: "https://topykly.com" });
+    assert.equal(html.includes("<script>alert(1)</script>"), false);
+    assert.equal(html.includes("<script>alert(3)</script>"), false);
+    assert.equal(html.includes("<img src=x"), false);
+    assert.equal(html.includes("<b>otro</b>"), false);
+    assert.equal(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true);
+    assert.equal(html.includes(`<link rel="canonical" href="https://topykly.com/tema/topic-xss/script-alert-1-script">`), true);
+    assert.equal(html.includes(`"@type":"DiscussionForumPosting"`), true);
+    assert.equal(html.includes("\\u003cscript"), true);
+  });
+
+  await test("preview server renders crawlable topic pages with canonical redirects", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-seo-"));
+    let preview = null;
+
+    try {
+      preview = startPreviewServer({
+        port: 0,
+        host: "127.0.0.1",
+        log() {},
+        dbPath: path.join(tempDir, "preview.sqlite")
+      });
+      if (!preview.server.listening) {
+        await new Promise((resolve, reject) => {
+          preview.server.once("listening", resolve);
+          preview.server.once("error", reject);
+        });
+      }
+
+      const address = preview.server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const store = preview.store;
+
+      store.registerWithPassword({
+        sessionId: "session-seo-author",
+        email: "seo-author@example.com",
+        password: "password-segura",
+        nickname: "seo_author"
+      });
+      const created = store.createTopic({
+        sessionId: "session-seo-author",
+        authMode: "registered",
+        title: "El mejor tema de fútbol",
+        text: "Un tema para hablar de fútbol con <script>etiquetas</script>."
+      });
+      const topicId = created.selectedTopicId || created.topics[0].id;
+
+      const redirectResponse = await fetch(`${origin}/tema/${encodeURIComponent(topicId)}`, { redirect: "manual" });
+      assert.equal(redirectResponse.status, 301);
+      const location = redirectResponse.headers.get("location");
+      assert.equal(location, `/tema/${encodeURIComponent(topicId)}/el-mejor-tema-de-futbol`);
+      await redirectResponse.arrayBuffer();
+
+      const pageResponse = await fetch(`${origin}${location}`);
+      assert.equal(pageResponse.status, 200);
+      assert.match(pageResponse.headers.get("content-type") || "", /text\/html/);
+      const pageHtml = await pageResponse.text();
+      assert.equal(pageHtml.includes("El mejor tema de fútbol"), true);
+      assert.equal(pageHtml.includes("<script>etiquetas</script>"), false);
+      assert.equal(pageHtml.includes("&lt;script&gt;etiquetas&lt;/script&gt;"), true);
+      assert.equal(pageHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
+      assert.equal(pageHtml.includes("Abrir en TOPYKLY"), true);
+
+      for (let index = 0; index < 3; index += 1) {
+        const commenterSession = `session-seo-commenter-${index}`;
+        store.registerWithPassword({
+          sessionId: commenterSession,
+          email: `seo-commenter-${index}@example.com`,
+          password: "password-segura",
+          nickname: `seo_com_${index}`
+        });
+        store.addMessage(topicId, {
+          sessionId: commenterSession,
+          authMode: "registered",
+          text: `Comentario número ${index + 1}`
+        });
+      }
+
+      const indexableResponse = await fetch(`${origin}${location}`);
+      const indexableHtml = await indexableResponse.text();
+      assert.equal(indexableHtml.includes(`<meta name="robots" content="index,follow">`), true);
+      assert.equal(indexableHtml.includes(`"commentCount":3`), true);
+
+      const hubResponse = await fetch(`${origin}/temas`);
+      assert.equal(hubResponse.status, 200);
+      const hubHtml = await hubResponse.text();
+      assert.equal(hubHtml.includes("El mejor tema de fútbol"), true);
+      assert.equal(hubHtml.includes(`<link rel="canonical" href="https://topykly.com/temas">`), true);
+
+      const missingResponse = await fetch(`${origin}/tema/topic-inexistente`);
+      assert.equal(missingResponse.status, 404);
+      const missingHtml = await missingResponse.text();
+      assert.equal(missingHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
+
+      const shellResponse = await fetch(`${origin}/`);
+      const shellHtml = await shellResponse.text();
+      assert.equal(shellHtml.includes(`<a href="/temas">`), true);
     } finally {
       if (preview) {
         const closed = new Promise((resolve) => preview.server.once("close", resolve));

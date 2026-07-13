@@ -97,9 +97,10 @@ function createReportIcon() {
 }
 
 export function createTopicItem(topic, users, selected = false, currentUserId = null, unread = false) {
-  const button = el("button", `topic-item${selected ? " is-active" : ""}${unread ? " topic-item--unread" : ""}`);
-  button.type = "button";
+  const button = el("a", `topic-item${selected ? " is-active" : ""}${unread ? " topic-item--unread" : ""}`);
   button.dataset.id = topic.id;
+  button.setAttribute("href", `/tema/${encodeURIComponent(topic.id)}`);
+  button.setAttribute("role", "button");
   button.setAttribute("aria-pressed", String(selected));
   button.setAttribute("aria-current", selected ? "true" : "false");
 

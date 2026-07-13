@@ -5,6 +5,13 @@ import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "./auth-service.js";
 import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-store.js";
+import {
+  renderNotFoundPage,
+  renderTopicPage,
+  renderTopicsIndexPage,
+  resolvePublicOrigin,
+  slugify
+} from "./seo-pages.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -141,6 +148,17 @@ function writePlainText(res, statusCode, text) {
   });
   res.end(text);
 }
+function sendHtml(res, req, statusCode, html, headers = {}) {
+  const body = req.method === "HEAD" ? "" : html;
+  res.writeHead(statusCode, {
+    ...getSecurityHeaders({ includeCsp: true, req }),
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Length": Buffer.byteLength(html),
+    ...headers
+  });
+  res.end(body);
+}
+
 function sendJson(res, statusCode, payload, { headers = {}, cookies = [] } = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(statusCode, {
@@ -963,6 +981,66 @@ function runMessageReactionReset(store, log) {
   }
 }
 
+function isSeoPagePath(pathname) {
+  return pathname === "/temas" || pathname === "/tema" || pathname.startsWith("/tema/");
+}
+
+function handleSeoPageRequest(store, req, res, url) {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    writePlainText(res, 405, "Method not allowed");
+    return;
+  }
+
+  const origin = resolvePublicOrigin();
+
+  if (url.pathname === "/tema") {
+    sendRedirect(res, 301, "/temas");
+    return;
+  }
+
+  if (url.pathname === "/temas") {
+    sendHtml(res, req, 200, renderTopicsIndexPage(store.getSeoTopicEntries(), { origin }), {
+      "Cache-Control": "public, max-age=300"
+    });
+    return;
+  }
+
+  const segments = url.pathname.split("/").filter(Boolean);
+  let topicId = "";
+  let requestedSlug = "";
+  try {
+    topicId = decodeURIComponent(segments[1] || "");
+    requestedSlug = decodeURIComponent(segments.slice(2).join("/"));
+  } catch {
+    sendHtml(res, req, 404, renderNotFoundPage());
+    return;
+  }
+
+  let topic;
+  try {
+    topic = store.getTopicPageData(topicId);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      sendHtml(res, req, 404, renderNotFoundPage());
+      return;
+    }
+    throw error;
+  }
+
+  const canonicalSlug = slugify(topic.title);
+  if (requestedSlug !== canonicalSlug) {
+    const canonicalPath = canonicalSlug
+      ? `/tema/${encodeURIComponent(topic.id)}/${canonicalSlug}`
+      : `/tema/${encodeURIComponent(topic.id)}`;
+    sendRedirect(res, 301, canonicalPath);
+    return;
+  }
+
+  sendHtml(res, req, 200, renderTopicPage(topic, { origin }), {
+    "Cache-Control": "public, max-age=60"
+  });
+}
+
 function handleStaticRequest(req, res, url, store) {
   if (url.pathname.startsWith("/avatars/")) {
     handleAvatarRequest(res, url, store.avatarStorageDir);
@@ -1065,6 +1143,14 @@ export function startPreviewServer({
           return;
         }
         await handleApiRequest(store, authService, req, res, url);
+        return;
+      }
+
+      if (isSeoPagePath(url.pathname)) {
+        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
+          return;
+        }
+        handleSeoPageRequest(store, req, res, url);
         return;
       }
 

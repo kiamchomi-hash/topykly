@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { initialUsers, topicSeedData } from "../data.js";
+import { SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
 
 export const ACTIVE_TOPIC_LIMIT = 40;
 export const VISIBLE_TOPIC_LIMIT = 20;
@@ -4217,6 +4218,93 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
 
         throw new ApiError(400, "INVALID_MODERATION_ACTION", "Accion de moderacion no soportada.");
       });
+    },
+    // Lecturas para las páginas SEO server-rendered: nunca crean sesiones ni escriben.
+    getSeoTopicEntries() {
+      return db.prepare(`
+        SELECT
+          topics.id,
+          topics.title,
+          topics.last_activity_at,
+          (
+            SELECT COUNT(*)
+            FROM messages
+            WHERE messages.topic_id = topics.id
+              AND messages.kind = 'user'
+              AND messages.is_root = 0
+          ) AS comment_count
+        FROM topics
+        WHERE topics.status IN (?, ?)
+        ORDER BY topics.active_rank ASC
+        LIMIT ?
+      `).all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT).map((row) => ({
+        id: row.id,
+        title: row.title,
+        lastActivityAt: row.last_activity_at,
+        commentCount: Number(row.comment_count ?? 0),
+        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT
+      }));
+    },
+    getTopicPageData(topicId) {
+      const normalizedId = String(topicId || "").trim();
+      const topicRow = normalizedId
+        ? db.prepare("SELECT * FROM topics WHERE id = ?").get(normalizedId)
+        : null;
+      if (!topicRow || topicRow.status === TOPIC_STATUS_BLOCKED) {
+        throw new ApiError(404, "TOPIC_NOT_FOUND", "Tema no encontrado.");
+      }
+
+      const authorRow = db.prepare("SELECT name, nickname, type FROM users WHERE id = ?")
+        .get(topicRow.author_id);
+      const messages = db.prepare(`
+        SELECT
+          messages.text,
+          messages.kind,
+          messages.likes,
+          messages.is_root,
+          messages.created_at,
+          users.name AS author_name,
+          users.nickname AS author_nickname,
+          users.type AS author_type
+        FROM messages
+        JOIN users ON users.id = messages.author_id
+        WHERE messages.topic_id = ?
+        ORDER BY messages.id ASC
+      `).all(normalizedId).map((row) => ({
+        text: row.text,
+        kind: row.kind,
+        likes: Number(row.likes ?? 0),
+        isRoot: Boolean(row.is_root),
+        createdAt: row.created_at,
+        authorName: row.author_name,
+        authorNickname: row.author_nickname ?? null,
+        authorType: row.author_type
+      }));
+      const commentCount = messages.filter((message) => message.kind === "user" && !message.isRoot).length;
+      const likeCount = messages.reduce((total, message) => total + message.likes, 0);
+      const relatedTopics = getActiveTopicsForFrontend(db)
+        .filter((row) => row.id !== normalizedId)
+        .slice(0, 5)
+        .map((row) => ({ id: row.id, title: row.title }));
+
+      return {
+        id: topicRow.id,
+        title: topicRow.title,
+        createdAt: topicRow.created_at,
+        lastActivityAt: topicRow.last_activity_at,
+        isExpelled: topicRow.status === TOPIC_STATUS_EXPELLED,
+        isBlocked: false,
+        isThin: commentCount < SEO_THIN_TOPIC_COMMENT_COUNT,
+        author: {
+          name: authorRow?.name || "Usuario de TOPYKLY",
+          nickname: authorRow?.nickname ?? null,
+          type: authorRow?.type || "guest"
+        },
+        messages,
+        relatedTopics,
+        commentCount,
+        likeCount
+      };
     },
     getDiagnosticsForViewer({ sessionId, authMode, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
