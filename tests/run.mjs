@@ -9,6 +9,7 @@ import { createAuthService } from "../services/auth-service.js";
 import {
   getRequestIp,
   isLocalDevLoginAllowed,
+  isRequestOriginAllowed,
   startPreviewServer,
   shouldTrustProxy
 } from "../services/preview-server.js";
@@ -4963,6 +4964,7 @@ await (async () => {
   await test("preview auth requires Turnstile, blocks unverified registration and scopes HSTS to production HTTPS", async () => {
     const previousNodeEnv = process.env.NODE_ENV;
     const previousVercelEnv = process.env.VERCEL_ENV;
+    const previousSessionSecret = process.env.TOPYKLY_SESSION_SECRET;
     const previousTurnstileSiteKey = process.env.TOPYKLY_TURNSTILE_SITE_KEY;
     const previousTurnstileSecretKey = process.env.TOPYKLY_TURNSTILE_SECRET_KEY;
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-auth-"));
@@ -4971,6 +4973,7 @@ await (async () => {
     try {
       process.env.NODE_ENV = "production";
       delete process.env.VERCEL_ENV;
+      process.env.TOPYKLY_SESSION_SECRET = "test-session-secret";
       process.env.TOPYKLY_TURNSTILE_SITE_KEY = "test-site-key";
       process.env.TOPYKLY_TURNSTILE_SECRET_KEY = "test-secret-key";
       preview = startPreviewServer({
@@ -5039,6 +5042,11 @@ await (async () => {
       } else {
         process.env.VERCEL_ENV = previousVercelEnv;
       }
+      if (previousSessionSecret === undefined) {
+        delete process.env.TOPYKLY_SESSION_SECRET;
+      } else {
+        process.env.TOPYKLY_SESSION_SECRET = previousSessionSecret;
+      }
       if (previousTurnstileSiteKey === undefined) {
         delete process.env.TOPYKLY_TURNSTILE_SITE_KEY;
       } else {
@@ -5048,6 +5056,81 @@ await (async () => {
         delete process.env.TOPYKLY_TURNSTILE_SECRET_KEY;
       } else {
         process.env.TOPYKLY_TURNSTILE_SECRET_KEY = previousTurnstileSecretKey;
+      }
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  await test("origin check only restricts cross-origin write requests", () => {
+    const baseHeaders = { host: "topykly.local" };
+
+    assert.equal(isRequestOriginAllowed({ method: "GET", headers: baseHeaders }, {}), true);
+    assert.equal(isRequestOriginAllowed({ method: "POST", headers: baseHeaders }, {}), true);
+    assert.equal(
+      isRequestOriginAllowed(
+        { method: "POST", headers: { ...baseHeaders, origin: "http://topykly.local" } },
+        {}
+      ),
+      true
+    );
+    assert.equal(
+      isRequestOriginAllowed(
+        { method: "POST", headers: { ...baseHeaders, origin: "https://evil.example" } },
+        {}
+      ),
+      false
+    );
+    assert.equal(
+      isRequestOriginAllowed(
+        { method: "POST", headers: { ...baseHeaders, origin: "https://topykly.com" } },
+        { TOPYKLY_PUBLIC_ORIGIN: "https://topykly.com" }
+      ),
+      true
+    );
+    assert.equal(
+      isRequestOriginAllowed(
+        { method: "POST", headers: { ...baseHeaders, origin: "no-es-una-url" } },
+        {}
+      ),
+      false
+    );
+  });
+
+  await test("preview server refuses to start in production without session secret", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousSessionSecret = process.env.TOPYKLY_SESSION_SECRET;
+    const previousLegacySecret = process.env.CHETREND_SESSION_SECRET;
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-secret-"));
+
+    try {
+      process.env.NODE_ENV = "production";
+      process.env.TOPYKLY_SESSION_SECRET = "";
+      process.env.CHETREND_SESSION_SECRET = "";
+
+      assert.throws(
+        () => startPreviewServer({
+          port: 0,
+          host: "127.0.0.1",
+          log() {},
+          dbPath: path.join(tempDir, "preview.sqlite")
+        }),
+        /TOPYKLY_SESSION_SECRET/
+      );
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousSessionSecret === undefined) {
+        delete process.env.TOPYKLY_SESSION_SECRET;
+      } else {
+        process.env.TOPYKLY_SESSION_SECRET = previousSessionSecret;
+      }
+      if (previousLegacySecret === undefined) {
+        delete process.env.CHETREND_SESSION_SECRET;
+      } else {
+        process.env.CHETREND_SESSION_SECRET = previousLegacySecret;
       }
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -5106,6 +5189,28 @@ await (async () => {
       assert.equal(diagnosticsResponse.status, 403);
       const diagnosticsPayload = await diagnosticsResponse.json();
       assert.equal(diagnosticsPayload.error?.code, "MODERATOR_REQUIRED");
+
+      const crossOriginResponse = await fetch(`${origin}/api/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+        body: "{}"
+      });
+      assert.equal(crossOriginResponse.status, 403);
+      const crossOriginPayload = await crossOriginResponse.json();
+      assert.equal(crossOriginPayload.error?.code, "ORIGIN_NOT_ALLOWED");
+
+      const sameOriginResponse = await fetch(`${origin}/api/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: "{}"
+      });
+      assert.notEqual(sameOriginResponse.status, 403);
+      await sameOriginResponse.arrayBuffer();
+
+      const preflightResponse = await fetch(`${origin}/api/bootstrap`, { method: "OPTIONS" });
+      assert.equal(preflightResponse.status, 204);
+      assert.equal(preflightResponse.headers.get("access-control-allow-origin"), null);
+      await preflightResponse.arrayBuffer();
     } finally {
       if (preview) {
         const closed = new Promise((resolve) => preview.server.once("close", resolve));

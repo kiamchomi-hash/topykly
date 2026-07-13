@@ -270,6 +270,37 @@ export function getRequestIp(req, env = process.env) {
   return req.socket.remoteAddress || "";
 }
 
+export function isRequestOriginAllowed(req, env = process.env) {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method || "GET")) {
+    return true;
+  }
+
+  const originHeader = String(req.headers.origin || "").trim();
+  if (!originHeader) {
+    return true;
+  }
+
+  let originHost;
+  try {
+    originHost = new URL(originHeader).host;
+  } catch {
+    return false;
+  }
+
+  const allowedHosts = new Set([String(req.headers.host || "").trim()]);
+  const publicOrigin = String(env.TOPYKLY_PUBLIC_ORIGIN || env.CHETREND_PUBLIC_ORIGIN || "").trim();
+  if (publicOrigin) {
+    try {
+      allowedHosts.add(new URL(publicOrigin).host);
+    } catch {
+      // ignore malformed configured origin
+    }
+  }
+  allowedHosts.delete("");
+
+  return allowedHosts.has(originHost);
+}
+
 function getRequestContext(req) {
   const cookies = readCookies(req);
 
@@ -719,10 +750,11 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    console.error("API request failed:", error);
     sendJson(res, 500, {
       error: {
         code: "INTERNAL_ERROR",
-        message: error instanceof Error ? error.message : "Error interno del servidor."
+        message: "Error interno del servidor."
       }
     });
   }
@@ -973,6 +1005,14 @@ export function startPreviewServer({
   dbPath
 }) {
   loadEnvFile(path.join(root, ".env"));
+  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  const sessionSecret = String(process.env.TOPYKLY_SESSION_SECRET || process.env.CHETREND_SESSION_SECRET || "").trim();
+  if (nodeEnv === "production" && !sessionSecret) {
+    throw new Error("TOPYKLY_SESSION_SECRET es obligatorio cuando NODE_ENV=production.");
+  }
+  if (isLocalDevLoginAllowed()) {
+    log("ADVERTENCIA: login local sin contraseña habilitado porque NODE_ENV no es \"production\". No usar esta configuración en producción.");
+  }
   const store = createBackendStore({
     dbPath,
     seedDemoData: shouldSeedDemoData(process.env, false)
@@ -993,16 +1033,9 @@ export function startPreviewServer({
   runGuestCleanup(store, log);
   runMessageReactionReset(store, log);
   const server = http.createServer(async (req, res) => {
-    // Handle CORS preflight globally for all routes
+    // The app is strictly same-origin: no CORS headers are ever granted.
     if (req.method === "OPTIONS") {
-      res.writeHead(204, {
-        ...getSecurityHeaders({ includeCsp: false, req }),
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-        "Access-Control-Allow-Private-Network": "true",
-        "Access-Control-Max-Age": "86400"
-      });
+      res.writeHead(204, getSecurityHeaders({ includeCsp: false, req }));
       res.end();
       return;
     }
@@ -1022,16 +1055,26 @@ export function startPreviewServer({
         if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
           return;
         }
+        if (!isRequestOriginAllowed(req)) {
+          sendJson(res, 403, {
+            error: {
+              code: "ORIGIN_NOT_ALLOWED",
+              message: "Origen no permitido."
+            }
+          });
+          return;
+        }
         await handleApiRequest(store, authService, req, res, url);
         return;
       }
 
       handleStaticRequest(req, res, url, store);
     } catch (error) {
+      console.error("Request failed:", error);
       sendJson(res, 500, {
         error: {
           code: "INTERNAL_ERROR",
-          message: error instanceof Error ? error.message : "Error interno del servidor."
+          message: "Error interno del servidor."
         }
       });
     }

@@ -203,7 +203,7 @@ try {
     process.env.TOPYKLY_OIDC_ISSUER = "";
     process.env.TOPYKLY_OIDC_CLIENT_ID = "";
     process.env.TOPYKLY_OIDC_CLIENT_SECRET = "";
-    process.env.TOPYKLY_SESSION_SECRET = "";
+    process.env.TOPYKLY_SESSION_SECRET = "smoke-test-session-secret";
     process.env.TOPYKLY_TURNSTILE_SITE_KEY = "";
     process.env.TOPYKLY_TURNSTILE_SECRET_KEY = "";
 
