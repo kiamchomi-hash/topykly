@@ -25,6 +25,7 @@ function readBootstrapLocationParams() {
   if (typeof window === "undefined") {
     return {
       selectedTopicId: null,
+      publicProfileNickname: null,
       authError: null,
       authAction: null,
       fakeSocial: false
@@ -34,6 +35,7 @@ function readBootstrapLocationParams() {
   const url = new URL(window.location.href);
   return {
     selectedTopicId: url.searchParams.get("selectedTopicId") || null,
+    publicProfileNickname: url.searchParams.get("perfil") || null,
     authError: url.searchParams.get("authError") || null,
     authAction: url.searchParams.get("authAction") || null,
     fakeSocial: FAKE_SOCIAL_PARAM_VALUES.has(String(url.searchParams.get("fakeSocial") || "").trim().toLowerCase())
@@ -80,6 +82,7 @@ function clearBootstrapLocationParams() {
 
   const url = new URL(window.location.href);
   url.searchParams.delete("selectedTopicId");
+  url.searchParams.delete("perfil");
   url.searchParams.delete("authError");
   url.searchParams.delete("authAction");
   window.history.replaceState({}, "", url.toString());
@@ -246,13 +249,35 @@ function createFakeSocialApiClient(baseApi, stateRef) {
   };
 }
 
-async function hydrateInitialData(render, initialSelectedTopicId = null, { fakeSocial = false } = {}) {
+function openSharedPublicProfile(nickname) {
+  const nicknameKey = String(nickname || "").trim().toLowerCase();
+  if (!nicknameKey) {
+    return;
+  }
+
+  const profileUser = state.users.find(
+    (user) => user.type === "registered" && String(user.nickname || "").toLowerCase() === nicknameKey
+  );
+  if (profileUser) {
+    dispatch(state, reducers.setPublicProfileUser, profileUser.id);
+    return;
+  }
+
+  if (typeof window !== "undefined") {
+    window.location.replace(`/u/${encodeURIComponent(String(nickname).trim())}`);
+  }
+}
+
+async function hydrateInitialData(render, initialSelectedTopicId = null, { fakeSocial = false, publicProfileNickname = null } = {}) {
   try {
-    const payload = await api.fetchInitialData(initialSelectedTopicId ?? state.selectedTopicId);
+    const payload = await api.fetchInitialData(initialSelectedTopicId ?? state.selectedTopicId, publicProfileNickname);
     const preview = fakeSocial ? createFakeSocialPreview(payload) : null;
     const nextPayload = preview?.payload || payload;
     dispatch(state, reducers.hydrateFromBackend, nextPayload);
     dispatch(state, reducers.setWebNotificationsPermission, getWebNotificationPermission());
+    if (publicProfileNickname) {
+      openSharedPublicProfile(publicProfileNickname);
+    }
     if (preview) {
       dispatch(state, reducers.setFriendRequestsPanelOpen, false);
       dispatch(state, reducers.addNotifications, {
@@ -421,6 +446,7 @@ export function bootstrap() {
     confirmAccountDeletion: actions.confirmAccountDeletion,
     skipProfileSetup: actions.skipProfileSetup,
     closePublicProfileModal: actions.closePublicProfileModal,
+    showFeedback: actions.showFeedback,
     openAdminPanel: actions.openAdminPanel,
     closeAdminPanel: actions.closeAdminPanel,
     applyAdminAction: actions.applyAdminAction,
@@ -465,7 +491,8 @@ export function bootstrap() {
 
   clearBootstrapLocationParams();
   scheduleInitialDataHydration(renderers.render, bootstrapLocationParams.selectedTopicId, {
-    fakeSocial: bootstrapLocationParams.fakeSocial
+    fakeSocial: bootstrapLocationParams.fakeSocial,
+    publicProfileNickname: bootstrapLocationParams.publicProfileNickname
   });
   if (!bootstrapLocationParams.fakeSocial) {
     createLiveTopicSync({

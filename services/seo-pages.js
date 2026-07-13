@@ -293,7 +293,7 @@ export function renderProfilePage(profile, { origin }) {
         ${profile.joinedAt ? `<p class="seo-meta">Miembro desde ${escapeHtml(formatDate(profile.joinedAt))}</p>` : ""}
         ${profile.description ? `<p>${escapeHtml(profile.description)}</p>` : ""}
         ${stats.length ? `<p class="seo-meta">${escapeHtml(stats.join(" · "))}</p>` : ""}
-        <a class="seo-cta" href="/">Abrir TOPYKLY</a>
+        <a class="seo-cta" href="/?perfil=${escapeHtml(encodeURIComponent(profile.nickname))}">Abrir en TOPYKLY</a>
       </article>
       ${topicItems ? `<h2 class="seo-section-title">Últimos temas de @${escapeHtml(profile.nickname)}</h2>\n      <ul class="seo-list">\n        ${topicItems}\n      </ul>` : ""}`;
 

@@ -79,12 +79,10 @@ export function renderPublicProfileModal(state, dom) {
     dom.publicProfileUsername.textContent = user.nickname ? `@${user.nickname}` : "";
   }
 
-  if (dom.publicProfilePermalink) {
-    const hasPublicPage = user.type === "registered" && Boolean(user.nickname);
-    dom.publicProfilePermalink.hidden = !hasPublicPage;
-    if (hasPublicPage) {
-      dom.publicProfilePermalink.setAttribute("href", `/u/${encodeURIComponent(user.nickname)}`);
-    }
+  const canShareProfile = user.type === "registered" && Boolean(user.nickname);
+  if (dom.publicProfileCopyLinkButton) {
+    dom.publicProfileCopyLinkButton.hidden = !canShareProfile;
+    dom.publicProfileCopyLinkButton.dataset.profileNickname = canShareProfile ? user.nickname : "";
   }
 
   const publicAvatarUrl = isCurrentUser ? user.avatarPendingUrl || user.avatarUrl || "" : user.avatarUrl || "";
@@ -168,10 +166,6 @@ export function renderPublicProfileModal(state, dom) {
       });
       dom.publicProfileRecentCafes.append(title, list);
     }
-  }
-
-  if (dom.publicProfileActions) {
-    dom.publicProfileActions.hidden = isCurrentUser;
   }
 
   if (dom.publicProfileReportButton) {

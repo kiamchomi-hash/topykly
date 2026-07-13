@@ -813,15 +813,32 @@
             <h2 class="profile-modal__title">Perfil</h2>
             <h2 id="publicProfileName">Usuario</h2>
             <p class="public-profile-modal__username" id="publicProfileUsername">@usuario</p>
-            <a class="public-profile-modal__permalink" id="publicProfilePermalink" href="#" target="_blank" rel="noopener" hidden>Ver perfil público</a>
           </div>
-          <button class="icon-button icon-button--compact profile-modal__close" id="closePublicProfileModalButton" type="button" aria-label="Cerrar perfil">
-            <span class="modal-close-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false">
-                <path d="M6 6l12 12M18 6 6 18"></path>
-              </svg>
-            </span>
-          </button>
+          <div class="public-profile-modal__header-actions">
+            <button class="icon-button icon-button--compact public-profile-modal__copy-link" id="publicProfileCopyLinkButton" type="button" data-profile-nickname="" aria-label="Copiar enlace del perfil" title="Copiar enlace del perfil" hidden>
+              <span class="modal-close-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
+              </span>
+            </button>
+            <button class="icon-button icon-button--compact public-profile-modal__report" id="publicProfileReportButton" type="button" data-report-entity-type="user" data-report-entity-id="" aria-label="Reportar usuario" title="Reportar usuario">
+              <span class="modal-close-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                  <path d="M4 22v-7"></path>
+                </svg>
+              </span>
+            </button>
+            <button class="icon-button icon-button--compact profile-modal__close" id="closePublicProfileModalButton" type="button" aria-label="Cerrar perfil">
+              <span class="modal-close-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M6 6l12 12M18 6 6 18"></path>
+                </svg>
+              </span>
+            </button>
+          </div>
         </div>
         <div class="profile-modal__body public-profile-modal__body">
           <div class="profile-modal__preview public-profile-modal__avatar" id="publicProfileAvatar" aria-hidden="true"></div>
@@ -835,9 +852,6 @@
             <p class="public-profile-modal__description" id="publicProfileDescription"></p>
           </div>
           <div class="public-profile-modal__social" id="publicProfileSocial" hidden></div>
-          <div class="profile-modal__actions public-profile-modal__actions" id="publicProfileActions">
-            <button class="text-button" id="publicProfileReportButton" type="button" data-report-entity-type="user" data-report-entity-id="">Reportar usuario</button>
-          </div>
         </div>
       </section>
     </div>

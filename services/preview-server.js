@@ -410,7 +410,8 @@ async function handleApiRequest(store, authService, req, res, url) {
     if (req.method === "GET" && url.pathname === "/api/bootstrap") {
       sendBackendPayload(res, req, authService, 200, store.bootstrap({
         ...context,
-        selectedTopicId: normalizeSelectedTopicId(url)
+        selectedTopicId: normalizeSelectedTopicId(url),
+        profileNickname: url.searchParams.get("perfil") || null
       }));
       return;
     }

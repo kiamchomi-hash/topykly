@@ -1134,6 +1134,40 @@ await (async () => {
 
     assert.equal(nextState.selectedTopicId, topics[1].id);
   });
+  await test("hydrate keeps the open public profile user when the payload drops them", () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const sharedUser = { ...users[1], id: "shared-user", nickname: "compartido" };
+    const baseState = {
+      viewer: { id: "u1", type: "registered" },
+      currentUserId: "u1",
+      selectedTopicId: null,
+      activeConnectedUserId: null,
+      publicProfileUserId: "shared-user",
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      unreadTopicIds: [],
+      rankings: null,
+      topics,
+      users: [...users, sharedUser]
+    };
+    const payload = {
+      viewer: baseState.viewer,
+      selectedTopicId: null,
+      users,
+      topics,
+      reportedTopicIds: [],
+      reportedMessageIds: []
+    };
+
+    const nextState = reducers.hydrateFromBackend(baseState, payload);
+    assert.equal(nextState.publicProfileUserId, "shared-user");
+    assert.equal(nextState.users.some((user) => user.id === "shared-user"), true);
+
+    const closedState = reducers.hydrateFromBackend({ ...baseState, publicProfileUserId: null }, payload);
+    assert.equal(closedState.publicProfileUserId, null);
+    assert.equal(closedState.users.some((user) => user.id === "shared-user"), false);
+  });
   await test("markTopicRead clears the selected topic after manual refresh", () => {
     const nextState = reducers.markTopicRead(
       {
@@ -5425,6 +5459,17 @@ await (async () => {
         profileHtml.includes(`<link rel="canonical" href="https://topykly.com/u/Perfil_publico">`),
         true
       );
+      assert.equal(profileHtml.includes(`href="/?perfil=Perfil_publico"`), true);
+
+      const sharedBootstrap = store.bootstrap({
+        sessionId: "session-profile-visitor",
+        authMode: "guest",
+        profileNickname: "PERFIL_PUBLICO"
+      });
+      assert.equal(
+        sharedBootstrap.users.some((user) => user.nickname === "Perfil_publico"),
+        true
+      );
 
       const caseRedirect = await fetch(`${origin}/u/PERFIL_PUBLICO`, { redirect: "manual" });
       assert.equal(caseRedirect.status, 301);
@@ -8538,7 +8583,7 @@ await (async () => {
     assert.match(html, /id="publicProfileDescription"/);
     assert.match(html, /id="publicProfileJoinedAt"/);
     assert.match(html, /id="publicProfileRecentCafes"/);
-    assert.match(html, /id="publicProfileActions"/);
+    assert.match(html, /id="publicProfileCopyLinkButton"/);
     assert.match(html, /id="publicProfileReportButton"[\s\S]*Reportar usuario/);
     assert.match(html, /class="theme-switch"/);
     assert.match(html, /role="switch"/);
@@ -8849,7 +8894,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.public-profile-modal \.profile-modal__header,[\s\S]*\.public-profile-modal \.public-profile-modal__actions\s*\{[\s\S]*background:\s*var\(--bg\);/
+      /\.public-profile-modal \.profile-modal__header\s*\{\s*background:\s*var\(--bg\);/
     );
     assert.match(
       styles,
@@ -8897,8 +8942,9 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.public-profile-modal__actions\s*\{[\s\S]*margin:\s*8px -28px -28px;[\s\S]*padding:\s*11px 24px;/
+      /\.public-profile-modal__header-actions\s*\{[\s\S]*display:\s*flex;[\s\S]*gap:\s*8px;/
     );
+    assert.doesNotMatch(styles, /\.public-profile-modal__actions/);
     assert.match(
       styles,
       /html\[data-theme\] \.topic-item:hover,[\s\S]*html\[data-theme\] #topicList \.topic-item:focus-visible\s*\{[\s\S]*background:\s*color-mix\(in srgb,\s*var\(--surface-strong\) 86%,\s*var\(--accent\) 14%\);/
@@ -9805,7 +9851,7 @@ await (async () => {
     assert.match(publicProfileModal, /publicProfileDescription/);
     assert.match(publicProfileModal, /publicProfileJoinedAt/);
     assert.match(publicProfileModal, /joinedAtContainer.hidden = !joinedDate.length/);
-    assert.match(publicProfileModal, /publicProfileActions\.hidden = isCurrentUser/);
+    assert.match(publicProfileModal, /publicProfileCopyLinkButton\.hidden = !canShareProfile/);
     assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isCurrentUser/);
     assert.match(publicProfileModal, /profileShowSocial/);
     assert.match(publicProfileModal, /publicProfileSocial/);

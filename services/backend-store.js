@@ -1949,7 +1949,7 @@ function assertRegisteredFriendContext(db, context) {
     throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para agregar amigos.");
   }
 }
-function buildFrontendPayload(db, context, selectedTopicId = null) {
+function buildFrontendPayload(db, context, selectedTopicId = null, profileNickname = null) {
   rebuildActiveTopicRanks(db);
 
   const activeTopicRows = getActiveTopicsForFrontend(db);
@@ -1972,6 +1972,15 @@ function buildFrontendPayload(db, context, selectedTopicId = null) {
     topic.authorId,
     ...topic.messages.map((message) => message.authorId)
   ]);
+
+  if (profileNickname) {
+    const sharedProfileRow = db.prepare(
+      "SELECT id FROM users WHERE nickname_norm = ? AND type = 'registered' AND status = 'active'"
+    ).get(normalizeUniqueNameKey(profileNickname));
+    if (sharedProfileRow) {
+      profileUserIds.push(sharedProfileRow.id);
+    }
+  }
 
   return {
     sessionId: context.sessionId,
@@ -3668,10 +3677,10 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         return buildFrontendPayload(db, guestContext, selectedTopicId);
       });
     },
-    bootstrap({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    bootstrap({ sessionId, authMode, selectedTopicId = null, ipAddress = "", profileNickname = null } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        return buildFrontendPayload(db, context, selectedTopicId);
+        return buildFrontendPayload(db, context, selectedTopicId, profileNickname);
       });
     },
     refresh({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {

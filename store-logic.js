@@ -117,9 +117,17 @@ function buildHydratedState(state, payload, topics) {
   const nextActiveConnectedUserId = payload.users.some((user) => user.id === state.activeConnectedUserId)
     ? state.activeConnectedUserId
     : null;
-  const nextPublicProfileUserId = payload.users.some((user) => user.id === state.publicProfileUserId)
+  // Mantiene abierto el modal de perfil aunque el payload de refresco ya no
+  // incluya a ese usuario (p. ej. perfiles compartidos que solo llegan en el
+  // bootstrap): se conserva la última copia conocida hasta cerrar el modal.
+  const payloadHasProfileUser = payload.users.some((user) => user.id === state.publicProfileUserId);
+  const previousProfileUser = payloadHasProfileUser
+    ? null
+    : (state.users ?? []).find((user) => user.id === state.publicProfileUserId) || null;
+  const nextPublicProfileUserId = payloadHasProfileUser || previousProfileUser
     ? state.publicProfileUserId
     : null;
+  const nextUsers = previousProfileUser ? [...payload.users, previousProfileUser] : payload.users;
   const nextTopicIds = new Set(payload.topics.map((topic) => topic.id));
 
   return {
@@ -134,7 +142,7 @@ function buildHydratedState(state, payload, topics) {
       outgoing: [],
       friends: []
     },
-    users: payload.users,
+    users: nextUsers,
     topics,
     unreadTopicIds: getUnreadTopicIdsAfterHydration(state, payload),
     followedTopicIds: (state.followedTopicIds ?? []).filter((topicId) => nextTopicIds.has(topicId)),

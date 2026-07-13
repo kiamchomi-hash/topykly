@@ -122,10 +122,11 @@ function normalizeBackendPayload(payload) {
 }
 
 export const api = {
-  async fetchInitialData(selectedTopicId = null) {
+  async fetchInitialData(selectedTopicId = null, profileNickname = null) {
     return request("/api/bootstrap", {
       searchParams: {
-        selectedTopicId
+        selectedTopicId,
+        perfil: profileNickname
       }
     });
   },

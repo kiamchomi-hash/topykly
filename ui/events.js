@@ -10,6 +10,32 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])"
 ].join(", ");
 
+async function copyTextToClipboard(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Sin permiso de portapapeles: probar el mecanismo heredado.
+  }
+
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    return copied;
+  } catch {
+    return false;
+  }
+}
+
 function getFocusableElements(container) {
   if (!(container instanceof HTMLElement)) {
     return [];
@@ -296,6 +322,23 @@ export function bindPageEvents(dom, handlers) {
       }
 
       handlers.openReportModal?.("user", entityId, { trigger: target });
+    });
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileCopyLinkButton instanceof HTMLElement) {
+    dom.publicProfileCopyLinkButton.addEventListener("click", async () => {
+      const nickname = dom.publicProfileCopyLinkButton.dataset.profileNickname || "";
+      if (!nickname) {
+        return;
+      }
+
+      const shareUrl = `${window.location.origin}/?perfil=${encodeURIComponent(nickname)}`;
+      const copied = await copyTextToClipboard(shareUrl);
+      if (copied) {
+        handlers.showFeedback?.("Enlace del perfil copiado.");
+      } else {
+        handlers.showFeedback?.("No se pudo copiar el enlace.", { kind: "error" });
+      }
     });
   }
 
