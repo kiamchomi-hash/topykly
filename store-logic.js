@@ -271,6 +271,17 @@ export const reducers = {
     isProfileModalOpen
   }),
 
+  setSettingsModalOpen: (state, isSettingsModalOpen) => ({
+    ...state,
+    isSettingsModalOpen,
+    settingsDeleteConfirming: false
+  }),
+
+  setSettingsDeleteConfirming: (state, settingsDeleteConfirming) => ({
+    ...state,
+    settingsDeleteConfirming
+  }),
+
   setFriendRequestsPanelOpen: (state, isFriendRequestsPanelOpen) => ({
     ...state,
     isFriendRequestsPanelOpen

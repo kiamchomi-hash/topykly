@@ -283,6 +283,30 @@ export const api = {
     });
   },
 
+  async updateSettings({
+    likesAnonymous = null,
+    filterProfanity = null,
+    notificationsFriendsOnly = null,
+    selectedTopicId = null
+  } = {}) {
+    return request("/api/settings", {
+      method: "PATCH",
+      body: {
+        likesAnonymous,
+        filterProfanity,
+        notificationsFriendsOnly,
+        selectedTopicId
+      }
+    });
+  },
+
+  async deleteAccount(selectedTopicId = null) {
+    return request("/api/account/delete", {
+      method: "POST",
+      body: { selectedTopicId }
+    });
+  },
+
   async submitMessage(topicId, text) {
     return request(`/api/topics/${encodeURIComponent(topicId)}/messages`, {
       method: "POST",

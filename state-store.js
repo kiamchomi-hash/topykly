@@ -4,6 +4,9 @@ export const state = {
   customPaletteHex: "#B25B33",
   isPaletteModalOpen: false,
   isProfileModalOpen: false,
+  isSettingsModalOpen: false,
+  settingsDeleteConfirming: false,
+  settingsUpdatePending: false,
   isFriendRequestsPanelOpen: false,
   friendRequestsTab: "incoming",
   friendRequestsLimits: {

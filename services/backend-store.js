@@ -656,6 +656,9 @@ function initSchema(db) {
       social_twitter TEXT NOT NULL DEFAULT '',
       social_discord TEXT NOT NULL DEFAULT '',
       profile_show_social INTEGER NOT NULL DEFAULT 1,
+      likes_anonymous INTEGER NOT NULL DEFAULT 0,
+      filter_profanity INTEGER NOT NULL DEFAULT 0,
+      notifications_friends_only INTEGER NOT NULL DEFAULT 0,
       avatar_url TEXT,
       avatar_pending_url TEXT,
       avatar_review_status TEXT,
@@ -835,6 +838,9 @@ function initSchema(db) {
   ensureColumn(db, "users", "social_twitter", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "users", "social_discord", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "users", "profile_show_social", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "users", "likes_anonymous", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "notifications_friends_only", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "nickname", "TEXT");
   ensureColumn(db, "users", "nickname_norm", "TEXT");
   ensureColumn(db, "users", "password_hash", "TEXT");
@@ -1246,6 +1252,9 @@ function mapViewerRow(row, sessionRow) {
     socialTwitter: row.social_twitter ?? "",
     socialDiscord: row.social_discord ?? "",
     profileShowSocial: row.profile_show_social !== 0,
+    likesAnonymous: row.likes_anonymous === 1,
+    filterProfanity: row.filter_profanity === 1,
+    notificationsFriendsOnly: row.notifications_friends_only === 1,
     createdAt: row.created_at ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarPendingUrl: row.avatar_pending_url ?? null,
@@ -1597,7 +1606,23 @@ function hydrateTopicMessages(db, topicId, viewerId = null) {
       messages.is_root,
       messages.created_at,
       CASE WHEN message_likes.user_id IS NULL THEN 0 ELSE 1 END AS liked_by_viewer,
-      CASE WHEN message_dislikes.user_id IS NULL THEN 0 ELSE 1 END AS disliked_by_viewer
+      CASE WHEN message_dislikes.user_id IS NULL THEN 0 ELSE 1 END AS disliked_by_viewer,
+      (
+        SELECT CASE WHEN liker.likes_anonymous = 1 THEN NULL ELSE liker.id END
+        FROM message_likes last_like
+        JOIN users liker ON liker.id = last_like.user_id
+        WHERE last_like.message_id = messages.id
+        ORDER BY last_like.created_at DESC, last_like.rowid DESC
+        LIMIT 1
+      ) AS last_like_by_id,
+      (
+        SELECT CASE WHEN liker.likes_anonymous = 1 THEN NULL ELSE liker.name END
+        FROM message_likes last_like
+        JOIN users liker ON liker.id = last_like.user_id
+        WHERE last_like.message_id = messages.id
+        ORDER BY last_like.created_at DESC, last_like.rowid DESC
+        LIMIT 1
+      ) AS last_like_by_name
     FROM messages
     LEFT JOIN message_likes ON message_likes.message_id = messages.id AND message_likes.user_id = ?
     LEFT JOIN message_dislikes ON message_dislikes.message_id = messages.id AND message_dislikes.user_id = ?
@@ -1614,6 +1639,8 @@ function hydrateTopicMessages(db, topicId, viewerId = null) {
     isRoot: Boolean(row.is_root),
     likedByViewer: Boolean(row.liked_by_viewer),
     dislikedByViewer: Boolean(row.disliked_by_viewer),
+    lastLikeById: row.last_like_by_id ?? null,
+    lastLikeByName: row.last_like_by_name ?? null,
     createdAt: row.created_at,
     timestamp: row.created_at
   }));
@@ -3563,6 +3590,74 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           ipAddress
         });
         return buildFrontendPayload(db, refreshedContext, selectedTopicId);
+      });
+    },
+    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertViewerCanParticipate(context.viewerRow);
+        assertContextNotBlocked(db, context);
+        if (context.viewer.type !== "registered") {
+          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para cambiar la configuracion.");
+        }
+
+        const nextLikesAnonymous = likesAnonymous === null ? context.viewer.likesAnonymous : likesAnonymous === true;
+        const nextFilterProfanity = filterProfanity === null ? context.viewer.filterProfanity : filterProfanity === true;
+        const nextNotificationsFriendsOnly = notificationsFriendsOnly === null
+          ? context.viewer.notificationsFriendsOnly
+          : notificationsFriendsOnly === true;
+
+        db.prepare(`
+          UPDATE users
+          SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, updated_at = ?
+          WHERE id = ?
+        `).run(
+          nextLikesAnonymous ? 1 : 0,
+          nextFilterProfanity ? 1 : 0,
+          nextNotificationsFriendsOnly ? 1 : 0,
+          new Date().toISOString(),
+          context.viewer.id
+        );
+
+        const refreshedContext = resolveViewer(db, {
+          sessionId: context.sessionId,
+          authMode,
+          ipAddress
+        });
+        return buildFrontendPayload(db, refreshedContext, selectedTopicId);
+      });
+    },
+    deleteAccount({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, (afterCommit) => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        if (context.viewer.type !== "registered") {
+          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para eliminar la cuenta.");
+        }
+
+        const userId = context.viewer.id;
+        const nowIso = new Date().toISOString();
+        const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
+
+        db.prepare("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?").run(userId, userId);
+        db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+
+        // Los mensajes y temas quedan (tienen FK al usuario); la fila se anonimiza y desactiva.
+        db.prepare(`
+          UPDATE users
+          SET name = 'Usuario eliminado', nickname = NULL, nickname_norm = NULL,
+              email = NULL, email_verified_at = NULL, auth_provider = NULL, auth_subject = NULL, password_hash = NULL,
+              description = '', social_whatsapp = '', social_instagram = '', social_tiktok = '',
+              social_facebook = '', social_twitter = '', social_discord = '',
+              avatar_url = NULL, avatar_pending_url = NULL, avatar_review_status = NULL,
+              profile_pending = 0, profile_suggested_name = NULL, profile_suggested_avatar_url = NULL,
+              role = '', status = 'deleted', updated_at = ?
+          WHERE id = ?
+        `).run(nowIso, userId);
+
+        scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, previousAvatarUrls);
+
+        const guestContext = createGuestSession(db, context.sessionId, ipAddress, nowIso, null);
+        return buildFrontendPayload(db, guestContext, selectedTopicId);
       });
     },
     bootstrap({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {

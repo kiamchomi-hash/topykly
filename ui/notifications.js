@@ -1,4 +1,6 @@
 import { getActiveAccentColor } from "../palettes.js";
+import { filterDisplayText } from "../profanity-filter.js";
+import { reconcile } from "./render-utils.js";
 
 const NOTIFICATION_LIMIT = 120;
 const MESSAGE_PREVIEW_LIMIT = 86;
@@ -229,6 +231,9 @@ function collectLikeNotifications({ previousTopic, topic, viewerId, users, notif
 
     const kind = message.isRoot ? "post-like" : "comment-like";
     const delta = nextLikes - previousLikes;
+    const knownLiker = delta === 1 && message.lastLikeByName
+      ? { id: message.lastLikeById || message.lastLikeByName, name: message.lastLikeByName, avatarUrl: null }
+      : null;
     return [{
       id: `toast-${kind}-${messageId}-${nextLikes}`,
       kind,
@@ -236,16 +241,18 @@ function collectLikeNotifications({ previousTopic, topic, viewerId, users, notif
       messageId: `like-${messageId}-${nextLikes}`,
       targetMessageId: messageId,
       totalCount: nextLikes,
-      actors: [{ name: "Alguien", avatarUrl: null }],
+      actors: [knownLiker || { name: "Alguien", avatarUrl: null }],
       title: getNotificationTitle(kind),
-      body: `${delta === 1 ? "Alguien dio" : `${delta} personas dieron`} like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`,
+      body: knownLiker
+        ? `${knownLiker.name} le dio like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`
+        : `${delta === 1 ? "Alguien dio" : `${delta} personas dieron`} like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`,
       topicTitle: topic.title || "Tema",
       createdAt: now
     }];
   });
 }
 function truncatePreview(text) {
-  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  const normalized = filterDisplayText(String(text || "")).replace(/\s+/g, " ").trim();
   if (normalized.length <= MESSAGE_PREVIEW_LIMIT) {
     return normalized;
   }
@@ -325,6 +332,14 @@ export function collectTopicNotifications(state, payload, now = Date.now()) {
     }, ...likeNotifications];
   });
 }
+export function filterNotificationsForFriends(notifications, friendships) {
+  const friendIds = new Set((friendships?.friends || []).map((friend) => friend.id).filter(Boolean));
+  return notifications.filter((notification) => {
+    const actors = Array.isArray(notification.actors) ? notification.actors : [];
+    return actors.some((actor) => actor.id && friendIds.has(actor.id));
+  });
+}
+
 export function createNotificationStateUpdate(state, notifications) {
   if (!notifications.length) {
     return null;
@@ -393,6 +408,7 @@ function positionNotificationPanel(panel, button) {
 function createNotificationPanelHeader() {
   const header = document.createElement("header");
   header.className = "notification-panel__header";
+  header.dataset.id = "header";
   const title = document.createElement("h1");
   title.className = "notification-panel__title";
   title.textContent = "Notificaciones";
@@ -1173,23 +1189,13 @@ export function renderNotifications(state, dom) {
   node.hidden = !isOpen;
   node.setAttribute("aria-hidden", String(!isOpen));
 
-  const wasOpen = node.dataset.lastOpen === "true";
-  let savedScrollTop = 0;
-  if (isOpen && wasOpen) {
-    savedScrollTop = node.querySelector?.(".notification-panel__body")?.scrollTop || 0;
-  }
-  node.dataset.lastOpen = String(isOpen);
-
   const body = document.createElement("div");
   body.className = "notification-panel__body";
+  body.dataset.id = "body";
   body.append(
     ...(groupedNotifications.length ? groupedNotifications.map(createToast) : [createNotificationEmptyState(state)])
   );
-  node.replaceChildren(createNotificationPanelHeader(), body);
-
-  if (savedScrollTop > 0) {
-    body.scrollTop = savedScrollTop;
-  }
+  reconcile(node, [createNotificationPanelHeader(), body]);
 }
 
 export function getWebNotificationPermission() {

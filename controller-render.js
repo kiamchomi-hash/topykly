@@ -11,9 +11,12 @@ import { renderReportModal } from "./ui/report-modal.js";
 import { renderTitles } from "./ui/titles.js";
 import { renderUsers } from "./ui/users.js";
 import { renderTopicsWithFocus } from "./ui/topic-renderers.js";
+import { renderSettingsModal } from "./ui/settings-modal.js";
+import { setProfanityFilterEnabled } from "./profanity-filter.js";
 
 export function createRenderers({ state, dom, actions, responsive, closeTimerRef, getTransitionDurationMs }) {
   function render() {
+    setProfanityFilterEnabled(Boolean(state.viewer?.filterProfanity));
     responsive.syncResponsiveView();
     renderTopicsWithFocus({
       state,
@@ -29,6 +32,7 @@ export function createRenderers({ state, dom, actions, responsive, closeTimerRef
     renderTitles(state, dom);
     renderPaletteModal(state, dom);
     renderProfileModal(state, dom);
+    renderSettingsModal(state, dom);
     renderPublicProfileModal(state, dom);
     renderAdminPanel(state, dom);
     renderReportModal(state, dom);

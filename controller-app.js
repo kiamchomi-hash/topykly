@@ -13,6 +13,7 @@ import { api } from "./services/api.js?v=20260709-topicrace1";
 import {
   collectTopicNotifications,
   createNotificationStateUpdate,
+  filterNotificationsForFriends,
   getWebNotificationPermission,
   showWebNotification
 } from "./ui/notifications.js";
@@ -296,7 +297,11 @@ export function createLiveTopicSync({
     inFlight = true;
     try {
       const payload = await apiClient.refreshTopics(state.selectedTopicId);
-      const notifications = collectTopicNotifications(state, payload);
+      const collected = collectTopicNotifications(state, payload);
+      const viewer = payload.viewer ?? state.viewer;
+      const notifications = viewer?.notificationsFriendsOnly
+        ? filterNotificationsForFriends(collected, payload.friendships ?? state.friendships)
+        : collected;
       dispatch(state, reducers.mergeLiveTopics, payload);
       const notificationStateUpdate = createNotificationStateUpdate(state, notifications);
       if (notificationStateUpdate) {
@@ -408,6 +413,12 @@ export function bootstrap() {
     closePaletteModal: actions.closePaletteModal,
     openProfileModal: actions.openProfileModal,
     closeProfileModal: actions.closeProfileModal,
+    openSettingsModal: actions.openSettingsModal,
+    closeSettingsModal: actions.closeSettingsModal,
+    toggleSetting: actions.toggleSetting,
+    requestAccountDeletion: actions.requestAccountDeletion,
+    cancelAccountDeletion: actions.cancelAccountDeletion,
+    confirmAccountDeletion: actions.confirmAccountDeletion,
     skipProfileSetup: actions.skipProfileSetup,
     closePublicProfileModal: actions.closePublicProfileModal,
     openAdminPanel: actions.openAdminPanel,

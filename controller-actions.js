@@ -347,6 +347,97 @@ export function createActionHandlers({
     dom.profileButton?.focus?.();
   }
 
+  function openSettingsModal() {
+    dispatch(state, reducers.setSettingsModalOpen, true);
+    render();
+    setTimeout(() => dom.settingsModal?.focus?.(), 0);
+  }
+
+  function closeSettingsModal() {
+    dispatch(state, reducers.setSettingsModalOpen, false);
+    render();
+    dom.settingsButton?.focus?.();
+  }
+
+  const SETTING_FEEDBACK = {
+    likesAnonymous: {
+      on: "Tus likes ahora son anónimos.",
+      off: "Tus likes ahora muestran tu nombre."
+    },
+    filterProfanity: {
+      on: "Filtro de insultos activado.",
+      off: "Filtro de insultos desactivado."
+    },
+    notificationsFriendsOnly: {
+      on: "Solo verás notificaciones de tus amigos.",
+      off: "Verás notificaciones de toda la actividad."
+    }
+  };
+
+  async function toggleSetting(settingKey) {
+    if (!SETTING_FEEDBACK[settingKey] || state.settingsUpdatePending) {
+      return null;
+    }
+
+    const nextValue = !state.viewer?.[settingKey];
+    state.settingsUpdatePending = true;
+    render();
+
+    try {
+      const payload = await api.updateSettings({
+        [settingKey]: nextValue,
+        selectedTopicId: state.selectedTopicId
+      });
+      dispatch(state, reducers.mergeLiveTopics, payload);
+      showFeedback(SETTING_FEEDBACK[settingKey][nextValue ? "on" : "off"]);
+      return payload;
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo guardar la configuración.", { kind: "error" });
+      return null;
+    } finally {
+      state.settingsUpdatePending = false;
+      render();
+    }
+  }
+
+  function requestAccountDeletion() {
+    dispatch(state, reducers.setSettingsDeleteConfirming, true);
+    render();
+    setTimeout(() => dom.settingsDeleteCancelButton?.focus?.(), 0);
+  }
+
+  function cancelAccountDeletion() {
+    dispatch(state, reducers.setSettingsDeleteConfirming, false);
+    render();
+    dom.settingsDeleteAccountButton?.focus?.();
+  }
+
+  async function confirmAccountDeletion() {
+    if (dom.settingsDeleteConfirmButton) {
+      dom.settingsDeleteConfirmButton.disabled = true;
+      dom.settingsDeleteConfirmButton.setAttribute("aria-busy", "true");
+    }
+
+    try {
+      const payload = await api.deleteAccount(state.selectedTopicId);
+      dispatch(state, reducers.mergeLiveTopics, payload);
+      dispatch(state, reducers.setSettingsModalOpen, false);
+      showFeedback("Tu cuenta fue eliminada.");
+      return payload;
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo eliminar la cuenta.", { kind: "error" });
+      return null;
+    } finally {
+      if (dom.settingsDeleteConfirmButton) {
+        dom.settingsDeleteConfirmButton.disabled = false;
+        dom.settingsDeleteConfirmButton.setAttribute("aria-busy", "false");
+      }
+      render();
+    }
+  }
+
 
   function setProfileNameFeedback(message = "") {
     const normalized = String(message || "").trim();
@@ -795,6 +886,12 @@ export function createActionHandlers({
     openNotificationTopic,
     openProfileModal,
     closeProfileModal,
+    openSettingsModal,
+    closeSettingsModal,
+    toggleSetting,
+    requestAccountDeletion,
+    cancelAccountDeletion,
+    confirmAccountDeletion,
     skipProfileSetup,
     closePublicProfileModal,
     openAdminPanel,

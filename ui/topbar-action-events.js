@@ -1498,7 +1498,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       dom.authTools.hidden = !loggedIn;
     }
 
-    [dom.profileButton, dom.storeButton, dom.openRightDrawer].forEach((node) => {
+    [dom.profileButton, dom.settingsButton, dom.storeButton, dom.openRightDrawer].forEach((node) => {
       if (node) {
         node.hidden = node === dom.openRightDrawer ? false : !loggedIn;
       }
@@ -1894,6 +1894,10 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (event.key === "Escape" && dom.reportModalBackdrop && !dom.reportModalBackdrop.hidden) {
       handlers.closeReportModal?.();
     }
+
+    if (event.key === "Escape" && dom.settingsModalBackdrop && !dom.settingsModalBackdrop.hidden) {
+      handlers.closeSettingsModal?.();
+    }
   });
 
   addListener(dom.friendRequestsButton, "click", (event) => {
@@ -1954,6 +1958,13 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
+    if (target.dataset.mobileTopbarAction === "settings") {
+      setMobileDrawerPanel(null, { restoreFocus: false });
+      handlers.closeDrawers?.();
+      scheduleOpen(() => handlers.openSettingsModal?.());
+      return;
+    }
+
     if (target.dataset.mobileTopbarAction === "store") {
       setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
@@ -1992,6 +2003,24 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (event.target === dom.profileModalBackdrop) {
       handlers.closeProfileModal?.();
     }
+  });
+  addListener(dom.settingsButton, "click", handlers.openSettingsModal);
+  addListener(dom.closeSettingsModalButton, "click", handlers.closeSettingsModal);
+  addListener(dom.settingsModalBackdrop, "click", (event) => {
+    if (event.target === dom.settingsModalBackdrop) {
+      handlers.closeSettingsModal?.();
+    }
+  });
+  addListener(dom.settingsModal, "click", (event) => {
+    const toggleTarget = resolveEventElement(event)?.closest?.("[data-setting-toggle]") ?? null;
+    if (toggleTarget instanceof HTMLElement) {
+      void handlers.toggleSetting?.(toggleTarget.dataset.settingToggle);
+    }
+  });
+  addListener(dom.settingsDeleteAccountButton, "click", handlers.requestAccountDeletion);
+  addListener(dom.settingsDeleteCancelButton, "click", handlers.cancelAccountDeletion);
+  addListener(dom.settingsDeleteConfirmButton, "click", () => {
+    void handlers.confirmAccountDeletion?.();
   });
   addListener(dom.adminModalBackdrop, "click", (event) => {
     if (event.target === dom.adminModalBackdrop) {
@@ -2159,8 +2188,12 @@ export function bindTopbarActionEvents(dom, handlers) {
     const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
     const scaledWidth = state.width * scale;
     const scaledHeight = state.height * scale;
-    const dx = (PROFILE_AVATAR_CROP_SIZE - scaledWidth) / 2 + state.offsetX * outputRatio;
-    const dy = (PROFILE_AVATAR_CROP_SIZE - scaledHeight) / 2 + state.offsetY * outputRatio;
+    const rawDx = (PROFILE_AVATAR_CROP_SIZE - scaledWidth) / 2 + state.offsetX * outputRatio;
+    const rawDy = (PROFILE_AVATAR_CROP_SIZE - scaledHeight) / 2 + state.offsetY * outputRatio;
+    // La imagen debe cubrir todo el canvas: cualquier franja descubierta queda
+    // negra al exportar a JPEG y se ve como pixeles sueltos en el avatar.
+    const dx = Math.min(0, Math.max(PROFILE_AVATAR_CROP_SIZE - scaledWidth, rawDx));
+    const dy = Math.min(0, Math.max(PROFILE_AVATAR_CROP_SIZE - scaledHeight, rawDy));
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
     context.drawImage(state.image, dx, dy, scaledWidth, scaledHeight);

@@ -1,5 +1,6 @@
 import { createAvatarIcon as createProfileAvatar, createIcon } from "./ui/icons.js";
 import { formatMessageTime } from "./ui/date-utils.js";
+import { filterDisplayText } from "./profanity-filter.js";
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -53,19 +54,19 @@ function parseLeadingQuote(text) {
 function createMessageContent(text) {
   const parsedQuote = parseLeadingQuote(text);
   if (!parsedQuote) {
-    return el("p", "message__text", text);
+    return el("p", "message__text", filterDisplayText(text));
   }
 
   const content = el("div", "message__content");
   const quote = el("blockquote", "message__quote");
   quote.append(
     el("p", "message__quote-author", parsedQuote.author),
-    el("p", "message__quote-text", parsedQuote.text)
+    el("p", "message__quote-text", filterDisplayText(parsedQuote.text))
   );
   content.append(quote);
 
   if (parsedQuote.body) {
-    content.append(el("p", "message__text", parsedQuote.body));
+    content.append(el("p", "message__text", filterDisplayText(parsedQuote.body)));
   }
 
   return content;
@@ -122,7 +123,7 @@ export function createTopicItem(topic, users, selected = false, currentUserId = 
   }
   meta.append(commentCount, separator, lastCommenter);
   content.append(
-    el("span", "topic-item__title", topic.title),
+    el("span", "topic-item__title", filterDisplayText(topic.title)),
     meta
   );
 

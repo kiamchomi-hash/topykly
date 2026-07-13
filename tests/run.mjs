@@ -75,7 +75,8 @@ import { createMessageItem, createTopicItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
-import { collectTopicNotifications, createNotificationStateUpdate, groupNotificationsForDisplay, createNotificationEmptyState } from "../ui/notifications.js";
+import { collectTopicNotifications, createNotificationStateUpdate, filterNotificationsForFriends, groupNotificationsForDisplay, createNotificationEmptyState } from "../ui/notifications.js";
+import { censorProfanity, hasProfanity, setProfanityFilterEnabled, filterDisplayText } from "../profanity-filter.js";
 import { isFriendOnline, splitFriendsByPresence } from "../ui/friend-requests.js";
 import {
   formatJoinedDateParts,
@@ -4418,6 +4419,20 @@ await (async () => {
     assert.equal(state.isFriendRequestsPanelOpen, false);
   });
 
+  await test("friend requests and notifications panels reuse DOM nodes across live polls", async () => {
+    const friendRequests = await read("ui/friend-requests.js");
+    const notifications = await read("ui/notifications.js");
+
+    assert.match(friendRequests, /import \{ reconcile \} from "\.\/render-utils\.js";/);
+    assert.match(friendRequests, /reconcile\(panel, \[header, tabsContainer, activeSection\]\);/);
+    assert.doesNotMatch(friendRequests, /replaceChildren/);
+    assert.match(friendRequests, /row\.dataset\.id = String\(user\.id\);/);
+
+    assert.match(notifications, /import \{ reconcile \} from "\.\/render-utils\.js";/);
+    assert.match(notifications, /reconcile\(node, \[createNotificationPanelHeader\(\), body\]\);/);
+    assert.doesNotMatch(notifications, /replaceChildren/);
+  });
+
   await test("applyAdminAction requires a second confirming click for destructive actions", async () => {
     const state = {
       theme: "dark",
@@ -8201,7 +8216,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.profile-button__avatar\s*\{[\s\S]*width:\s*42px;[\s\S]*height:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/
+      /\.profile-button__avatar\s*\{[\s\S]*align-self:\s*stretch;[\s\S]*width:\s*42px;[\s\S]*margin:\s*0 0 0 -1px;[\s\S]*border-right:\s*1px solid[\s\S]*border-radius:\s*0;[\s\S]*background:\s*linear-gradient/
     );
     assert.match(styles, /\.profile-modal\s*\{[\s\S]*width:\s*min\(920px,\s*100%\);/);
     assert.match(
@@ -9474,6 +9489,330 @@ await (async () => {
     assert.match(domStore, /export const dom/);
     assert.match(timerStore, /export const closeTimerRef/);
     assert.doesNotMatch(app, /createTopicForm|mobileCreateTopicForm/);
+  });
+
+  await test("settings modal ids are registered in DOM_IDS so bootstrap can wire them", async () => {
+    // Object.assign(dom, cacheDom()) copia un snapshot plano del Proxy, asi que
+    // cualquier id que no este en DOM_IDS queda undefined tras el bootstrap.
+    const domSource = await read("ui/dom.js");
+    const indexSource = await read("index.html");
+    const settingsIds = [
+      "settingsButton",
+      "settingsModalBackdrop",
+      "settingsModal",
+      "closeSettingsModalButton",
+      "settingsLikesAnonymousToggle",
+      "settingsFilterProfanityToggle",
+      "settingsFriendsOnlyToggle",
+      "settingsDeleteAccountButton",
+      "settingsDeleteConfirmRow",
+      "settingsDeleteCancelButton",
+      "settingsDeleteConfirmButton"
+    ];
+    const domIdsSection = domSource.slice(domSource.indexOf("const DOM_IDS"));
+    for (const id of settingsIds) {
+      assert.equal(domIdsSection.includes(`"${id}"`), true, `DOM_IDS debe incluir ${id}`);
+      assert.equal(indexSource.includes(`id="${id}"`), true, `index.html debe incluir #${id}`);
+    }
+    // El engranaje vive a la derecha del boton Perfil, no en el grupo derecho.
+    const profileIndex = indexSource.indexOf('id="profileButton"');
+    const settingsIndex = indexSource.indexOf('id="settingsButton"');
+    const paletteIndex = indexSource.indexOf('id="paletteButton"');
+    assert.equal(profileIndex < settingsIndex && settingsIndex < paletteIndex, true);
+  });
+
+  await test("settings button click opens the modal through the page event wiring", async () => {
+    // Regresion: bindPageEvents reenvia una lista explicita de handlers; si los
+    // de configuracion faltan ahi, el click no hace nada aunque el listener exista.
+    const controllerAppSource = await read("controller-app.js");
+    for (const handlerName of [
+      "openSettingsModal",
+      "closeSettingsModal",
+      "toggleSetting",
+      "requestAccountDeletion",
+      "cancelAccountDeletion",
+      "confirmAccountDeletion"
+    ]) {
+      assert.match(
+        controllerAppSource,
+        new RegExp(`${handlerName}: actions\\.${handlerName}`),
+        `bindPageEvents debe reenviar ${handlerName}`
+      );
+    }
+
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousHTMLInputElement = globalThis.HTMLInputElement;
+    const previousHTMLButtonElement = globalThis.HTMLButtonElement;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      closest() {
+        return null;
+      }
+    }
+
+    class FakeInput extends FakeElement {}
+    class FakeButton extends FakeElement {}
+
+    const settingsButton = new FakeButton();
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      settingsButton,
+      createTopicButton: new FakeElement()
+    };
+
+    let openCalls = 0;
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.HTMLInputElement = FakeInput;
+      globalThis.HTMLButtonElement = FakeButton;
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        openSettingsModal() {
+          openCalls += 1;
+        },
+        createNewTopic() {}
+      });
+
+      settingsButton.dispatch("click");
+      assert.equal(openCalls, 1);
+    } finally {
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+      globalThis.HTMLInputElement = previousHTMLInputElement;
+      globalThis.HTMLButtonElement = previousHTMLButtonElement;
+    }
+  });
+
+  await test("profanity filter censors spanish and english words with leet variants", () => {
+    assert.equal(censorProfanity("sos un pene"), "sos un ****");
+    assert.equal(censorProfanity("sos un p3ne"), "sos un ****");
+    assert.equal(censorProfanity("PUT4 madre"), "**** madre");
+    assert.equal(censorProfanity("what the fvck"), "what the ****");
+    assert.equal(censorProfanity("boluuuudo total"), "********* total");
+    assert.equal(censorProfanity("texto normal sin nada"), "texto normal sin nada");
+    // Palabras inocentes que casi colisionan no se censuran.
+    assert.equal(censorProfanity("este año fui al cono sur"), "este año fui al cono sur");
+    assert.equal(hasProfanity("una mierda"), true);
+    assert.equal(hasProfanity("una merienda"), false);
+
+    setProfanityFilterEnabled(false);
+    assert.equal(filterDisplayText("una mierda"), "una mierda");
+    setProfanityFilterEnabled(true);
+    assert.equal(filterDisplayText("una mierda"), "una ******");
+    setProfanityFilterEnabled(false);
+  });
+
+  await test("like notifications name the liker when known and friends-only filter applies", () => {
+    const rootMessage = {
+      ...createMessage("u1", "Post original", 0, "user", 1_700_000_000_000, true),
+      id: "root-1",
+      likes: 4
+    };
+    const nextRootMessage = { ...rootMessage, likes: 5, lastLikeById: "u2", lastLikeByName: "Mora" };
+    const previousTopic = {
+      id: "topic-1",
+      title: "Tema",
+      authorId: "u1",
+      messages: [rootMessage]
+    };
+    const nextTopic = { ...previousTopic, messages: [nextRootMessage] };
+    const users = [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }];
+
+    const notifications = collectTopicNotifications(
+      {
+        viewer: { id: "u1", name: "Cami" },
+        currentUserId: "u1",
+        followedTopicIds: [],
+        notifiedMessageIds: [],
+        users,
+        topics: [previousTopic]
+      },
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users,
+        topics: [nextTopic],
+        selectedTopicId: "topic-1"
+      },
+      1_700_000_002_000
+    );
+
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].kind, "post-like");
+    assert.equal(notifications[0].actors[0].name, "Mora");
+    assert.match(notifications[0].body, /^Mora le dio like/);
+
+    // Sin datos del liker (anonimo) vuelve a "Alguien".
+    const anonymousNotifications = collectTopicNotifications(
+      {
+        viewer: { id: "u1", name: "Cami" },
+        currentUserId: "u1",
+        followedTopicIds: [],
+        notifiedMessageIds: [],
+        users,
+        topics: [previousTopic]
+      },
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users,
+        topics: [{ ...previousTopic, messages: [{ ...rootMessage, likes: 5 }] }],
+        selectedTopicId: "topic-1"
+      },
+      1_700_000_003_000
+    );
+    assert.equal(anonymousNotifications[0].actors[0].name, "Alguien");
+
+    const friendships = { incoming: [], outgoing: [], friends: [{ id: "u2", name: "Mora" }] };
+    assert.equal(filterNotificationsForFriends(notifications, friendships).length, 1);
+    assert.equal(
+      filterNotificationsForFriends(notifications, { incoming: [], outgoing: [], friends: [] }).length,
+      0
+    );
+    assert.equal(filterNotificationsForFriends(anonymousNotifications, friendships).length, 0);
+  });
+
+  await test("backend persists viewer settings and exposes last liker respecting anonymity", async () => {
+    await withTempStore((store) => {
+      store.registerWithPassword({
+        sessionId: "session-settings-author",
+        email: "settings-author@example.com",
+        password: "password-segura",
+        nickname: "settings_author"
+      });
+      const voterPayload = store.registerWithPassword({
+        sessionId: "session-settings-voter",
+        email: "settings-voter@example.com",
+        password: "password-segura",
+        nickname: "settings_voter"
+      });
+      const voterName = voterPayload.viewer.displayName;
+
+      const updated = store.updateSettings({
+        sessionId: "session-settings-voter",
+        filterProfanity: true,
+        notificationsFriendsOnly: true
+      });
+      assert.equal(updated.viewer.filterProfanity, true);
+      assert.equal(updated.viewer.notificationsFriendsOnly, true);
+      assert.equal(updated.viewer.likesAnonymous, false);
+
+      const created = store.createTopic({
+        sessionId: "session-settings-author",
+        title: "Tema para likes con nombre",
+        text: "Mensaje raiz"
+      });
+      const topic = created.topics.find((entry) => entry.title === "Tema para likes con nombre");
+      const rootMessage = topic.messages[0];
+
+      const liked = store.toggleMessageLike(rootMessage.id, {
+        sessionId: "session-settings-voter",
+        selectedTopicId: topic.id
+      });
+      const likedMessage = liked.topics
+        .find((entry) => entry.id === topic.id)
+        .messages.find((entry) => entry.id === rootMessage.id);
+      assert.equal(likedMessage.lastLikeByName, voterName);
+
+      // Con likes anonimos el nombre deja de exponerse.
+      store.updateSettings({
+        sessionId: "session-settings-voter",
+        likesAnonymous: true
+      });
+      const refreshed = store.openTopic(topic.id, { sessionId: "session-settings-author" });
+      const refreshedMessage = refreshed.topics
+        .find((entry) => entry.id === topic.id)
+        .messages.find((entry) => entry.id === rootMessage.id);
+      assert.equal(refreshedMessage.lastLikeByName, null);
+      assert.equal(refreshedMessage.lastLikeById, null);
+      assert.equal(refreshedMessage.likes, 1);
+
+      // Los invitados no pueden guardar configuracion.
+      assert.throws(
+        () => store.updateSettings({ sessionId: "session-settings-guest", filterProfanity: true }),
+        (error) => error?.code === "LOGIN_REQUIRED"
+      );
+    });
+  });
+
+  await test("backend deletes account anonymizing the user and downgrading to guest", async () => {
+    await withTempStore((store) => {
+      store.registerWithPassword({
+        sessionId: "session-delete-me",
+        email: "delete-me@example.com",
+        password: "password-segura",
+        nickname: "delete_me"
+      });
+      const created = store.createTopic({
+        sessionId: "session-delete-me",
+        title: "Tema que sobrevive",
+        text: "Mensaje que sobrevive"
+      });
+      const topic = created.topics.find((entry) => entry.title === "Tema que sobrevive");
+      const deletedUserId = created.viewer.id;
+
+      const payload = store.deleteAccount({ sessionId: "session-delete-me" });
+      assert.equal(payload.viewer.type, "guest");
+      assert.equal(payload.users.some((user) => user.id === deletedUserId), false);
+      assert.equal(payload.topics.some((entry) => entry.id === topic.id), true);
+
+      assert.throws(
+        () =>
+          store.loginWithPassword({
+            sessionId: "session-delete-me-2",
+            email: "delete-me@example.com",
+            password: "password-segura"
+          }),
+        (error) => Boolean(error)
+      );
+
+      // Los invitados no pueden eliminar cuentas.
+      assert.throws(
+        () => store.deleteAccount({ sessionId: "session-guest-delete" }),
+        (error) => error?.code === "LOGIN_REQUIRED"
+      );
+    });
   });
 
   console.log("all tests passed");

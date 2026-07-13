@@ -1,4 +1,5 @@
 import { getSelectedTopic } from "../model.js";
+import { filterDisplayText } from "../profanity-filter.js";
 import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel, getScopeRankingLabel } from "./ranking-labels.js";
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
@@ -6,25 +7,26 @@ const SITE_NAME = "TOPYKLY";
 
 export function renderTitles(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
+  const topicTitle = topic ? filterDisplayText(topic.title) : null;
   const chatTitleWrapper = dom.chatTitle?.parentElement ?? null;
 
   if (typeof document !== "undefined") {
-    document.title = topic ? `${SITE_NAME} - ${topic.title}` : SITE_NAME;
+    document.title = topic ? `${SITE_NAME} - ${topicTitle}` : SITE_NAME;
   }
 
   if (dom.chatTitle) {
-    dom.chatTitle.textContent = topic ? topic.title : "Nuevo tema";
+    dom.chatTitle.textContent = topic ? topicTitle : "Nuevo tema";
   }
   if (chatTitleWrapper) {
     chatTitleWrapper.hidden = !topic && state.mobileView !== "chat";
   }
 
   if (dom.chatTopicName) {
-    dom.chatTopicName.textContent = topic ? topic.title : "Crear un tema";
+    dom.chatTopicName.textContent = topic ? topicTitle : "Crear un tema";
   }
   if (dom.chatTopicDescription) {
     dom.chatTopicDescription.textContent = topic
-      ? topic.subtitle
+      ? filterDisplayText(topic.subtitle)
       : "Escribe un titulo y el primer mensaje para abrir un tema nuevo.";
   }
 

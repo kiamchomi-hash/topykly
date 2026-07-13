@@ -46,6 +46,14 @@
             </span>
             <span class="button-label">Perfil</span>
           </button>
+          <button class="icon-button icon-button--circular" id="settingsButton" type="button" aria-label="Configuración" aria-haspopup="dialog" aria-controls="settingsModal" aria-expanded="false" data-auth-private hidden>
+            <span class="icon-button__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.88Z"></path>
+              </svg>
+            </span>
+          </button>
           <button class="icon-button" id="paletteButton" type="button" aria-label="Paletas" aria-haspopup="dialog" aria-controls="paletteModal" aria-expanded="false">
             <span class="icon-button__icon" aria-hidden="true">
               <span class="palette-mark" aria-hidden="true">
@@ -676,6 +684,65 @@
     </div>
 
 
+    <div class="profile-modal-backdrop settings-modal-backdrop" id="settingsModalBackdrop" hidden>
+      <section class="profile-modal settings-modal" id="settingsModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Configuración" tabindex="-1">
+        <div class="profile-modal__header">
+          <div>
+            <h2 class="profile-modal__title">Configuración</h2>
+            <h2>Preferencias de tu cuenta</h2>
+          </div>
+          <button class="icon-button icon-button--compact profile-modal__close" id="closeSettingsModalButton" type="button" aria-label="Cerrar configuración">
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
+          </button>
+        </div>
+        <div class="settings-modal__body">
+          <div class="settings-modal__option">
+            <div class="settings-modal__option-text">
+              <span class="settings-modal__option-title">Likes anónimos</span>
+              <span class="settings-modal__option-copy">Tu nombre no se muestra cuando das like a un posteo o comentario.</span>
+            </div>
+            <button class="settings-switch" id="settingsLikesAnonymousToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="likesAnonymous" aria-label="Likes anónimos">
+              <span class="settings-switch__thumb" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="settings-modal__option">
+            <div class="settings-modal__option-text">
+              <span class="settings-modal__option-title">Filtrar insultos</span>
+              <span class="settings-modal__option-copy">Censura malas palabras (español e inglés) en mensajes y títulos.</span>
+            </div>
+            <button class="settings-switch" id="settingsFilterProfanityToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="filterProfanity" aria-label="Filtrar insultos">
+              <span class="settings-switch__thumb" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="settings-modal__option">
+            <div class="settings-modal__option-text">
+              <span class="settings-modal__option-title">Notificaciones solo de amigos</span>
+              <span class="settings-modal__option-copy">Solo verás notificaciones de la actividad de tus amigos.</span>
+            </div>
+            <button class="settings-switch" id="settingsFriendsOnlyToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="notificationsFriendsOnly" aria-label="Notificaciones solo de amigos">
+              <span class="settings-switch__thumb" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="settings-modal__danger">
+            <p class="settings-modal__danger-title">Eliminar cuenta</p>
+            <p class="settings-modal__danger-copy">Se cierra tu sesión y tus datos personales se eliminan de forma permanente.</p>
+            <button class="text-button settings-modal__danger-button" id="settingsDeleteAccountButton" type="button">Eliminar cuenta</button>
+            <div class="settings-modal__danger-confirm" id="settingsDeleteConfirmRow" hidden>
+              <p class="settings-modal__danger-copy">¿Seguro? Esta acción no se puede deshacer.</p>
+              <div class="settings-modal__danger-actions">
+                <button class="text-button" id="settingsDeleteCancelButton" type="button">Cancelar</button>
+                <button class="primary-button settings-modal__danger-confirm-button" id="settingsDeleteConfirmButton" type="button">Eliminar definitivamente</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div class="profile-avatar-crop-backdrop" id="profileAvatarCropBackdrop" hidden>
       <section class="profile-avatar-crop" id="profileAvatarCropModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Ajustar foto" tabindex="-1">
         <div class="profile-avatar-crop__header">
@@ -839,6 +906,15 @@
                 </svg>
               </span>
               <span class="drawer-action-button__label">Paletas</span>
+            </button>
+            <button class="drawer-action-button" type="button" data-mobile-topbar-action="settings" data-auth-private>
+              <span class="drawer-action-button__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.88Z"></path>
+                </svg>
+              </span>
+              <span class="drawer-action-button__label">Configuración</span>
             </button>
             <button class="drawer-action-button drawer-action-button--store" type="button" data-mobile-topbar-action="store" data-auth-private>
               <span class="drawer-action-button__icon" aria-hidden="true">

@@ -567,6 +567,27 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (req.method === "PATCH" && url.pathname === "/api/settings") {
+      const body = await readJsonBody(req);
+      sendBackendPayload(res, req, authService, 200, store.updateSettings({
+        ...context,
+        likesAnonymous: typeof body.likesAnonymous === "boolean" ? body.likesAnonymous : null,
+        filterProfanity: typeof body.filterProfanity === "boolean" ? body.filterProfanity : null,
+        notificationsFriendsOnly: typeof body.notificationsFriendsOnly === "boolean" ? body.notificationsFriendsOnly : null,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/account/delete") {
+      const body = await readJsonBody(req);
+      sendBackendPayload(res, req, authService, 200, store.deleteAccount({
+        ...context,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
+
     if (req.method === "GET" && url.pathname.startsWith("/api/topics/")) {
       const topicId = url.pathname.split("/").pop() || "";
       sendBackendPayload(res, req, authService, 200, store.openTopic(topicId, context));
