@@ -8336,7 +8336,7 @@ await (async () => {
 
     assert.match(html, /<title>TOPYKLY — Comunidad de temas y rankings en español<\/title>/);
     assert.match(html, /<main id="main-content" class="workspace" aria-label="Chat social">/);
-    assert.match(html, /class="topbar__title" aria-label="TOPYKLY"/);
+    assert.match(html, /class="topbar__title" role="img" aria-label="TOPYKLY"/);
     assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
     assert.match(html, /class="brand-mark__trend">KLY<\/span>/);
     assert.match(html, /id="topicList"/);

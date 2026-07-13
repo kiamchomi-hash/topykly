@@ -397,8 +397,11 @@ export function createSocialLinkButton(platform, handle) {
     link.href = urlBuilder(handle);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
+    link.setAttribute("aria-label", `${label}: ${handle}`);
+  } else {
+    const srLabel = el("span", "sr-only", `${label}: `);
+    link.appendChild(srLabel);
   }
-  link.setAttribute("aria-label", `${label}: ${handle}`);
   link.title = `${label}: ${handle}`;
   link.dataset.socialPlatform = platform;
 
