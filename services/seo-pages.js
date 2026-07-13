@@ -107,9 +107,11 @@ export function renderPageShell({
   jsonLd = null,
   ogType = "website",
   ogImage = "",
-  bodyHtml = ""
+  bodyHtml = "",
+  redirectUrl = ""
 }) {
   const head = [
+    redirectUrl ? `<script>window.location.replace(${JSON.stringify(redirectUrl)});</script>` : "",
     `<meta charset="UTF-8">`,
     `<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
     `<title>${escapeHtml(title)}</title>`,
@@ -224,7 +226,8 @@ export function renderTopicPage(topic, { origin }) {
     jsonLd,
     ogType: "article",
     ogImage: `${origin}/og-image.png`,
-    bodyHtml
+    bodyHtml,
+    redirectUrl: `/?selectedTopicId=${encodeURIComponent(topic.id)}`
   });
 }
 
@@ -254,7 +257,8 @@ export function renderTopicsIndexPage(topics, { origin }) {
       name: "Temas activos — TOPYKLY",
       url: `${origin}/temas`
     },
-    bodyHtml
+    bodyHtml,
+    redirectUrl: "/"
   });
 }
 
@@ -307,7 +311,8 @@ export function renderProfilePage(profile, { origin }) {
     jsonLd,
     ogType: "profile",
     ogImage: profile.avatarUrl ? `${origin}${profile.avatarUrl}` : `${origin}/og-image.png`,
-    bodyHtml
+    bodyHtml,
+    redirectUrl: `/?perfil=${encodeURIComponent(profile.nickname)}`
   });
 }
 

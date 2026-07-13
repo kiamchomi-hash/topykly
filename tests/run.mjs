@@ -78,7 +78,7 @@ import {
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
 import { selectOnlineUsers } from "../ui/users.js";
-import { createMessageItem, createTopicItem } from "../components.js";
+import { createMessageItem, createTopicItem, createUserItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
@@ -91,6 +91,7 @@ import {
   formatProfileJoinedDate
 } from "../ui/date-utils.js";
 import { renderTitles } from "../ui/titles.js";
+import { renderPublicProfileModal } from "../ui/public-profile-modal.js";
 import { selectUsersViewModel } from "../features/users/selectors.js";
 
 const rootDir = path.dirname(fileURLToPath(new URL("../app.js", import.meta.url)));
@@ -694,6 +695,127 @@ await (async () => {
     assert.equal(formatMessageTime(""), "");
     assert.equal(formatProfileJoinedDate(""), "Fecha de registro no disponible");
     assert.deepEqual(formatJoinedDateParts(""), []);
+  });
+
+  await test("guest cards in connected users expose only the profile notice entry", () => {
+    const previousDocument = globalThis.document;
+
+    class MockNode {
+      constructor(tagName) {
+        this.tagName = tagName;
+        this.children = [];
+        this.dataset = {};
+        this.attributes = new Map();
+        this.className = "";
+        this.textContent = "";
+      }
+
+      append(...nodes) {
+        this.children.push(...nodes);
+      }
+
+      appendChild(node) {
+        this.children.push(node);
+        return node;
+      }
+
+      setAttribute(name, value) {
+        this.attributes.set(name, String(value));
+      }
+    }
+
+    function collectUserActions(node) {
+      const actions = node.dataset.userAction ? [node.dataset.userAction] : [];
+      return node.children.reduce((result, child) => result.concat(collectUserActions(child)), actions);
+    }
+
+    try {
+      globalThis.document = {
+        createElement: (tagName) => new MockNode(tagName),
+        createElementNS: (namespace, tagName) => new MockNode(tagName)
+      };
+
+      const guestItem = createUserItem({ id: "guest-1", name: "*topy17", type: "guest" }, "u1");
+      const registeredItem = createUserItem(
+        { id: "u2", name: "Nadia", type: "registered", friendshipStatus: "none" },
+        "u1"
+      );
+
+      assert.deepEqual(collectUserActions(guestItem), ["profile", "profile"]);
+      assert.deepEqual(collectUserActions(registeredItem), ["profile", "profile", "friend", "report"]);
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
+
+  await test("guest public profiles render only a compact notice without actions or registration date", () => {
+    const createNode = () => {
+      const classes = new Set();
+      return {
+        hidden: false,
+        textContent: "",
+        dataset: {},
+        attributes: new Map(),
+        classList: {
+          contains: (name) => classes.has(name),
+          toggle(name, force) {
+            if (force) {
+              classes.add(name);
+            } else {
+              classes.delete(name);
+            }
+          }
+        },
+        setAttribute(name, value) {
+          this.attributes.set(name, String(value));
+        }
+      };
+    };
+
+    const joinedAtContainer = createNode();
+    const publicProfileJoinedAt = {
+      ...createNode(),
+      closest: (selector) => selector === ".public-profile-modal__joined-wrap" ? joinedAtContainer : null
+    };
+    const dom = {
+      publicProfileModalBackdrop: createNode(),
+      publicProfileModal: createNode(),
+      publicProfileName: createNode(),
+      publicProfileUsername: createNode(),
+      publicProfileGuestNotice: createNode(),
+      publicProfileCopyLinkButton: createNode(),
+      publicProfileReportButton: createNode(),
+      publicProfileAvatar: createNode(),
+      publicProfileMeta: createNode(),
+      publicProfileJoinedAt,
+      publicProfileRecentCafes: createNode(),
+      publicProfileSocial: createNode()
+    };
+
+    renderPublicProfileModal(
+      {
+        currentUserId: "u1",
+        publicProfileUserId: "guest-1",
+        users: [{ id: "guest-1", name: "*topy17", nickname: "should-not-show", type: "guest" }]
+      },
+      dom
+    );
+
+    assert.equal(dom.publicProfileModalBackdrop.hidden, false);
+    assert.equal(dom.publicProfileModal.attributes.get("aria-hidden"), "false");
+    assert.equal(dom.publicProfileModal.classList.contains("is-guest-profile"), true);
+    assert.equal(dom.publicProfileName.textContent, "*topy17");
+    assert.equal(dom.publicProfileUsername.textContent, "");
+    assert.equal(dom.publicProfileGuestNotice.hidden, false);
+    assert.equal(dom.publicProfileCopyLinkButton.hidden, true);
+    assert.equal(dom.publicProfileReportButton.hidden, true);
+    assert.equal(dom.publicProfileReportButton.dataset.reportEntityId, "");
+    assert.equal(dom.publicProfileAvatar.hidden, true);
+    assert.equal(dom.publicProfileMeta.hidden, true);
+    assert.equal(dom.publicProfileJoinedAt.hidden, true);
+    assert.equal(joinedAtContainer.hidden, true);
+    assert.equal(dom.publicProfileRecentCafes.hidden, true);
+    assert.equal(dom.publicProfileSocial.hidden, true);
   });
 
   await test("collects mention and followed topic notifications from backend activity", () => {
@@ -3171,6 +3293,40 @@ await (async () => {
           });
         },
         (error) => error.code === "USER_EXPELLED"
+      );
+    });
+  });
+
+  await test("backend temporary bans restrict access and expire correctly", async () => {
+    await withTempStore((store) => {
+      const topicId = store.bootstrap({
+        sessionId: "session-pre-ban"
+      }).topics[0].id;
+
+      store.login({
+        sessionId: "session-moderator",
+        userId: "u2"
+      });
+
+      // Suspender al usuario u1 por 2 horas
+      store.applyModerationAction("expel_user", {
+        sessionId: "session-moderator",
+        targetType: "user",
+        targetId: "u1",
+        banHours: 2
+      });
+
+      // El usuario u1 está suspendido, no puede postear
+      assert.throws(
+        () => {
+          store.createTopic({
+            sessionId: "session-pre-ban", // u1
+            authMode: "registered",
+            title: "No entra",
+            text: "No entra"
+          });
+        },
+        (error) => error.code === "USER_EXPELLED" && error.message.includes("suspendido temporalmente por 2 horas")
       );
     });
   });
@@ -8895,18 +9051,25 @@ await (async () => {
       styles,
       /\.public-profile-modal-backdrop\s*\{[\s\S]*background:\s*color-mix\(in srgb, var\(--bg\) 12%, transparent\);[\s\S]*backdrop-filter:\s*blur\(5px\);/
     );
-    assert.match(styles, /\.public-profile-modal\s*\{[\s\S]*background:\s*var\(--bg\);/);
+    assert.match(
+      styles,
+      /\.public-profile-modal\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*column;[\s\S]*height:\s*min\(680px, calc\(100vh - 32px\)\);[\s\S]*background:\s*var\(--bg\);/
+    );
     assert.match(
       styles,
       /\.public-profile-modal__social\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*3;[\s\S]*align-self:\s*start;[\s\S]*align-content:\s*flex-start;/
     );
     assert.match(
       styles,
-      /\.public-profile-modal \.profile-modal__header\s*\{\s*background:\s*var\(--bg\);/
+      /\.public-profile-modal \.profile-modal__header\s*\{[\s\S]*flex:\s*0 0 auto;[\s\S]*background:\s*var\(--bg\);/
     );
     assert.match(
       styles,
-      /\.public-profile-modal__body\s*\{[\s\S]*grid-template-columns:\s*minmax\(220px, 260px\) minmax\(0, 1fr\);[\s\S]*padding:\s*18px 28px 28px;/
+      /\.public-profile-modal__body\s*\{[\s\S]*flex:\s*1 1 auto;[\s\S]*grid-template-columns:\s*minmax\(220px, 260px\) minmax\(0, 1fr\);[\s\S]*min-height:\s*0;[\s\S]*padding:\s*18px 28px 28px;/
+    );
+    assert.match(
+      styles,
+      /@media \(max-width: 920px\)\s*\{[\s\S]*\.public-profile-modal\s*\{\s*height:\s*calc\(100vh - 24px\);/
     );
     assert.match(
       styles,
@@ -8940,6 +9103,7 @@ await (async () => {
       styles,
       /\.public-profile-modal__cafes\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*align-self:\s*stretch;/
     );
+    assert.match(styles, /\.public-profile-modal__cafes\s*\{[^}]*min-height:\s*184px;/);
     assert.match(
       styles,
       /\.public-profile-modal__cafes ul\s*\{[\s\S]*display:\s*grid;[\s\S]*align-content:\s*start;[\s\S]*gap:\s*7px;/
@@ -9860,7 +10024,7 @@ await (async () => {
     assert.match(publicProfileModal, /publicProfileJoinedAt/);
     assert.match(publicProfileModal, /joinedAtContainer.hidden = !joinedDate.length/);
     assert.match(publicProfileModal, /publicProfileCopyLinkButton\.hidden = !canShareProfile/);
-    assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isCurrentUser/);
+    assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isGuest \|\| isCurrentUser/);
     assert.match(html, /id="publicProfileReportButton"[\s\S]*id="publicProfileCopyLinkButton"/);
     assert.match(renderController, /export function getAppLocationPath/);
     assert.match(renderController, /return `\/u\/\$\{encodeURIComponent\(profileUser\.nickname\)\}`;/);
@@ -10211,11 +10375,20 @@ await (async () => {
   });
 
   await test("profanity filter censors spanish and english words with leet variants", () => {
-    assert.equal(censorProfanity("sos un pene"), "sos un ****");
-    assert.equal(censorProfanity("sos un p3ne"), "sos un ****");
-    assert.equal(censorProfanity("PUT4 madre"), "**** madre");
-    assert.equal(censorProfanity("what the fvck"), "what the ****");
-    assert.equal(censorProfanity("boluuuudo total"), "********* total");
+    const p3neCensored = censorProfanity("sos un p3ne");
+    assert.ok(/^sos un [*$%#&!]{4}$/.test(p3neCensored), `Expected p3ne to be censored, got ${p3neCensored}`);
+    assert.equal(censorProfanity("sos un p3ne"), p3neCensored);
+    assert.ok(new Set(p3neCensored.slice(-4)).size > 1, "Expected the censor mask to use varied characters");
+
+    const put4Censored = censorProfanity("PUT4 madre");
+    assert.ok(/^[*$%#&!]{4} madre$/.test(put4Censored), `Expected PUT4 to be censored, got ${put4Censored}`);
+
+    const fvckCensored = censorProfanity("what the fvck");
+    assert.ok(/^what the [*$%#&!]{4}$/.test(fvckCensored), `Expected fvck to be censored, got ${fvckCensored}`);
+
+    const boluCensored = censorProfanity("boluuuudo total");
+    assert.ok(/^[*$%#&!]{9} total$/.test(boluCensored), `Expected boluuuudo to be censored, got ${boluCensored}`);
+
     assert.equal(censorProfanity("texto normal sin nada"), "texto normal sin nada");
     // Palabras inocentes que casi colisionan no se censuran.
     assert.equal(censorProfanity("este año fui al cono sur"), "este año fui al cono sur");
@@ -10225,7 +10398,8 @@ await (async () => {
     setProfanityFilterEnabled(false);
     assert.equal(filterDisplayText("una mierda"), "una mierda");
     setProfanityFilterEnabled(true);
-    assert.equal(filterDisplayText("una mierda"), "una ******");
+    const mierdaCensored = filterDisplayText("una mierda");
+    assert.ok(/^una [*$%#&!]{6}$/.test(mierdaCensored), `Expected mierda to be censored, got ${mierdaCensored}`);
     setProfanityFilterEnabled(false);
   });
 

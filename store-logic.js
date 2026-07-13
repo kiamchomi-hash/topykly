@@ -148,7 +148,8 @@ function buildHydratedState(state, payload, topics) {
     followedTopicIds: (state.followedTopicIds ?? []).filter((topicId) => nextTopicIds.has(topicId)),
     selectedTopicId: nextSelectedTopicId,
     activeConnectedUserId: nextActiveConnectedUserId,
-    publicProfileUserId: nextPublicProfileUserId
+    publicProfileUserId: nextPublicProfileUserId,
+    pendingModerationCount: payload.pendingModerationCount ?? state.pendingModerationCount ?? 0
   };
 }
 
@@ -326,10 +327,21 @@ export const reducers = {
     isAdminPanelOpen
   }),
 
-  setAdminDashboard: (state, adminDashboard) => ({
-    ...state,
-    adminDashboard
-  }),
+  setAdminDashboard: (state, adminDashboard) => {
+    const avatarCount = Number.isFinite(adminDashboard.avatarPagination?.total)
+      ? adminDashboard.avatarPagination.total
+      : Array.isArray(adminDashboard.pendingAvatars) ? adminDashboard.pendingAvatars.length : 0;
+    const reportCount = Number.isFinite(adminDashboard.reportPagination?.total)
+      ? adminDashboard.reportPagination.total
+      : Array.isArray(adminDashboard.reports) ? adminDashboard.reports.length : 0;
+    const pendingModerationCount = avatarCount + reportCount;
+
+    return {
+      ...state,
+      adminDashboard,
+      pendingModerationCount
+    };
+  },
 
   setReportModalOpen: (state, reportModal) => ({
     ...state,

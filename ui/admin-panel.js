@@ -124,7 +124,26 @@ function renderSection(title, count, children) {
   return section;
 }
 
+function syncAdminButton(state, dom) {
+  const button = dom.adminPanelButton;
+  if (!button) {
+    return;
+  }
+
+  const count = state.pendingModerationCount || 0;
+  button.setAttribute("aria-expanded", String(Boolean(state.isAdminPanelOpen)));
+  if (count > 0) {
+    button.dataset.pendingModeration = count > 99 ? "99+" : String(count);
+    button.setAttribute("title", `Administración (${count} pendientes)`);
+  } else {
+    delete button.dataset.pendingModeration;
+    button.setAttribute("title", "Administración");
+  }
+}
+
 export function renderAdminPanel(state, dom) {
+  syncAdminButton(state, dom);
+
   const isOpen = Boolean(state.isAdminPanelOpen);
   const dashboard = state.adminDashboard || {};
   const pendingAvatars = Array.isArray(dashboard.pendingAvatars) ? dashboard.pendingAvatars : [];

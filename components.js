@@ -311,6 +311,7 @@ function getFriendActionLabel(status) {
 export function createUserItem(user, currentUserId, activeConnectedUserId = null) {
   const isCurrentUser = user.id === currentUserId;
   const isActive = user.id === activeConnectedUserId;
+  const isRegistered = user.type === "registered";
   const menuId = `user-action-menu-${user.id}`;
   const node = el("article", `user-item${isCurrentUser ? " is-current" : ""}${isActive ? " is-active" : ""}`);
   node.dataset.id = user.id;
@@ -334,26 +335,25 @@ export function createUserItem(user, currentUserId, activeConnectedUserId = null
   info.append(trigger);
 
   const actions = el("div", "user-item__actions");
-  actions.append(createUserActionButton("Ver perfil", "profile"));
-
-  const friendMenuButton = createUserMenuButton("Agregar amigo", "friend");
-  const friendStatus = user.friendshipStatus || "none";
-  const friendActionLabel = getFriendActionLabel(friendStatus);
-  friendMenuButton.textContent = friendActionLabel;
-  friendMenuButton.setAttribute("aria-label", friendActionLabel);
-  friendMenuButton.dataset.friendshipStatus = friendStatus;
-  friendMenuButton.disabled = friendStatus === "friend" || friendStatus === "outgoing-request" || friendStatus === "self";
+  actions.append(createUserActionButton(isRegistered ? "Ver perfil" : "Ver aviso de invitado", "profile"));
 
   const menu = el("div", "user-item__menu");
   menu.id = menuId;
   menu.hidden = true;
   menu.dataset.userMenu = user.id;
   menu.setAttribute("role", "menu");
-  menu.append(
-    createUserMenuButton("Perfil", "profile"),
-    friendMenuButton,
-    createUserMenuButton("Reportar", "report")
-  );
+  menu.append(createUserMenuButton("Perfil", "profile"));
+
+  if (isRegistered) {
+    const friendMenuButton = createUserMenuButton("Agregar amigo", "friend");
+    const friendStatus = user.friendshipStatus || "none";
+    const friendActionLabel = getFriendActionLabel(friendStatus);
+    friendMenuButton.textContent = friendActionLabel;
+    friendMenuButton.setAttribute("aria-label", friendActionLabel);
+    friendMenuButton.dataset.friendshipStatus = friendStatus;
+    friendMenuButton.disabled = friendStatus === "friend" || friendStatus === "outgoing-request" || friendStatus === "self";
+    menu.append(friendMenuButton, createUserMenuButton("Reportar", "report"));
+  }
 
   node.append(info, actions, menu);
   return node;

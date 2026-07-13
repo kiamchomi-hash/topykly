@@ -7774,19 +7774,79 @@ html.is-mobile-viewport .ranking-mode-list__label {
 }
 
 .public-profile-modal {
+  display: flex;
+  flex-direction: column;
+  height: min(680px, calc(100vh - 32px));
   background: var(--bg);
 }
 
+.public-profile-modal.is-guest-profile {
+  width: min(440px, 100%);
+  height: auto;
+  max-height: calc(100vh - 32px);
+}
+
 .public-profile-modal .profile-modal__header {
+  flex: 0 0 auto;
   background: var(--bg);
 }
 
 .public-profile-modal__body {
+  flex: 1 1 auto;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 18px 24px;
   align-items: stretch;
+  min-height: 0;
   padding: 18px 28px 28px;
+}
+
+.is-guest-profile .public-profile-modal__body {
+  display: block;
+  flex: 0 0 auto;
+  padding: 20px 24px 24px;
+}
+
+.public-profile-modal__guest-notice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line-strong));
+  border-radius: 8px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent-soft) 54%, var(--surface-strong));
+}
+
+.public-profile-modal__guest-notice[hidden] {
+  display: none;
+}
+
+.public-profile-modal__guest-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  font-size: 1.4rem;
+  font-weight: 950;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.public-profile-modal__guest-notice strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 0.95rem;
+}
+
+.public-profile-modal__guest-notice p {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  color: var(--text-soft);
 }
 
 .public-profile-modal__avatar {
@@ -7906,6 +7966,7 @@ html.is-mobile-viewport .ranking-mode-list__label {
   align-self: stretch;
   justify-self: center;
   width: min(232px, 100%);
+  min-height: 184px;
   margin: 0;
   padding-top: 2px;
 }
@@ -7990,6 +8051,10 @@ html.is-mobile-viewport .ranking-mode-list__label {
 }
 
 @media (max-width: 920px) {
+  .public-profile-modal {
+    height: calc(100vh - 24px);
+  }
+
   .public-profile-modal__body {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto auto auto auto;
@@ -9555,17 +9620,20 @@ button.icon-button.profile-modal__close {
 }
 
 #notificationsButton,
-#friendRequestsButton {
+#friendRequestsButton,
+#adminPanelButton {
   position: relative;
 }
 
 #notificationsButton[data-pending-notifications],
-#friendRequestsButton[data-pending-friends] {
+#friendRequestsButton[data-pending-friends],
+#adminPanelButton[data-pending-moderation] {
   color: var(--accent-strong);
 }
 
 #notificationsButton[data-pending-notifications]::after,
-#friendRequestsButton[data-pending-friends]::after {
+#friendRequestsButton[data-pending-friends]::after,
+#adminPanelButton[data-pending-moderation]::after {
   content: attr(data-pending-notifications);
   position: absolute;
   top: -4px;
@@ -9591,6 +9659,10 @@ button.icon-button.profile-modal__close {
 
 #friendRequestsButton[data-pending-friends]::after {
   content: attr(data-pending-friends);
+}
+
+#adminPanelButton[data-pending-moderation]::after {
+  content: attr(data-pending-moderation);
 }
 
 @media (max-width: 720px) {
@@ -10767,30 +10839,83 @@ button.icon-button.profile-modal__close {
 
 /* Settings modal */
 .settings-modal {
-  max-width: 440px;
-  width: min(440px, calc(100vw - 32px));
+  max-width: 480px;
+  width: min(480px, calc(100vw - 32px));
 }
 
 .settings-modal__body {
   display: grid;
-  gap: 14px;
-  padding: 18px 22px 22px;
+  gap: 18px;
+  padding: 18px 22px 24px;
+}
+
+.settings-modal__group {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-modal__group-title {
+  margin: 0 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.settings-modal__group-title--danger {
+  color: #dc4444;
+}
+
+.settings-modal__card {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-muted);
+  overflow: hidden;
 }
 
 .settings-modal__option {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-muted);
+  padding: 14px 16px;
+}
+
+.settings-modal__option + .settings-modal__option {
+  border-top: 1px solid var(--line);
+}
+
+.settings-modal__option-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.settings-modal__option-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.settings-modal__option-icon--danger {
+  background: rgba(220, 68, 68, 0.12);
+  color: #dc4444;
 }
 
 .settings-modal__option-text {
   display: grid;
   gap: 3px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -10802,15 +10927,15 @@ button.icon-button.profile-modal__close {
 
 .settings-modal__option-copy {
   font-size: 0.78rem;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--text-soft);
 }
 
 .settings-switch {
   position: relative;
   flex: 0 0 auto;
-  width: 46px;
-  height: 26px;
+  width: 44px;
+  height: 25px;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -10823,22 +10948,23 @@ button.icon-button.profile-modal__close {
   position: absolute;
   top: 50%;
   left: 3px;
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
   background: var(--text-soft);
   transform: translateY(-50%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: left 0.18s ease, background 0.18s ease;
 }
 
 .settings-switch.is-on {
   border-color: var(--accent);
-  background: var(--accent-soft);
+  background: var(--accent);
 }
 
 .settings-switch.is-on .settings-switch__thumb {
   left: 21px;
-  background: var(--accent);
+  background: #fff;
 }
 
 .settings-switch:disabled {
@@ -10852,37 +10978,35 @@ button.icon-button.profile-modal__close {
 }
 
 .settings-modal__danger {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border: 1px solid rgba(220, 68, 68, 0.45);
-  border-radius: 14px;
-  background: rgba(220, 68, 68, 0.06);
+  border-color: rgba(220, 68, 68, 0.4);
+  background: rgba(220, 68, 68, 0.05);
 }
 
-.settings-modal__danger-title {
-  margin: 0;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #dc4444;
+.settings-modal__danger .settings-modal__option + .settings-modal__danger-confirm {
+  border-top: 1px solid rgba(220, 68, 68, 0.25);
 }
 
 .settings-modal__danger-copy {
   margin: 0;
   font-size: 0.78rem;
-  line-height: 1.3;
+  line-height: 1.35;
   color: var(--text-soft);
 }
 
 .settings-modal__danger-button {
-  justify-self: start;
+  flex: 0 0 auto;
   color: #dc4444;
   border-color: rgba(220, 68, 68, 0.5);
 }
 
 .settings-modal__danger-confirm {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+.settings-modal__danger-confirm[hidden] {
+  display: none;
 }
 
 .settings-modal__danger-actions {

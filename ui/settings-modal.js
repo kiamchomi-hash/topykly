@@ -1,5 +1,6 @@
 const SETTING_TOGGLE_KEYS = {
   likesAnonymous: "settingsLikesAnonymousToggle",
+  profileIndexable: "settingsProfileIndexableToggle",
   filterProfanity: "settingsFilterProfanityToggle",
   notificationsFriendsOnly: "settingsFriendsOnlyToggle"
 };
@@ -35,6 +36,7 @@ export function renderSettingsModal(state, dom) {
 
   const pending = Boolean(state.settingsUpdatePending);
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.likesAnonymous], viewer.likesAnonymous, pending);
+  syncSettingToggle(dom[SETTING_TOGGLE_KEYS.profileIndexable], viewer.profileIndexable !== false, pending);
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.filterProfanity], viewer.filterProfanity, pending);
   syncSettingToggle(
     dom[SETTING_TOGGLE_KEYS.notificationsFriendsOnly],

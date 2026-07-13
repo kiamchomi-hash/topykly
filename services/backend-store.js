@@ -658,7 +658,7 @@ function initSchema(db) {
       social_discord TEXT NOT NULL DEFAULT '',
       profile_show_social INTEGER NOT NULL DEFAULT 1,
       likes_anonymous INTEGER NOT NULL DEFAULT 0,
-      filter_profanity INTEGER NOT NULL DEFAULT 0,
+      filter_profanity INTEGER NOT NULL DEFAULT 1,
       notifications_friends_only INTEGER NOT NULL DEFAULT 0,
       avatar_url TEXT,
       avatar_pending_url TEXT,
@@ -669,7 +669,8 @@ function initSchema(db) {
       last_topic_at TEXT,
       last_message_at TEXT,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      banned_until TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -840,7 +841,7 @@ function initSchema(db) {
   ensureColumn(db, "users", "social_discord", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "users", "profile_show_social", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "likes_anonymous", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "notifications_friends_only", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "profile_indexable", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "nickname", "TEXT");
@@ -853,6 +854,7 @@ function initSchema(db) {
   ensureColumn(db, "users", "profile_suggested_name", "TEXT");
   ensureColumn(db, "users", "profile_suggested_avatar_url", "TEXT");
   ensureColumn(db, "users", "registration_age", "INTEGER");
+  ensureColumn(db, "users", "banned_until", "TEXT");
   ensureColumn(db, "users", "terms_accepted_at", "TEXT");
   ensureColumn(db, "users", "terms_version", "TEXT");
   ensureColumn(db, "auth_email_challenges", "password_hash", "TEXT");
@@ -967,6 +969,21 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS auth_email_challenges_expiry_idx
     ON auth_email_challenges(expires_at, consumed_at);
   `);
+
+  // Migracion unica: el filtro de insultos paso a estar activado por defecto;
+  // las filas creadas con el default viejo (0) nunca reflejaron una eleccion del usuario.
+  const filterProfanityDefaultKey = "filter_profanity_default_on";
+  const filterProfanityDefaultRow = db
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(filterProfanityDefaultKey);
+  if (!filterProfanityDefaultRow) {
+    db.prepare("UPDATE users SET filter_profanity = 1").run();
+    db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
+      filterProfanityDefaultKey,
+      "1",
+      new Date().toISOString()
+    );
+  }
 }
 
 function ensureColumn(db, tableName, columnName, columnDefinition) {
@@ -1982,6 +1999,23 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     }
   }
 
+  let pendingModerationCount = 0;
+  if (context.viewer.role === "admin") {
+    const reportsCount = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM reports
+      WHERE status = ?
+    `).get(REPORT_STATUS_OPEN)?.count ?? 0;
+
+    const avatarsCount = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM users
+      WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
+    `).get()?.count ?? 0;
+
+    pendingModerationCount = reportsCount + avatarsCount;
+  }
+
   return {
     sessionId: context.sessionId,
     viewer: context.viewer,
@@ -1994,7 +2028,8 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,
     reportedMessageIds: reportSnapshot.reportedMessageIds,
-    rankings: buildBackendRankings(db, context, resolvedSelectedTopicId)
+    rankings: buildBackendRankings(db, context, resolvedSelectedTopicId),
+    pendingModerationCount
   };
 }
 
@@ -2134,11 +2169,25 @@ function normalizeMessageEntityId(messageId) {
 }
 
 function assertViewerCanParticipate(viewerRow) {
-  if (!viewerRow || viewerRow.status === USER_STATUS_ACTIVE) {
+  if (!viewerRow) {
     return;
   }
 
-  throw new ApiError(403, "USER_EXPELLED", "Este usuario no puede participar en esta etapa.");
+  if (viewerRow.status === USER_STATUS_EXPELLED) {
+    throw new ApiError(403, "USER_EXPELLED", "Este usuario está expulsado permanentemente.");
+  }
+
+  if (viewerRow.banned_until) {
+    const bannedUntil = new Date(viewerRow.banned_until);
+    if (!Number.isNaN(bannedUntil.getTime()) && bannedUntil > new Date()) {
+      const remainingHours = Math.ceil((bannedUntil - new Date()) / (1000 * 60 * 60));
+      throw new ApiError(
+        403,
+        "USER_EXPELLED",
+        `Este usuario está suspendido temporalmente por ${remainingHours} hora${remainingHours === 1 ? "" : "s"}.`
+      );
+    }
+  }
 }
 
 function getEffectiveContextIpAddress(context) {
@@ -3609,7 +3658,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         return buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, profileIndexable = null, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -3623,15 +3672,19 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         const nextNotificationsFriendsOnly = notificationsFriendsOnly === null
           ? context.viewer.notificationsFriendsOnly
           : notificationsFriendsOnly === true;
+        const nextProfileIndexable = profileIndexable === null
+          ? context.viewerRow.profile_indexable !== 0
+          : profileIndexable === true;
 
         db.prepare(`
           UPDATE users
-          SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, updated_at = ?
+          SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, profile_indexable = ?, updated_at = ?
           WHERE id = ?
         `).run(
           nextLikesAnonymous ? 1 : 0,
           nextFilterProfanity ? 1 : 0,
           nextNotificationsFriendsOnly ? 1 : 0,
+          nextProfileIndexable ? 1 : 0,
           new Date().toISOString(),
           context.viewer.id
         );
@@ -3974,6 +4027,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
       targetType,
       targetId,
       reason = "",
+      banHours = null,
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
@@ -4066,18 +4120,31 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
             throw new ApiError(409, "INVALID_MODERATION_TARGET", "Solo se expulsa a usuarios registrados en esta etapa.");
           }
 
+          let bannedUntil = null;
+          let status = USER_STATUS_EXPELLED;
+
+          if (banHours !== null && banHours !== "permanent" && banHours !== "") {
+            const hours = Number(banHours);
+            if (Number.isFinite(hours) && hours > 0) {
+              const date = new Date(nowIso);
+              date.setHours(date.getHours() + hours);
+              bannedUntil = date.toISOString();
+              status = USER_STATUS_ACTIVE;
+            }
+          }
+
           db.prepare(`
             UPDATE users
-            SET status = ?, updated_at = ?
+            SET status = ?, banned_until = ?, updated_at = ?
             WHERE id = ?
-          `).run(USER_STATUS_EXPELLED, nowIso, normalizedUserId);
+          `).run(status, bannedUntil, nowIso, normalizedUserId);
           resolveReportsForEntity(db, "user", normalizedUserId, nowIso);
           recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
             targetId: normalizedUserId,
             actorUserId: context.viewer.id,
-            reason: normalizedReason,
+            reason: bannedUntil ? `Suspension por ${banHours} horas` : (normalizedReason || "Ban permanente"),
             createdAt: nowIso
           });
 

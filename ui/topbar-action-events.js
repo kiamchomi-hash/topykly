@@ -2314,9 +2314,7 @@ export function bindTopbarActionEvents(dom, handlers) {
       ? "fecha de registro"
       : button.dataset.profileVisibility === "social"
         ? "redes sociales"
-        : button.dataset.profileVisibility === "indexable"
-          ? "perfil en buscadores"
-          : "descripción";
+        : "descripción";
     button.setAttribute("aria-label", nextVisible ? `Ocultar ${label}` : `Mostrar ${label}`);
     button.innerHTML = nextVisible
       ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg>`
@@ -2326,7 +2324,6 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.profileDescriptionEditButton, "click", () => toggleProfileSection("description"));
   addListener(dom.profileDescriptionVisibilityButton, "click", () => toggleProfileVisibility(dom.profileDescriptionVisibilityButton));
   addListener(dom.profileJoinedAtVisibilityButton, "click", () => toggleProfileVisibility(dom.profileJoinedAtVisibilityButton));
-  addListener(dom.profileIndexableVisibilityButton, "click", () => toggleProfileVisibility(dom.profileIndexableVisibilityButton));
   addListener(dom.profileSocialVisibilityButton, "click", () => toggleProfileVisibility(dom.profileSocialVisibilityButton));
   dom.profileSocialSection?.querySelectorAll?.("[data-profile-social-edit]")?.forEach((button) => {
     addListener(button, "click", () => {

@@ -1,13 +1,13 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-11T23:21:14.310Z",
+  "lastChecked": "2026-07-13T19:48:06.304Z",
   "tests": [
     {
       "name": "unit and integration suite",
       "command": "npm test",
       "status": "passed",
-      "summary": "all tests passed, including identity linking, duplicate display names, OIDC verification and public email privacy"
+      "summary": "all tests passed, including stable and varied profanity censor masks"
     },
     {
       "name": "HTTP smoke suite",
@@ -16,14 +16,8 @@
       "summary": "12 smoke checks passed"
     },
     {
-      "name": "security audit",
-      "command": "node .agents/scripts/audit-site.mjs",
-      "status": "passed_with_warning",
-      "summary": "live site healthy and private files blocked; production HSTS is still absent"
-    },
-    {
       "name": "diff validation",
-      "command": "git diff --check",
+      "command": "git diff --check -- profanity-filter.js tests/run.mjs",
       "status": "passed",
       "summary": "no whitespace errors"
     }

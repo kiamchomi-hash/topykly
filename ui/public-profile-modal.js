@@ -58,6 +58,7 @@ export function renderPublicProfileModal(state, dom) {
   const user = state.users.find((candidate) => candidate.id === state.publicProfileUserId) || null;
   const isOpen = Boolean(user);
   const isCurrentUser = Boolean(user && user.id === state.currentUserId);
+  const isGuest = Boolean(user && user.type !== "registered");
 
   if (dom.publicProfileModalBackdrop) {
     dom.publicProfileModalBackdrop.hidden = !isOpen;
@@ -65,6 +66,7 @@ export function renderPublicProfileModal(state, dom) {
 
   if (dom.publicProfileModal) {
     dom.publicProfileModal.setAttribute("aria-hidden", String(!isOpen));
+    dom.publicProfileModal.classList.toggle("is-guest-profile", isGuest);
   }
 
   if (!user) {
@@ -76,16 +78,55 @@ export function renderPublicProfileModal(state, dom) {
   }
 
   if (dom.publicProfileUsername) {
-    dom.publicProfileUsername.textContent = user.nickname ? `@${user.nickname}` : "";
+    dom.publicProfileUsername.textContent = !isGuest && user.nickname ? `@${user.nickname}` : "";
   }
 
-  const canShareProfile = user.type === "registered" && Boolean(user.nickname);
+  const canShareProfile = !isGuest && Boolean(user.nickname);
   if (dom.publicProfileCopyLinkButton) {
     dom.publicProfileCopyLinkButton.hidden = !canShareProfile;
     dom.publicProfileCopyLinkButton.dataset.profileNickname = canShareProfile ? user.nickname : "";
   }
 
+  if (dom.publicProfileReportButton) {
+    dom.publicProfileReportButton.dataset.reportEntityId = isGuest ? "" : user.id;
+    dom.publicProfileReportButton.hidden = isGuest || isCurrentUser;
+  }
+
+  if (dom.publicProfileGuestNotice) {
+    dom.publicProfileGuestNotice.hidden = !isGuest;
+  }
+
+  if (isGuest) {
+    if (dom.publicProfileAvatar) {
+      dom.publicProfileAvatar.hidden = true;
+      dom.publicProfileAvatar.textContent = "";
+    }
+    if (dom.publicProfileMeta) {
+      dom.publicProfileMeta.hidden = true;
+    }
+    if (dom.publicProfileJoinedAt) {
+      dom.publicProfileJoinedAt.hidden = true;
+      dom.publicProfileJoinedAt.textContent = "";
+      const joinedAtContainer = dom.publicProfileJoinedAt.closest?.(".public-profile-modal__joined-wrap");
+      if (joinedAtContainer) {
+        joinedAtContainer.hidden = true;
+      }
+    }
+    if (dom.publicProfileRecentCafes) {
+      dom.publicProfileRecentCafes.hidden = true;
+      dom.publicProfileRecentCafes.textContent = "";
+    }
+    if (dom.publicProfileSocial) {
+      dom.publicProfileSocial.hidden = true;
+      dom.publicProfileSocial.textContent = "";
+    }
+    return;
+  }
+
   const publicAvatarUrl = isCurrentUser ? user.avatarPendingUrl || user.avatarUrl || "" : user.avatarUrl || "";
+  if (dom.publicProfileAvatar) {
+    dom.publicProfileAvatar.hidden = false;
+  }
   setPublicProfileAvatar(dom.publicProfileAvatar, publicAvatarUrl);
 
   const joinedDate = user.profileShowJoinedAt === false ? [] : formatJoinedDateParts(user.createdAt);
@@ -94,6 +135,9 @@ export function renderPublicProfileModal(state, dom) {
   if (dom.publicProfileDescription) {
     dom.publicProfileDescription.textContent = description || "Sin descripción";
     dom.publicProfileDescription.classList.toggle("public-profile-modal__description--empty", !description);
+  }
+  if (dom.publicProfileMeta) {
+    dom.publicProfileMeta.hidden = false;
   }
 
   if (dom.publicProfileJoinedAt) {
@@ -168,8 +212,4 @@ export function renderPublicProfileModal(state, dom) {
     }
   }
 
-  if (dom.publicProfileReportButton) {
-    dom.publicProfileReportButton.dataset.reportEntityId = user.id;
-    dom.publicProfileReportButton.hidden = isCurrentUser;
-  }
 }

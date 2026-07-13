@@ -290,6 +290,7 @@ export const api = {
     likesAnonymous = null,
     filterProfanity = null,
     notificationsFriendsOnly = null,
+    profileIndexable = null,
     selectedTopicId = null
   } = {}) {
     return request("/api/settings", {
@@ -298,6 +299,7 @@ export const api = {
         likesAnonymous,
         filterProfanity,
         notificationsFriendsOnly,
+        profileIndexable,
         selectedTopicId
       }
     });
@@ -394,7 +396,7 @@ export const api = {
     };
   },
 
-  async applyModerationAction(actionType, targetType, targetId, reason = "", selectedTopicId = null) {
+  async applyModerationAction(actionType, targetType, targetId, reason = "", selectedTopicId = null, banHours = null) {
     return request("/api/moderation/actions", {
       method: "POST",
       body: {
@@ -402,7 +404,8 @@ export const api = {
         targetType,
         targetId,
         reason,
-        selectedTopicId
+        selectedTopicId,
+        banHours
       }
     });
   }

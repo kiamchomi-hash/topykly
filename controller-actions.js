@@ -330,14 +330,42 @@ export function createActionHandlers({
       dispatch(state, reducers.setAdminConfirmAction, null);
     }
 
+    let banHours = null;
+    if (actionType === "expel_user") {
+      const response = prompt(
+        "Ingresa la cantidad de horas para la suspensión (ej. 24, 48) o escribe 'permanente' para un ban permanente:",
+        "permanente"
+      );
+      if (response === null) {
+        render();
+        return;
+      }
+      const trimmed = response.trim().toLowerCase();
+      if (trimmed === "permanente" || trimmed === "") {
+        banHours = "permanent";
+      } else {
+        const hours = Number(trimmed);
+        if (isNaN(hours) || hours <= 0) {
+          showFeedback("Por favor ingresa un número de horas válido o 'permanente'.", { kind: "error" });
+          render();
+          return;
+        }
+        banHours = hours;
+      }
+    }
+
     try {
-      await api.applyModerationAction(actionType, targetType, targetId, "", state.selectedTopicId);
+      await api.applyModerationAction(actionType, targetType, targetId, "", state.selectedTopicId, banHours);
       const dashboard = await api.getAdminDashboard();
       dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
-      showFeedback(ADMIN_ACTION_FEEDBACK[actionType] || "Accion aplicada");
+      showFeedback(
+        actionType === "expel_user"
+          ? (banHours === "permanent" ? "Usuario expulsado permanentemente" : `Usuario suspendido por ${banHours} horas`)
+          : (ADMIN_ACTION_FEEDBACK[actionType] || "Acción aplicada")
+      );
     } catch (error) {
       console.error(error);
-      showFeedback(error?.message || "No se pudo aplicar la accion.", { kind: "error" });
+      showFeedback(error?.message || "No se pudo aplicar la acción.", { kind: "error" });
     }
     render();
   }
@@ -371,6 +399,10 @@ export function createActionHandlers({
     notificationsFriendsOnly: {
       on: "Solo verás notificaciones de tus amigos.",
       off: "Verás notificaciones de toda la actividad."
+    },
+    profileIndexable: {
+      on: "Tu perfil puede aparecer en buscadores.",
+      off: "Tu perfil ya no aparecerá en buscadores."
     }
   };
 
@@ -492,9 +524,6 @@ export function createActionHandlers({
     const socialTwitter = dom.socialTwitterInput?.value?.trim() || "";
     const socialDiscord = dom.socialDiscordInput?.value?.trim() || "";
     const profileShowSocial = dom.profileSocialVisibilityButton?.dataset?.visible !== "false";
-    const profileIndexable = dom.profileIndexableVisibilityButton
-      ? dom.profileIndexableVisibilityButton.dataset?.visible !== "false"
-      : null;
 
     if (dom.saveProfileButton) {
       dom.saveProfileButton.disabled = true;
@@ -517,7 +546,6 @@ export function createActionHandlers({
         socialTwitter,
         socialDiscord,
         profileShowSocial,
-        profileIndexable,
         avatarDataUrl,
         removeAvatar,
         selectedTopicId: state.selectedTopicId

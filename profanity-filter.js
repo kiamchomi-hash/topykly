@@ -183,6 +183,7 @@ const LEET_MAP = {
 
 const ENYE_PLACEHOLDER = "\u0001";
 const WORD_PATTERN = /[\p{L}\p{N}@$€]+/gu;
+const CENSOR_CHARACTERS = ["*", "$", "%", "#", "&", "!"];
 
 function normalizeToken(token) {
   // La enie se protege antes de quitar diacriticos para no confundir "año" con "ano".
@@ -236,9 +237,26 @@ export function censorProfanity(text) {
     return value;
   }
 
-  return value.replace(WORD_PATTERN, (token) =>
-    isProfaneWord(token) ? "*".repeat(token.length) : token
-  );
+  return value.replace(WORD_PATTERN, (token) => {
+    if (!isProfaneWord(token)) {
+      return token;
+    }
+
+    // La mascara debe conservarse entre renders. Un desplazamiento derivado
+    // de la palabra mantiene la variedad visual sin depender de Math.random().
+    let hash = 2166136261;
+    for (const character of normalizeToken(token)) {
+      hash ^= character.codePointAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    const startIndex = (hash >>> 0) % CENSOR_CHARACTERS.length;
+    let result = "";
+    for (let index = 0; index < token.length; index++) {
+      result += CENSOR_CHARACTERS[(startIndex + index) % CENSOR_CHARACTERS.length];
+    }
+    return result;
+  });
 }
 
 export function hasProfanity(text) {

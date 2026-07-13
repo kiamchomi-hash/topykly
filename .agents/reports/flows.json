@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente de Flujos de Usabilidad",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-09T00:00:00.000Z",
+    "lastChecked":  "2026-07-13T00:00:00.000Z",
     "suggestions":  [
                         {
                             "level":  "suggestion",
@@ -13,6 +13,12 @@
                             "level":  "fix",
                             "message":  "La hidratacion del backend ahora preserva la seleccion local vigente cuando un payload tardio trae un selectedTopicId anterior, evitando saltos al clickear temas rapidamente.",
                             "id":  "topic-selection-race",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "Los usuarios invitados ya no exponen fecha de registro, redes, temas, amistad ni reporte: al abrir su perfil desde Usuarios conectados se muestra un aviso compacto sin acciones.",
+                            "id":  "guest-profile-notice-only",
                             "agent":  "flows"
                         }
                     ]

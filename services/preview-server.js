@@ -753,6 +753,7 @@ async function handleApiRequest(store, authService, req, res, url) {
         targetType: body.targetType,
         targetId: body.targetId,
         reason: body.reason,
+        banHours: body.banHours,
         selectedTopicId: body.selectedTopicId ?? null
       }));
       return;
@@ -1031,6 +1032,42 @@ function handleSeoPageRequest(store, req, res, url) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     writePlainText(res, 405, "Method not allowed");
     return;
+  }
+
+  const userAgent = req.headers["user-agent"] || "";
+  const isBot = /googlebot|bingbot|yandex|baiduspider|duckduckbot|yahoo|twitterbot|facebookexternalhit|discordbot|slackbot|lighthouse|telegrambot|embedly|quora link preview|outbrain|vkshare|pinterest|slack-imgproxy/i.test(userAgent);
+  const isBrowser = /mozilla|chrome|safari|firefox|edge|mobile/i.test(userAgent);
+
+  if (isBrowser && !isBot) {
+    if (url.pathname === "/temas" || url.pathname === "/tema" || url.pathname === "/u") {
+      sendRedirect(res, 302, "/");
+      return;
+    }
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments[0] === "tema") {
+      let topicId = "";
+      try {
+        topicId = decodeURIComponent(segments[1] || "");
+      } catch {
+        topicId = "";
+      }
+      if (topicId) {
+        sendRedirect(res, 302, `/?selectedTopicId=${encodeURIComponent(topicId)}`);
+        return;
+      }
+    }
+    if (segments[0] === "u") {
+      let nickname = "";
+      try {
+        nickname = decodeURIComponent(segments[1] || "");
+      } catch {
+        nickname = "";
+      }
+      if (nickname) {
+        sendRedirect(res, 302, `/?perfil=${encodeURIComponent(nickname)}`);
+        return;
+      }
+    }
   }
 
   const origin = resolvePublicOrigin();
