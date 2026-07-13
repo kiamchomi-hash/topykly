@@ -132,7 +132,7 @@ try {
     assert.match(response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
     assert.match(response.headers.get("content-security-policy") || "", /upgrade-insecure-requests/);
     assert.match(response.headers.get("content-security-policy") || "", /script-src 'self' 'unsafe-inline' https:\/\/cdn\.jsdelivr\.net https:\/\/challenges\.cloudflare\.com/);
-    assert.match(html, /<title>TOPYKLY<\/title>/);
+    assert.match(html, /<title>TOPYKLY — Comunidad de temas y rankings en español<\/title>/);
     assert.match(html, /id="messageForm"/);
   });
 

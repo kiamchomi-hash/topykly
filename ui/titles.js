@@ -4,6 +4,7 @@ import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel, getScope
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
 const SITE_NAME = "TOPYKLY";
+const BASE_TITLE = "TOPYKLY — Comunidad de temas y rankings en español";
 
 export function renderTitles(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
@@ -11,7 +12,7 @@ export function renderTitles(state, dom) {
   const chatTitleWrapper = dom.chatTitle?.parentElement ?? null;
 
   if (typeof document !== "undefined") {
-    document.title = topic ? `${SITE_NAME} - ${topicTitle}` : SITE_NAME;
+    document.title = topic ? `${SITE_NAME} - ${topicTitle}` : BASE_TITLE;
   }
 
   if (dom.chatTitle) {

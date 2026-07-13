@@ -223,7 +223,7 @@ export function renderTopicPage(topic, { origin }) {
     robotsMeta: isIndexable ? "index,follow" : "noindex,follow",
     jsonLd,
     ogType: "article",
-    ogImage: `${origin}/favicon.svg`,
+    ogImage: `${origin}/og-image.png`,
     bodyHtml
   });
 }
@@ -306,7 +306,7 @@ export function renderProfilePage(profile, { origin }) {
     robotsMeta: profile.indexable ? "index,follow" : "noindex,follow",
     jsonLd,
     ogType: "profile",
-    ogImage: profile.avatarUrl ? `${origin}${profile.avatarUrl}` : `${origin}/favicon.svg`,
+    ogImage: profile.avatarUrl ? `${origin}${profile.avatarUrl}` : `${origin}/og-image.png`,
     bodyHtml
   });
 }

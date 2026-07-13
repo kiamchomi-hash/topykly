@@ -8058,7 +8058,7 @@ await (async () => {
       assert.equal(themeToggle["aria-checked"], "true");
       assert.equal(themeToggle["aria-label"], "Tema oscuro");
       assert.equal(themeToggle.title, "Cambiar a tema claro");
-      assert.equal(document.title, "TOPYKLY");
+      assert.equal(document.title, "TOPYKLY — Comunidad de temas y rankings en español");
 
       state.theme = "light";
       state.topics = [{ id: "topic-1", title: "Tema alpha", subtitle: "Subtitulo", messages: [] }];
@@ -8334,7 +8334,7 @@ await (async () => {
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
 
-    assert.match(html, /<title>TOPYKLY<\/title>/);
+    assert.match(html, /<title>TOPYKLY — Comunidad de temas y rankings en español<\/title>/);
     assert.match(html, /<main id="main-content" class="workspace" aria-label="Chat social">/);
     assert.match(html, /class="topbar__title" aria-label="TOPYKLY"/);
     assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
