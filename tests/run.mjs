@@ -5465,6 +5465,117 @@ await (async () => {
     }
   });
 
+  await test("preview server serves robots.txt and a filtered sitemap.xml", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-sitemap-"));
+    let preview = null;
+
+    try {
+      preview = startPreviewServer({
+        port: 0,
+        host: "127.0.0.1",
+        log() {},
+        dbPath: path.join(tempDir, "preview.sqlite")
+      });
+      if (!preview.server.listening) {
+        await new Promise((resolve, reject) => {
+          preview.server.once("listening", resolve);
+          preview.server.once("error", reject);
+        });
+      }
+
+      const address = preview.server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const store = preview.store;
+
+      store.registerWithPassword({
+        sessionId: "session-sitemap-author",
+        email: "sitemap-author@example.com",
+        password: "password-segura",
+        nickname: "sitemap_autor"
+      });
+      const richTopic = store.createTopic({
+        sessionId: "session-sitemap-author",
+        authMode: "registered",
+        title: "Tema con muchos comentarios",
+        text: "Mensaje raíz."
+      });
+      const richTopicId = richTopic.selectedTopicId || richTopic.topics[0].id;
+      for (let index = 0; index < 3; index += 1) {
+        const commenterSession = `session-sitemap-commenter-${index}`;
+        store.registerWithPassword({
+          sessionId: commenterSession,
+          email: `sitemap-commenter-${index}@example.com`,
+          password: "password-segura",
+          nickname: `sitemap_com_${index}`
+        });
+        store.addMessage(richTopicId, {
+          sessionId: commenterSession,
+          authMode: "registered",
+          text: `Comentario ${index + 1}`
+        });
+      }
+
+      store.registerWithPassword({
+        sessionId: "session-sitemap-thin",
+        email: "sitemap-thin@example.com",
+        password: "password-segura",
+        nickname: "sitemap_thin"
+      });
+      const thinTopic = store.createTopic({
+        sessionId: "session-sitemap-thin",
+        authMode: "registered",
+        title: "Tema sin comentarios",
+        text: "Mensaje raíz sin respuestas."
+      });
+      const thinTopicId = thinTopic.selectedTopicId || thinTopic.topics[0].id;
+
+      store.registerWithPassword({
+        sessionId: "session-sitemap-optout",
+        email: "sitemap-optout@example.com",
+        password: "password-segura",
+        nickname: "sitemap_optout"
+      });
+      store.addMessage(richTopicId, {
+        sessionId: "session-sitemap-optout",
+        authMode: "registered",
+        text: "Comentario de quien no quiere indexarse"
+      });
+      store.updateProfile({
+        sessionId: "session-sitemap-optout",
+        authMode: "registered",
+        displayName: "Opt Out",
+        profileIndexable: false
+      });
+
+      const robotsResponse = await fetch(`${origin}/robots.txt`);
+      assert.equal(robotsResponse.status, 200);
+      const robotsBody = await robotsResponse.text();
+      assert.equal(robotsBody.includes("Disallow: /api/"), true);
+      assert.equal(robotsBody.includes("Disallow: /avatars/"), true);
+      assert.equal(robotsBody.includes("Sitemap: https://topykly.com/sitemap.xml"), true);
+
+      const sitemapResponse = await fetch(`${origin}/sitemap.xml`);
+      assert.equal(sitemapResponse.status, 200);
+      assert.match(sitemapResponse.headers.get("content-type") || "", /application\/xml/);
+      const sitemapBody = await sitemapResponse.text();
+      assert.equal(sitemapBody.includes("<loc>https://topykly.com/</loc>"), true);
+      assert.equal(sitemapBody.includes("<loc>https://topykly.com/temas</loc>"), true);
+      assert.equal(sitemapBody.includes(`/tema/${richTopicId}/`), true);
+      assert.equal(sitemapBody.includes(thinTopicId), false);
+      assert.equal(sitemapBody.includes("/u/Sitemap_autor"), true);
+      assert.equal(sitemapBody.includes("Sitemap_com_0"), true);
+      assert.equal(sitemapBody.includes("Sitemap_optout"), false);
+      assert.equal(sitemapBody.includes("Sitemap_thin"), true);
+    } finally {
+      if (preview) {
+        const closed = new Promise((resolve) => preview.server.once("close", resolve));
+        preview.close();
+        await closed;
+      }
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   await test("client auth surface has no direct password registration bypass", async () => {
     const apiSource = await read("services/api.js");
     const actionsSource = await read("controller-actions.js");

@@ -8,10 +8,13 @@ import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-stor
 import {
   renderNotFoundPage,
   renderProfilePage,
+  renderRobots,
+  renderSitemap,
   renderTopicPage,
   renderTopicsIndexPage,
   resolvePublicOrigin,
-  slugify
+  slugify,
+  topicPath
 } from "./seo-pages.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -983,6 +986,36 @@ function runMessageReactionReset(store, log) {
   }
 }
 
+const SITEMAP_CACHE_TTL_MS = 5 * 60_000;
+
+function sendTextResource(res, req, body, contentType, cacheControl) {
+  res.writeHead(200, {
+    ...getSecurityHeaders({ req }),
+    "Content-Type": contentType,
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": cacheControl
+  });
+  res.end(req.method === "HEAD" ? "" : body);
+}
+
+function buildSitemapXml(store) {
+  const origin = resolvePublicOrigin();
+  const entries = [
+    { loc: `${origin}/` },
+    { loc: `${origin}/temas` },
+    { loc: `${origin}/terms.html` }
+  ];
+  store.getSeoTopicEntries()
+    .filter((topic) => !topic.isThin)
+    .forEach((topic) => {
+      entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
+    });
+  store.getSeoProfileEntries().forEach((profile) => {
+    entries.push({ loc: `${origin}/u/${encodeURIComponent(profile.nickname)}`, lastmod: profile.lastmod });
+  });
+  return renderSitemap(entries);
+}
+
 function isSeoPagePath(pathname) {
   return pathname === "/temas"
     || pathname === "/tema"
@@ -1140,6 +1173,7 @@ export function startPreviewServer({
   const authService = createAuthService();
   const httpRateLimitConfig = resolveHttpRateLimitConfig();
   const httpRateLimitBuckets = new Map();
+  const sitemapCache = { xml: null, expiresAt: 0 };
   const guestCleanupIntervalMs = resolveGuestCleanupIntervalMs();
   const reactionResetCheckIntervalMs = resolveReactionResetCheckIntervalMs();
   const guestCleanupTimer = guestCleanupIntervalMs > 0
@@ -1185,6 +1219,32 @@ export function startPreviewServer({
           return;
         }
         await handleApiRequest(store, authService, req, res, url);
+        return;
+      }
+
+      if (url.pathname === "/robots.txt") {
+        sendTextResource(
+          res,
+          req,
+          renderRobots({ origin: resolvePublicOrigin() }),
+          "text/plain; charset=utf-8",
+          "public, max-age=3600"
+        );
+        return;
+      }
+
+      if (url.pathname === "/sitemap.xml") {
+        if (!sitemapCache.xml || Date.now() >= sitemapCache.expiresAt) {
+          sitemapCache.xml = buildSitemapXml(store);
+          sitemapCache.expiresAt = Date.now() + SITEMAP_CACHE_TTL_MS;
+        }
+        sendTextResource(
+          res,
+          req,
+          sitemapCache.xml,
+          "application/xml; charset=utf-8",
+          "public, max-age=300"
+        );
         return;
       }
 
