@@ -5370,6 +5370,101 @@ await (async () => {
     }
   });
 
+  await test("preview server renders public profile pages for registered users only", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-profile-"));
+    let preview = null;
+
+    try {
+      preview = startPreviewServer({
+        port: 0,
+        host: "127.0.0.1",
+        log() {},
+        dbPath: path.join(tempDir, "preview.sqlite")
+      });
+      if (!preview.server.listening) {
+        await new Promise((resolve, reject) => {
+          preview.server.once("listening", resolve);
+          preview.server.once("error", reject);
+        });
+      }
+
+      const address = preview.server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const store = preview.store;
+
+      store.registerWithPassword({
+        sessionId: "session-profile-owner",
+        email: "profile-owner@example.com",
+        password: "password-segura",
+        nickname: "perfil_publico"
+      });
+      store.createTopic({
+        sessionId: "session-profile-owner",
+        authMode: "registered",
+        title: "Tema del perfil público",
+        text: "Primer mensaje del tema."
+      });
+      store.updateProfile({
+        sessionId: "session-profile-owner",
+        authMode: "registered",
+        displayName: "Perfil <b>Público</b>",
+        description: "Descripción con <script>etiquetas</script>",
+        profileShowJoinedAt: false
+      });
+
+      const profileResponse = await fetch(`${origin}/u/Perfil_publico`);
+      assert.equal(profileResponse.status, 200);
+      const profileHtml = await profileResponse.text();
+      assert.equal(profileHtml.includes("Perfil &lt;b&gt;Público&lt;/b&gt;"), true);
+      assert.equal(profileHtml.includes("<script>etiquetas</script>"), false);
+      assert.equal(profileHtml.includes("Miembro desde"), false);
+      assert.equal(profileHtml.includes("Tema del perfil público"), true);
+      assert.equal(profileHtml.includes(`<meta name="robots" content="index,follow">`), true);
+      assert.equal(profileHtml.includes(`"@type":"ProfilePage"`), true);
+      assert.equal(
+        profileHtml.includes(`<link rel="canonical" href="https://topykly.com/u/Perfil_publico">`),
+        true
+      );
+
+      const caseRedirect = await fetch(`${origin}/u/PERFIL_PUBLICO`, { redirect: "manual" });
+      assert.equal(caseRedirect.status, 301);
+      assert.equal(caseRedirect.headers.get("location"), "/u/Perfil_publico");
+      await caseRedirect.arrayBuffer();
+
+      const optOut = store.updateProfile({
+        sessionId: "session-profile-owner",
+        authMode: "registered",
+        displayName: "Perfil <b>Público</b>",
+        profileIndexable: false
+      });
+      assert.equal(optOut.viewer.profileIndexable, false);
+      const noindexResponse = await fetch(`${origin}/u/Perfil_publico`);
+      assert.equal(noindexResponse.status, 200);
+      assert.equal(noindexResponse.headers.get("x-robots-tag"), "noindex");
+      const noindexHtml = await noindexResponse.text();
+      assert.equal(noindexHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
+
+      const keepsOptOut = store.updateProfile({
+        sessionId: "session-profile-owner",
+        authMode: "registered",
+        displayName: "Perfil <b>Público</b>"
+      });
+      assert.equal(keepsOptOut.viewer.profileIndexable, false);
+
+      const guestResponse = await fetch(`${origin}/u/desconocido_123`);
+      assert.equal(guestResponse.status, 404);
+      const guestHtml = await guestResponse.text();
+      assert.equal(guestHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
+    } finally {
+      if (preview) {
+        const closed = new Promise((resolve) => preview.server.once("close", resolve));
+        preview.close();
+        await closed;
+      }
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   await test("client auth surface has no direct password registration bypass", async () => {
     const apiSource = await read("services/api.js");
     const actionsSource = await read("controller-actions.js");

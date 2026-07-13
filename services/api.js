@@ -254,6 +254,7 @@ export const api = {
     socialTwitter = "",
     socialDiscord = "",
     profileShowSocial = true,
+    profileIndexable = null,
     avatarDataUrl = null,
     removeAvatar = false,
     selectedTopicId = null
@@ -276,6 +277,7 @@ export const api = {
         socialTwitter,
         socialDiscord,
         profileShowSocial,
+        profileIndexable,
         avatarDataUrl,
         removeAvatar,
         selectedTopicId

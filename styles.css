@@ -10939,3 +10939,17 @@ button.icon-button.profile-modal__close {
   opacity: 1;
   text-decoration: underline;
 }
+
+.public-profile-modal__permalink {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: inherit;
+  opacity: 0.7;
+  text-decoration: underline;
+}
+
+.public-profile-modal__permalink:hover,
+.public-profile-modal__permalink:focus-visible {
+  opacity: 1;
+}

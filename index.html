@@ -592,6 +592,15 @@
             </div>
             <textarea id="profileDescriptionInput" maxlength="180" placeholder="Cuenta algo breve sobre ti" readonly></textarea>
           </div>
+          <div class="profile-modal__joined" id="profileIndexableSection">
+            <span class="profile-modal__joined-info">
+              <span class="profile-modal__joined-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+              </span>
+              <span class="profile-modal__joined-text">Perfil en buscadores</span>
+            </span>
+            <button class="profile-modal__visibility-button" id="profileIndexableVisibilityButton" type="button" aria-label="Ocultar perfil de buscadores" aria-pressed="false" data-visible="true" data-profile-visibility="indexable"></button>
+          </div>
           <div class="profile-modal__bottom-row">
             <div class="profile-modal__field profile-modal__field--social" id="profileSocialSection">
               <span class="profile-modal__social-legend">Redes sociales</span>
@@ -778,6 +787,7 @@
             <h2 class="profile-modal__title">Perfil</h2>
             <h2 id="publicProfileName">Usuario</h2>
             <p class="public-profile-modal__username" id="publicProfileUsername">@usuario</p>
+            <a class="public-profile-modal__permalink" id="publicProfilePermalink" href="#" target="_blank" rel="noopener" hidden>Ver perfil público</a>
           </div>
           <button class="icon-button icon-button--compact profile-modal__close" id="closePublicProfileModalButton" type="button" aria-label="Cerrar perfil">
             <span class="modal-close-icon" aria-hidden="true">

@@ -7,6 +7,7 @@ import { createAuthService } from "./auth-service.js";
 import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-store.js";
 import {
   renderNotFoundPage,
+  renderProfilePage,
   renderTopicPage,
   renderTopicsIndexPage,
   resolvePublicOrigin,
@@ -621,6 +622,7 @@ async function handleApiRequest(store, authService, req, res, url) {
         socialTwitter: body.socialTwitter,
         socialDiscord: body.socialDiscord,
         profileShowSocial: body.profileShowSocial !== false,
+        profileIndexable: typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
         avatarDataUrl: body.avatarDataUrl,
         removeAvatar: body.removeAvatar === true,
         selectedTopicId: body.selectedTopicId ?? null
@@ -982,7 +984,11 @@ function runMessageReactionReset(store, log) {
 }
 
 function isSeoPagePath(pathname) {
-  return pathname === "/temas" || pathname === "/tema" || pathname.startsWith("/tema/");
+  return pathname === "/temas"
+    || pathname === "/tema"
+    || pathname.startsWith("/tema/")
+    || pathname === "/u"
+    || pathname.startsWith("/u/");
 }
 
 function handleSeoPageRequest(store, req, res, url) {
@@ -1006,6 +1012,42 @@ function handleSeoPageRequest(store, req, res, url) {
   }
 
   const segments = url.pathname.split("/").filter(Boolean);
+
+  if (segments[0] === "u") {
+    let nickname = "";
+    try {
+      nickname = decodeURIComponent(segments[1] || "");
+    } catch {
+      nickname = "";
+    }
+    if (!nickname || segments.length > 2) {
+      sendHtml(res, req, 404, renderNotFoundPage());
+      return;
+    }
+
+    let profile;
+    try {
+      profile = store.getPublicProfileByNickname(nickname);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        sendHtml(res, req, 404, renderNotFoundPage());
+        return;
+      }
+      throw error;
+    }
+
+    if (profile.nickname !== nickname) {
+      sendRedirect(res, 301, `/u/${encodeURIComponent(profile.nickname)}`);
+      return;
+    }
+
+    sendHtml(res, req, 200, renderProfilePage(profile, { origin }), {
+      "Cache-Control": "public, max-age=300",
+      ...(profile.indexable ? {} : { "X-Robots-Tag": "noindex" })
+    });
+    return;
+  }
+
   let topicId = "";
   let requestedSlug = "";
   try {

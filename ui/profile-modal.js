@@ -201,6 +201,7 @@ export function renderProfileModal(state, dom) {
   }
   setVisibilityButton(dom.profileDescriptionVisibilityButton, showDescription, "descripción", justOpened);
   setVisibilityButton(dom.profileJoinedAtVisibilityButton, showJoinedAt, "fecha de registro", justOpened);
+  setVisibilityButton(dom.profileIndexableVisibilityButton, viewer.profileIndexable !== false, "perfil en buscadores", justOpened);
 
   const showSocial = viewer.profileShowSocial !== false;
   setVisibilityButton(dom.profileSocialVisibilityButton, showSocial, "redes sociales", justOpened);

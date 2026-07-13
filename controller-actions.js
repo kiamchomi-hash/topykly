@@ -492,6 +492,9 @@ export function createActionHandlers({
     const socialTwitter = dom.socialTwitterInput?.value?.trim() || "";
     const socialDiscord = dom.socialDiscordInput?.value?.trim() || "";
     const profileShowSocial = dom.profileSocialVisibilityButton?.dataset?.visible !== "false";
+    const profileIndexable = dom.profileIndexableVisibilityButton
+      ? dom.profileIndexableVisibilityButton.dataset?.visible !== "false"
+      : null;
 
     if (dom.saveProfileButton) {
       dom.saveProfileButton.disabled = true;
@@ -514,6 +517,7 @@ export function createActionHandlers({
         socialTwitter,
         socialDiscord,
         profileShowSocial,
+        profileIndexable,
         avatarDataUrl,
         removeAvatar,
         selectedTopicId: state.selectedTopicId

@@ -842,6 +842,7 @@ function initSchema(db) {
   ensureColumn(db, "users", "likes_anonymous", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "notifications_friends_only", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "profile_indexable", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "nickname", "TEXT");
   ensureColumn(db, "users", "nickname_norm", "TEXT");
   ensureColumn(db, "users", "password_hash", "TEXT");
@@ -1253,6 +1254,7 @@ function mapViewerRow(row, sessionRow) {
     socialTwitter: row.social_twitter ?? "",
     socialDiscord: row.social_discord ?? "",
     profileShowSocial: row.profile_show_social !== 0,
+    profileIndexable: row.profile_indexable !== 0,
     likesAnonymous: row.likes_anonymous === 1,
     filterProfanity: row.filter_profanity === 1,
     notificationsFriendsOnly: row.notifications_friends_only === 1,
@@ -3492,7 +3494,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({ sessionId, authMode, displayName = null, username = null, age = null, acceptedTerms = false, termsVersion = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, socialWhatsapp = "", socialInstagram = "", socialTiktok = "", socialFacebook = "", socialTwitter = "", socialDiscord = "", profileShowSocial = true, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateProfile({ sessionId, authMode, displayName = null, username = null, age = null, acceptedTerms = false, termsVersion = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, socialWhatsapp = "", socialInstagram = "", socialTiktok = "", socialFacebook = "", socialTwitter = "", socialDiscord = "", profileShowSocial = true, profileIndexable = null, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -3544,11 +3546,15 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
             : context.viewer.avatarReviewStatus ?? null;
         const nextTermsAcceptedAt = completingProfile ? nowIso : context.viewerRow.terms_accepted_at ?? null;
         const nextTermsVersion = completingProfile ? termsVersion : context.viewerRow.terms_version ?? null;
+        const nextProfileIndexable = profileIndexable === null
+          ? (context.viewerRow.profile_indexable !== 0 ? 1 : 0)
+          : (profileIndexable === false ? 0 : 1);
 
         db.prepare(`
           UPDATE users
           SET name = ?, nickname = ?, nickname_norm = ?, description = ?, profile_show_description = ?, profile_show_joined_at = ?,
               social_whatsapp = ?, social_instagram = ?, social_tiktok = ?, social_facebook = ?, social_twitter = ?, social_discord = ?, profile_show_social = ?,
+              profile_indexable = ?,
               avatar_url = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
               registration_age = ?, terms_accepted_at = ?, terms_version = ?,
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
@@ -3567,6 +3573,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           normalizedSocialTwitter,
           normalizedSocialDiscord,
           profileShowSocial === false ? 0 : 1,
+          nextProfileIndexable,
           nextAvatarUrl,
           nextPendingUrl,
           nextReviewStatus,
@@ -4305,6 +4312,76 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         commentCount,
         likeCount
       };
+    },
+    getPublicProfileByNickname(nickname) {
+      const key = normalizeUniqueNameKey(nickname);
+      const row = key
+        ? db.prepare(`
+          SELECT id, name, nickname, description, created_at, updated_at, avatar_url,
+                 profile_show_description, profile_show_joined_at, profile_indexable
+          FROM users
+          WHERE nickname_norm = ? AND type = 'registered' AND status = 'active'
+        `).get(key)
+        : null;
+      if (!row) {
+        throw new ApiError(404, "PROFILE_NOT_FOUND", "Perfil no encontrado.");
+      }
+
+      const stats = db.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM topics WHERE author_id = ? AND status != 'blocked') AS post_count,
+          (SELECT COUNT(*) FROM messages WHERE author_id = ? AND kind = 'user' AND is_root = 0) AS comment_count,
+          (SELECT COALESCE(SUM(likes), 0) FROM messages WHERE author_id = ? AND kind = 'user') AS like_count
+      `).get(row.id, row.id, row.id);
+      const recentTopics = db.prepare(`
+        SELECT id, title
+        FROM topics
+        WHERE author_id = ? AND status IN (?, ?)
+        ORDER BY created_at DESC
+        LIMIT 5
+      `).all(row.id, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED);
+      const postCount = Number(stats?.post_count ?? 0);
+      const commentCount = Number(stats?.comment_count ?? 0);
+      const hasActivity = postCount > 0 || commentCount > 0;
+
+      return {
+        name: row.name,
+        nickname: row.nickname,
+        avatarUrl: row.avatar_url ?? null,
+        description: row.profile_show_description !== 0 ? row.description || "" : "",
+        joinedAt: row.profile_show_joined_at !== 0 ? row.created_at : null,
+        postCount,
+        commentCount,
+        likeCount: Number(stats?.like_count ?? 0),
+        recentTopics,
+        indexable: row.profile_indexable !== 0 && hasActivity,
+        lastmod: row.updated_at ?? row.created_at ?? null
+      };
+    },
+    getSeoProfileEntries() {
+      return db.prepare(`
+        SELECT users.nickname, users.updated_at, users.created_at
+        FROM users
+        WHERE users.type = 'registered'
+          AND users.status = 'active'
+          AND users.nickname IS NOT NULL
+          AND users.profile_indexable != 0
+          AND (
+            EXISTS (
+              SELECT 1 FROM topics
+              WHERE topics.author_id = users.id AND topics.status != 'blocked'
+            )
+            OR EXISTS (
+              SELECT 1 FROM messages
+              WHERE messages.author_id = users.id AND messages.kind = 'user' AND messages.is_root = 0
+            )
+          )
+        ORDER BY users.created_at ASC
+        LIMIT 500
+      `).all().map((row) => ({
+        nickname: row.nickname,
+        lastmod: row.updated_at ?? row.created_at ?? null
+      }));
     },
     getDiagnosticsForViewer({ sessionId, authMode, ipAddress = "" } = {}) {
       return withTransaction(db, () => {

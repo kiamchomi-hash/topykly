@@ -79,6 +79,14 @@ export function renderPublicProfileModal(state, dom) {
     dom.publicProfileUsername.textContent = user.nickname ? `@${user.nickname}` : "";
   }
 
+  if (dom.publicProfilePermalink) {
+    const hasPublicPage = user.type === "registered" && Boolean(user.nickname);
+    dom.publicProfilePermalink.hidden = !hasPublicPage;
+    if (hasPublicPage) {
+      dom.publicProfilePermalink.setAttribute("href", `/u/${encodeURIComponent(user.nickname)}`);
+    }
+  }
+
   const publicAvatarUrl = isCurrentUser ? user.avatarPendingUrl || user.avatarUrl || "" : user.avatarUrl || "";
   setPublicProfileAvatar(dom.publicProfileAvatar, publicAvatarUrl);
 
