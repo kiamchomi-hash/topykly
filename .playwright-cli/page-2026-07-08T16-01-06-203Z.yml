@@ -1,0 +1,62 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic "TOPYKLY" [ref=e16]:
+        - img [ref=e18]
+        - generic [ref=e23]:
+          - generic [ref=e24]: TOPY
+          - generic [ref=e25]: KLY
+      - generic [ref=e26]:
+        - button "Iniciar sesión" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Iniciar sesión
+        - button "Abrir menú" [expanded] [ref=e125] [cursor=pointer]:
+          - img [ref=e127]
+    - main "Chat social" [ref=e29]:
+      - region "Temas" [ref=e30]:
+        - generic [ref=e31]:
+          - button "dasda 1 , Matias_velazco" [ref=e129] [cursor=pointer]:
+            - img [ref=e38]
+            - generic [ref=e42]:
+              - generic [ref=e43]: dasda
+              - generic [ref=e44]:
+                - generic [ref=e130]: "1"
+                - generic [ref=e131]: ","
+                - generic [ref=e132]: Matias_velazco
+          - button "Crear nuevo tema de chat" [ref=e46] [cursor=pointer]: Crear nuevo tema
+  - dialog "Menú móvil" [ref=e134]:
+    - generic [ref=e135]:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic: TOPY
+          - generic: KLY
+      - button "Cerrar menú" [active] [ref=e136] [cursor=pointer]:
+        - img [ref=e138]
+    - region "Acciones secundarias" [ref=e140]:
+      - generic [ref=e142]:
+        - generic:
+          - img
+        - textbox [ref=e143]:
+          - /placeholder: Buscar en menú
+      - generic [ref=e144]:
+        - button "Inicio" [ref=e145] [cursor=pointer]:
+          - img [ref=e147]
+          - generic [ref=e151]: Inicio
+        - button "Paletas" [ref=e152] [cursor=pointer]:
+          - img [ref=e154]
+          - generic [ref=e159]: Paletas
+        - button "Usuarios" [ref=e160] [cursor=pointer]:
+          - img [ref=e162]
+          - generic [ref=e169]: Usuarios
+        - button "Ranking" [ref=e170] [cursor=pointer]:
+          - img [ref=e172]
+          - generic [ref=e175]: Ranking
+      - generic "Tema" [ref=e176]:
+        - switch "Tema oscuro" [checked] [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - img

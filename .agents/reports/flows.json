@@ -1,13 +1,19 @@
 {
-  "agentName": "Agente de Flujos de Usabilidad",
-  "status": "Sugerencia",
-  "lastChecked": "2026-07-07T16:10:00.000Z",
-  "suggestions": [
-    {
-      "level": "suggestion",
-      "message": "Mejorar el flujo de recuperación de contraseña: Si el usuario introduce credenciales erróneas tres veces seguidas en el modal de autenticación, mostrar un enlace de ayuda directa o reinicio en lugar de solo la alerta genérica de error.",
-      "id": "snsmqyt",
-      "agent": "flows"
-    }
-  ]
+    "agentName":  "Agente de Flujos de Usabilidad",
+    "status":  "Corregido",
+    "lastChecked":  "2026-07-09T00:00:00.000Z",
+    "suggestions":  [
+                        {
+                            "level":  "suggestion",
+                            "message":  "Mejorar el flujo de recuperación de contraseña: Si el usuario introduce credenciales erróneas tres veces seguidas en el modal de autenticación, mostrar un enlace de ayuda directa o reinicio en lugar de solo la alerta genérica de error.",
+                            "id":  "snsmqyt",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "La hidratacion del backend ahora preserva la seleccion local vigente cuando un payload tardio trae un selectedTopicId anterior, evitando saltos al clickear temas rapidamente.",
+                            "id":  "topic-selection-race",
+                            "agent":  "flows"
+                        }
+                    ]
 }

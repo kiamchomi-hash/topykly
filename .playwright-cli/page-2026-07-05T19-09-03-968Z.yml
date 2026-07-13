@@ -1,0 +1,164 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - button "Paletas" [ref=f2e5] [cursor=pointer]:
+        - generic [ref=f2e11]: Paletas
+      - switch "Tema oscuro" [ref=f2e13] [cursor=pointer]:
+        - generic [ref=f2e14]:
+          - generic:
+            - generic:
+              - img
+            - generic:
+              - img
+    - generic "TOPYKLY" [ref=f2e16]:
+      - img [ref=f2e18]
+      - generic [ref=f2e23]:
+        - generic [ref=f2e24]: TOPY
+        - generic [ref=f2e25]: KLY
+    - button "Iniciar sesión" [ref=f2e27] [cursor=pointer]:
+      - generic [ref=f2e28]: Iniciar sesión
+  - main "Chat social" [ref=f2e29]:
+    - region "Temas" [ref=f2e30]:
+      - generic [ref=f2e31]:
+        - generic [ref=f2e35]:
+          - button "teste 2, Cooco" [ref=f2e36] [cursor=pointer]:
+            - generic [ref=f2e38]:
+              - generic [ref=f2e39]: teste
+              - generic [ref=f2e40]: 2, Cooco
+          - button "gola 3, Cooco" [ref=f2e41] [cursor=pointer]:
+            - generic [ref=f2e43]:
+              - generic [ref=f2e44]: gola
+              - generic [ref=f2e45]: 3, Cooco
+          - button "hola 3, Cooco" [ref=f2e46] [cursor=pointer]:
+            - generic [ref=f2e48]:
+              - generic [ref=f2e49]: hola
+              - generic [ref=f2e50]: 3, Cooco
+        - button "Crear nuevo tema" [ref=f2e52] [cursor=pointer]
+    - region [ref=f2e53]:
+      - generic [ref=f2e54]:
+        - textbox "Titulo del tema" [ref=f2e56]
+        - textbox "Mensaje" [ref=f2e58]:
+          - /placeholder: Primer posteo del tema
+        - button "Crear tema" [ref=f2e59] [cursor=pointer]:
+          - generic [ref=f2e60]: Crear tema
+    - region "Comunidad" [ref=f2e61]:
+      - heading "Comunidad" [level=2] [ref=f2e65]
+      - generic [ref=f2e66]:
+        - generic [ref=f2e67]:
+          - generic [ref=f2e68]:
+            - img [ref=f2e70]
+            - heading "Usuarios conectados" [level=3] [ref=f2e73]
+          - generic [ref=f2e74]:
+            - article [ref=f2e75] [cursor=pointer]:
+              - 'button "Seleccionar usuario: Perfil_demo" [ref=f2e77]':
+                - paragraph [ref=f2e78]: Perfil_demo
+              - generic [ref=f2e79]:
+                - button "Ver perfil" [ref=f2e80]:
+                  - img [ref=f2e81]
+                - button "Mensaje directo" [ref=f2e84]:
+                  - img [ref=f2e85]
+            - article [ref=f2e87] [cursor=pointer]:
+              - 'button "Seleccionar usuario: ToneLike0533" [ref=f2e89]':
+                - paragraph [ref=f2e90]: ToneLike0533
+              - generic [ref=f2e91]:
+                - button "Ver perfil" [ref=f2e92]:
+                  - img [ref=f2e93]
+                - button "Mensaje directo" [ref=f2e96]:
+                  - img [ref=f2e97]
+            - article [ref=f2e99] [cursor=pointer]:
+              - 'button "Seleccionar usuario: FixedLike2725" [ref=f2e101]':
+                - paragraph [ref=f2e102]: FixedLike2725
+              - generic [ref=f2e103]:
+                - button "Ver perfil" [ref=f2e104]:
+                  - img [ref=f2e105]
+                - button "Mensaje directo" [ref=f2e108]:
+                  - img [ref=f2e109]
+            - article [ref=f2e111] [cursor=pointer]:
+              - 'button "Seleccionar usuario: FreshLike9353" [ref=f2e113]':
+                - paragraph [ref=f2e114]: FreshLike9353
+              - generic [ref=f2e115]:
+                - button "Ver perfil" [ref=f2e116]:
+                  - img [ref=f2e117]
+                - button "Mensaje directo" [ref=f2e120]:
+                  - img [ref=f2e121]
+            - article [ref=f2e123] [cursor=pointer]:
+              - 'button "Seleccionar usuario: LikeTester" [ref=f2e125]':
+                - paragraph [ref=f2e126]: LikeTester
+              - generic [ref=f2e127]:
+                - button "Ver perfil" [ref=f2e128]:
+                  - img [ref=f2e129]
+                - button "Mensaje directo" [ref=f2e132]:
+                  - img [ref=f2e133]
+            - article [ref=f2e135] [cursor=pointer]:
+              - 'button "Seleccionar usuario: ux_temporal_2" [ref=f2e137]':
+                - paragraph [ref=f2e138]: ux_temporal_2
+              - generic [ref=f2e139]:
+                - button "Ver perfil" [ref=f2e140]:
+                  - img [ref=f2e141]
+                - button "Mensaje directo" [ref=f2e144]:
+                  - img [ref=f2e145]
+            - article [ref=f2e147] [cursor=pointer]:
+              - 'button "Seleccionar usuario: FixUser" [ref=f2e149]':
+                - paragraph [ref=f2e150]: FixUser
+              - generic [ref=f2e151]:
+                - button "Ver perfil" [ref=f2e152]:
+                  - img [ref=f2e153]
+                - button "Mensaje directo" [ref=f2e156]:
+                  - img [ref=f2e157]
+            - article [ref=f2e159] [cursor=pointer]:
+              - 'button "Seleccionar usuario: User Flow" [ref=f2e161]':
+                - paragraph [ref=f2e162]: User Flow
+              - generic [ref=f2e163]:
+                - button "Ver perfil" [ref=f2e164]:
+                  - img [ref=f2e165]
+                - button "Mensaje directo" [ref=f2e168]:
+                  - img [ref=f2e169]
+            - article [ref=f2e171] [cursor=pointer]:
+              - 'button "Seleccionar usuario: Admin Flow" [ref=f2e173]':
+                - paragraph [ref=f2e174]: Admin Flow
+              - generic [ref=f2e175]:
+                - button "Ver perfil" [ref=f2e176]:
+                  - img [ref=f2e177]
+                - button "Mensaje directo" [ref=f2e180]:
+                  - img [ref=f2e181]
+            - article [ref=f2e183] [cursor=pointer]:
+              - 'button "Seleccionar usuario: Kiam Chomi" [ref=f2e185]':
+                - paragraph [ref=f2e186]: Kiam Chomi
+              - generic [ref=f2e187]:
+                - button "Ver perfil" [ref=f2e188]:
+                  - img [ref=f2e189]
+                - button "Mensaje directo" [ref=f2e192]:
+                  - img [ref=f2e193]
+        - generic [ref=f2e195]:
+          - generic [ref=f2e197]:
+            - img [ref=f2e199]
+            - heading "Ranking" [level=3] [ref=f2e202]
+          - group "Alcance del ranking" [ref=f2e204]:
+            - button "GLOBAL" [pressed] [ref=f2e205] [cursor=pointer]
+            - button "TEMA" [ref=f2e206] [cursor=pointer]
+          - generic "Cambiar ranking" [ref=f2e207]:
+            - button "Ranking anterior" [ref=f2e208] [cursor=pointer]:
+              - img [ref=f2e210]
+            - 'button "Modo actual: TEMAS COMENTARIOS" [ref=f2e212] [cursor=pointer]':
+              - generic:
+                - generic: TEMAS COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=f2e213] [cursor=pointer]:
+              - img [ref=f2e215]
+          - generic [ref=f2e218]:
+            - article [ref=f2e219]:
+              - generic [ref=f2e220]: "1"
+              - generic [ref=f2e221]:
+                - paragraph [ref=f2e222]: gola
+                - paragraph [ref=f2e223]: 3 comentarios
+            - article [ref=f2e224]:
+              - generic [ref=f2e225]: "2"
+              - generic [ref=f2e226]:
+                - paragraph [ref=f2e227]: hola
+                - paragraph [ref=f2e228]: 3 comentarios
+            - article [ref=f2e229]:
+              - generic [ref=f2e230]: "3"
+              - generic [ref=f2e231]:
+                - paragraph [ref=f2e232]: teste
+                - paragraph [ref=f2e233]: 2 comentarios

@@ -47,14 +47,70 @@ function renderAvatarItem(item) {
   return node;
 }
 
-function renderReportItem(report) {
-  const node = el("article", "admin-panel__item");
+function createAdminActionButton(label, actionType, targetType, targetId, isConfirming) {
+  const button = el(
+    "button",
+    `text-button admin-panel__action${isConfirming ? " is-confirming" : ""}`,
+    isConfirming ? "¿Confirmar?" : label
+  );
+  button.type = "button";
+  button.dataset.adminAction = actionType;
+  button.dataset.targetType = targetType;
+  button.dataset.targetId = targetId;
+  return button;
+}
+
+function renderReportItem(report, adminConfirmAction) {
+  const node = el("article", "admin-panel__item admin-panel__item--report");
   const info = el("div", "admin-panel__item-info");
+  const target = report.target;
+
+  let title;
+  let subtitle;
+  if (report.entityType === "message" && target) {
+    title = target.text || "Comentario eliminado";
+    subtitle = `De ${target.authorName} en "${target.topicTitle}"`;
+  } else if (report.entityType === "topic" && target) {
+    title = target.title;
+    subtitle = `Tema de ${target.authorName}`;
+  } else if (report.entityType === "user" && target) {
+    title = target.name;
+    subtitle = target.status === "expelled" ? "Usuario (ya sancionado)" : "Usuario";
+  } else {
+    title = `${report.entityType}: ${report.entityId}`;
+    subtitle = "Contenido no disponible";
+  }
+
   info.append(
-    el("strong", "admin-panel__item-title", `${report.entityType}: ${report.entityId}`),
-    el("span", "admin-panel__item-meta", report.reason || "Sin motivo")
+    el("strong", "admin-panel__item-title", title),
+    el("span", "admin-panel__item-meta", subtitle),
+    el("span", "admin-panel__item-meta", `Motivo: ${report.reason || "Sin motivo"} - reportado por ${report.reporterName}`)
   );
   node.append(info);
+
+  if (report.entityType === "message" && target) {
+    const actions = el("div", "admin-panel__item-actions");
+    const deleteKey = `delete_message:message:${report.entityId}`;
+    const sanctionKey = `expel_user:user:${target.authorId}`;
+    actions.append(
+      createAdminActionButton(
+        "Eliminar comentario",
+        "delete_message",
+        "message",
+        report.entityId,
+        adminConfirmAction?.key === deleteKey
+      ),
+      createAdminActionButton(
+        "Sancionar usuario",
+        "expel_user",
+        "user",
+        target.authorId,
+        adminConfirmAction?.key === sanctionKey
+      )
+    );
+    node.append(actions);
+  }
+
   return node;
 }
 
@@ -94,7 +150,7 @@ export function renderAdminPanel(state, dom) {
 
   dom.adminPanelBody.textContent = "";
   if (!dashboard.loaded && isOpen) {
-    dom.adminPanelBody.append(renderEmpty("Cargando moderacion..."));
+    dom.adminPanelBody.append(renderEmpty("Cargando moderación..."));
     return;
   }
 
@@ -107,7 +163,9 @@ export function renderAdminPanel(state, dom) {
     renderSection(
       "Reportes abiertos",
       reportCount,
-      reports.length ? reports.map(renderReportItem) : [renderEmpty("No hay reportes abiertos.")]
+      reports.length
+        ? reports.map((report) => renderReportItem(report, state.adminConfirmAction))
+        : [renderEmpty("No hay reportes abiertos.")]
     )
   );
 }

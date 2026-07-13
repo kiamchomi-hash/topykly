@@ -4,24 +4,18 @@ import { renderIntoTargets } from "./render-utils.js";
 
 const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 24;
 const COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX = 1;
+const MESSAGE_CARD_MIN_HEIGHT_PX = 112;
 
 export function syncComposerTextareaHeight(textarea) {
   if (typeof HTMLTextAreaElement === "undefined" || !(textarea instanceof HTMLTextAreaElement)) {
     return;
   }
 
-  textarea.style.height = "auto";
-
-  const styles = getComputedStyle(textarea);
-  const maxHeight = Number.parseFloat(styles.maxHeight);
-  const nextHeight = Number.isFinite(maxHeight)
-    ? Math.min(textarea.scrollHeight, maxHeight)
-    : textarea.scrollHeight;
-
-  textarea.style.height = `${nextHeight}px`;
+  textarea.style.height = "";
+  const visibleHeight = textarea.clientHeight || textarea.offsetHeight;
   textarea.classList.toggle(
     "is-scrollable",
-    Number.isFinite(maxHeight) && textarea.scrollHeight > maxHeight + COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX
+    visibleHeight > 0 && textarea.scrollHeight > visibleHeight + COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX
   );
 }
 
@@ -185,7 +179,7 @@ function syncMessageCardHeights(messageStream) {
       return;
     }
 
-    const nextMinHeight = `${Math.max(84, getMessageBodyMeasuredScrollHeight(body))}px`;
+    const nextMinHeight = `${Math.max(MESSAGE_CARD_MIN_HEIGHT_PX, getMessageBodyMeasuredScrollHeight(body))}px`;
     if (card.style.height !== "auto") {
       card.style.height = "auto";
     }

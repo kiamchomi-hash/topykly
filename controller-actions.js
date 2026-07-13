@@ -1,7 +1,7 @@
 import { createChatActions } from "./controller-chat-actions.js";
 import { createRankingActions } from "./controller-ranking-actions.js";
-import { api } from "./services/api.js?v=20260709-palettefocus5";
-import { dispatch, reducers } from "./store-logic.js";
+import { api } from "./services/api.js?v=20260709-topicrace1";
+import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 import {
   applyPaletteToDocument,
   CUSTOM_PALETTE_ID,
@@ -13,6 +13,16 @@ import {
   updateDocumentFavicon
 } from "./palettes.js";
 import { getWebNotificationPermission, requestWebNotificationPermission } from "./ui/notifications.js";
+
+const ADMIN_ACTION_FEEDBACK = {
+  approve_avatar: "Foto aprobada",
+  reject_avatar: "Foto rechazada",
+  delete_message: "Comentario eliminado",
+  expel_user: "Usuario sancionado"
+};
+
+const DESTRUCTIVE_ADMIN_ACTIONS = new Set(["delete_message", "expel_user"]);
+const ADMIN_CONFIRM_WINDOW_MS = 4000;
 
 function focusPaletteOption(dom, paletteId) {
   dom.paletteOptionGrid
@@ -106,7 +116,9 @@ export function createActionHandlers({
   closeDrawers
 }) {
   let syncAuthUiRef = () => {};
+  let openOidcProfileCompletionRef = () => {};
   let feedbackTimer = 0;
+  let adminConfirmTimer = 0;
   dispatch(state, reducers.setWebNotificationsPermission, getWebNotificationPermission());
 
   function render() {
@@ -170,7 +182,7 @@ export function createActionHandlers({
       return result;
     }
 
-    dispatch(state, reducers.hydrateFromBackend, result);
+    dispatch(state, reducers.mergeLiveTopics, result);
     render();
     return result;
   }
@@ -182,31 +194,78 @@ export function createActionHandlers({
       turnstileToken,
       selectedTopicId: resolveSelectedTopicId(selectedTopicId)
     });
-    dispatch(state, reducers.hydrateFromBackend, result);
+    dispatch(state, reducers.mergeLiveTopics, result);
     render();
     return result;
   }
 
-  async function registerWithPassword({ email, password, nickname, turnstileToken = "", selectedTopicId = null } = {}) {
-    const result = await api.registerWithPassword({
+  async function requestEmailAuthCode({
+    email,
+    nickname = "",
+    age = null,
+    password = "",
+    acceptedTerms = false,
+    termsVersion = null,
+    turnstileToken = ""
+  } = {}) {
+    return api.requestEmailAuthCode({
       email,
-      password,
       nickname,
-      turnstileToken,
+      age,
+      password,
+      acceptedTerms,
+      termsVersion,
+      turnstileToken
+    });
+  }
+
+  async function verifyEmailAuthCode({ challengeId, code, selectedTopicId = null } = {}) {
+    const result = await api.verifyEmailAuthCode({
+      challengeId,
+      code,
       selectedTopicId: resolveSelectedTopicId(selectedTopicId)
     });
-    dispatch(state, reducers.hydrateFromBackend, result);
+    dispatch(state, reducers.mergeLiveTopics, result);
     render();
     return result;
   }
+
+  async function requestPasswordResetCode({ email, turnstileToken = "" } = {}) {
+    return api.requestPasswordResetCode({ email, turnstileToken });
+  }
+
+  async function confirmPasswordReset({ challengeId, code, newPassword, selectedTopicId = null } = {}) {
+    const result = await api.confirmPasswordReset({
+      challengeId,
+      code,
+      newPassword,
+      selectedTopicId: resolveSelectedTopicId(selectedTopicId)
+    });
+    dispatch(state, reducers.mergeLiveTopics, result);
+    render();
+    return result;
+  }
+
+  async function startAccountLink({ password, turnstileToken = "", selectedTopicId = null } = {}) {
+    return api.startAccountLink({
+      password,
+      turnstileToken,
+      selectedTopicId: resolveSelectedTopicId(selectedTopicId)
+    });
+  }
+
   async function logout() {
     const payload = await api.logout(state.selectedTopicId);
-    dispatch(state, reducers.hydrateFromBackend, payload);
+    dispatch(state, reducers.mergeLiveTopics, payload);
     render();
     return payload;
   }
 
   function openProfileModal() {
+    if (state.viewer?.profilePending) {
+      openOidcProfileCompletionRef();
+      return;
+    }
     dispatch(state, reducers.setProfileModalOpen, true);
     render();
     setTimeout(() => dom.profileNameEditButton?.focus?.(), 0);
@@ -223,14 +282,19 @@ export function createActionHandlers({
       dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
     } catch (error) {
       console.error(error);
-      showFeedback(error?.message || "No se pudo cargar administracion.", { kind: "error" });
+      showFeedback(error?.message || "No se pudo cargar administración.", { kind: "error" });
       dispatch(state, reducers.setAdminDashboard, { loaded: true, reports: [], pendingAvatars: [] });
     }
     render();
   }
 
   function closeAdminPanel() {
+    if (adminConfirmTimer) {
+      clearTimeout(adminConfirmTimer);
+      adminConfirmTimer = 0;
+    }
     dispatch(state, reducers.setAdminPanelOpen, false);
+    dispatch(state, reducers.setAdminConfirmAction, null);
     render();
     dom.adminPanelButton?.focus?.();
   }
@@ -241,11 +305,36 @@ export function createActionHandlers({
   }
 
   async function applyAdminAction(actionType, targetType, targetId) {
+    if (DESTRUCTIVE_ADMIN_ACTIONS.has(actionType)) {
+      const confirmKey = `${actionType}:${targetType}:${targetId}`;
+      const pending = state.adminConfirmAction;
+      const now = Date.now();
+
+      if (!pending || pending.key !== confirmKey || pending.until < now) {
+        if (adminConfirmTimer) {
+          clearTimeout(adminConfirmTimer);
+        }
+        dispatch(state, reducers.setAdminConfirmAction, { key: confirmKey, until: now + ADMIN_CONFIRM_WINDOW_MS });
+        render();
+        adminConfirmTimer = setTimeout(() => {
+          dispatch(state, reducers.setAdminConfirmAction, null);
+          adminConfirmTimer = 0;
+          render();
+        }, ADMIN_CONFIRM_WINDOW_MS);
+        adminConfirmTimer.unref?.();
+        return;
+      }
+
+      clearTimeout(adminConfirmTimer);
+      adminConfirmTimer = 0;
+      dispatch(state, reducers.setAdminConfirmAction, null);
+    }
+
     try {
       await api.applyModerationAction(actionType, targetType, targetId, "", state.selectedTopicId);
       const dashboard = await api.getAdminDashboard();
       dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
-      showFeedback(actionType === "approve_avatar" ? "Foto aprobada" : "Foto rechazada");
+      showFeedback(ADMIN_ACTION_FEEDBACK[actionType] || "Accion aplicada");
     } catch (error) {
       console.error(error);
       showFeedback(error?.message || "No se pudo aplicar la accion.", { kind: "error" });
@@ -274,21 +363,44 @@ export function createActionHandlers({
     }
   }
 
+  function setProfileUsernameFeedback(message = "") {
+    const normalized = String(message || "").trim();
+    if (dom.profileUsernameInput) {
+      if (normalized) {
+        dom.profileUsernameInput.setAttribute("aria-invalid", "true");
+      } else {
+        dom.profileUsernameInput.removeAttribute("aria-invalid");
+      }
+    }
+    if (dom.profileUsernameFeedback) {
+      dom.profileUsernameFeedback.textContent = normalized;
+      dom.profileUsernameFeedback.hidden = !normalized;
+    }
+  }
+
   function skipProfileSetup() {
     dispatch(state, reducers.setProfileModalOpen, false);
-    showFeedback("Puedes completar tu perfil desde Perfil.");
     render();
     dom.profileButton?.focus?.();
   }
 
   async function saveProfile(event) {
     event?.preventDefault?.();
+    const showSavedFeedback = !event || event.submitter === dom.saveProfileButton;
     const displayName = dom.profileNameInput?.value?.trim() || null;
+    const username = dom.profileUsernameInput?.value?.trim() || null;
     const description = dom.profileDescriptionInput?.value?.trim() || "";
     const avatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || null;
     const removeAvatar = dom.profileAvatarInput?.dataset?.removeAvatar === "true";
     const profileShowDescription = dom.profileDescriptionVisibilityButton?.dataset?.visible !== "false";
     const profileShowJoinedAt = dom.profileJoinedAtVisibilityButton?.dataset?.visible !== "false";
+    const socialWhatsapp = dom.socialWhatsappInput?.value?.trim() || "";
+    const socialInstagram = dom.socialInstagramInput?.value?.trim() || "";
+    const socialTiktok = dom.socialTiktokInput?.value?.trim() || "";
+    const socialFacebook = dom.socialFacebookInput?.value?.trim() || "";
+    const socialTwitter = dom.socialTwitterInput?.value?.trim() || "";
+    const socialDiscord = dom.socialDiscordInput?.value?.trim() || "";
+    const profileShowSocial = dom.profileSocialVisibilityButton?.dataset?.visible !== "false";
 
     if (dom.saveProfileButton) {
       dom.saveProfileButton.disabled = true;
@@ -297,25 +409,39 @@ export function createActionHandlers({
 
     try {
       setProfileNameFeedback();
+      setProfileUsernameFeedback();
       const payload = await api.updateProfile({
         displayName,
+        username,
         description,
         profileShowDescription,
         profileShowJoinedAt,
+        socialWhatsapp,
+        socialInstagram,
+        socialTiktok,
+        socialFacebook,
+        socialTwitter,
+        socialDiscord,
+        profileShowSocial,
         avatarDataUrl,
         removeAvatar,
         selectedTopicId: state.selectedTopicId
       });
-      dispatch(state, reducers.hydrateFromBackend, payload);
+      dispatch(state, reducers.mergeLiveTopics, payload);
       dispatch(state, reducers.setProfileModalOpen, false);
-      showFeedback(avatarDataUrl ? "Perfil actualizado. La foto queda pendiente de revision." : removeAvatar ? "Perfil actualizado. Foto eliminada." : "Perfil actualizado");
+      if (showSavedFeedback) {
+        showFeedback(avatarDataUrl ? "Perfil actualizado. La foto queda pendiente de revision." : removeAvatar ? "Perfil actualizado. Foto eliminada." : "Perfil actualizado");
+      }
       return payload;
     } catch (error) {
       console.error(error);
+      const usernameError = ["NICKNAME_TAKEN", "USERNAME_REQUIRED", "USERNAME_IMMUTABLE"].includes(error?.code);
       const message = error?.code === "NICKNAME_TAKEN"
-        ? "Ese nombre no esta disponible."
+        ? "Ese username no esta disponible."
         : error?.message || "No se pudo actualizar el perfil.";
-      if (error?.code === "NICKNAME_TAKEN" || error?.code === "VALIDATION_ERROR") {
+      if (usernameError) {
+        setProfileUsernameFeedback(message);
+      } else if (error?.code === "VALIDATION_ERROR") {
         setProfileNameFeedback(message);
       }
       showFeedback(message, { kind: "error" });
@@ -326,7 +452,24 @@ export function createActionHandlers({
         dom.saveProfileButton.setAttribute("aria-busy", "false");
       }
       render();
+      if (!state.isProfileModalOpen) {
+        dom.profileButton?.focus?.();
+      }
     }
+  }
+
+  async function completeOidcProfile({ username, age = null, acceptedTerms = false, termsVersion = null } = {}) {
+    const payload = await api.updateProfile({
+      displayName: username,
+      username,
+      age,
+      acceptedTerms,
+      termsVersion,
+      selectedTopicId: state.selectedTopicId
+    });
+    dispatch(state, reducers.mergeLiveTopics, payload);
+    render();
+    return payload;
   }
 
   function applyPalette() {
@@ -481,11 +624,6 @@ export function createActionHandlers({
 
     render();
 
-    if (action === "message") {
-      flashTitle(`Mensaje directo con ${targetUser.name} listo para conectar`);
-      return;
-    }
-
     if (action === "friend") {
       sendFriendRequest(userId);
       return;
@@ -496,13 +634,35 @@ export function createActionHandlers({
   function toggleFriendRequestsPanel(forceOpen = null) {
     const nextOpen = forceOpen === null ? !state.isFriendRequestsPanelOpen : Boolean(forceOpen);
     dispatch(state, reducers.setFriendRequestsPanelOpen, nextOpen);
+    if (nextOpen) {
+      dispatch(state, reducers.setNotificationsPanelOpen, false);
+      dispatch(state, reducers.resetFriendRequestsLimits);
+      dispatch(state, reducers.setFriendRequestsTab, "incoming");
+    }
     render();
+  }
+
+  function setFriendRequestsTab(tab) {
+    dispatch(state, reducers.setFriendRequestsTab, tab);
+    render();
+  }
+
+  function loadMoreFriendRequests() {
+    const tab = state.friendRequestsTab || "incoming";
+    if (tab === "incoming" || tab === "outgoing") {
+      const currentLimit = state.friendRequestsLimits?.[tab] || 10;
+      const totalItems = state.friendships?.[tab]?.length || 0;
+      if (currentLimit < totalItems) {
+        dispatch(state, reducers.increaseFriendRequestsLimit, tab);
+        render();
+      }
+    }
   }
 
   async function sendFriendRequest(userId) {
     try {
       const result = await api.sendFriendRequest(userId, resolveSelectedTopicId());
-      dispatch(state, reducers.hydrateFromBackend, result);
+      dispatch(state, reducers.mergeLiveTopics, result);
       const targetUser = state.users.find((user) => user.id === userId);
       showFeedback(targetUser?.friendshipStatus === "friend" ? "Amistad aceptada." : "Solicitud de amistad enviada.");
       render();
@@ -516,7 +676,7 @@ export function createActionHandlers({
   async function acceptFriendRequest(userId) {
     try {
       const result = await api.acceptFriendRequest(userId, resolveSelectedTopicId());
-      dispatch(state, reducers.hydrateFromBackend, result);
+      dispatch(state, reducers.mergeLiveTopics, result);
       showFeedback("Solicitud de amistad aceptada.");
       render();
       return result;
@@ -529,7 +689,7 @@ export function createActionHandlers({
   async function rejectFriendRequest(userId) {
     try {
       const result = await api.rejectFriendRequest(userId, resolveSelectedTopicId());
-      dispatch(state, reducers.hydrateFromBackend, result);
+      dispatch(state, reducers.mergeLiveTopics, result);
       showFeedback("Solicitud de amistad rechazada.");
       render();
       return result;
@@ -549,6 +709,9 @@ export function createActionHandlers({
   function toggleNotificationsPanel(forceOpen = null) {
     const nextOpen = forceOpen === null ? !state.isNotificationsPanelOpen : Boolean(forceOpen);
     dispatch(state, reducers.setNotificationsPanelOpen, nextOpen);
+    if (nextOpen) {
+      dispatch(state, reducers.setFriendRequestsPanelOpen, false);
+    }
     render();
   }
   function dismissNotification(notificationId) {
@@ -564,7 +727,28 @@ export function createActionHandlers({
     if (notificationId) {
       dispatch(state, reducers.markNotificationRead, notificationId);
     }
+    focusTopic(topicId);
+  }
+
+  function clearMessageComposerDraft() {
+    if (!dom.messageInput) {
+      return;
+    }
+
+    dom.messageInput.value = "";
+    dom.messageInput.scrollTop = 0;
+    dom.messageInput.classList?.remove?.("is-scrollable");
+    if (dom.messageInput.dataset) {
+      delete dom.messageInput.dataset.quoteLockLength;
+    }
+  }
+
+  function focusTopic(topicId) {
+    const previousTopicId = state.selectedTopicId || null;
     rankingActions.focusTopic(topicId);
+    if ((topicId || null) !== previousTopicId) {
+      clearMessageComposerDraft();
+    }
   }
 
   const chatActions = createChatActions({
@@ -585,15 +769,25 @@ export function createActionHandlers({
     syncAuthUi() {
       syncAuthUiRef();
     },
+    setOpenOidcProfileCompletionSync(fn) {
+      openOidcProfileCompletionRef = typeof fn === "function" ? fn : () => {};
+    },
+    completeOidcProfile,
     getAuthStatus,
     login,
     loginWithPassword,
-    registerWithPassword,
+    requestEmailAuthCode,
+    verifyEmailAuthCode,
+    requestPasswordResetCode,
+    confirmPasswordReset,
+    startAccountLink,
     logout,
     flashTitle,
     showFeedback,
     enableWebNotifications,
     toggleFriendRequestsPanel,
+    setFriendRequestsTab,
+    loadMoreFriendRequests,
     toggleNotificationsPanel,
     acceptFriendRequest,
     rejectFriendRequest,
@@ -610,16 +804,21 @@ export function createActionHandlers({
     toggleTheme,
     setRankingScope: rankingActions.setRankingScope,
     toggleRankingScope: rankingActions.toggleRankingScope,
-    focusTopic: rankingActions.focusTopic,
+    focusTopic,
     setRankingStep: rankingActions.setRankingStep,
     setScopeRankingStep: rankingActions.setScopeRankingStep,
     selectRankingStep: rankingActions.selectRankingStep,
     createNewTopic: chatActions.createNewTopic,
     submitMessage: chatActions.submitMessage,
     refreshCurrentTopic: chatActions.refreshCurrentTopic,
+    refreshTopicsList: chatActions.refreshTopicsList,
     toggleMessageLike: chatActions.toggleMessageLike,
     toggleMessageDislike: chatActions.toggleMessageDislike,
+    quoteMessage: chatActions.quoteMessage,
     reportEntity: chatActions.reportEntity,
+    openReportModal: chatActions.openReportModal,
+    closeReportModal: chatActions.closeReportModal,
+    submitReportModal: chatActions.submitReportModal,
     openPaletteModal,
     closePaletteModal,
     selectPalette,

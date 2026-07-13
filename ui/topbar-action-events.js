@@ -1,14 +1,19 @@
 import { CUSTOM_PALETTE_ID } from "../palettes.js";
-import { setProfileSectionEditing } from "./profile-modal.js";
-import { dispatch, reducers } from "../store-logic.js";
+import { resetSocialEditing, setProfileSectionEditing, setSocialFieldEditing } from "./profile-modal.js";
+import { dispatch, reducers } from "../store-logic.js?v=20260709-topicrace1";
+import { computeAgeFromBirthdateParts, MINIMUM_REGISTRATION_AGE, populateBirthYearOptions } from "./date-utils.js";
 const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 const PROFILE_AVATAR_CROP_SIZE = 1024;
 const PROFILE_AVATAR_CROP_PREVIEW_SIZE = 256;
 const PROFILE_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-const AUTH_RECOVERY_HELP_THRESHOLD = 3;
 const AUTH_EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const AUTH_NICKNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]{2,23}$/;
+const AUTH_CODE_PATTERN = /^\d{6}$/;
+const AUTH_MINIMUM_AGE = MINIMUM_REGISTRATION_AGE;
+const AUTH_TERMS_VERSION = "2026-07-10";
+const AUTH_RESEND_COOLDOWN_MS = 60000;
+const AUTH_RESEND_DEFAULT_LABEL = "Reenviar código";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled]):not([tabindex='-1'])",
@@ -29,18 +34,32 @@ export function bindTopbarActionEvents(dom, handlers) {
   let turnstileScriptPromise = null;
   let turnstileWidgetId = null;
   let authPasswordMode = "login";
-  let failedPasswordLoginAttempts = 0;
+  let authRegisterStep = "credentials";
+  let authEmailChallenge = null;
+  let authRecoveryMode = false;
+  let authRecoveryStep = "request";
+  let authRecoveryChallenge = null;
   let pendingAuthTopicId = null;
   let turnstileRequired = false;
   let pendingTurnstileToken = null;
   let logoutConfirmUntil = 0;
+  let authButtonErrorTimer = 0;
+  let authValidationMessage = "";
+  let authResendCooldownTimer = 0;
+  let authResendCooldownEndsAt = 0;
   let activeMobileDrawerPanel = null;
   let lastMobilePanelTrigger = null;
   let profileAvatarCropState = null;
+  let authOidcCompletion = false;
+  let oidcCompletionPrompted = false;
+  let authAccountLinkMode = false;
+  let authAccountLinkRequested = handlers.initialAuthAction === "link-account";
   globalThis.__topyklyAuthControllerReady = true;
   syncAuthUi();
+  populateAuthBirthYearOptions();
   setPickerOpenState(false);
   handlers.setAuthUiSync?.(syncAuthUi);
+  handlers.setOpenOidcProfileCompletionSync?.(openOidcProfileCompletion);
 
   function addListener(node, type, listener, options) {
     if (!node || typeof listener !== "function") {
@@ -624,7 +643,6 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    dom.authTurnstile.hidden = !turnstileRequired;
     dom.authTurnstile.dataset.turnstileMode = turnstileRequired ? "silent" : "off";
     if (!turnstileRequired) {
       resetTurnstileToken();
@@ -665,7 +683,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     });
   }
 
-  async function requestTurnstileToken() {
+  async function requestTurnstileToken({ silent = false } = {}) {
     await syncTurnstile();
     if (!turnstileRequired) {
       return "";
@@ -680,8 +698,10 @@ export function bindTopbarActionEvents(dom, handlers) {
       throw new Error("La verificacion anti-bots todavia esta cargando.");
     }
 
-    handlers.flashTitle?.("Verificando acceso...");
-    setAuthStatusMessage("Verificando acceso...");
+    if (!silent) {
+      handlers.flashTitle?.("Verificando acceso...");
+      setAuthStatusMessage("Verificando acceso...");
+    }
     return new Promise((resolve, reject) => {
       pendingTurnstileToken = {
         resolve,
@@ -695,21 +715,134 @@ export function bindTopbarActionEvents(dom, handlers) {
     });
   }
 
-  function setAuthButtonPending(button, pending, pendingText = "Verificando...") {
+  function setAuthButtonPending(button, pending, pendingText = "Verificando...", { preserveLabel = false } = {}) {
     if (!button) {
       return;
     }
 
-    const label = button.querySelector?.("span:last-child") ?? button.querySelector?.("span") ?? button;
+    const label = button.querySelector?.("[data-auth-button-label]") ?? button.querySelector?.("span:last-child") ?? button;
     if (label && !button.dataset.defaultAuthLabel) {
       button.dataset.defaultAuthLabel = label.textContent || "";
     }
 
+    if (pending) {
+      clearTimeout(authButtonErrorTimer);
+      button.classList?.remove?.("is-error");
+    }
+
     button.disabled = pending;
     button.setAttribute("aria-busy", String(pending));
-    if (label) {
+    button.classList?.toggle?.("is-pending", pending);
+    if (label && !preserveLabel) {
       label.textContent = pending ? pendingText : button.dataset.defaultAuthLabel || label.textContent;
     }
+  }
+
+  function flashAuthButtonError(button, message) {
+    if (!button || !message) {
+      return;
+    }
+
+    const label = button.querySelector?.("[data-auth-button-label]") ?? button;
+    if (!button.dataset.defaultAuthLabel) {
+      button.dataset.defaultAuthLabel = label.textContent || "";
+    }
+
+    clearTimeout(authButtonErrorTimer);
+    button.classList?.add?.("is-error");
+    label.textContent = message;
+    button.title = message;
+    authButtonErrorTimer = setTimeout(() => {
+      button.classList?.remove?.("is-error");
+      button.removeAttribute?.("title");
+      if (label.textContent === message) {
+        label.textContent = button.dataset.defaultAuthLabel || label.textContent;
+      }
+    }, 3600);
+    authButtonErrorTimer?.unref?.();
+  }
+
+  function scheduleAuthButtonError(button, message) {
+    const timer = setTimeout(() => flashAuthButtonError(button, message), 0);
+    timer?.unref?.();
+  }
+
+  function clearAuthButtonError(button) {
+    if (!button) {
+      return;
+    }
+
+    clearTimeout(authButtonErrorTimer);
+    button.classList?.remove?.("is-error");
+    button.removeAttribute?.("title");
+  }
+
+  function formatAuthResendCountdown(remainingMs) {
+    const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function tickAuthResendCooldown() {
+    const button = dom.authSendCodeAgainButton;
+    if (!button) {
+      clearInterval(authResendCooldownTimer);
+      authResendCooldownTimer = 0;
+      return;
+    }
+
+    const remainingMs = authResendCooldownEndsAt - Date.now();
+    if (remainingMs <= 0) {
+      stopAuthResendCooldown();
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = `${AUTH_RESEND_DEFAULT_LABEL} (${formatAuthResendCountdown(remainingMs)})`;
+  }
+
+  function startAuthResendCooldown(durationMs = AUTH_RESEND_COOLDOWN_MS) {
+    clearInterval(authResendCooldownTimer);
+    authResendCooldownEndsAt = Date.now() + durationMs;
+    tickAuthResendCooldown();
+    if (typeof setInterval !== "function") {
+      return;
+    }
+    authResendCooldownTimer = setInterval(tickAuthResendCooldown, 1000);
+    authResendCooldownTimer?.unref?.();
+  }
+
+  function stopAuthResendCooldown() {
+    clearInterval(authResendCooldownTimer);
+    authResendCooldownTimer = 0;
+    authResendCooldownEndsAt = 0;
+    const button = dom.authSendCodeAgainButton;
+    if (button) {
+      button.disabled = false;
+      button.textContent = AUTH_RESEND_DEFAULT_LABEL;
+    }
+  }
+
+  function getAuthCodeBoxes() {
+    return Array.from(dom.authCodeBoxes?.querySelectorAll?.(".auth-code-box") ?? []);
+  }
+
+  function syncAuthCodeValueFromBoxes() {
+    if (!dom.authCodeInput) {
+      return;
+    }
+
+    dom.authCodeInput.value = getAuthCodeBoxes().map((box) => box.value || "").join("");
+    dom.authCodeInput.dispatchEvent?.(new Event("input", { bubbles: true }));
+  }
+
+  function setAuthCodeBoxesValue(value) {
+    const digits = String(value || "").replace(/\D/g, "").slice(0, 6).split("");
+    getAuthCodeBoxes().forEach((box, index) => {
+      box.value = digits[index] || "";
+    });
+    syncAuthCodeValueFromBoxes();
   }
 
   function setAuthStatusMessage(message = "", kind = "info") {
@@ -719,20 +852,9 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     const normalized = String(message || "").trim();
     dom.authStatus.textContent = normalized;
-    dom.authStatus.hidden = !normalized;
+    dom.authStatus.hidden = false;
     dom.authStatus.dataset.statusKind = normalized ? kind : "off";
   }
-  function setAuthRecoveryHelpVisible(isVisible) {
-    if (dom.authRecoveryHelp) {
-      dom.authRecoveryHelp.hidden = !isVisible;
-    }
-  }
-
-  function resetAuthRecoveryHelp() {
-    failedPasswordLoginAttempts = 0;
-    setAuthRecoveryHelpVisible(false);
-  }
-
   function setAuthFieldInvalid(input, isInvalid) {
     if (!input) {
       return;
@@ -745,10 +867,40 @@ export function bindTopbarActionEvents(dom, handlers) {
     field?.classList?.toggle?.("is-invalid", Boolean(isInvalid));
   }
 
+  function setAuthTermsInvalid(isInvalid) {
+    dom.authTermsInput?.setAttribute?.("aria-invalid", String(Boolean(isInvalid)));
+    dom.authTermsField?.classList?.toggle?.("is-invalid", Boolean(isInvalid));
+  }
+
+  function populateAuthBirthYearOptions() {
+    populateBirthYearOptions(dom.authBirthYear, AUTH_MINIMUM_AGE);
+  }
+
+  function syncAuthBirthdateAge() {
+    const day = dom.authBirthDay?.value || "";
+    const month = dom.authBirthMonth?.value || "";
+    const year = dom.authBirthYear?.value || "";
+    if (!dom.authAgeInput) {
+      return;
+    }
+
+    if (!day || !month || !year) {
+      dom.authAgeInput.value = "";
+      return;
+    }
+
+    const age = computeAgeFromBirthdateParts(day, month, year);
+    dom.authAgeInput.value = age === null ? "" : String(age);
+    dom.authAgeInput.dispatchEvent?.(new Event("input", { bubbles: true }));
+  }
+
   function resetAuthFieldValidation() {
-    [dom.authNicknameInput, dom.authEmailInput, dom.authPasswordInput].forEach((input) => {
+    [dom.authNicknameInput, dom.authEmailInput, dom.authAgeInput, dom.authCodeInput, dom.authPasswordInput, dom.authPasswordConfirmInput].forEach((input) => {
       setAuthFieldInvalid(input, false);
     });
+    setAuthTermsInvalid(false);
+    clearAuthButtonError(dom.authPasswordButton);
+    clearAuthButtonError(dom.authSendCodeAgainButton);
   }
 
   function markAuthErrorFields(error) {
@@ -756,9 +908,15 @@ export function bindTopbarActionEvents(dom, handlers) {
     const message = String(error?.message || "").toLowerCase();
     let marked = false;
 
-    if (authPasswordMode === "login" && code === "INVALID_CREDENTIALS") {
-      setAuthFieldInvalid(dom.authEmailInput, true);
-      setAuthFieldInvalid(dom.authPasswordInput, true);
+    if ([
+      "INVALID_EMAIL_CODE",
+      "EMAIL_CODE_EXPIRED",
+      "EMAIL_CODE_ATTEMPTS_EXCEEDED",
+      "INVALID_PASSWORD_RESET_CODE",
+      "PASSWORD_RESET_CODE_EXPIRED",
+      "PASSWORD_RESET_ATTEMPTS_EXCEEDED"
+    ].includes(code)) {
+      setAuthFieldInvalid(dom.authCodeInput, true);
       return;
     }
 
@@ -770,6 +928,14 @@ export function bindTopbarActionEvents(dom, handlers) {
       setAuthFieldInvalid(dom.authEmailInput, true);
       marked = true;
     }
+    if (code === "INVALID_AGE" || message.includes("edad") || message.includes("anos")) {
+      setAuthFieldInvalid(dom.authAgeInput, true);
+      marked = true;
+    }
+    if (code === "TERMS_REQUIRED" || message.includes("terminos")) {
+      setAuthTermsInvalid(true);
+      marked = true;
+    }
     if (message.includes("contrasena") || message.includes("contraseña")) {
       setAuthFieldInvalid(dom.authPasswordInput, true);
       marked = true;
@@ -777,53 +943,178 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     if (!marked && code === "VALIDATION_ERROR") {
       setAuthFieldInvalid(dom.authEmailInput, true);
-      setAuthFieldInvalid(dom.authPasswordInput, true);
       if (authPasswordMode === "register") {
         setAuthFieldInvalid(dom.authNicknameInput, true);
+        setAuthFieldInvalid(dom.authAgeInput, true);
       }
     }
   }
 
-  function validateAuthPasswordFields() {
+  function getAuthBirthdateValidationMessage() {
+    const raw = dom.authAgeInput?.value ?? "";
+    if (raw === "") {
+      return "Completa tu fecha de nacimiento.";
+    }
+
+    const age = Number(raw);
+    if (!Number.isInteger(age) || age < AUTH_MINIMUM_AGE || age > 120) {
+      return age < AUTH_MINIMUM_AGE
+        ? `Debes tener al menos ${AUTH_MINIMUM_AGE} años para registrarte.`
+        : "Revisa tu fecha de nacimiento.";
+    }
+
+    return "";
+  }
+
+  function validateAuthEmailFields() {
     resetAuthFieldValidation();
+    authValidationMessage = "";
     const isRegister = authPasswordMode === "register";
     const email = String(dom.authEmailInput?.value || "").trim();
-    const password = String(dom.authPasswordInput?.value || "");
     const nickname = String(dom.authNicknameInput?.value || "").trim();
-    let isValid = true;
+    const password = String(dom.authPasswordInput?.value || "");
+    const code = String(dom.authCodeInput?.value || "").trim();
 
-    if (isRegister && !AUTH_NICKNAME_PATTERN.test(nickname)) {
-      setAuthFieldInvalid(dom.authNicknameInput, true);
-      isValid = false;
-    }
-    if (!AUTH_EMAIL_PATTERN.test(email)) {
-      setAuthFieldInvalid(dom.authEmailInput, true);
-      isValid = false;
-    }
-    if (password.length < 8) {
-      setAuthFieldInvalid(dom.authPasswordInput, true);
-      isValid = false;
+    if (authAccountLinkMode) {
+      if (!password) {
+        setAuthFieldInvalid(dom.authPasswordInput, true);
+        authValidationMessage = "Ingresa tu contraseña actual.";
+        return false;
+      }
+      return true;
     }
 
-    return isValid;
+    if (authRecoveryMode) {
+      if (authRecoveryStep === "request") {
+        if (!AUTH_EMAIL_PATTERN.test(email)) {
+          setAuthFieldInvalid(dom.authEmailInput, true);
+          authValidationMessage = "Ingresa un email válido.";
+          return false;
+        }
+        return true;
+      }
+
+      const codeInvalid = !AUTH_CODE_PATTERN.test(code);
+      const passwordInvalid = password.length < 8;
+      const confirmValue = String(dom.authPasswordConfirmInput?.value || "");
+      const confirmInvalid = !passwordInvalid && confirmValue !== password;
+      if (codeInvalid) {
+        setAuthFieldInvalid(dom.authCodeInput, true);
+      }
+      if (passwordInvalid) {
+        setAuthFieldInvalid(dom.authPasswordInput, true);
+      }
+      if (confirmInvalid) {
+        setAuthFieldInvalid(dom.authPasswordConfirmInput, true);
+      }
+
+      if (codeInvalid) {
+        authValidationMessage = "Ingresa el código de 6 dígitos que te enviamos por email.";
+      } else if (passwordInvalid) {
+        authValidationMessage = password
+          ? "La nueva contraseña debe tener al menos 8 caracteres."
+          : "Ingresa una nueva contraseña.";
+      } else if (confirmInvalid) {
+        authValidationMessage = "Las contraseñas no coinciden.";
+      }
+
+      return !codeInvalid && !passwordInvalid && !confirmInvalid;
+    }
+
+    if (isRegister && authRegisterStep === "verify") {
+      if (!AUTH_CODE_PATTERN.test(code)) {
+        setAuthFieldInvalid(dom.authCodeInput, true);
+        authValidationMessage = "Ingresa el código de 6 dígitos que te enviamos por email.";
+        return false;
+      }
+      return true;
+    }
+
+    if (!isRegister || authRegisterStep === "credentials") {
+      const emailInvalid = !AUTH_EMAIL_PATTERN.test(email);
+      const passwordInvalid = password.length < 8;
+      if (emailInvalid) {
+        setAuthFieldInvalid(dom.authEmailInput, true);
+      }
+      if (passwordInvalid) {
+        setAuthFieldInvalid(dom.authPasswordInput, true);
+      }
+
+      if (emailInvalid && passwordInvalid) {
+        authValidationMessage = "Completa tu email y contraseña.";
+      } else if (emailInvalid) {
+        authValidationMessage = "Ingresa un email válido.";
+      } else if (passwordInvalid) {
+        authValidationMessage = password
+          ? "La contraseña debe tener al menos 8 caracteres."
+          : "Ingresa tu contraseña.";
+      }
+
+      return !emailInvalid && !passwordInvalid;
+    }
+
+    if (authRegisterStep === "profile") {
+      const nicknameInvalid = !AUTH_NICKNAME_PATTERN.test(nickname);
+      const ageMessage = getAuthBirthdateValidationMessage();
+      const termsInvalid = !dom.authTermsInput?.checked;
+
+      if (nicknameInvalid) {
+        setAuthFieldInvalid(dom.authNicknameInput, true);
+      }
+      if (ageMessage) {
+        setAuthFieldInvalid(dom.authAgeInput, true);
+      }
+      if (termsInvalid) {
+        setAuthTermsInvalid(true);
+      }
+
+      if (nicknameInvalid) {
+        authValidationMessage = "El nombre de usuario debe tener 3 a 24 caracteres y empezar con una letra.";
+      } else if (ageMessage) {
+        authValidationMessage = ageMessage;
+      } else if (termsInvalid) {
+        authValidationMessage = "Acepta los Términos y Condiciones para continuar.";
+      }
+
+      return !nicknameInvalid && !ageMessage && !termsInvalid;
+    }
+
+    return true;
   }
 
-  function registerAuthPasswordFailure(error) {
-    const isCredentialFailure = authPasswordMode === "login" && error?.code === "INVALID_CREDENTIALS";
-    if (!isCredentialFailure) {
-      return false;
+  function setAuthPasswordLabelText(text) {
+    const labelText = dom.authPasswordField?.querySelector?.(".auth-email-form__label-text");
+    const textNode = labelText?.firstChild;
+    if (textNode && typeof textNode.nodeValue === "string") {
+      textNode.nodeValue = `${text} `;
     }
-
-    failedPasswordLoginAttempts += 1;
-    const shouldShowHelp = failedPasswordLoginAttempts >= AUTH_RECOVERY_HELP_THRESHOLD;
-    setAuthRecoveryHelpVisible(shouldShowHelp);
-    return shouldShowHelp;
   }
+
   function syncAuthPasswordMode() {
-    const isRegister = authPasswordMode === "register";
+    const isRecovery = authRecoveryMode;
+    const isAccountLink = authAccountLinkMode;
+    const recoveryRequestStep = isRecovery && authRecoveryStep === "request";
+    const recoveryVerifyStep = isRecovery && authRecoveryStep === "verify";
+    const isRegister = !isRecovery && !isAccountLink && authPasswordMode === "register";
+    const isCredentialsStep = !isRecovery && !isAccountLink && (!isRegister || authRegisterStep === "credentials");
+    const isProfileStep = isRegister && authRegisterStep === "profile";
+    const isCodeStep = isRegister && authRegisterStep === "verify";
     if (dom.authPasswordForm) {
-      dom.authPasswordForm.dataset.authMode = authPasswordMode;
+      dom.authPasswordForm.dataset.authMode = isAccountLink ? "link" : isRecovery ? "recovery" : authPasswordMode;
+      dom.authPasswordForm.dataset.authStep = isRecovery ? authRecoveryStep : isRegister ? authRegisterStep : "credentials";
     }
+
+    const authModalTitle = authOidcCompletion
+      ? "Completa tu registro"
+      : isRecovery
+        ? "Recuperar contraseña"
+        : isAccountLink
+          ? "Vincular con Google"
+          : isRegister ? "Regístrate" : "Iniciar Sesión";
+    if (dom.authModalTitle) {
+      dom.authModalTitle.textContent = authModalTitle;
+    }
+    dom.authModal?.setAttribute?.("aria-label", authModalTitle);
 
     [dom.authLoginModeButton, dom.authRegisterModeButton].forEach((button) => {
       if (!button) {
@@ -833,31 +1124,220 @@ export function bindTopbarActionEvents(dom, handlers) {
       const active = button.dataset.authMode === authPasswordMode;
       button.classList?.toggle?.("is-active", active);
       button.setAttribute?.("aria-pressed", String(active));
+      button.disabled = isCodeStep || authOidcCompletion || isRecovery || isAccountLink;
     });
+    const authModeTabsContainer = dom.authLoginModeButton?.closest?.(".auth-mode-tabs") ?? null;
+    if (authModeTabsContainer) {
+      authModeTabsContainer.hidden = authOidcCompletion || isRecovery || isAccountLink;
+    }
 
-    dom.authModal?.querySelectorAll?.(".auth-register-only")?.forEach((node) => {
-      node.hidden = !isRegister;
+    dom.authModal?.querySelectorAll?.(".auth-credentials-step")?.forEach((node) => {
+      node.hidden = !(isCredentialsStep || isRecovery || isAccountLink);
+    });
+    if (dom.authGoogleSection) {
+      dom.authGoogleSection.classList?.toggle?.("is-collapsed", !isCredentialsStep);
+      dom.authGoogleSection.setAttribute?.("aria-hidden", String(!isCredentialsStep));
+    }
+    if (dom.authGoogleButton) {
+      dom.authGoogleButton.disabled = !isCredentialsStep;
+    }
+    dom.authModal?.querySelectorAll?.(".auth-profile-step")?.forEach((node) => {
+      node.hidden = !isProfileStep;
+    });
+    dom.authModal?.querySelectorAll?.(".auth-verify-step")?.forEach((node) => {
+      node.hidden = !(isCodeStep || recoveryVerifyStep);
     });
     if (dom.authNicknameInput) {
-      dom.authNicknameInput.required = isRegister;
-      dom.authNicknameInput.disabled = !isRegister;
+      dom.authNicknameInput.required = isProfileStep;
+      dom.authNicknameInput.disabled = !isProfileStep;
     }
+    if (dom.authAgeInput) {
+      dom.authAgeInput.required = isProfileStep;
+      dom.authAgeInput.disabled = !isProfileStep;
+    }
+    [dom.authBirthDay, dom.authBirthMonth, dom.authBirthYear].forEach((select) => {
+      if (select) {
+        select.required = isProfileStep;
+        select.disabled = !isProfileStep;
+      }
+    });
+    if (dom.authTermsInput) {
+      dom.authTermsInput.required = isProfileStep;
+      dom.authTermsInput.disabled = !isProfileStep;
+    }
+    const emailActive = isCredentialsStep || recoveryRequestStep;
+    if (dom.authEmailInput) {
+      dom.authEmailInput.required = emailActive;
+      dom.authEmailInput.disabled = !emailActive;
+      dom.authEmailInput.readOnly = false;
+    }
+    if (dom.authEmailField) {
+      dom.authEmailField.hidden = recoveryVerifyStep || isAccountLink;
+    }
+    const passwordActive = isCredentialsStep || recoveryVerifyStep || isAccountLink;
     if (dom.authPasswordInput) {
-      dom.authPasswordInput.autocomplete = isRegister ? "new-password" : "current-password";
+      dom.authPasswordInput.required = passwordActive;
+      dom.authPasswordInput.disabled = !passwordActive;
+      dom.authPasswordInput.autocomplete = isRegister || recoveryVerifyStep ? "new-password" : "current-password";
     }
-    const label = dom.authPasswordButton?.querySelector?.("span") ?? dom.authPasswordButton;
+    if (dom.authPasswordField) {
+      dom.authPasswordField.hidden = recoveryRequestStep;
+    }
+    setAuthPasswordLabelText(recoveryVerifyStep ? "Nueva contraseña" : isAccountLink ? "Contraseña actual" : "Contraseña");
+    if (dom.authPasswordConfirmField) {
+      dom.authPasswordConfirmField.hidden = !recoveryVerifyStep;
+    }
+    if (dom.authPasswordConfirmInput) {
+      dom.authPasswordConfirmInput.required = recoveryVerifyStep;
+      dom.authPasswordConfirmInput.disabled = !recoveryVerifyStep;
+    }
+    if (dom.authCodeInput) {
+      dom.authCodeInput.required = isCodeStep || recoveryVerifyStep;
+      dom.authCodeInput.disabled = !(isCodeStep || recoveryVerifyStep);
+    }
+    if (dom.authSendCodeAgainButton) {
+      dom.authSendCodeAgainButton.hidden = !(isCodeStep || recoveryVerifyStep);
+    }
+    if (dom.authRecoveryButton) {
+      // In the register credentials step the button stays as an invisible
+      // placeholder so both tabs keep the fields at the same vertical position.
+      dom.authRecoveryButton.hidden = !(isCredentialsStep && !authOidcCompletion);
+      dom.authRecoveryButton.classList?.toggle?.("is-placeholder", isCredentialsStep && isRegister);
+      dom.authRecoveryButton.disabled = isRegister;
+    }
+    if (dom.authBackButton) {
+      dom.authBackButton.hidden = !(isProfileStep || isRecovery || isAccountLink);
+      dom.authBackButton.textContent = authOidcCompletion ? "Más tarde" : isAccountLink ? "Cancelar" : "Volver";
+    }
+    const label = dom.authPasswordButton?.querySelector?.("[data-auth-button-label]") ?? dom.authPasswordButton;
     if (label) {
-      label.textContent = isRegister ? "Crear cuenta" : "Entrar con email";
+      label.textContent = authOidcCompletion
+        ? "Guardar"
+        : recoveryRequestStep
+        ? "Enviar código"
+        : recoveryVerifyStep
+        ? "Cambiar contraseña"
+        : isAccountLink
+        ? "Continuar con Google"
+        : isCredentialsStep && isRegister
+        ? "Siguiente"
+        : isCodeStep
+        ? "Verificar código"
+        : (isRegister ? "Enviar código" : "Iniciar sesión");
+      if (dom.authPasswordButton) {
+        // Keep the restore label in sync so pending/error flashes revert to the
+        // current mode's text instead of the first one ever captured.
+        dom.authPasswordButton.dataset.defaultAuthLabel = label.textContent;
+      }
+    }
+  }
+
+  function resetAuthEmailChallenge() {
+    authEmailChallenge = null;
+    if (dom.authCodeInput) {
+      dom.authCodeInput.value = "";
+    }
+    if (dom.authCodeHint) {
+      dom.authCodeHint.textContent = "";
+    }
+    setAuthCodeBoxesValue("");
+    stopAuthResendCooldown();
+  }
+
+  function resetAuthFormDraft() {
+    [dom.authNicknameInput, dom.authEmailInput, dom.authAgeInput, dom.authCodeInput, dom.authPasswordInput, dom.authPasswordConfirmInput].forEach((input) => {
+      if (input) {
+        input.value = "";
+      }
+    });
+    [dom.authBirthDay, dom.authBirthMonth, dom.authBirthYear].forEach((select) => {
+      if (select) {
+        select.value = "";
+      }
+    });
+    setAuthCodeBoxesValue("");
+    if (dom.authTermsInput) {
+      dom.authTermsInput.checked = false;
     }
   }
 
   function setAuthPasswordMode(nextMode) {
     authPasswordMode = nextMode === "register" ? "register" : "login";
+    authRegisterStep = "credentials";
+    authRecoveryMode = false;
+    authRecoveryStep = "request";
+    authRecoveryChallenge = null;
+    authAccountLinkMode = false;
+    resetAuthEmailChallenge();
+    resetAuthFormDraft();
     resetTurnstileToken();
-    resetAuthRecoveryHelp();
     resetAuthFieldValidation();
     setAuthStatusMessage();
     syncAuthPasswordMode();
+  }
+
+  function enterPasswordRecovery() {
+    if (authPending) {
+      return;
+    }
+
+    authRecoveryMode = true;
+    authRecoveryStep = "request";
+    authRecoveryChallenge = null;
+    authAccountLinkMode = false;
+    authRegisterStep = "credentials";
+    resetAuthEmailChallenge();
+    resetTurnstileToken();
+    resetAuthFieldValidation();
+    if (dom.authPasswordInput) {
+      dom.authPasswordInput.value = "";
+    }
+    if (dom.authPasswordConfirmInput) {
+      dom.authPasswordConfirmInput.value = "";
+    }
+    setAuthStatusMessage();
+    syncAuthPasswordMode();
+    dom.authEmailInput?.focus?.();
+  }
+
+  function exitPasswordRecovery() {
+    authRecoveryMode = false;
+    authRecoveryStep = "request";
+    authRecoveryChallenge = null;
+    resetAuthEmailChallenge();
+    resetTurnstileToken();
+    resetAuthFieldValidation();
+    if (dom.authPasswordInput) {
+      dom.authPasswordInput.value = "";
+    }
+    if (dom.authPasswordConfirmInput) {
+      dom.authPasswordConfirmInput.value = "";
+    }
+    setAuthStatusMessage();
+    syncAuthPasswordMode();
+    dom.authEmailInput?.focus?.();
+  }
+
+  function openAccountLinkModal() {
+    if (authPending || !isLoggedIn() || !handlers.state?.viewer?.canLinkGoogle) {
+      return;
+    }
+
+    handlers.closeProfileModal?.();
+    pendingAuthTopicId = handlers.state?.selectedTopicId ?? null;
+    authAccountLinkMode = true;
+    authRecoveryMode = false;
+    authRecoveryStep = "request";
+    authRecoveryChallenge = null;
+    authPasswordMode = "login";
+    authRegisterStep = "credentials";
+    resetAuthEmailChallenge();
+    resetAuthFormDraft();
+    resetAuthFieldValidation();
+    setAuthStatusMessage();
+    setAuthModalOpen(true);
+    void syncTurnstile();
+    dom.authPasswordInput?.focus?.();
   }
   function setAuthModalOpen(isOpen) {
     if (dom.authModalBackdrop) {
@@ -887,7 +1367,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     pendingAuthTopicId = handlers.state?.selectedTopicId ?? null;
-    resetAuthRecoveryHelp();
+    resetAuthEmailChallenge();
     resetAuthFieldValidation();
     setAuthStatusMessage();
     setAuthModalOpen(true);
@@ -897,10 +1377,37 @@ export function bindTopbarActionEvents(dom, handlers) {
   function closeAuthModal() {
     pendingAuthTopicId = null;
     resetTurnstileToken();
-    resetAuthRecoveryHelp();
+    authRegisterStep = "credentials";
+    authOidcCompletion = false;
+    authRecoveryMode = false;
+    authRecoveryStep = "request";
+    authRecoveryChallenge = null;
+    authAccountLinkMode = false;
+    resetAuthEmailChallenge();
+    resetAuthFormDraft();
     resetAuthFieldValidation();
     setAuthStatusMessage();
+    if (dom.authGoogleButton) {
+      dom.authGoogleButton.disabled = true;
+    }
     setAuthModalOpen(false);
+  }
+
+  function openOidcProfileCompletion() {
+    if (authPending) {
+      return;
+    }
+
+    pendingAuthTopicId = handlers.state?.selectedTopicId ?? null;
+    authPasswordMode = "register";
+    authRegisterStep = "profile";
+    authOidcCompletion = true;
+    resetAuthEmailChallenge();
+    resetAuthFieldValidation();
+    setAuthStatusMessage();
+    syncAuthPasswordMode();
+    setAuthModalOpen(true);
+    dom.authNicknameInput?.focus?.();
   }
 
   function requestLogoutConfirmation() {
@@ -912,9 +1419,9 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     logoutConfirmUntil = now + 4500;
-    handlers.flashTitle?.("Toca de nuevo para cerrar sesion");
+    handlers.flashTitle?.("Toca de nuevo para cerrar sesión");
   }
-  async function setLoggedIn(nextLoggedIn, { announce = true } = {}) {
+  async function setLoggedIn(nextLoggedIn, { announce = true, silentTurnstile = false } = {}) {
     const currentLoggedIn = isLoggedIn();
     if (currentLoggedIn === nextLoggedIn) {
       syncAuthUi();
@@ -931,7 +1438,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     syncAuthUi();
 
     try {
-      const turnstileToken = nextLoggedIn ? await requestTurnstileToken() : "";
+      const turnstileToken = nextLoggedIn ? await requestTurnstileToken({ silent: silentTurnstile }) : "";
 
       const authResult = nextLoggedIn
         ? await handlers.login?.({ turnstileToken, selectedTopicId: getPendingAuthTopicId() })
@@ -945,12 +1452,12 @@ export function bindTopbarActionEvents(dom, handlers) {
       closeAuthModal();
 
       if (announce) {
-        handlers.flashTitle(nextLoggedIn ? "Sesion iniciada" : "Sesion cerrada");
+        handlers.flashTitle(nextLoggedIn ? "Sesión iniciada" : "Sesión cerrada");
       }
     } catch (error) {
       console.error(error);
       if (announce) {
-        const message = error?.message || (nextLoggedIn ? "No se pudo iniciar sesion" : "No se pudo cerrar sesion");
+        const message = error?.message || (nextLoggedIn ? "No se pudo iniciar sesión" : "No se pudo cerrar sesión");
         setAuthStatusMessage(message, "error");
         handlers.flashTitle(message);
       }
@@ -1014,10 +1521,25 @@ export function bindTopbarActionEvents(dom, handlers) {
     });
 
     syncMobileMenuSearch();
+
+    if (Boolean(handlers.state?.viewer?.profilePending)) {
+      if (!oidcCompletionPrompted) {
+        oidcCompletionPrompted = true;
+        openOidcProfileCompletion();
+      }
+    } else {
+      oidcCompletionPrompted = false;
+    }
+
+    if (authAccountLinkRequested && loggedIn && !authPending) {
+      authAccountLinkRequested = false;
+      openAccountLinkModal();
+    }
   }
 
   addListener(dom.themeToggle, "click", handlers.toggleTheme);
   addListener(dom.refreshButton, "click", handlers.refreshCurrentTopic);
+  addListener(dom.topicsRefreshButton, "click", handlers.refreshTopicsList);
   addListener(dom.messageForm, "submit", handlers.submitMessage);
   addListener(dom.profileButton, "click", handlers.openProfileModal);
   addListener(dom.adminPanelButton, "click", handlers.openAdminPanel);
@@ -1060,11 +1582,11 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   });
   addListener(dom.authGoogleButton, "click", async () => {
-    setAuthButtonPending(dom.authGoogleButton, true, "Verificando...");
+    setAuthButtonPending(dom.authGoogleButton, true, "", { preserveLabel: true });
     try {
-      await setLoggedIn(true);
+      await setLoggedIn(true, { silentTurnstile: true });
     } finally {
-      setAuthButtonPending(dom.authGoogleButton, false);
+      setAuthButtonPending(dom.authGoogleButton, false, "", { preserveLabel: true });
     }
   });
   addListener(dom.closeAuthModalButton, "click", closeAuthModal);
@@ -1075,65 +1597,289 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
   addListener(dom.authLoginModeButton, "click", () => setAuthPasswordMode("login"));
   addListener(dom.authRegisterModeButton, "click", () => setAuthPasswordMode("register"));
+  addListener(dom.authBackButton, "click", () => {
+    if (authPending) {
+      return;
+    }
+    if (authOidcCompletion) {
+      closeAuthModal();
+      handlers.flashTitle("Puedes completar tu registro desde el botón de acceso.");
+      return;
+    }
+    if (authAccountLinkMode) {
+      closeAuthModal();
+      return;
+    }
+    if (authRecoveryMode) {
+      if (authRecoveryStep === "verify") {
+        authRecoveryStep = "request";
+        authRecoveryChallenge = null;
+        resetAuthEmailChallenge();
+        resetAuthFieldValidation();
+        if (dom.authPasswordInput) {
+          dom.authPasswordInput.value = "";
+        }
+        if (dom.authPasswordConfirmInput) {
+          dom.authPasswordConfirmInput.value = "";
+        }
+        setAuthStatusMessage();
+        syncAuthPasswordMode();
+        dom.authEmailInput?.focus?.();
+        return;
+      }
+      exitPasswordRecovery();
+      return;
+    }
+    if (authPasswordMode !== "register" || authRegisterStep !== "profile") {
+      return;
+    }
+    authRegisterStep = "credentials";
+    resetAuthFieldValidation();
+    setAuthStatusMessage();
+    syncAuthPasswordMode();
+    dom.authEmailInput?.focus?.();
+  });
+
+  async function requestAuthEmailCode() {
+    if (authEmailChallenge) {
+      resetTurnstileToken();
+    }
+    const turnstileToken = await requestTurnstileToken();
+    const challenge = await handlers.requestEmailAuthCode({
+      email: dom.authEmailInput?.value || "",
+      nickname: dom.authNicknameInput?.value || "",
+      age: dom.authAgeInput?.value || null,
+      password: dom.authPasswordInput?.value || "",
+      acceptedTerms: Boolean(dom.authTermsInput?.checked),
+      termsVersion: AUTH_TERMS_VERSION,
+      turnstileToken
+    });
+    authEmailChallenge = challenge;
+    authRegisterStep = "verify";
+    setAuthCodeBoxesValue("");
+    setAuthFieldInvalid(dom.authCodeInput, false);
+    syncAuthPasswordMode();
+    setAuthStatusMessage();
+    if (dom.authCodeHint) {
+      dom.authCodeHint.textContent = "";
+      const emailStrong = document.createElement("strong");
+      emailStrong.textContent = challenge.email;
+      dom.authCodeHint.append("Te enviamos un código a ", emailStrong, ". Revisa también spam.");
+    }
+    startAuthResendCooldown();
+    getAuthCodeBoxes()[0]?.focus?.();
+    return challenge;
+  }
+
+  async function requestPasswordRecoveryCode() {
+    if (authRecoveryChallenge) {
+      resetTurnstileToken();
+    }
+    const turnstileToken = await requestTurnstileToken();
+    const email = String(dom.authEmailInput?.value || "").trim();
+    const challenge = await handlers.requestPasswordResetCode?.({ email, turnstileToken });
+    authRecoveryChallenge = { ...challenge, email };
+    authRecoveryStep = "verify";
+    setAuthCodeBoxesValue("");
+    setAuthFieldInvalid(dom.authCodeInput, false);
+    if (dom.authPasswordInput) {
+      dom.authPasswordInput.value = "";
+    }
+    if (dom.authPasswordConfirmInput) {
+      dom.authPasswordConfirmInput.value = "";
+    }
+    syncAuthPasswordMode();
+    setAuthStatusMessage();
+    if (dom.authCodeHint) {
+      dom.authCodeHint.textContent = "";
+      const emailStrong = document.createElement("strong");
+      emailStrong.textContent = email;
+      dom.authCodeHint.append("Si ", emailStrong, " tiene una cuenta, recibirá un código. Revisa también spam.");
+    }
+    startAuthResendCooldown();
+    getAuthCodeBoxes()[0]?.focus?.();
+    return challenge;
+  }
+
   addListener(dom.authPasswordForm, "submit", async (event) => {
     event.preventDefault();
-    if (authPending || isLoggedIn()) {
+    if (authPending || (isLoggedIn() && !authOidcCompletion && !authAccountLinkMode)) {
       return;
     }
 
-    if (!validateAuthPasswordFields()) {
-      setAuthStatusMessage("Revisa los campos marcados.", "error");
+    if (!validateAuthEmailFields()) {
+      const message = authValidationMessage || "Revisa los campos marcados.";
+      setAuthStatusMessage(message, "error");
+      flashAuthButtonError(dom.authPasswordButton, message);
+      return;
+    }
+
+    const isRegister = !authRecoveryMode && !authAccountLinkMode && authPasswordMode === "register";
+    if (isRegister && authRegisterStep === "credentials") {
+      authRegisterStep = "profile";
+      setAuthStatusMessage();
+      syncAuthPasswordMode();
+      dom.authNicknameInput?.focus?.();
       return;
     }
 
     authPending = true;
     syncAuthUi();
-    setAuthButtonPending(dom.authPasswordButton, true, "Verificando...");
+    const showVerifyingLabel = authEmailChallenge
+      || authAccountLinkMode
+      || (authRecoveryMode && authRecoveryStep === "verify");
+    setAuthButtonPending(dom.authPasswordButton, true, showVerifyingLabel ? "Verificando..." : "Enviando...");
 
     try {
-      setAuthStatusMessage("Verificando acceso...");
-      const turnstileToken = await requestTurnstileToken();
-
-      const payload = {
-        email: dom.authEmailInput?.value || "",
-        password: dom.authPasswordInput?.value || "",
-        turnstileToken,
-        selectedTopicId: getPendingAuthTopicId()
-      };
-      const authResult = authPasswordMode === "register"
-        ? await handlers.registerWithPassword?.({ ...payload, nickname: dom.authNicknameInput?.value || "" })
-        : await handlers.loginWithPassword?.(payload);
+      let authResult = null;
+      if (authOidcCompletion) {
+        authResult = await handlers.completeOidcProfile?.({
+          username: dom.authNicknameInput?.value || "",
+          age: Number(dom.authAgeInput?.value) || null,
+          acceptedTerms: Boolean(dom.authTermsInput?.checked),
+          termsVersion: AUTH_TERMS_VERSION
+        });
+      } else if (authAccountLinkMode) {
+        const turnstileToken = await requestTurnstileToken();
+        setAuthStatusMessage("Verificando contraseña...");
+        const linkResult = await handlers.startAccountLink?.({
+          password: dom.authPasswordInput?.value || "",
+          turnstileToken,
+          selectedTopicId: getPendingAuthTopicId()
+        });
+        if (linkResult?.redirected) {
+          setAuthStatusMessage("Redirigiendo a Google...");
+          return;
+        }
+        authResult = linkResult;
+      } else if (authRecoveryMode) {
+        if (authRecoveryStep === "request") {
+          await requestPasswordRecoveryCode();
+          return;
+        }
+        setAuthStatusMessage("Verificando código...");
+        authResult = await handlers.confirmPasswordReset?.({
+          challengeId: authRecoveryChallenge?.challengeId || "",
+          code: dom.authCodeInput?.value || "",
+          newPassword: dom.authPasswordInput?.value || "",
+          selectedTopicId: getPendingAuthTopicId()
+        });
+      } else if (!isRegister) {
+        const turnstileToken = await requestTurnstileToken();
+        authResult = await handlers.loginWithPassword?.({
+          email: dom.authEmailInput?.value || "",
+          password: dom.authPasswordInput?.value || "",
+          turnstileToken,
+          selectedTopicId: getPendingAuthTopicId()
+        });
+      } else if (authRegisterStep === "profile") {
+        await requestAuthEmailCode();
+        return;
+      } else {
+        setAuthStatusMessage("Verificando código...");
+        authResult = await handlers.verifyEmailAuthCode({
+          challengeId: authEmailChallenge.challengeId,
+          code: dom.authCodeInput?.value || "",
+          selectedTopicId: getPendingAuthTopicId()
+        });
+      }
 
       if (authResult) {
-        resetAuthRecoveryHelp();
+        const successMessage = authOidcCompletion
+          ? "Perfil completado"
+          : authRecoveryMode
+            ? "Contraseña actualizada"
+            : authAccountLinkMode
+              ? "Cuenta de Google vinculada"
+              : authPasswordMode === "register" ? "Cuenta creada" : "Sesión iniciada";
         setAuthStatusMessage();
         closeAuthModal();
-        handlers.flashTitle(authPasswordMode === "register" ? "Cuenta creada" : "Sesion iniciada");
+        handlers.flashTitle(successMessage);
       }
     } catch (error) {
       console.error(error);
       markAuthErrorFields(error);
-      const showRecoveryHelp = registerAuthPasswordFailure(error);
-      const message = showRecoveryHelp
-        ? "No pudimos entrar con esos datos. Usa el enlace de recuperacion si olvidaste tu clave."
-        : error?.message || "No se pudo completar el acceso";
+      const message = error?.message || "No se pudo completar el acceso";
       setAuthStatusMessage(message, "error");
       handlers.flashTitle(message);
+      scheduleAuthButtonError(dom.authPasswordButton, message);
     } finally {
       authPending = false;
       setAuthButtonPending(dom.authPasswordButton, false);
+      syncAuthPasswordMode();
       syncAuthUi();
     }
   });
-  [dom.authNicknameInput, dom.authEmailInput, dom.authPasswordInput].forEach((node) => {
+
+  addListener(dom.authSendCodeAgainButton, "click", async () => {
+    if (authPending || (!authEmailChallenge && !authRecoveryChallenge)) {
+      return;
+    }
+    authPending = true;
+    dom.authSendCodeAgainButton.disabled = true;
+    try {
+      if (authRecoveryMode) {
+        await requestPasswordRecoveryCode();
+      } else {
+        await requestAuthEmailCode();
+      }
+    } catch (error) {
+      markAuthErrorFields(error);
+      const message = error?.message || "No se pudo reenviar el código.";
+      setAuthStatusMessage(message, "error");
+      stopAuthResendCooldown();
+      flashAuthButtonError(dom.authSendCodeAgainButton, message);
+    } finally {
+      authPending = false;
+      syncAuthUi();
+    }
+  });
+
+  [dom.authNicknameInput, dom.authEmailInput, dom.authAgeInput, dom.authCodeInput, dom.authPasswordInput, dom.authPasswordConfirmInput].forEach((node) => {
     addListener(node, "input", () => {
       setAuthFieldInvalid(node, false);
-      if (failedPasswordLoginAttempts > 0) {
-        resetAuthRecoveryHelp();
-        setAuthStatusMessage();
-      }
     });
   });
+  addListener(dom.authRecoveryButton, "click", enterPasswordRecovery);
+  addListener(dom.profileLinkGoogleButton, "click", openAccountLinkModal);
+  [dom.authBirthDay, dom.authBirthMonth, dom.authBirthYear].forEach((select) => {
+    addListener(select, "change", syncAuthBirthdateAge);
+  });
+  getAuthCodeBoxes().forEach((box, index) => {
+    addListener(box, "input", () => {
+      const digit = String(box.value || "").replace(/\D/g, "").slice(-1);
+      box.value = digit;
+      syncAuthCodeValueFromBoxes();
+      if (digit && index < 5) {
+        getAuthCodeBoxes()[index + 1]?.focus?.();
+      }
+    });
+    addListener(box, "keydown", (event) => {
+      if (event.key === "Backspace" && !box.value && index > 0) {
+        const previousBox = getAuthCodeBoxes()[index - 1];
+        if (previousBox) {
+          previousBox.value = "";
+          previousBox.focus?.();
+          syncAuthCodeValueFromBoxes();
+        }
+      } else if (event.key === "ArrowLeft" && index > 0) {
+        getAuthCodeBoxes()[index - 1]?.focus?.();
+      } else if (event.key === "ArrowRight" && index < 5) {
+        getAuthCodeBoxes()[index + 1]?.focus?.();
+      }
+    });
+    addListener(box, "paste", (event) => {
+      const text = event.clipboardData?.getData?.("text") || "";
+      if (!text) {
+        return;
+      }
+      event.preventDefault?.();
+      setAuthCodeBoxesValue(text);
+      const filledCount = String(text).replace(/\D/g, "").length;
+      getAuthCodeBoxes()[Math.min(filledCount, 5)]?.focus?.();
+    });
+  });
+  addListener(dom.authTermsInput, "change", () => setAuthTermsInvalid(false));
   addListener(typeof window !== "undefined" ? window : null, "keydown", (event) => {
     if (event.key === "Escape" && dom.profileAvatarCropBackdrop && !dom.profileAvatarCropBackdrop.hidden) {
       closeProfileAvatarCrop();
@@ -1144,18 +1890,20 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (event.key === "Escape" && dom.authModalBackdrop && !dom.authModalBackdrop.hidden) {
       closeAuthModal();
     }
+
+    if (event.key === "Escape" && dom.reportModalBackdrop && !dom.reportModalBackdrop.hidden) {
+      handlers.closeReportModal?.();
+    }
   });
 
-  addListener(dom.friendRequestsButton, "click", () => {
+  addListener(dom.friendRequestsButton, "click", (event) => {
+    event?.stopPropagation();
     handlers.toggleFriendRequestsPanel?.();
   });
 
-  addListener(dom.notificationsButton, "click", () => {
+  addListener(dom.notificationsButton, "click", (event) => {
+    event?.stopPropagation();
     handlers.toggleNotificationsPanel?.();
-  });
-
-  addListener(dom.messagesButton, "click", () => {
-    handlers.flashTitle("Mensajes abiertos");
   });
 
   addListener(dom.storeButton, "click", () => {
@@ -1189,6 +1937,13 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     if (target.dataset.mobileTopbarAction === "profile") {
       openProfileShortcut();
+      return;
+    }
+
+    if (target.dataset.mobileTopbarAction === "friends") {
+      setMobileDrawerPanel(null, { restoreFocus: false });
+      handlers.closeDrawers?.();
+      scheduleOpen(() => handlers.toggleFriendRequestsPanel?.(true));
       return;
     }
 
@@ -1249,6 +2004,40 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
     void handlers.applyAdminAction?.(target.dataset.adminAction, target.dataset.targetType, target.dataset.targetId);
+  });
+  addListener(dom.closeReportModalButton, "click", () => handlers.closeReportModal?.());
+  addListener(dom.reportModalBackdrop, "click", (event) => {
+    if (event.target === dom.reportModalBackdrop) {
+      handlers.closeReportModal?.();
+    }
+  });
+  function syncReportModalSubmitState() {
+    if (!dom.reportModalSubmitButton) {
+      return;
+    }
+
+    const selected = dom.reportReasonForm?.querySelector?.("input[name='reportReason']:checked");
+    const isOther = selected?.value === "other";
+    const hasCustomText = Boolean(dom.reportOtherReasonInput?.value?.trim());
+    dom.reportModalSubmitButton.disabled = !selected || (isOther && !hasCustomText);
+  }
+
+  addListener(dom.reportReasonForm, "change", (event) => {
+    const target = resolveEventElement(event);
+    if (!(target instanceof HTMLInputElement) || target.name !== "reportReason") {
+      return;
+    }
+
+    syncReportModalSubmitState();
+  });
+  addListener(dom.reportOtherReasonInput, "input", syncReportModalSubmitState);
+  addListener(dom.reportReasonForm, "submit", (event) => {
+    event.preventDefault();
+    const selected = dom.reportReasonForm?.querySelector?.("input[name='reportReason']:checked");
+    if (!(selected instanceof HTMLInputElement)) {
+      return;
+    }
+    void handlers.submitReportModal?.(selected.value, dom.reportOtherReasonInput?.value || "");
   });
   function setProfileAvatarSelection(dataUrl) {
     if (dom.profileAvatarInput) {
@@ -1488,7 +2277,11 @@ export function bindTopbarActionEvents(dom, handlers) {
     const nextVisible = button.dataset.visible !== "false" ? false : true;
     button.dataset.visible = String(nextVisible);
     button.setAttribute("aria-pressed", String(!nextVisible));
-    const label = button.dataset.profileVisibility === "joinedAt" ? "fecha de registro" : "descripción";
+    const label = button.dataset.profileVisibility === "joinedAt"
+      ? "fecha de registro"
+      : button.dataset.profileVisibility === "social"
+        ? "redes sociales"
+        : "descripción";
     button.setAttribute("aria-label", nextVisible ? `Ocultar ${label}` : `Mostrar ${label}`);
     button.innerHTML = nextVisible
       ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg>`
@@ -1498,11 +2291,33 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.profileDescriptionEditButton, "click", () => toggleProfileSection("description"));
   addListener(dom.profileDescriptionVisibilityButton, "click", () => toggleProfileVisibility(dom.profileDescriptionVisibilityButton));
   addListener(dom.profileJoinedAtVisibilityButton, "click", () => toggleProfileVisibility(dom.profileJoinedAtVisibilityButton));
+  addListener(dom.profileSocialVisibilityButton, "click", () => toggleProfileVisibility(dom.profileSocialVisibilityButton));
+  dom.profileSocialSection?.querySelectorAll?.("[data-profile-social-edit]")?.forEach((button) => {
+    addListener(button, "click", () => {
+      const field = button.closest(".profile-modal__social-field");
+      const isEditing = field?.dataset?.editing === "true";
+      setSocialFieldEditing(field, !isEditing);
+      if (!isEditing) {
+        const input = field?.querySelector?.("input");
+        input?.focus?.();
+        input?.select?.();
+      } else {
+        button.focus();
+      }
+    });
+  });
   addListener(dom.profileNameInput, "input", () => {
     dom.profileNameInput?.removeAttribute?.("aria-invalid");
     if (dom.profileNameFeedback) {
       dom.profileNameFeedback.textContent = "";
       dom.profileNameFeedback.hidden = true;
+    }
+  });
+  addListener(dom.profileUsernameInput, "input", () => {
+    dom.profileUsernameInput?.removeAttribute?.("aria-invalid");
+    if (dom.profileUsernameFeedback) {
+      dom.profileUsernameFeedback.textContent = "";
+      dom.profileUsernameFeedback.hidden = true;
     }
   });
   addListener(dom.profileAvatarInput, "change", () => {
@@ -1586,7 +2401,10 @@ export function bindTopbarActionEvents(dom, handlers) {
       profileAvatarCropState.drag = null;
     }
   });
-  addListener(dom.profileModal?.querySelector?.("#profileForm") ?? null, "submit", handlers.saveProfile);
+  addListener(dom.profileModal?.querySelector?.("#profileForm") ?? null, "submit", (event) => {
+    resetSocialEditing(dom);
+    handlers.saveProfile(event);
+  });
   addListener(dom.paletteModalBackdrop, "click", (event) => {
     if (event.target === dom.paletteModalBackdrop) {
       dismissPaletteModal();

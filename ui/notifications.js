@@ -2,7 +2,7 @@ import { getActiveAccentColor } from "../palettes.js";
 
 const NOTIFICATION_LIMIT = 120;
 const MESSAGE_PREVIEW_LIMIT = 86;
-const MENTION_BOUNDARY = String.raw`(?:^|[^a-z0-9_])`;
+const MENTION_BOUNDARY = String.raw`(?:^|[^a-z0-9_.-])`;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 function normalizeToken(value) {
@@ -11,7 +11,7 @@ function normalizeToken(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9_]+/g, "");
+    .replace(/[^a-z0-9_.-]+/g, "");
 }
 
 function getUserName(users, userId) {
@@ -43,13 +43,11 @@ function didRootLikeIncrease(previousTopic, topic) {
 function getViewerMentionTokens(state, payload) {
   const viewer = payload.viewer ?? state.viewer;
   const viewerUser = payload.users?.find?.((user) => user.id === viewer?.id) ?? null;
-  return [
-    viewer?.id,
-    viewer?.name,
-    viewer?.displayName,
-    viewerUser?.name,
-    viewerUser?.displayName
-  ]
+  const username = viewer?.nickname || viewerUser?.nickname || null;
+  const legacyNames = username
+    ? []
+    : [viewer?.name, viewer?.displayName, viewerUser?.name, viewerUser?.displayName];
+  return [viewer?.id, username, ...legacyNames]
     .map(normalizeToken)
     .filter(Boolean);
 }
@@ -61,7 +59,8 @@ function messageMentionsViewer(message, mentionTokens) {
     .replace(/[\u0300-\u036f]/g, "");
 
   return mentionTokens.some((token) => {
-    const mentionPattern = new RegExp(`${MENTION_BOUNDARY}@${token}(?![a-z0-9_])`, "i");
+    const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const mentionPattern = new RegExp(`${MENTION_BOUNDARY}@${escapedToken}(?![a-z0-9_.-])`, "i");
     return mentionPattern.test(normalized);
   });
 }
@@ -369,9 +368,17 @@ function positionNotificationPanel(panel, button) {
     return;
   }
 
+  if (!rect.width && !rect.height) {
+    // Anchor button hidden (mobile viewport): fall back to the CSS default position.
+    panel.style.removeProperty("--notification-panel-width");
+    panel.style.removeProperty("--notification-panel-right");
+    panel.style.removeProperty("--notification-panel-top");
+    return;
+  }
+
   const gap = 10;
   const viewportPadding = 12;
-  const panelWidth = Math.min(380, Math.max(292, window.innerWidth - viewportPadding * 2));
+  const panelWidth = Math.min(400, Math.max(292, window.innerWidth - viewportPadding * 2));
   const right = Math.max(viewportPadding, window.innerWidth - rect.right);
   const top = Math.min(
     window.innerHeight - viewportPadding,
@@ -1165,10 +1172,24 @@ export function renderNotifications(state, dom) {
   positionNotificationPanel(node, dom.notificationsButton);
   node.hidden = !isOpen;
   node.setAttribute("aria-hidden", String(!isOpen));
-  node.replaceChildren(
-    createNotificationPanelHeader(),
+
+  const wasOpen = node.dataset.lastOpen === "true";
+  let savedScrollTop = 0;
+  if (isOpen && wasOpen) {
+    savedScrollTop = node.querySelector?.(".notification-panel__body")?.scrollTop || 0;
+  }
+  node.dataset.lastOpen = String(isOpen);
+
+  const body = document.createElement("div");
+  body.className = "notification-panel__body";
+  body.append(
     ...(groupedNotifications.length ? groupedNotifications.map(createToast) : [createNotificationEmptyState(state)])
   );
+  node.replaceChildren(createNotificationPanelHeader(), body);
+
+  if (savedScrollTop > 0) {
+    body.scrollTop = savedScrollTop;
+  }
 }
 
 export function getWebNotificationPermission() {

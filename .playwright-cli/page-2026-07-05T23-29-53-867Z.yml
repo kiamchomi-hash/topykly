@@ -1,0 +1,77 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic "TOPYKLY" [ref=e16]:
+        - img [ref=e18]
+        - generic [ref=e23]:
+          - generic [ref=e24]: TOPY
+          - generic [ref=e25]: KLY
+      - generic [ref=e26]:
+        - switch "Tema oscuro" [checked] [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - img
+        - button "Iniciar sesión" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Iniciar sesión
+        - button "Abrir menú" [expanded] [ref=e78] [cursor=pointer]:
+          - img [ref=e80]
+    - main "Chat social" [ref=e29]:
+      - region "Temas" [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e35]:
+            - button "gola 4, Cooco" [ref=e82] [cursor=pointer]:
+              - generic [ref=e84]:
+                - generic [ref=e85]: gola
+                - generic [ref=e86]: 4, Cooco
+            - button "teste 2, Cooco" [ref=e87] [cursor=pointer]:
+              - generic [ref=e89]:
+                - generic [ref=e90]: teste
+                - generic [ref=e91]: 2, Cooco
+            - button "hola 3, Cooco" [ref=e92] [cursor=pointer]:
+              - generic [ref=e94]:
+                - generic [ref=e95]: hola
+                - generic [ref=e96]: 3, Cooco
+          - button "Crear nuevo tema" [ref=e37] [cursor=pointer]
+  - dialog "Menú móvil" [ref=e98]:
+    - generic [ref=e99]:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic: TOPY
+          - generic: KLY
+      - button "Cerrar menú" [ref=e100] [cursor=pointer]:
+        - generic [ref=e101]: ×
+    - generic [ref=e139]:
+      - generic [ref=e140]:
+        - button "Volver al menú" [ref=e141] [cursor=pointer]:
+          - img [ref=e143]
+        - heading "Ranking" [level=3] [ref=e146]
+      - generic [ref=e147]:
+        - generic [ref=e148]:
+          - heading "Global" [level=3] [ref=e151]
+          - generic [ref=e152]:
+            - button "Ranking anterior" [ref=e153] [cursor=pointer]:
+              - img [ref=e155]
+            - 'button "Modo actual: TEMAS COMENTARIOS" [ref=e157] [cursor=pointer]':
+              - generic:
+                - generic: TEMAS COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [active] [ref=e158] [cursor=pointer]:
+              - img [ref=e160]
+        - generic [ref=e162]:
+          - heading "Tema" [level=3] [ref=e165]
+          - generic [ref=e166]:
+            - button "Ranking anterior" [ref=e167] [cursor=pointer]:
+              - img [ref=e169]
+            - 'button "Modo actual: COMENTARIOS" [ref=e171] [cursor=pointer]':
+              - generic:
+                - generic: COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=e172] [cursor=pointer]:
+              - img [ref=e174]

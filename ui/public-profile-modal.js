@@ -1,4 +1,11 @@
 import { formatJoinedDateParts } from "./date-utils.js";
+import { createSocialLinkButton } from "../components.js";
+
+const SOCIAL_PLATFORMS = ["whatsapp", "instagram", "tiktok", "facebook", "twitter", "discord"];
+
+function capitalize(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 function setPublicProfileAvatar(container, avatarUrl) {
   if (!container) {
@@ -43,6 +50,10 @@ function getRecentUserCafes(topics, userId) {
     .map(({ topic }) => topic);
 }
 
+function isTopicAvailable(topic) {
+  return topic?.visible !== false && topic?.status !== "blocked" && topic?.status !== "expelled";
+}
+
 export function renderPublicProfileModal(state, dom) {
   const user = state.users.find((candidate) => candidate.id === state.publicProfileUserId) || null;
   const isOpen = Boolean(user);
@@ -61,7 +72,11 @@ export function renderPublicProfileModal(state, dom) {
   }
 
   if (dom.publicProfileName) {
-    dom.publicProfileName.textContent = user.nickname || user.name || "Usuario";
+    dom.publicProfileName.textContent = user.name || "Usuario";
+  }
+
+  if (dom.publicProfileUsername) {
+    dom.publicProfileUsername.textContent = user.nickname ? `@${user.nickname}` : "";
   }
 
   const publicAvatarUrl = isCurrentUser ? user.avatarPendingUrl || user.avatarUrl || "" : user.avatarUrl || "";
@@ -71,8 +86,8 @@ export function renderPublicProfileModal(state, dom) {
   const description = user.profileShowDescription === false ? "" : String(user.description || "").trim();
 
   if (dom.publicProfileDescription) {
-    dom.publicProfileDescription.textContent = description || "Sin descripcion visible";
-    dom.publicProfileDescription.hidden = !description;
+    dom.publicProfileDescription.textContent = description || "Sin descripción";
+    dom.publicProfileDescription.classList.toggle("public-profile-modal__description--empty", !description);
   }
 
   if (dom.publicProfileJoinedAt) {
@@ -85,10 +100,36 @@ export function renderPublicProfileModal(state, dom) {
       });
     }
     dom.publicProfileJoinedAt.hidden = !joinedDate.length;
+    const joinedAtContainer = dom.publicProfileJoinedAt.closest?.(".public-profile-modal__joined-wrap");
+    if (joinedAtContainer) {
+      joinedAtContainer.hidden = !joinedDate.length;
+    }
   }
 
-  if (dom.publicProfileMeta) {
-    dom.publicProfileMeta.hidden = !description;
+  if (dom.publicProfileSocial) {
+    const showSocial = user.profileShowSocial !== false;
+    const socialEntries = showSocial
+      ? SOCIAL_PLATFORMS
+          .map((platform) => ({ platform, handle: String(user[`social${capitalize(platform)}`] || "").trim() }))
+          .filter((entry) => entry.handle)
+      : [];
+    dom.publicProfileSocial.textContent = "";
+    dom.publicProfileSocial.hidden = !showSocial;
+    if (showSocial) {
+      const title = document.createElement("p");
+      title.className = "public-profile-modal__social-title";
+      title.textContent = "Redes sociales";
+      dom.publicProfileSocial.append(title);
+    }
+    socialEntries.forEach(({ platform, handle }) => {
+      dom.publicProfileSocial.append(createSocialLinkButton(platform, handle));
+    });
+    if (showSocial && socialEntries.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "public-profile-modal__social-empty";
+      empty.textContent = "Sin redes públicas";
+      dom.publicProfileSocial.append(empty);
+    }
   }
 
   if (dom.publicProfileRecentCafes) {
@@ -102,7 +143,19 @@ export function renderPublicProfileModal(state, dom) {
       const list = document.createElement("ul");
       recentCafes.forEach((topic) => {
         const item = document.createElement("li");
-        item.textContent = topic.title || "Tema sin título";
+        const topicName = document.createElement("span");
+        topicName.className = "public-profile-modal__cafe-name";
+        topicName.textContent = topic.title || "Tema sin título";
+        item.append(topicName);
+        if (isTopicAvailable(topic)) {
+          const openButton = document.createElement("button");
+          openButton.className = "text-button public-profile-modal__cafe-button";
+          openButton.type = "button";
+          openButton.textContent = "Ir al tema";
+          openButton.dataset.publicProfileTopicId = topic.id;
+          openButton.setAttribute("aria-label", `Ir al tema ${topicName.textContent}`);
+          item.append(openButton);
+        }
         list.append(item);
       });
       dom.publicProfileRecentCafes.append(title, list);

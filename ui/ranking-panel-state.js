@@ -1,35 +1,23 @@
+// Desktop-only: the mobile drawer's Tema panel renders its own "select a topic"
+// empty state inline (see ui/rankings.js), so this must not also populate
+// dom.drawerRankingsEmpty or it shows the same message twice.
 export function showRankingEmpty(dom, emptyHtml) {
   clearRankingListHeights(dom);
   if (dom.rankingsEmpty) {
     dom.rankingsEmpty.innerHTML = emptyHtml;
     dom.rankingsEmpty.hidden = false;
   }
-  if (dom.drawerRankingsEmpty) {
-    dom.drawerRankingsEmpty.innerHTML = emptyHtml;
-    dom.drawerRankingsEmpty.hidden = false;
-  }
   if (dom.rankingsBody) {
     dom.rankingsBody.classList.add("is-empty");
-  }
-  if (dom.drawerRankingsBody) {
-    dom.drawerRankingsBody.classList.add("is-empty");
   }
   if (dom.rankingsPanel) {
     dom.rankingsPanel.classList.add("is-empty");
   }
-  if (dom.drawerRankingsSection) {
-    dom.drawerRankingsSection.classList.add("is-empty");
+  if (dom.rankingList) {
+    dom.rankingList.hidden = true;
   }
-  [dom.rankingList, dom.drawerRankingList].forEach(list => {
-    if (list) {
-      list.hidden = true;
-    }
-  });
   if (dom.rankingCarousel) {
     dom.rankingCarousel.hidden = true;
-  }
-  if (dom.drawerRankingSwitch) {
-    dom.drawerRankingSwitch.hidden = true;
   }
   resetRankingScroll(dom);
 }
@@ -42,17 +30,23 @@ export function resetRankingScroll(dom) {
   });
 }
 
+// Falls back to a real rendered .ranking-item when there's no skeleton to measure
+// (i.e. on every normal render, not just the initial loading flash). Without this
+// fallback, a list that stayed hidden during that one loading moment (e.g. the
+// desktop list while the app booted in a mobile viewport) never captures a value
+// and keeps using the CSS fallback forever, rendering visibly shorter rows after
+// switching back to that viewport.
 function captureRankingSkeletonHeight(list) {
   if (!list || list.hidden) {
     return;
   }
 
-  const skeletonItem = list.querySelector(".ranking-item--skeleton");
-  if (!skeletonItem) {
+  const referenceItem = list.querySelector(".ranking-item--skeleton, .ranking-item");
+  if (!referenceItem) {
     return;
   }
 
-  const height = skeletonItem.getBoundingClientRect().height;
+  const height = referenceItem.getBoundingClientRect().height;
   if (height > 0) {
     list.style.setProperty("--ranking-skeleton-item-height", `${height}px`);
   }

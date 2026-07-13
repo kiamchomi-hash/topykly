@@ -1,0 +1,94 @@
+- generic [ref=f12e1]:
+  - generic [ref=f12e2]:
+    - banner [ref=f12e3]:
+      - generic "TOPYKLY" [ref=f12e4]:
+        - img [ref=f12e6]
+        - generic [ref=f12e11]:
+          - generic [ref=f12e12]: TOPY
+          - generic [ref=f12e13]: KLY
+      - generic [ref=f12e14]:
+        - switch "Tema oscuro" [checked] [ref=f12e16] [cursor=pointer]:
+          - generic [ref=f12e17]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - img
+        - button "Iniciar sesión" [ref=f12e19] [cursor=pointer]:
+          - generic [ref=f12e20]: Iniciar sesión
+        - button "Abrir menú" [expanded] [ref=f12e21] [cursor=pointer]:
+          - img [ref=f12e23]
+    - main "Chat social" [ref=f12e25]:
+      - region "Temas" [ref=f12e26]:
+        - generic [ref=f12e27]:
+          - generic [ref=f12e31]:
+            - button "gola 4, Cooco" [ref=f12e32] [cursor=pointer]:
+              - generic [ref=f12e34]:
+                - generic [ref=f12e35]: gola
+                - generic [ref=f12e36]: 4, Cooco
+            - button "teste 2, Cooco" [ref=f12e37] [cursor=pointer]:
+              - generic [ref=f12e39]:
+                - generic [ref=f12e40]: teste
+                - generic [ref=f12e41]: 2, Cooco
+            - button "hola 3, Cooco" [ref=f12e42] [cursor=pointer]:
+              - generic [ref=f12e44]:
+                - generic [ref=f12e45]: hola
+                - generic [ref=f12e46]: 3, Cooco
+          - button "Crear nuevo tema" [ref=f12e48] [cursor=pointer]
+  - dialog "Menú móvil" [ref=f12e50]:
+    - generic [ref=f12e51]:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic: TOPY
+          - generic: KLY
+      - button "Cerrar menú" [ref=f12e52] [cursor=pointer]:
+        - generic [ref=f12e53]: ×
+    - generic [ref=f12e91]:
+      - generic [ref=f12e92]:
+        - button "Volver al menú" [active] [ref=f12e93] [cursor=pointer]:
+          - img [ref=f12e95]
+        - heading "Ranking" [level=3] [ref=f12e98]
+      - generic [ref=f12e99]:
+        - generic [ref=f12e100]:
+          - heading "Global" [level=3] [ref=f12e103]
+          - generic [ref=f12e104]:
+            - button "Ranking anterior" [ref=f12e105] [cursor=pointer]:
+              - img [ref=f12e107]
+            - 'button "Modo actual: TEMAS COMENTARIOS" [ref=f12e109] [cursor=pointer]':
+              - generic:
+                - generic: TEMAS COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=f12e110] [cursor=pointer]:
+              - img [ref=f12e112]
+          - generic [ref=f12e114]:
+            - article [ref=f12e115]:
+              - generic [ref=f12e116]: "1"
+              - generic [ref=f12e117]:
+                - paragraph [ref=f12e118]: gola
+                - paragraph [ref=f12e119]: 4 comentarios
+            - article [ref=f12e120]:
+              - generic [ref=f12e121]: "2"
+              - generic [ref=f12e122]:
+                - paragraph [ref=f12e123]: hola
+                - paragraph [ref=f12e124]: 3 comentarios
+            - article [ref=f12e125]:
+              - generic [ref=f12e126]: "3"
+              - generic [ref=f12e127]:
+                - paragraph [ref=f12e128]: teste
+                - paragraph [ref=f12e129]: 2 comentarios
+        - generic [ref=f12e130]:
+          - heading "Tema" [level=3] [ref=f12e133]
+          - generic [ref=f12e134]:
+            - button "Ranking anterior" [ref=f12e135] [cursor=pointer]:
+              - img [ref=f12e137]
+            - 'button "Modo actual: COMENTARIOS" [ref=f12e139] [cursor=pointer]':
+              - generic:
+                - generic: COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=f12e140] [cursor=pointer]:
+              - img [ref=f12e142]
+          - generic [ref=f12e146]: Selecciona un tema para ver su actividad real

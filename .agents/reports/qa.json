@@ -1,27 +1,31 @@
 {
-    "status":  "passed",
-    "tests":  [
-                  {
-                      "name":  "npm test",
-                      "command":  "npm test",
-                      "status":  "passed",
-                      "summary":  "all tests passed"
-                  },
-                  {
-                      "name":  "smoke",
-                      "command":  "node tests/smoke.mjs",
-                      "status":  "passed",
-                      "summary":  "all smoke checks passed"
-                  },
-                  {
-                      "name":  "browser console",
-                      "command":  "Playwright navigate http://127.0.0.1:4173/?fix-check=2",
-                      "status":  "passed",
-                      "summary":  "0 errors, 0 warnings"
-                  }
-              ],
-    "fixed":  [
-                  "Removed assignment to read-only HTMLElement.dataset in custom palette stylesheet injection.",
-                  "Replaced CSP-blocked blob stylesheet with inline style element for custom palette CSS."
-              ]
+  "agentName": "Agente QA",
+  "status": "passed",
+  "lastChecked": "2026-07-11T23:21:14.310Z",
+  "tests": [
+    {
+      "name": "unit and integration suite",
+      "command": "npm test",
+      "status": "passed",
+      "summary": "all tests passed, including identity linking, duplicate display names, OIDC verification and public email privacy"
+    },
+    {
+      "name": "HTTP smoke suite",
+      "command": "node tests/smoke.mjs",
+      "status": "passed",
+      "summary": "12 smoke checks passed"
+    },
+    {
+      "name": "security audit",
+      "command": "node .agents/scripts/audit-site.mjs",
+      "status": "passed_with_warning",
+      "summary": "live site healthy and private files blocked; production HSTS is still absent"
+    },
+    {
+      "name": "diff validation",
+      "command": "git diff --check",
+      "status": "passed",
+      "summary": "no whitespace errors"
+    }
+  ]
 }

@@ -9,6 +9,19 @@ const AUTH_FLOW_TTL_MS = 10 * 60_000;
 const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DISCOVERY_CACHE_TTL_MS = 10 * 60_000;
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const RESEND_EMAIL_URL = "https://api.resend.com/emails";
+const EMAIL_CODE_CONTENT = Object.freeze({
+  register: {
+    subject: "Confirma tu cuenta de TOPYKLY",
+    action: "crear tu cuenta",
+    footer: "Si no solicitaste este código, ignora este correo. No se creó ninguna cuenta."
+  },
+  password_reset: {
+    subject: "Recupera tu cuenta de TOPYKLY",
+    action: "cambiar tu contrasena",
+    footer: "Si no solicitaste este código, ignora este correo. Tu contraseña no cambió."
+  }
+});
 
 function shouldTrustProxy(env = process.env) {
   return [env.TOPYKLY_TRUST_PROXY, env.CHETREND_TRUST_PROXY]
@@ -204,7 +217,74 @@ async function readResponsePayload(response) {
   return payload;
 }
 
-function buildReturnUrl(origin, { selectedTopicId = null, authError = null } = {}) {
+function renderEmailCodeHtml(code, action, footer) {
+  const pageBg = "#08090c";
+  const cardBg = "#14171d";
+  const cardBorder = "#20242c";
+  const accentBar = "linear-gradient(90deg,#8f431e,#f08b58,#8f431e)";
+  const badgeBg = "#241209";
+  const badgeBorder = "#4a2a18";
+  const accent = "#f6a06f";
+  const ink = "#f5f2ec";
+  const body = "#c7c2ba";
+  const faint = "#9a948b";
+  const divider = "#1f232b";
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
+  </head>
+  <body style="margin:0;padding:0;background:${pageBg};font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${pageBg};padding:48px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;width:100%;">
+            <tr>
+              <td style="height:4px;line-height:4px;font-size:0;background:${accentBar};border-radius:4px 4px 0 0;">&nbsp;</td>
+            </tr>
+            <tr>
+              <td style="background:${cardBg};border:1px solid ${cardBorder};border-top:none;border-radius:0 0 16px 16px;padding:40px 36px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                  <tr>
+                    <td align="center">
+                      <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="vertical-align:middle;">
+                            <img src="https://www.topykly.com/favicon.svg" width="40" height="40" alt="TOPYKLY" style="display:block;width:40px;height:40px;border-radius:11px;" />
+                          </td>
+                          <td style="vertical-align:middle;padding-left:12px;font-size:24px;font-weight:800;letter-spacing:0.8px;color:${ink};text-transform:uppercase;">TOPYKLY</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:0 0 4px;font-size:20px;font-weight:600;color:${ink};line-height:1.3;">Tu c&oacute;digo de confirmaci&oacute;n</p>
+                <p style="margin:0 0 28px;font-size:14px;line-height:1.6;color:${body};">&Uacute;salo para ${action} en TOPYKLY. Vence en 10 minutos y solo sirve una vez.</p>
+
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+                  <tr>
+                    <td align="center" style="background:${badgeBg};border:1px solid ${badgeBorder};border-radius:12px;padding:20px 12px;">
+                      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:34px;font-weight:600;letter-spacing:10px;color:${accent};">${code}</span>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:0;padding-top:20px;border-top:1px solid ${divider};font-size:12px;line-height:1.6;color:${faint};">${footer}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function buildReturnUrl(origin, { selectedTopicId = null, authError = null, authAction = null } = {}) {
   const url = new URL("/", origin);
 
   if (selectedTopicId) {
@@ -213,6 +293,10 @@ function buildReturnUrl(origin, { selectedTopicId = null, authError = null } = {
 
   if (authError) {
     url.searchParams.set("authError", authError);
+  }
+
+  if (authAction) {
+    url.searchParams.set("authAction", authAction);
   }
 
   return url.toString();
@@ -233,6 +317,9 @@ export function createAuthService({
   const turnstileSiteKey = String(env.TOPYKLY_TURNSTILE_SITE_KEY || env.CHETREND_TURNSTILE_SITE_KEY || "").trim();
   const turnstileSecretKey = String(env.TOPYKLY_TURNSTILE_SECRET_KEY || env.CHETREND_TURNSTILE_SECRET_KEY || "").trim();
   const turnstileConfigured = Boolean(fetchImpl && turnstileSiteKey && turnstileSecretKey);
+  const resendApiKey = String(env.TOPYKLY_RESEND_API_KEY || "").trim();
+  const resendFrom = String(env.TOPYKLY_RESEND_FROM || "").trim();
+  const resendConfigured = Boolean(fetchImpl && resendApiKey && resendFrom);
 
   const configured = Boolean(fetchImpl && issuer && clientId && clientSecret && sessionSecret);
   const discoveryCache = {
@@ -291,6 +378,14 @@ export function createAuthService({
     });
   }
 
+  function clearFlowCookies(req) {
+    const secure = getCookieSecurity(req, env);
+    return [
+      clearFlowCookie(req),
+      createExpiredCookie(LEGACY_AUTH_FLOW_COOKIE, { secure })
+    ];
+  }
+
   async function validateTurnstile({ req, token = "" } = {}) {
     if (!turnstileConfigured) {
       return { success: true, skipped: true };
@@ -332,6 +427,7 @@ export function createAuthService({
     providerLabel,
     sessionCookieName: SESSION_COOKIE,
     createSessionCookie,
+    clearFlowCookies,
 
     getStatus(req) {
       return {
@@ -351,13 +447,55 @@ export function createAuthService({
         turnstile: {
           configured: turnstileConfigured,
           siteKey: turnstileSiteKey || null
+        },
+        emailCode: {
+          configured: resendConfigured
         }
       };
     },
 
     validateTurnstile,
 
-    async createLoginResponse({ req, sessionId, selectedTopicId = null }) {
+    async sendEmailCode({ email, code, challengeId = "", purpose = "register" } = {}) {
+      if (!resendConfigured) {
+        throw new ApiError(503, "RESEND_NOT_CONFIGURED", "El acceso por codigo todavia no esta configurado.");
+      }
+
+      const content = EMAIL_CODE_CONTENT[purpose];
+      if (!content) {
+        throw new ApiError(400, "INVALID_EMAIL_CODE_PURPOSE", "El tipo de codigo solicitado no es valido.");
+      }
+      const { subject, action, footer } = content;
+      const response = await fetchImpl(RESEND_EMAIL_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": String(challengeId || `email-code-${code}`)
+        },
+        body: JSON.stringify({
+          from: resendFrom,
+          to: [String(email || "").trim().toLowerCase()],
+          subject,
+          text: `Tu código para ${action} es ${code}. Vence en 10 minutos y solo puede usarse una vez. ${footer}`,
+          html: renderEmailCodeHtml(code, action, footer)
+        })
+      });
+      const payload = await readResponsePayload(response);
+
+      return {
+        id: payload.id || null
+      };
+    },
+
+    async createLoginResponse({
+      req,
+      sessionId,
+      selectedTopicId = null,
+      purpose = "login",
+      targetUserId = null,
+      expectedEmail = null
+    }) {
       if (!configured) {
         return null;
       }
@@ -367,11 +505,20 @@ export function createAuthService({
       const codeVerifier = createRandomToken(48);
       const redirectUri = getRedirectUri(req);
       const normalizedSessionId = String(sessionId || `session-${crypto.randomUUID()}`).trim();
+      const normalizedPurpose = purpose === "link" ? "link" : "login";
+      const normalizedTargetUserId = normalizedPurpose === "link" ? String(targetUserId || "").trim() : null;
+      const normalizedExpectedEmail = normalizedPurpose === "link" ? normalizeEmail(expectedEmail) : null;
+      if (normalizedPurpose === "link" && (!normalizedTargetUserId || !normalizedExpectedEmail)) {
+        throw new ApiError(400, "INVALID_ACCOUNT_LINK_FLOW", "No se pudo iniciar la vinculacion de cuenta.");
+      }
       const flowPayload = {
         state,
         codeVerifier,
         sessionId: normalizedSessionId,
         selectedTopicId: selectedTopicId || null,
+        purpose: normalizedPurpose,
+        targetUserId: normalizedTargetUserId,
+        expectedEmail: normalizedExpectedEmail,
         issuedAt: now()
       };
 
@@ -383,6 +530,9 @@ export function createAuthService({
       authorizationUrl.searchParams.set("state", state);
       authorizationUrl.searchParams.set("code_challenge", createSha256Base64Url(codeVerifier));
       authorizationUrl.searchParams.set("code_challenge_method", "S256");
+      if (normalizedPurpose === "link") {
+        authorizationUrl.searchParams.set("prompt", "select_account");
+      }
 
       return {
         payload: {
@@ -410,6 +560,12 @@ export function createAuthService({
 
       const requestOrigin = publicOrigin || getRequestOrigin(req);
       const selectedTopicId = flowPayload.selectedTopicId || null;
+      const purpose = flowPayload.purpose === "link" ? "link" : "login";
+      const targetUserId = purpose === "link" ? String(flowPayload.targetUserId || "").trim() : null;
+      const expectedEmail = purpose === "link" ? normalizeEmail(flowPayload.expectedEmail) : null;
+      if (purpose === "link" && (!targetUserId || !expectedEmail)) {
+        throw new ApiError(400, "INVALID_ACCOUNT_LINK_FLOW", "No se pudo validar la vinculacion de cuenta.");
+      }
 
       if (query.error) {
         return {
@@ -417,9 +573,7 @@ export function createAuthService({
             selectedTopicId,
             authError: String(query.error || "auth_failed")
           }),
-          cookies: [
-            clearFlowCookie(req)
-          ]
+          cookies: clearFlowCookies(req)
         };
       }
 
@@ -464,20 +618,27 @@ export function createAuthService({
 
       const nextSessionId = `session-${crypto.randomUUID()}`;
       return {
-        redirectUrl: buildReturnUrl(requestOrigin, { selectedTopicId }),
+        redirectUrl: buildReturnUrl(requestOrigin, {
+          selectedTopicId,
+          authAction: purpose === "link" ? "google-linked" : null
+        }),
         identity: {
           authProvider: issuer,
           authSubject: String(userInfo.sub),
-          email: normalizeEmail(userInfo.email),
+          email: userInfo.email_verified === true ? normalizeEmail(userInfo.email) : null,
+          emailVerified: userInfo.email_verified === true,
           displayName: normalizeDisplayName(userInfo),
           avatarUrl: normalizeImageUrl(userInfo.picture)
         },
+        purpose,
+        targetUserId,
+        expectedEmail,
         sourceSessionId: String(flowPayload.sessionId || ""),
         sessionId: nextSessionId,
         selectedTopicId,
         cookies: [
           createSessionCookie(req, nextSessionId),
-          clearFlowCookie(req)
+          ...clearFlowCookies(req)
         ]
       };
     }

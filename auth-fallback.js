@@ -1,6 +1,7 @@
 let authStatusPromise = null;
 let turnstileWidgetId = null;
 let pendingTurnstileToken = null;
+let authFallbackPending = false;
 
 function clearLegacyClientSessionId() {
   try {
@@ -11,14 +12,27 @@ function clearLegacyClientSessionId() {
   }
 }
 
-function flash(message) {
-  const feedback = document.getElementById("actionFeedback");
-  if (!feedback) {
+function setAuthStatusMessage(message = "", kind = "info") {
+  const status = document.getElementById("authStatus");
+  if (!status) {
     return;
   }
 
-  feedback.textContent = message;
-  feedback.hidden = false;
+  const normalized = String(message || "").trim();
+  status.textContent = normalized;
+  status.hidden = !normalized;
+  status.dataset.statusKind = normalized ? kind : "off";
+}
+
+function setGoogleAuthPending(pending) {
+  const button = document.getElementById("authGoogleButton");
+  if (!button) {
+    return;
+  }
+
+  button.disabled = pending;
+  button.setAttribute("aria-busy", String(pending));
+  button.classList.toggle("is-pending", pending);
 }
 
 function setAuthModalOpen(isOpen) {
@@ -96,7 +110,6 @@ async function syncTurnstile() {
     return required;
   }
 
-  container.hidden = !required;
   container.dataset.turnstileMode = required ? "silent" : "off";
   if (!required) {
     resetTurnstileToken();
@@ -106,7 +119,6 @@ async function syncTurnstile() {
   if (!globalThis.turnstile?.render) {
     await loadTurnstileScript();
     if (!globalThis.turnstile?.render) {
-      flash("Preparando verificacion anti-bots");
       return true;
     }
   }
@@ -145,7 +157,6 @@ async function requestTurnstileToken() {
     throw new Error("La verificacion anti-bots todavia esta cargando.");
   }
 
-  flash("Verificando acceso...");
   return new Promise((resolve, reject) => {
     pendingTurnstileToken = {
       resolve,
@@ -166,7 +177,12 @@ async function openAuthModal(event) {
   event.preventDefault();
   event.stopImmediatePropagation();
   setAuthModalOpen(true);
-  await syncTurnstile();
+  setAuthStatusMessage();
+  try {
+    await syncTurnstile();
+  } catch (error) {
+    setAuthStatusMessage(error?.message || "No pudimos preparar el acceso.", "error");
+  }
 }
 
 async function continueWithGoogle(event) {
@@ -177,39 +193,45 @@ async function continueWithGoogle(event) {
 
   event.preventDefault();
   event.stopImmediatePropagation();
+  if (authFallbackPending) {
+    return;
+  }
 
-  let turnstileToken = "";
+  authFallbackPending = true;
+  setGoogleAuthPending(true);
+  setAuthStatusMessage();
   try {
-    turnstileToken = await requestTurnstileToken();
+    const turnstileToken = await requestTurnstileToken();
+
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        selectedTopicId: null,
+        turnstileToken
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(payload?.error?.message || "No se pudo iniciar sesion");
+    }
+
+    if (payload.mode === "redirect" && payload.redirectUrl) {
+      window.location.href = payload.redirectUrl;
+      return;
+    }
+
+    window.location.reload();
   } catch (error) {
-    flash(error?.message || "No pudimos verificarte. Intentalo de nuevo.");
-    return;
+    setAuthStatusMessage(error?.message || "No pudimos verificarte. Intentalo de nuevo.", "error");
+  } finally {
+    authFallbackPending = false;
+    setGoogleAuthPending(false);
   }
-
-  const response = await fetch("/api/auth/login", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      selectedTopicId: null,
-      turnstileToken
-    })
-  });
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    flash(payload?.error?.message || "No se pudo iniciar sesion");
-    return;
-  }
-
-  if (payload.mode === "redirect" && payload.redirectUrl) {
-    window.location.href = payload.redirectUrl;
-    return;
-  }
-
-  window.location.reload();
 }
 
 document.addEventListener("click", (event) => {

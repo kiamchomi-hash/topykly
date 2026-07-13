@@ -1,0 +1,24 @@
+- generic [ref=f4e2]:
+  - banner [ref=f4e3]:
+    - generic [ref=f4e4]:
+      - button "Iniciar sesión" [ref=f4e5] [cursor=pointer]:
+        - generic [ref=f4e6]: Iniciar sesión
+      - button "Abrir menú" [ref=f4e7] [cursor=pointer]:
+        - img [ref=f4e9]
+  - main "Chat social" [ref=f4e11]:
+    - region "Temas" [ref=f4e12]:
+      - generic [ref=f4e13]:
+        - generic [ref=f4e17]:
+          - button "hola 4, Cooco" [ref=f4e18] [cursor=pointer]:
+            - generic [ref=f4e20]:
+              - generic [ref=f4e21]: hola
+              - generic [ref=f4e22]: 4, Cooco
+          - button "gola 4, Cooco" [ref=f4e23] [cursor=pointer]:
+            - generic [ref=f4e25]:
+              - generic [ref=f4e26]: gola
+              - generic [ref=f4e27]: 4, Cooco
+          - button "teste 2, Cooco" [ref=f4e28] [cursor=pointer]:
+            - generic [ref=f4e30]:
+              - generic [ref=f4e31]: teste
+              - generic [ref=f4e32]: 2, Cooco
+        - button "Crear nuevo tema" [ref=f4e34] [cursor=pointer]

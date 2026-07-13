@@ -1,0 +1,84 @@
+- generic [ref=f7e2]:
+  - banner [ref=f7e3]:
+    - generic "TOPYKLY" [ref=f7e4]:
+      - img [ref=f7e6]
+      - generic [ref=f7e11]:
+        - generic [ref=f7e12]: TOPY
+        - generic [ref=f7e13]: KLY
+    - generic [ref=f7e14]:
+      - switch "Tema oscuro" [checked] [ref=f7e16] [cursor=pointer]:
+        - generic [ref=f7e17]:
+          - generic:
+            - generic:
+              - img
+            - generic:
+              - img
+      - button "Iniciar sesión" [ref=f7e19] [cursor=pointer]:
+        - generic [ref=f7e20]: Iniciar sesión
+      - button "Abrir menú" [ref=f7e21] [cursor=pointer]:
+        - img [ref=f7e23]
+  - main "Chat social" [ref=f7e25]:
+    - region "Temas" [ref=f7e26]:
+      - generic [ref=f7e27]:
+        - generic [ref=f7e31]:
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+        - button "Crear nuevo tema" [ref=f7e33] [cursor=pointer]

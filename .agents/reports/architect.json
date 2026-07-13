@@ -1,5 +1,13 @@
 {
-  "agentName": "Agente Arquitecto / Refactorización",
-  "status": "Optimizado",
-  "suggestions": []
+  "agentName": "Agente Arquitecto",
+  "status": "implemented",
+  "lastChecked": "2026-07-11T23:21:14.310Z",
+  "implemented": [
+    "users.id remains the immutable identity for sessions, topics, messages and friendships.",
+    "users.name is now a repeatable display name while users.nickname remains the unique username.",
+    "Existing completed accounts without a username are backfilled deterministically without changing user ids.",
+    "Password and verified Google identities can resolve to the same user row instead of creating duplicate accounts.",
+    "Public UI and mentions distinguish duplicate display names through the unique username."
+  ],
+  "proposals": []
 }

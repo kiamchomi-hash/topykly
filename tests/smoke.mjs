@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { MINIMUM_REGISTRATION_AGE, TERMS_VERSION } from "../services/backend-store.js";
 import { startPreviewServer } from "../services/preview-server.js";
 
 const host = "127.0.0.1";
@@ -58,6 +59,31 @@ async function request(pathname, {
 
   assert.equal(response.status, expectedStatus, `${method} ${pathname}: ${text}`);
   return payload;
+}
+
+function readSessionId(cookie = "") {
+  const match = String(cookie).match(/(?:^|;\s*)topykly_sid=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function registerVerifiedUserFixture({ sessionId, email, password, nickname }) {
+  const challenge = app.store.createEmailAuthChallenge({
+    email,
+    nickname,
+    age: MINIMUM_REGISTRATION_AGE,
+    password,
+    acceptedTerms: true,
+    termsVersion: TERMS_VERSION
+  });
+  const registered = app.store.verifyEmailAuthChallenge({
+    challengeId: challenge.challengeId,
+    code: challenge.code,
+    sessionId: readSessionId(cookieJars.get(sessionId)) || `fixture-${sessionId}`,
+    rotateSession: true
+  });
+
+  cookieJars.set(sessionId, `topykly_sid=${encodeURIComponent(registered.sessionId)}`);
+  return registered;
 }
 
 async function waitForServer() {
@@ -229,21 +255,18 @@ try {
     assert.equal(payload.topics.length, 40);
     assert.equal(payload.topics.filter((topic) => topic.visible).length, 20);
     assert.equal(payload.viewer.type, "guest");
+    assert.equal(payload.users.every((user) => !Object.hasOwn(user, "email")), true);
   });
 
   await test("opens a topic and posts a comment through the HTTP route", async () => {
     const sessionId = "session-smoke-comment";
     const initial = await request("/api/bootstrap", { sessionId });
     const guestCookie = cookieJars.get(sessionId);
-    await request("/api/auth/password/register", {
-      method: "POST",
+    registerVerifiedUserFixture({
       sessionId,
-      expectedStatus: 201,
-      body: {
-        email: `smoke-comment-${Date.now()}@example.com`,
-        password: "password-segura",
-        nickname: `smoke_c_${Date.now() % 100000}`
-      }
+      email: `smoke-comment-${Date.now()}@example.com`,
+      password: "password-segura",
+      nickname: `smoke_c_${Date.now() % 100000}`
     });
     const registeredCookie = cookieJars.get(sessionId);
 
@@ -277,15 +300,11 @@ try {
     const title = `Smoke topic ${Date.now()}`;
     const text = "Smoke topic root message";
 
-    await request("/api/auth/password/register", {
-      method: "POST",
+    registerVerifiedUserFixture({
       sessionId,
-      expectedStatus: 201,
-      body: {
-        email: `smoke-topic-${Date.now()}@example.com`,
-        password: "password-segura",
-        nickname: `smoke_t_${Date.now() % 100000}`
-      }
+      email: `smoke-topic-${Date.now()}@example.com`,
+      password: "password-segura",
+      nickname: `smoke_t_${Date.now() % 100000}`
     });
     const created = await request("/api/topics", {
       method: "POST",
@@ -306,15 +325,11 @@ try {
     const title = `Smoke like topic ${Date.now()}`;
     const text = "Smoke like root message";
 
-    await request("/api/auth/password/register", {
-      method: "POST",
+    registerVerifiedUserFixture({
       sessionId,
-      expectedStatus: 201,
-      body: {
-        email: `smoke-like-${Date.now()}@example.com`,
-        password: "password-segura",
-        nickname: `smoke_l_${Date.now() % 100000}`
-      }
+      email: `smoke-like-${Date.now()}@example.com`,
+      password: "password-segura",
+      nickname: `smoke_l_${Date.now() % 100000}`
     });
     const created = await request("/api/topics", {
       method: "POST",
@@ -343,15 +358,11 @@ try {
   await test("reports a topic and hydrates reported ids", async () => {
     const sessionId = "session-smoke-report";
     const initial = await request("/api/bootstrap", { sessionId });
-    await request("/api/auth/password/register", {
-      method: "POST",
+    registerVerifiedUserFixture({
       sessionId,
-      expectedStatus: 201,
-      body: {
-        email: `smoke-comment-${Date.now()}@example.com`,
-        password: "password-segura",
-        nickname: `smoke_c_${Date.now() % 100000}`
-      }
+      email: `smoke-comment-${Date.now()}@example.com`,
+      password: "password-segura",
+      nickname: `smoke_c_${Date.now() % 100000}`
     });
 
     const topic = initial.topics.find((entry) => entry.visible);

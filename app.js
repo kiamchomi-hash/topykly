@@ -1,3 +1,3 @@
-import { bootstrap } from "./controller.js?v=20260709-palettefocus5";
+import { bootstrap } from "./controller.js?v=20260709-topicrace1";
 
 bootstrap();

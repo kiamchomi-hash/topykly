@@ -86,7 +86,7 @@ function patchNode(existing, incoming) {
 function patchElement(existing, incoming) {
   const preserveOpenOverlay = shouldPreserveOpenOverlayState(existing, incoming);
   const preserveExpandedTrigger = shouldPreserveExpandedTriggerState(existing, incoming);
-  syncAttributes(existing, incoming);
+  syncAttributes(existing, incoming, { preserveStyle: preserveOpenOverlay });
   syncElementProperties(existing, incoming);
   if (preserveOpenOverlay) {
     existing.hidden = false;
@@ -122,10 +122,13 @@ function shouldPreserveExpandedTriggerState(existing, incoming) {
   );
 }
 
-function syncAttributes(existing, incoming) {
+function syncAttributes(existing, incoming, { preserveStyle = false } = {}) {
   Array.from(existing.attributes).forEach((attribute) => {
     if (!incoming.hasAttribute(attribute.name)) {
       if (shouldPreserveMessageLayoutStyle(existing, attribute)) {
+        return;
+      }
+      if (preserveStyle && attribute.name === "style") {
         return;
       }
       existing.removeAttribute(attribute.name);
@@ -133,6 +136,9 @@ function syncAttributes(existing, incoming) {
   });
 
   Array.from(incoming.attributes).forEach((attribute) => {
+    if (preserveStyle && attribute.name === "style") {
+      return;
+    }
     if (existing.getAttribute(attribute.name) !== attribute.value) {
       existing.setAttribute(attribute.name, attribute.value);
     }

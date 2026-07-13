@@ -15,6 +15,7 @@ const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
 const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
+const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -76,7 +77,22 @@ function loadEnvFile(envPath) {
   });
 }
 
-function getSecurityHeaders({ includeCsp = true } = {}) {
+function isProductionHttpsRequest(req) {
+  const runtimeEnvironment = String(process.env.VERCEL_ENV || process.env.NODE_ENV || "")
+    .trim()
+    .toLowerCase();
+  if (runtimeEnvironment !== "production") {
+    return false;
+  }
+
+  const forwardedProtocol = String(req?.headers?.["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  return Boolean(req?.socket?.encrypted) || forwardedProtocol === "https";
+}
+
+function getSecurityHeaders({ includeCsp = true, req = null } = {}) {
   const headers = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -85,6 +101,10 @@ function getSecurityHeaders({ includeCsp = true } = {}) {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin"
   };
+
+  if (isProductionHttpsRequest(req)) {
+    headers["Strict-Transport-Security"] = STRICT_TRANSPORT_SECURITY;
+  }
 
   if (includeCsp) {
     headers["Content-Security-Policy"] = [
@@ -107,7 +127,7 @@ function getSecurityHeaders({ includeCsp = true } = {}) {
 
 function writePlainText(res, statusCode, text) {
   res.writeHead(statusCode, {
-    ...getSecurityHeaders(),
+    ...getSecurityHeaders({ req: res.req }),
     "Content-Type": "text/plain; charset=utf-8",
     "Content-Length": Buffer.byteLength(text)
   });
@@ -116,7 +136,8 @@ function writePlainText(res, statusCode, text) {
 function sendJson(res, statusCode, payload, { headers = {}, cookies = [] } = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(statusCode, {
-    ...getSecurityHeaders(),
+    ...getSecurityHeaders({ req: res.req }),
+    "Cache-Control": "no-store",
     ...headers,
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(body),
@@ -127,7 +148,7 @@ function sendJson(res, statusCode, payload, { headers = {}, cookies = [] } = {})
 
 function sendRedirect(res, statusCode, location, { cookies = [] } = {}) {
   res.writeHead(statusCode, {
-    ...getSecurityHeaders(),
+    ...getSecurityHeaders({ req: res.req }),
     "Location": location,
     ...(cookies.length ? { "Set-Cookie": cookies } : {})
   });
@@ -344,6 +365,10 @@ async function handleApiRequest(store, authService, req, res, url) {
 
     if (req.method === "POST" && url.pathname === "/api/auth/login") {
       const body = await readJsonBody(req);
+      await authService.validateTurnstile({
+        req,
+        token: body.turnstileToken
+      });
       const authLoginResponse = await authService.createLoginResponse({
         req,
         sessionId: context.sessionId,
@@ -360,10 +385,6 @@ async function handleApiRequest(store, authService, req, res, url) {
         throw new ApiError(503, "AUTH_NOT_CONFIGURED", "La autenticacion externa no esta configurada.");
       }
 
-      await authService.validateTurnstile({
-        req,
-        token: body.turnstileToken
-      });
       sendBackendPayload(res, req, authService, 200, store.login({
         ...context,
         selectedTopicId: body.selectedTopicId ?? null,
@@ -388,21 +409,128 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/auth/password/register") {
+    if (req.method === "POST" && url.pathname === "/api/auth/password/reset/request") {
       const body = await readJsonBody(req);
       await authService.validateTurnstile({
         req,
         token: body.turnstileToken
       });
-      sendBackendPayload(res, req, authService, 201, store.registerWithPassword({
-        ...context,
+      if (!authService.getStatus(req)?.emailCode?.configured) {
+        throw new ApiError(503, "RESEND_NOT_CONFIGURED", "La recuperacion por email todavia no esta configurada.");
+      }
+      const challenge = store.createPasswordResetChallenge({
         email: body.email,
-        password: body.password,
-        nickname: body.nickname,
+        ipAddress: context.ipAddress
+      });
+
+      if (challenge.deliveryRequired) {
+        try {
+          await authService.sendEmailCode({
+            ...challenge,
+            purpose: "password_reset"
+          });
+        } catch {
+          store.discardPasswordResetChallenge(challenge.challengeId);
+          console.error("Password reset email delivery failed.");
+        }
+      }
+
+      sendJson(res, 202, {
+        challengeId: challenge.challengeId,
+        expiresInSeconds: challenge.expiresInSeconds,
+        message: "Si existe una cuenta con ese email, enviamos un codigo de recuperacion."
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/password/reset/confirm") {
+      const body = await readJsonBody(req);
+      sendBackendPayload(res, req, authService, 200, store.verifyPasswordResetChallenge({
+        ...context,
+        challengeId: body.challengeId,
+        code: body.code,
+        newPassword: body.newPassword,
         selectedTopicId: body.selectedTopicId ?? null,
         rotateSession: true
       }));
       return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/account-link/start") {
+      const body = await readJsonBody(req);
+      await authService.validateTurnstile({
+        req,
+        token: body.turnstileToken
+      });
+      const target = store.prepareIdentityLink({
+        ...context,
+        password: body.password
+      });
+      const linkResponse = await authService.createLoginResponse({
+        req,
+        sessionId: target.sessionId,
+        selectedTopicId: body.selectedTopicId ?? null,
+        purpose: "link",
+        targetUserId: target.userId,
+        expectedEmail: target.email
+      });
+      if (!linkResponse) {
+        throw new ApiError(503, "AUTH_NOT_CONFIGURED", "La autenticacion externa no esta configurada.");
+      }
+      sendJson(res, 200, linkResponse.payload, {
+        cookies: linkResponse.cookies
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/email/request-code") {
+      const body = await readJsonBody(req);
+      await authService.validateTurnstile({
+        req,
+        token: body.turnstileToken
+      });
+      const challenge = store.createEmailAuthChallenge({
+        email: body.email,
+        nickname: body.nickname,
+        age: body.age,
+        password: body.password,
+        acceptedTerms: body.acceptedTerms === true,
+        termsVersion: body.termsVersion
+      });
+
+      try {
+        await authService.sendEmailCode(challenge);
+      } catch (error) {
+        store.discardEmailAuthChallenge(challenge.challengeId);
+        throw error;
+      }
+
+      sendJson(res, 202, {
+        challengeId: challenge.challengeId,
+        email: challenge.email,
+        expiresInSeconds: challenge.expiresInSeconds
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/email/verify-code") {
+      const body = await readJsonBody(req);
+      sendBackendPayload(res, req, authService, 200, store.verifyEmailAuthChallenge({
+        ...context,
+        challengeId: body.challengeId,
+        code: body.code,
+        selectedTopicId: body.selectedTopicId ?? null,
+        rotateSession: true
+      }));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/password/register") {
+      throw new ApiError(
+        410,
+        "REGISTRATION_REQUIRES_EMAIL_VERIFICATION",
+        "Para crear una cuenta debes verificar el codigo enviado a tu email."
+      );
     }
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
       const body = await readJsonBody(req);
@@ -418,9 +546,20 @@ async function handleApiRequest(store, authService, req, res, url) {
       sendBackendPayload(res, req, authService, 200, store.updateProfile({
         ...context,
         displayName: body.displayName,
+        username: body.username,
+        age: body.age,
+        acceptedTerms: body.acceptedTerms === true,
+        termsVersion: body.termsVersion,
         description: body.description,
         profileShowDescription: body.profileShowDescription !== false,
         profileShowJoinedAt: body.profileShowJoinedAt !== false,
+        socialWhatsapp: body.socialWhatsapp,
+        socialInstagram: body.socialInstagram,
+        socialTiktok: body.socialTiktok,
+        socialFacebook: body.socialFacebook,
+        socialTwitter: body.socialTwitter,
+        socialDiscord: body.socialDiscord,
+        profileShowSocial: body.profileShowSocial !== false,
         avatarDataUrl: body.avatarDataUrl,
         removeAvatar: body.removeAvatar === true,
         selectedTopicId: body.selectedTopicId ?? null
@@ -558,22 +697,35 @@ async function handleApiRequest(store, authService, req, res, url) {
 
 async function handleAuthCallback(store, authService, req, res, url) {
   const query = Object.fromEntries(url.searchParams.entries());
+  let callback = null;
 
   try {
-    const callback = await authService.handleCallback({
+    callback = await authService.handleCallback({
       req,
       cookies: readCookies(req),
       query
     });
 
     if (callback.identity) {
-      store.loginWithIdentity({
-        sessionId: callback.sessionId,
-        sourceSessionId: callback.sourceSessionId,
-        selectedTopicId: callback.selectedTopicId,
-        ipAddress: getRequestContext(req).ipAddress,
-        ...callback.identity
-      });
+      if (callback.purpose === "link") {
+        store.completeIdentityLink({
+          sessionId: callback.sessionId,
+          sourceSessionId: callback.sourceSessionId,
+          targetUserId: callback.targetUserId,
+          expectedEmail: callback.expectedEmail,
+          selectedTopicId: callback.selectedTopicId,
+          ipAddress: getRequestContext(req).ipAddress,
+          ...callback.identity
+        });
+      } else {
+        store.loginWithIdentity({
+          sessionId: callback.sessionId,
+          sourceSessionId: callback.sourceSessionId,
+          selectedTopicId: callback.selectedTopicId,
+          ipAddress: getRequestContext(req).ipAddress,
+          ...callback.identity
+        });
+      }
     }
 
     sendRedirect(res, 302, callback.redirectUrl, {
@@ -583,7 +735,15 @@ async function handleAuthCallback(store, authService, req, res, url) {
     if (error instanceof ApiError) {
       const redirectUrl = new URL("/", url);
       redirectUrl.searchParams.set("authError", error.code || "AUTH_FAILED");
-      sendRedirect(res, 302, redirectUrl.toString());
+      if (callback?.selectedTopicId) {
+        redirectUrl.searchParams.set("selectedTopicId", callback.selectedTopicId);
+      }
+      if (error.code === "ACCOUNT_LINK_REQUIRED") {
+        redirectUrl.searchParams.set("authAction", "link-account");
+      }
+      sendRedirect(res, 302, redirectUrl.toString(), {
+        cookies: authService.clearFlowCookies(req)
+      });
       return;
     }
 
@@ -606,7 +766,7 @@ function handleAvatarRequest(res, url, avatarStorageDir) {
     }
 
     res.writeHead(200, {
-      ...getSecurityHeaders({ includeCsp: false }),
+      ...getSecurityHeaders({ includeCsp: false, req: res.req }),
       "Content-Type": mime[path.extname(resolvedFilePath)] || "application/octet-stream",
       "Cache-Control": "public, max-age=31536000, immutable"
     });
@@ -630,8 +790,7 @@ function resolveHttpRateLimitConfig(env = process.env) {
 function getHttpRateLimitScope(url) {
   if (
     url.pathname === "/auth/oidc/callback"
-    || url.pathname === "/api/auth/login"
-    || url.pathname.startsWith("/api/auth/password/")
+    || url.pathname.startsWith("/api/auth/")
   ) {
     return "auth";
   }
@@ -738,6 +897,7 @@ function runMessageReactionReset(store, log) {
     log(`message reaction reset failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
 function handleStaticRequest(req, res, url, store) {
   if (url.pathname.startsWith("/avatars/")) {
     handleAvatarRequest(res, url, store.avatarStorageDir);
@@ -765,7 +925,7 @@ function handleStaticRequest(req, res, url, store) {
       ? "no-store, max-age=0"
       : "public, max-age=3600";
     res.writeHead(200, {
-      ...getSecurityHeaders({ includeCsp: extension === ".html" }),
+      ...getSecurityHeaders({ includeCsp: extension === ".html", req: res.req }),
       "Content-Type": contentType,
       "Cache-Control": cacheControl
     });
@@ -803,6 +963,7 @@ export function startPreviewServer({
     // Handle CORS preflight globally for all routes
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
+        ...getSecurityHeaders({ includeCsp: false, req }),
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",

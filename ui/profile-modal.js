@@ -1,4 +1,16 @@
 import { formatProfileJoinedDate } from "./date-utils.js";
+import { createIcon } from "./icons.js";
+
+const SOCIAL_PLATFORMS = ["Whatsapp", "Instagram", "Tiktok", "Facebook", "Twitter", "Discord"];
+
+function ensureSocialIcons(dom) {
+  SOCIAL_PLATFORMS.forEach((platform) => {
+    const iconContainer = dom[`social${platform}Icon`];
+    if (iconContainer && iconContainer.childElementCount === 0) {
+      iconContainer.appendChild(createIcon(platform.toLowerCase()));
+    }
+  });
+}
 
 const PROFILE_SECTION_CONFIG = {
   name: {
@@ -45,6 +57,30 @@ export function setProfileSectionEditing(dom, section, editing) {
 
 export function resetProfileEditing(dom) {
   Object.keys(PROFILE_SECTION_CONFIG).forEach((section) => setProfileSectionEditing(dom, section, false));
+  resetSocialEditing(dom);
+}
+
+export function setSocialFieldEditing(field, editing) {
+  const input = field?.querySelector?.("input");
+  const button = field?.querySelector?.("[data-profile-social-edit]");
+  if (!input || !button) {
+    return;
+  }
+
+  const isEditing = Boolean(editing);
+  const platform = field.querySelector(".profile-modal__social-label span:last-child")?.textContent || "red social";
+  field.classList.toggle("is-editing", isEditing);
+  field.dataset.editing = String(isEditing);
+  input.readOnly = !isEditing;
+  input.setAttribute("aria-readonly", String(!isEditing));
+  button.setAttribute("aria-pressed", String(isEditing));
+  button.setAttribute("aria-label", (isEditing ? "Confirmar " : "Editar ") + platform);
+}
+
+export function resetSocialEditing(dom) {
+  dom.profileSocialSection?.querySelectorAll?.(".profile-modal__social-field")?.forEach((field) => {
+    setSocialFieldEditing(field, false);
+  });
 }
 
 function getVisibilityIcon(visible) {
@@ -53,12 +89,18 @@ function getVisibilityIcon(visible) {
     : `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3l18 18"/><path d="M10.6 10.6A3 3 0 0 0 12 15a3 3 0 0 0 2.4-1.2"/><path d="M9.9 5.3A10.8 10.8 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-2.3 3.2"/><path d="M6.2 6.8A16.6 16.6 0 0 0 2.5 12s3.5 7 9.5 7a10 10 0 0 0 4.1-.9"/></svg>`;
 }
 
-function setVisibilityButton(button, visible, label) {
+function setVisibilityButton(button, visible, label, force = false) {
   if (!button) {
     return;
   }
 
-  button.dataset.visible = String(visible);
+  const sourceValue = String(visible);
+  if (!force && button.dataset.renderedSourceVisible === sourceValue) {
+    return;
+  }
+
+  button.dataset.renderedSourceVisible = sourceValue;
+  button.dataset.visible = sourceValue;
   button.setAttribute("aria-pressed", String(!visible));
   button.setAttribute("aria-label", visible ? `Ocultar ${label}` : `Mostrar ${label}`);
   button.innerHTML = getVisibilityIcon(visible);
@@ -86,12 +128,23 @@ function setPreviewImage(preview, avatarUrl) {
 }
 
 export function renderProfileModal(state, dom) {
+  ensureSocialIcons(dom);
   const isOpen = Boolean(state.isProfileModalOpen);
+  const wasOpen = dom.profileModal?.dataset?.renderedOpen === "true";
+  const justOpened = isOpen && !wasOpen;
+  if (dom.profileModal) {
+    dom.profileModal.dataset.renderedOpen = String(isOpen);
+  }
   const viewer = state.viewer || {};
   const displayName = viewer.profilePending
     ? viewer.profileSuggestedName || viewer.displayName || "Usuario"
     : viewer.displayName || "Usuario";
   const avatarUrl = viewer.avatarPendingUrl || viewer.avatarUrl || "";
+
+  if (dom.profileLinkGoogleButton) {
+    dom.profileLinkGoogleButton.hidden = !viewer.canLinkGoogle;
+    dom.profileLinkGoogleButton.disabled = !viewer.canLinkGoogle;
+  }
 
   if (dom.profileModalBackdrop) {
     dom.profileModalBackdrop.hidden = !isOpen;
@@ -115,6 +168,27 @@ export function renderProfileModal(state, dom) {
     }
   }
 
+  const username = viewer.nickname || "";
+  const usernameEditable = Boolean(viewer.profilePending);
+  if (dom.profileUsernameInput && dom.profileUsernameInput.dataset.renderedUsername !== username) {
+    dom.profileUsernameInput.value = username;
+    dom.profileUsernameInput.dataset.renderedUsername = username;
+    dom.profileUsernameInput.removeAttribute("aria-invalid");
+    if (dom.profileUsernameFeedback) {
+      dom.profileUsernameFeedback.textContent = "";
+      dom.profileUsernameFeedback.hidden = true;
+    }
+  }
+  if (dom.profileUsernameInput) {
+    dom.profileUsernameInput.readOnly = !usernameEditable;
+    dom.profileUsernameInput.setAttribute("aria-readonly", String(!usernameEditable));
+    dom.profileUsernameInput.required = usernameEditable;
+  }
+  if (dom.profileUsernameSection) {
+    dom.profileUsernameSection.dataset.editing = String(usernameEditable);
+    dom.profileUsernameSection.classList.toggle("is-editing", usernameEditable);
+  }
+
   const description = viewer.description || "";
   const showDescription = viewer.profileShowDescription !== false;
   const showJoinedAt = viewer.profileShowJoinedAt !== false;
@@ -125,8 +199,22 @@ export function renderProfileModal(state, dom) {
   if (dom.profileJoinedAtText) {
     dom.profileJoinedAtText.textContent = formatProfileJoinedDate(viewer.createdAt);
   }
-  setVisibilityButton(dom.profileDescriptionVisibilityButton, showDescription, "descripción");
-  setVisibilityButton(dom.profileJoinedAtVisibilityButton, showJoinedAt, "fecha de registro");
+  setVisibilityButton(dom.profileDescriptionVisibilityButton, showDescription, "descripción", justOpened);
+  setVisibilityButton(dom.profileJoinedAtVisibilityButton, showJoinedAt, "fecha de registro", justOpened);
+
+  const showSocial = viewer.profileShowSocial !== false;
+  setVisibilityButton(dom.profileSocialVisibilityButton, showSocial, "redes sociales", justOpened);
+  SOCIAL_PLATFORMS.forEach((platform) => {
+    const input = dom[`social${platform}Input`];
+    if (!input) {
+      return;
+    }
+    const value = viewer[`social${platform}`] || "";
+    if (justOpened || input.dataset.renderedValue !== value) {
+      input.value = value;
+      input.dataset.renderedValue = value;
+    }
+  });
 
   if (dom.profileAvatarInput && dom.profileAvatarInput.dataset.renderedAvatarUrl !== avatarUrl) {
     dom.profileAvatarInput.dataset.renderedAvatarUrl = avatarUrl;
@@ -137,12 +225,7 @@ export function renderProfileModal(state, dom) {
     }
   }
 
-  const wasOpen = dom.profileModal?.dataset?.renderedOpen === "true";
-  if (dom.profileModal) {
-    dom.profileModal.dataset.renderedOpen = String(isOpen);
-  }
-
-  if (isOpen && !wasOpen) {
+  if (justOpened) {
     resetProfileEditing(dom);
     if (dom.profileAvatarInput) {
       dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";

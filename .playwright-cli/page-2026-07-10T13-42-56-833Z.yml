@@ -1,0 +1,88 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - button "Paletas" [ref=e5] [cursor=pointer]
+        - switch "Tema oscuro" [checked] [ref=e13] [cursor=pointer]
+      - generic "TOPYKLY" [ref=e16]:
+        - generic [ref=e23]:
+          - generic [ref=e24]: TOPY
+          - generic [ref=e25]: KLY
+      - button "Iniciar sesión" [ref=e27] [cursor=pointer]
+    - main "Chat social" [ref=e29]:
+      - region "Temas" [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e35]:
+            - button "dasda 9, Matias_velazco" [ref=e36] [cursor=pointer]:
+              - generic [ref=e42]:
+                - generic [ref=e43]: dasda
+                - generic [ref=e44]: 9, Matias_velazco
+            - button "adada 1, Matias_velazco" [ref=e45] [cursor=pointer]:
+              - generic [ref=e51]:
+                - generic [ref=e52]: adada
+                - generic [ref=e53]: 1, Matias_velazco
+          - button "Crear nuevo tema de chat" [ref=e55] [cursor=pointer]: Crear nuevo tema
+      - region "Nuevo tema" [ref=e56]:
+        - generic [ref=e57]:
+          - textbox "Titulo del nuevo tema" [ref=e59]:
+            - /placeholder: Titulo del tema
+          - textbox "Primer mensaje del nuevo tema" [ref=e61]:
+            - /placeholder: Primer mensaje
+          - button "Crear tema con el primer mensaje" [ref=e62] [cursor=pointer]:
+            - generic [ref=e63]: Crear tema
+      - region [ref=e64]:
+        - heading "Comunidad" [level=2] [ref=e68]
+        - generic [ref=e69]:
+          - generic [ref=e70]:
+            - heading "Usuarios conectados" [level=3] [ref=e76]
+            - generic [ref=e77]:
+              - article [ref=e78] [cursor=pointer]:
+                - 'button "Seleccionar usuario: Usuario" [ref=e80]':
+                  - paragraph [ref=e81]: Usuario
+                - generic [ref=e82]:
+                  - button "Ver perfil" [ref=e83]
+                  - button "Mensaje directo" [ref=e87]
+              - article [ref=e90] [cursor=pointer]:
+                - 'button "Seleccionar usuario: Matias_velazco" [ref=e92]':
+                  - paragraph [ref=e93]: Matias_velazco
+                - generic [ref=e94]:
+                  - button "Ver perfil" [ref=e95]
+                  - button "Mensaje directo" [ref=e99]
+          - generic [ref=e102]:
+            - heading "Ranking" [level=3] [ref=e109]
+            - group "Alcance del ranking" [ref=e111]:
+              - button "GLOBAL" [pressed] [ref=e112] [cursor=pointer]
+              - button "TEMA" [ref=e113] [cursor=pointer]
+            - generic "Cambiar ranking" [ref=e114]:
+              - button "Ranking anterior" [ref=e115] [cursor=pointer]
+              - 'button "Modo actual: TEMAS COMENTARIOS" [ref=e119] [cursor=pointer]':
+                - generic: TEMAS COMENTARIOS
+              - button "Ranking siguiente" [ref=e120] [cursor=pointer]
+            - generic [ref=e125]:
+              - article [ref=e126]:
+                - generic [ref=e127]: "1"
+                - generic [ref=e128]:
+                  - paragraph [ref=e129]: dasda
+                  - paragraph [ref=e130]: 9 comentarios
+              - article [ref=e131]:
+                - generic [ref=e132]: "2"
+                - generic [ref=e133]:
+                  - paragraph [ref=e134]: adada
+                  - paragraph [ref=e135]: 1 comentario
+  - dialog "Iniciar sesion" [ref=e143]:
+    - generic [ref=e144]:
+      - generic [ref=e145]:
+        - paragraph [ref=e146]: Sesion
+        - heading "Iniciar sesion" [level=2] [ref=e147]
+      - button "Cerrar inicio de sesion" [ref=e148] [cursor=pointer]
+    - generic [ref=e152]:
+      - button "Continuar con Google" [active] [ref=e153] [cursor=pointer]
+      - generic [ref=e161]: o
+      - generic [ref=e163]:
+        - group "Modo de acceso" [ref=e164]:
+          - button "Entrar" [pressed] [ref=e165] [cursor=pointer]
+          - button "Crear cuenta" [ref=e166] [cursor=pointer]
+        - generic [ref=e167]:
+          - generic [ref=e168]: Email
+          - textbox "Email" [ref=e169]
+        - button "Enviar código" [ref=e170] [cursor=pointer]

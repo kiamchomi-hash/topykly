@@ -1,0 +1,139 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - button "Paletas" [expanded] [ref=e5] [cursor=pointer]:
+          - generic [ref=e11]: Paletas
+        - switch "Tema oscuro" [checked] [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - img
+      - generic "TOPYKLY" [ref=e16]:
+        - img [ref=e18]
+        - generic [ref=e23]:
+          - generic [ref=e24]: TOPY
+          - generic [ref=e25]: KLY
+      - button "Iniciar sesión" [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: Iniciar sesión
+    - main "Chat social" [ref=e29]:
+      - region "Temas" [ref=e30]:
+        - generic [ref=e31]:
+          - button "dasda 2, Matias_velazco" [ref=e78] [cursor=pointer]:
+            - img [ref=e80]
+            - generic [ref=e84]:
+              - generic [ref=e85]: dasda
+              - generic [ref=e86]: 2, Matias_velazco
+          - button "Crear nuevo tema de chat" [ref=e37] [cursor=pointer]: Crear nuevo tema
+      - region "Nuevo tema" [ref=e38]:
+        - generic [ref=e87]:
+          - textbox "Titulo del nuevo tema" [ref=e89]:
+            - /placeholder: Titulo del tema
+          - textbox "Primer mensaje del nuevo tema" [ref=e91]:
+            - /placeholder: Primer mensaje
+          - button "Crear tema con el primer mensaje" [ref=e92] [cursor=pointer]:
+            - generic [ref=e93]: Crear tema
+      - region "Comunidad" [ref=e40]:
+        - heading "Comunidad" [level=2] [ref=e44]
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - img [ref=e49]
+              - heading "Usuarios conectados" [level=3] [ref=e52]
+            - generic [ref=e53]:
+              - article [ref=e94] [cursor=pointer]:
+                - 'button "Seleccionar usuario: Usuario" [ref=e96]':
+                  - paragraph [ref=e97]: Usuario
+                - generic [ref=e98]:
+                  - button "Ver perfil" [ref=e99]:
+                    - img [ref=e100]
+                  - button "Mensaje directo" [ref=e103]:
+                    - img [ref=e104]
+              - article [ref=e106] [cursor=pointer]:
+                - 'button "Seleccionar usuario: Matias_velazco" [ref=e108]':
+                  - paragraph [ref=e109]: Matias_velazco
+                - generic [ref=e110]:
+                  - button "Ver perfil" [ref=e111]:
+                    - img [ref=e112]
+                  - button "Mensaje directo" [ref=e115]:
+                    - img [ref=e116]
+          - generic [ref=e54]:
+            - generic [ref=e56]:
+              - img [ref=e126]
+              - heading "Ranking" [level=3] [ref=e61]
+            - group "Alcance del ranking" [ref=e63]:
+              - button "GLOBAL" [pressed] [ref=e64] [cursor=pointer]
+              - button "TEMA" [ref=e65] [cursor=pointer]
+            - generic "Cambiar ranking" [ref=e66]:
+              - button "Ranking anterior" [ref=e67] [cursor=pointer]:
+                - img [ref=e69]
+              - 'button "Modo actual: TEMAS COMENTARIOS" [ref=e71] [cursor=pointer]':
+                - generic:
+                  - generic: TEMAS COMENTARIOS
+                  - generic:
+                    - img
+              - button "Ranking siguiente" [ref=e72] [cursor=pointer]:
+                - img [ref=e74]
+            - article [ref=e121]:
+              - generic [ref=e122]: "1"
+              - generic [ref=e123]:
+                - paragraph [ref=e124]: dasda
+                - paragraph [ref=e125]: 2 comentarios
+  - dialog "Selector de paletas" [active] [ref=e130]:
+    - button "Cerrar selector de paletas" [ref=e132] [cursor=pointer]:
+      - img [ref=e134]
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - region "Paleta personalizada" [ref=e139] [cursor=pointer]:
+          - generic [ref=e140]:
+            - generic [ref=e142]: Personalizada
+            - button "Aplicar paleta personalizada" [ref=e143]: Aplicar
+          - generic [ref=e144]:
+            - button "Abrir selector hexadecimal" [ref=e145]:
+              - textbox: "#B25B33"
+            - generic [ref=e147]:
+              - generic [ref=e148]: Color hexadecimal personalizado
+              - generic: HEX
+              - textbox "Color hexadecimal personalizado" [ref=e149]: "#B25B33"
+          - generic [ref=e150]:
+            - generic [ref=e152]: Light
+            - generic [ref=e170]: Dark
+        - button "Generar paleta personalizada al azar" [ref=e187] [cursor=pointer]:
+          - generic [ref=e188]: Al azar
+      - 'button "Paleta activa: Default" [pressed] [ref=e189] [cursor=pointer]':
+        - generic [ref=e190]:
+          - generic [ref=e192]: Default
+          - generic [ref=e193]: Actual
+        - generic [ref=e194]:
+          - generic [ref=e196]: Light
+          - generic [ref=e214]: Dark
+      - button "Usar paleta Turquesa" [ref=e231] [cursor=pointer]:
+        - generic [ref=e232]:
+          - generic [ref=e234]: Turquesa
+          - generic [ref=e235]: Aplicar
+        - generic [ref=e236]:
+          - generic [ref=e238]: Light
+          - generic [ref=e256]: Dark
+      - button "Usar paleta Bosque" [ref=e273] [cursor=pointer]:
+        - generic [ref=e274]:
+          - generic [ref=e276]: Bosque
+          - generic [ref=e277]: Aplicar
+        - generic [ref=e278]:
+          - generic [ref=e280]: Light
+          - generic [ref=e298]: Dark
+      - button "Usar paleta Terracota" [ref=e315] [cursor=pointer]:
+        - generic [ref=e316]:
+          - generic [ref=e318]: Terracota
+          - generic [ref=e319]: Aplicar
+        - generic [ref=e320]:
+          - generic [ref=e322]: Light
+          - generic [ref=e340]: Dark
+      - button "Usar paleta Azul" [ref=e357] [cursor=pointer]:
+        - generic [ref=e358]:
+          - generic [ref=e360]: Azul
+          - generic [ref=e361]: Aplicar
+        - generic [ref=e362]:
+          - generic [ref=e364]: Light
+          - generic [ref=e382]: Dark

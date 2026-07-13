@@ -19,8 +19,22 @@ const MESSAGE_TEXT_MAX_LENGTH = 240;
 const REPORT_REASON_MAX_LENGTH = 240;
 const NICKNAME_MIN_LENGTH = 3;
 const NICKNAME_MAX_LENGTH = 24;
+const DISPLAY_NAME_MAX_LENGTH = 50;
 const PROFILE_DESCRIPTION_MAX_LENGTH = 180;
+const SOCIAL_HANDLE_MAX_LENGTH = 40;
 const PASSWORD_MIN_LENGTH = 8;
+export const EMAIL_AUTH_CODE_TTL_MS = 10 * 60_000;
+export const EMAIL_AUTH_RESEND_DELAY_MS = 60_000;
+export const PASSWORD_RESET_CODE_TTL_MS = 10 * 60_000;
+export const PASSWORD_RESET_RESEND_DELAY_MS = 60_000;
+export const MINIMUM_REGISTRATION_AGE = 16;
+export const TERMS_VERSION = "2026-07-10";
+const EMAIL_AUTH_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_EMAIL_HOURLY_MAX = 5;
+const PASSWORD_RESET_IP_HOURLY_MAX = 20;
+const PASSWORD_RESET_RATE_WINDOW_MS = 60 * 60_000;
+const LOCAL_AUTH_CHALLENGE_SECRET = crypto.randomBytes(32).toString("base64url");
 const AVATAR_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 const AVATAR_UPLOAD_MAX_BASE64_BYTES = Math.ceil(AVATAR_UPLOAD_MAX_BYTES / 3) * 4;
 const AVATAR_UPLOAD_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -48,6 +62,9 @@ const GUEST_SESSION_MAX_PER_IP = 25;
 const GUEST_SESSION_MAX_TOTAL = 1000;
 const MESSAGE_REACTION_RESET_TIME_ZONE = "America/New_York";
 const MESSAGE_REACTION_RESET_META_KEY = "message_reactions_reset_day";
+const PRESENCE_ONLINE_WINDOW_MS = 20_000;
+const PRESENCE_ACCUMULATION_CAP_SECONDS = 30;
+const PRESENCE_RESET_META_KEY = "connected_hours_reset_day";
 const EXTRA_TOPIC_SEEDS = [
   ["Guardia tardia", "Hilo tranquilo para quien entra despues de hora."],
   ["Objetivos cortos", "Lista rapida de pendientes y mini retos."],
@@ -137,7 +154,7 @@ function isModeratorRole(role) {
 }
 
 function getEffectiveViewerRole(row) {
-  if (row?.type === "registered" && isAdminEmail(row.email)) {
+  if (row?.type === "registered" && row.email_verified_at && isAdminEmail(row.email)) {
     return ADMIN_ROLE;
   }
   return row?.role || "";
@@ -174,6 +191,18 @@ function normalizeUserDisplayName(value, fallback = "Usuario") {
   return (normalized || fallback).slice(0, 80);
 }
 
+function normalizeRequiredDisplayName(value) {
+  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Ingresa un nombre visible.");
+  }
+  if (normalized.length > DISPLAY_NAME_MAX_LENGTH) {
+    throw new ApiError(400, "VALIDATION_ERROR", `El nombre visible no puede superar ${DISPLAY_NAME_MAX_LENGTH} caracteres.`);
+  }
+
+  return normalized;
+}
+
 function normalizeOptionalEmail(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return normalized || null;
@@ -186,6 +215,63 @@ function normalizeRequiredEmail(value) {
   }
 
   return normalized;
+}
+
+function normalizeRegistrationAge(value) {
+  const age = Number(value);
+  if (!Number.isInteger(age) || age < MINIMUM_REGISTRATION_AGE || age > 120) {
+    throw new ApiError(400, "INVALID_AGE", `Debes tener al menos ${MINIMUM_REGISTRATION_AGE} anos para crear una cuenta.`);
+  }
+
+  return age;
+}
+
+function assertTermsAccepted(acceptedTerms, termsVersion) {
+  if (acceptedTerms !== true || termsVersion !== TERMS_VERSION) {
+    throw new ApiError(400, "TERMS_REQUIRED", "Debes aceptar los Terminos y Condiciones para crear una cuenta.");
+  }
+}
+
+function hashEmailAuthCode(challengeId, code) {
+  return crypto
+    .createHash("sha256")
+    .update(`${challengeId}:${String(code || "")}`, "utf8")
+    .digest("base64url");
+}
+
+function codesMatch(actualHash, expectedHash) {
+  const actual = Buffer.from(String(actualHash || ""));
+  const expected = Buffer.from(String(expectedHash || ""));
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function getAuthChallengeSecret() {
+  const configuredSecret = String(
+    process.env.TOPYKLY_AUTH_CHALLENGE_SECRET
+    || process.env.TOPYKLY_SESSION_SECRET
+    || process.env.CHETREND_SESSION_SECRET
+    || ""
+  ).trim();
+  if (configuredSecret) {
+    return configuredSecret;
+  }
+
+  const runtimeEnvironment = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  if (runtimeEnvironment === "production") {
+    throw new ApiError(503, "AUTH_CHALLENGE_NOT_CONFIGURED", "La recuperacion de cuenta no esta configurada.");
+  }
+  return LOCAL_AUTH_CHALLENGE_SECRET;
+}
+
+function createPrivateLookupKey(kind, value) {
+  return crypto
+    .createHmac("sha256", getAuthChallengeSecret())
+    .update(`${kind}:${String(value || "")}`, "utf8")
+    .digest("base64url");
+}
+
+function hashPasswordResetCode(challengeId, code) {
+  return createPrivateLookupKey("password-reset-code", `${challengeId}:${String(code || "")}`);
 }
 
 function normalizeNickname(value) {
@@ -215,6 +301,44 @@ function normalizeProfileDescription(value) {
   const normalized = String(value || "").trim().replace(/\s+/g, " ");
   if (normalized.length > PROFILE_DESCRIPTION_MAX_LENGTH) {
     throw new ApiError(400, "VALIDATION_ERROR", `La descripcion no puede superar ${PROFILE_DESCRIPTION_MAX_LENGTH} caracteres.`);
+  }
+
+  return normalized;
+}
+
+function normalizeSocialHandle(value, label) {
+  const normalized = String(value || "").trim().replace(/\s+/g, "");
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length > SOCIAL_HANDLE_MAX_LENGTH) {
+    throw new ApiError(400, "VALIDATION_ERROR", `El usuario de ${label} no puede superar ${SOCIAL_HANDLE_MAX_LENGTH} caracteres.`);
+  }
+
+  if (/[\/\\]|:\/\/|^javascript:|^data:|[\x00-\x1f]/i.test(normalized)) {
+    throw new ApiError(400, "VALIDATION_ERROR", `El usuario de ${label} contiene caracteres no permitidos.`);
+  }
+
+  if (!/^[A-Za-z0-9_.\-@+]+$/.test(normalized)) {
+    throw new ApiError(400, "VALIDATION_ERROR", `El usuario de ${label} solo puede usar letras, numeros, punto, guion y guion bajo.`);
+  }
+
+  return normalized.replace(/^@/, "");
+}
+
+function normalizeSocialWhatsapp(value) {
+  const normalized = String(value || "").trim().replace(/[\s()-]/g, "");
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length > SOCIAL_HANDLE_MAX_LENGTH) {
+    throw new ApiError(400, "VALIDATION_ERROR", `El numero de WhatsApp no puede superar ${SOCIAL_HANDLE_MAX_LENGTH} caracteres.`);
+  }
+
+  if (!/^\+?[0-9]+$/.test(normalized)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "El numero de WhatsApp solo puede tener digitos y un + inicial.");
   }
 
   return normalized;
@@ -521,9 +645,17 @@ function initSchema(db) {
       auth_provider TEXT,
       auth_subject TEXT,
       email TEXT,
+      email_verified_at TEXT,
       description TEXT NOT NULL DEFAULT '',
       profile_show_description INTEGER NOT NULL DEFAULT 1,
       profile_show_joined_at INTEGER NOT NULL DEFAULT 1,
+      social_whatsapp TEXT NOT NULL DEFAULT '',
+      social_instagram TEXT NOT NULL DEFAULT '',
+      social_tiktok TEXT NOT NULL DEFAULT '',
+      social_facebook TEXT NOT NULL DEFAULT '',
+      social_twitter TEXT NOT NULL DEFAULT '',
+      social_discord TEXT NOT NULL DEFAULT '',
+      profile_show_social INTEGER NOT NULL DEFAULT 1,
       avatar_url TEXT,
       avatar_pending_url TEXT,
       avatar_review_status TEXT,
@@ -656,6 +788,35 @@ function initSchema(db) {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS auth_email_challenges (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      intent TEXT NOT NULL CHECK (intent IN ('login', 'register')),
+      code_hash TEXT NOT NULL,
+      nickname TEXT,
+      age INTEGER,
+      terms_version TEXT,
+      expires_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 5,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS password_reset_challenges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      email_key TEXT NOT NULL,
+      request_ip_key TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 5,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   ensureColumn(db, "users", "last_topic_at", "TEXT");
@@ -663,9 +824,17 @@ function initSchema(db) {
   ensureColumn(db, "users", "auth_provider", "TEXT");
   ensureColumn(db, "users", "auth_subject", "TEXT");
   ensureColumn(db, "users", "email", "TEXT");
+  ensureColumn(db, "users", "email_verified_at", "TEXT");
   ensureColumn(db, "users", "description", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "users", "profile_show_description", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "profile_show_joined_at", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "users", "social_whatsapp", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "social_instagram", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "social_tiktok", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "social_facebook", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "social_twitter", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "social_discord", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "profile_show_social", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "nickname", "TEXT");
   ensureColumn(db, "users", "nickname_norm", "TEXT");
   ensureColumn(db, "users", "password_hash", "TEXT");
@@ -675,6 +844,10 @@ function initSchema(db) {
   ensureColumn(db, "users", "profile_pending", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "profile_suggested_name", "TEXT");
   ensureColumn(db, "users", "profile_suggested_avatar_url", "TEXT");
+  ensureColumn(db, "users", "registration_age", "INTEGER");
+  ensureColumn(db, "users", "terms_accepted_at", "TEXT");
+  ensureColumn(db, "users", "terms_version", "TEXT");
+  ensureColumn(db, "auth_email_challenges", "password_hash", "TEXT");
   ensureColumn(db, "messages", "dislikes", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "reports", "reporter_session_id", "TEXT");
   ensureColumn(db, "reports", "reporter_user_id", "TEXT");
@@ -682,6 +855,10 @@ function initSchema(db) {
   ensureColumn(db, "reports", "resolved_at", "TEXT");
   ensureColumn(db, "moderation_actions", "actor_user_id", "TEXT");
   ensureColumn(db, "moderation_actions", "reason", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "users", "total_connected_seconds", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "connected_seconds_24h", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "connected_seconds_today", "INTEGER NOT NULL DEFAULT 0");
+  db.exec("DROP TABLE IF EXISTS user_presence_hourly;");
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS users_auth_identity_idx
     ON users(auth_provider, auth_subject)
@@ -690,6 +867,11 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS users_email_idx
     ON users(email)
     WHERE email IS NOT NULL;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS users_verified_email_idx
+    ON users(email)
+    WHERE email IS NOT NULL AND email_verified_at IS NOT NULL;
+
     CREATE UNIQUE INDEX IF NOT EXISTS users_nickname_norm_idx
     ON users(nickname_norm)
     WHERE nickname_norm IS NOT NULL;
@@ -697,6 +879,15 @@ function initSchema(db) {
     CREATE UNIQUE INDEX IF NOT EXISTS users_password_email_idx
     ON users(email)
     WHERE email IS NOT NULL AND password_hash IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS password_reset_email_rate_idx
+    ON password_reset_challenges(email_key, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS password_reset_ip_rate_idx
+    ON password_reset_challenges(request_ip_key, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS password_reset_expiry_idx
+    ON password_reset_challenges(expires_at, consumed_at);
     CREATE INDEX IF NOT EXISTS users_frontend_active_idx
     ON users(status, type, score DESC, created_at ASC);
 
@@ -717,6 +908,9 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS sessions_guest_ip_idx
     ON sessions(auth_mode, last_ip, updated_at DESC, created_at DESC, id DESC);
+
+    CREATE INDEX IF NOT EXISTS sessions_user_presence_idx
+    ON sessions(user_id, updated_at DESC);
 
     CREATE INDEX IF NOT EXISTS topics_status_rank_idx
     ON topics(status, active_rank ASC);
@@ -758,6 +952,12 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS moderation_actions_target_idx
     ON moderation_actions(target_type, target_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS auth_email_challenges_email_idx
+    ON auth_email_challenges(email, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS auth_email_challenges_expiry_idx
+    ON auth_email_challenges(expires_at, consumed_at);
   `);
 }
 
@@ -768,6 +968,53 @@ function ensureColumn(db, tableName, columnName, columnDefinition) {
   }
 
   db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+}
+
+function rollConnectedHoursIfNeeded(db, nowIso) {
+  const resetDay = getMessageReactionResetDay(nowIso);
+  const row = db.prepare("SELECT value FROM app_metadata WHERE key = ?").get(PRESENCE_RESET_META_KEY);
+
+  if (!row) {
+    db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
+      PRESENCE_RESET_META_KEY,
+      resetDay,
+      nowIso
+    );
+    return;
+  }
+
+  if (row.value === resetDay) {
+    return;
+  }
+
+  db.prepare("UPDATE users SET connected_seconds_24h = connected_seconds_today, connected_seconds_today = 0").run();
+  db.prepare("UPDATE app_metadata SET value = ?, updated_at = ? WHERE key = ?").run(
+    resetDay,
+    nowIso,
+    PRESENCE_RESET_META_KEY
+  );
+}
+
+function accumulatePresence(db, userId, previousUpdatedAtIso, nowIso) {
+  rollConnectedHoursIfNeeded(db, nowIso);
+
+  if (!userId || !previousUpdatedAtIso) {
+    return;
+  }
+
+  const elapsedSeconds = Math.round(
+    (new Date(nowIso).getTime() - new Date(previousUpdatedAtIso).getTime()) / 1000
+  );
+  if (elapsedSeconds <= 0 || elapsedSeconds > PRESENCE_ACCUMULATION_CAP_SECONDS) {
+    return;
+  }
+
+  db.prepare(`
+    UPDATE users
+    SET total_connected_seconds = total_connected_seconds + ?,
+        connected_seconds_today = connected_seconds_today + ?
+    WHERE id = ?
+  `).run(elapsedSeconds, elapsedSeconds, userId);
 }
 
 function seedUsers(db) {
@@ -872,9 +1119,49 @@ function shouldSeedDemoData(env = process.env, fallback = true) {
 
   return fallback;
 }
+function seedFakeFriendRequests(db) {
+  const countRow = db.prepare("SELECT COUNT(*) AS count FROM users WHERE id LIKE 'fake-user-%'").get();
+  if ((countRow?.count ?? 0) > 0) {
+    return;
+  }
+
+  const insertUser = db.prepare(`
+    INSERT INTO users (id, name, type, role, score, status, created_at, updated_at)
+    VALUES (?, ?, 'registered', '', 0, 'active', ?, ?)
+  `);
+
+  const insertRequest = db.prepare(`
+    INSERT OR IGNORE INTO friend_requests (requester_id, addressee_id, status, created_at, updated_at)
+    VALUES (?, ?, 'pending', ?, ?)
+  `);
+
+  const nowIso = new Date().toISOString();
+
+  // Create 30 fake users sending request to u1 (incoming)
+  for (let i = 1; i <= 30; i++) {
+    const userId = `fake-user-in-${i}`;
+    const name = `Usuario Recibido ${i}`;
+    insertUser.run(userId, name, nowIso, nowIso);
+    insertRequest.run(userId, "u1", nowIso, nowIso);
+  }
+
+  // Create 30 fake users receiving request from u1 (outgoing)
+  for (let i = 1; i <= 30; i++) {
+    const userId = `fake-user-out-${i}`;
+    const name = `Usuario Enviado ${i}`;
+    insertUser.run(userId, name, nowIso, nowIso);
+    insertRequest.run("u1", userId, nowIso, nowIso);
+  }
+}
+
 function seedDatabase(db) {
   seedUsers(db);
   seedTopics(db);
+
+  const isRunningTests = process.argv[1] && (process.argv[1].endsWith("run.mjs") || process.argv[1].includes("tests"));
+  if (!isRunningTests) {
+    seedFakeFriendRequests(db);
+  }
 }
 
 function purgeDemoData(db) {
@@ -946,9 +1233,19 @@ function mapViewerRow(row, sessionRow) {
     role: getEffectiveViewerRole(row),
     isAdmin: row.type === "registered" && canModerate(row),
     email: row.email ?? null,
+    emailVerified: Boolean(row.email_verified_at),
+    registrationAge: row.registration_age ?? null,
+    termsAccepted: Boolean(row.terms_accepted_at),
     description: row.description ?? "",
     profileShowDescription: row.profile_show_description !== 0,
     profileShowJoinedAt: row.profile_show_joined_at !== 0,
+    socialWhatsapp: row.social_whatsapp ?? "",
+    socialInstagram: row.social_instagram ?? "",
+    socialTiktok: row.social_tiktok ?? "",
+    socialFacebook: row.social_facebook ?? "",
+    socialTwitter: row.social_twitter ?? "",
+    socialDiscord: row.social_discord ?? "",
+    profileShowSocial: row.profile_show_social !== 0,
     createdAt: row.created_at ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarPendingUrl: row.avatar_pending_url ?? null,
@@ -957,6 +1254,8 @@ function mapViewerRow(row, sessionRow) {
     profileSuggestedName: row.profile_suggested_name ?? null,
     profileSuggestedAvatarUrl: row.profile_suggested_avatar_url ?? null,
     authProvider: row.auth_provider ?? null,
+    hasPassword: viewerType === "registered" && Boolean(row.password_hash),
+    canLinkGoogle: viewerType === "registered" && Boolean(row.password_hash && row.email && !row.auth_provider && !row.auth_subject),
     rateLimits: {
       createTopicMs: rateLimits.createTopicMs,
       postMessageMs: rateLimits.postMessageMs,
@@ -1192,6 +1491,8 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", pers
 
   const resolvedIpAddress = normalizeIpAddress(ipAddress || sessionRow.last_ip || "");
 
+  accumulatePresence(db, sessionRow.user_id, sessionRow.updated_at, nowIso);
+
   db.prepare(`
     UPDATE sessions
     SET last_ip = ?, updated_at = ?
@@ -1220,20 +1521,67 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", pers
 function getFrontendUsers(db, viewerId, profileUserIds = []) {
   const friendshipStatusByUserId = arguments[3] instanceof Map ? arguments[3] : new Map();
   const extraUserIds = [...new Set(profileUserIds.filter((userId) => userId && userId !== viewerId))];
-  const extraUserFilter = extraUserIds.length ? ` OR id IN (${extraUserIds.map(() => "?").join(", ")})` : "";
+  const extraUserFilter = extraUserIds.length ? ` OR users.id IN (${extraUserIds.map(() => "?").join(", ")})` : "";
+  const nowMs = Date.now();
 
-  return db.prepare(`
-    SELECT id, name, nickname, type, role, score, email, description, profile_show_description AS profileShowDescription, profile_show_joined_at AS profileShowJoinedAt, created_at AS createdAt, avatar_url AS avatarUrl, avatar_pending_url AS avatarPendingUrl, avatar_review_status AS avatarReviewStatus, profile_pending AS profilePending
+  const rows = db.prepare(`
+    SELECT
+      users.id, users.name, users.nickname, users.type, users.role, users.score, users.description,
+      users.profile_show_description AS profileShowDescription,
+      users.profile_show_joined_at AS profileShowJoinedAt,
+      users.social_whatsapp AS socialWhatsapp,
+      users.social_instagram AS socialInstagram,
+      users.social_tiktok AS socialTiktok,
+      users.social_facebook AS socialFacebook,
+      users.social_twitter AS socialTwitter,
+      users.social_discord AS socialDiscord,
+      users.profile_show_social AS profileShowSocial,
+      users.created_at AS createdAt,
+      users.avatar_url AS avatarUrl,
+      users.avatar_pending_url AS avatarPendingUrl,
+      users.avatar_review_status AS avatarReviewStatus,
+      users.profile_pending AS profilePending,
+      users.total_connected_seconds AS totalConnectedSeconds,
+      users.connected_seconds_24h AS connectedSeconds24h,
+      COALESCE(post_stats.post_count, 0) AS postCount,
+      COALESCE(comment_stats.comment_count, 0) AS commentCount,
+      COALESCE(like_stats.like_count, 0) AS likeCount,
+      presence.last_seen_at AS lastSeenAt
     FROM users
-    WHERE status = 'active' AND (type = 'registered' OR id = ?${extraUserFilter})
-    ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, score DESC, created_at ASC
+    LEFT JOIN (
+      SELECT author_id, COUNT(*) AS post_count FROM topics WHERE status != 'blocked' GROUP BY author_id
+    ) post_stats ON post_stats.author_id = users.id
+    LEFT JOIN (
+      SELECT author_id, COUNT(*) AS comment_count FROM messages WHERE kind = 'user' AND is_root = 0 GROUP BY author_id
+    ) comment_stats ON comment_stats.author_id = users.id
+    LEFT JOIN (
+      SELECT author_id, SUM(likes) AS like_count FROM messages WHERE kind = 'user' GROUP BY author_id
+    ) like_stats ON like_stats.author_id = users.id
+    LEFT JOIN (
+      SELECT user_id, MAX(updated_at) AS last_seen_at FROM sessions GROUP BY user_id
+    ) presence ON presence.user_id = users.id
+    WHERE users.status = 'active' AND (users.type = 'registered' OR users.id = ?${extraUserFilter})
+    ORDER BY
+      COALESCE(post_stats.post_count, 0) DESC,
+      COALESCE(comment_stats.comment_count, 0) DESC,
+      COALESCE(like_stats.like_count, 0) DESC,
+      users.total_connected_seconds DESC,
+      users.connected_seconds_24h DESC,
+      users.created_at ASC
     LIMIT 80
-  `).all(viewerId, ...extraUserIds, viewerId).map((user) => ({
-    ...user,
-    profileShowDescription: user.profileShowDescription !== 0,
-    profileShowJoinedAt: user.profileShowJoinedAt !== 0,
-    friendshipStatus: user.id === viewerId ? "self" : friendshipStatusByUserId.get(user.id) || "none"
-  }));
+  `).all(viewerId, ...extraUserIds);
+
+  return rows.map((user) => {
+    const { lastSeenAt, ...rest } = user;
+    return {
+      ...rest,
+      online: Boolean(lastSeenAt) && nowMs - new Date(lastSeenAt).getTime() <= PRESENCE_ONLINE_WINDOW_MS,
+      profileShowDescription: user.profileShowDescription !== 0,
+      profileShowJoinedAt: user.profileShowJoinedAt !== 0,
+      profileShowSocial: user.profileShowSocial !== 0,
+      friendshipStatus: user.id === viewerId ? "self" : friendshipStatusByUserId.get(user.id) || "none"
+    };
+  });
 }
 
 function hydrateTopicMessages(db, topicId, viewerId = null) {
@@ -1467,6 +1815,7 @@ function getFriendshipUserSummary(row) {
   return {
     id: row.id,
     name: row.name,
+    nickname: row.nickname ?? null,
     avatarUrl: row.avatar_url ?? null
   };
 }
@@ -1483,7 +1832,7 @@ function getFriendshipsForFrontend(db, viewerId) {
   }
 
   const incoming = db.prepare(`
-    SELECT users.id, users.name, users.avatar_url
+    SELECT users.id, users.name, users.nickname, users.avatar_url
     FROM friend_requests
     JOIN users ON users.id = friend_requests.requester_id
     WHERE friend_requests.addressee_id = ?
@@ -1494,7 +1843,7 @@ function getFriendshipsForFrontend(db, viewerId) {
   `).all(viewerId).map(getFriendshipUserSummary);
 
   const outgoing = db.prepare(`
-    SELECT users.id, users.name, users.avatar_url
+    SELECT users.id, users.name, users.nickname, users.avatar_url
     FROM friend_requests
     JOIN users ON users.id = friend_requests.addressee_id
     WHERE friend_requests.requester_id = ?
@@ -1504,19 +1853,26 @@ function getFriendshipsForFrontend(db, viewerId) {
     LIMIT 50
   `).all(viewerId).map(getFriendshipUserSummary);
 
+  const nowMs = Date.now();
   const friends = db.prepare(`
-    SELECT users.id, users.name, users.avatar_url
+    SELECT users.id, users.name, users.nickname, users.avatar_url, presence.last_seen_at
     FROM friend_requests
     JOIN users ON users.id = CASE
       WHEN friend_requests.requester_id = ? THEN friend_requests.addressee_id
       ELSE friend_requests.requester_id
     END
+    LEFT JOIN (
+      SELECT user_id, MAX(updated_at) AS last_seen_at FROM sessions GROUP BY user_id
+    ) presence ON presence.user_id = users.id
     WHERE friend_requests.status = 'accepted'
       AND (friend_requests.requester_id = ? OR friend_requests.addressee_id = ?)
       AND users.status = 'active'
     ORDER BY friend_requests.updated_at DESC, users.name ASC
     LIMIT 80
-  `).all(viewerId, viewerId, viewerId).map(getFriendshipUserSummary);
+  `).all(viewerId, viewerId, viewerId).map((row) => ({
+    ...getFriendshipUserSummary(row),
+    online: Boolean(row.last_seen_at) && nowMs - new Date(row.last_seen_at).getTime() <= PRESENCE_ONLINE_WINDOW_MS
+  }));
 
   return { incoming, outgoing, friends };
 }
@@ -1857,7 +2213,7 @@ function recordMessageReaction(db, messageRow, userId, reactionType) {
   `).get(messageRow.id, userId, messageRow.id, userId);
 
   if (existingReaction) {
-    throw new ApiError(409, "MESSAGE_REACTION_LOCKED", "Ya reaccionaste a este comentario. Podras votar de nuevo despues del reinicio diario.");
+    throw new ApiError(409, "MESSAGE_REACTION_LOCKED", "Ya reaccionaste a este comentario. Podras hacerlo de nuevo despues del reinicio diario.");
   }
 
   db.prepare(`
@@ -1892,6 +2248,86 @@ function assertNicknameAvailable(db, nicknameKey, userId = null) {
     throw new ApiError(409, "NICKNAME_TAKEN", "Ese nickname ya esta en uso.");
   }
 }
+function normalizeGeneratedNicknameBase(value) {
+  let candidate = String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9_.-]+/g, "_")
+    .replace(/^[^A-Za-z]+/, "")
+    .replace(/[._-]+$/g, "");
+
+  if (!candidate) {
+    candidate = "Usuario";
+  }
+  if (candidate.length < NICKNAME_MIN_LENGTH) {
+    candidate = `${candidate}_user`;
+  }
+
+  return normalizeNickname(candidate.slice(0, NICKNAME_MAX_LENGTH));
+}
+
+function createAvailableNickname(db, preferredValue, userId) {
+  const baseNickname = normalizeGeneratedNicknameBase(preferredValue);
+  const baseKey = normalizeNicknameKey(baseNickname);
+  const existingBase = db.prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1").get(baseKey);
+  if (!existingBase || existingBase.id === userId) {
+    return baseNickname;
+  }
+
+  const digest = crypto
+    .createHash("sha256")
+    .update(String(userId || preferredValue || crypto.randomUUID()), "utf8")
+    .digest("hex");
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const suffix = `_${digest.slice(0, 5)}${attempt || ""}`;
+    const prefixLength = NICKNAME_MAX_LENGTH - suffix.length;
+    const candidate = normalizeNickname(`${baseNickname.slice(0, prefixLength)}${suffix}`);
+    const existing = db.prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1")
+      .get(normalizeNicknameKey(candidate));
+    if (!existing || existing.id === userId) {
+      return candidate;
+    }
+  }
+
+  throw new ApiError(409, "NICKNAME_TAKEN", "No pudimos generar un username disponible.");
+}
+
+function backfillRegisteredNicknames(db) {
+  const rows = db.prepare(`
+    SELECT id, name, nickname
+    FROM users
+    WHERE type = 'registered'
+      AND profile_pending = 0
+      AND (nickname IS NULL OR nickname = '' OR nickname_norm IS NULL OR nickname_norm = '')
+    ORDER BY created_at ASC, id ASC
+  `).all();
+
+  const updateNickname = db.prepare(`
+    UPDATE users
+    SET nickname = ?, nickname_norm = ?
+    WHERE id = ?
+  `);
+
+  rows.forEach((row) => {
+    const nickname = createAvailableNickname(db, row.nickname || row.name, row.id);
+    updateNickname.run(nickname, normalizeNicknameKey(nickname), row.id);
+  });
+}
+function backfillVerifiedPasswordEmails(db) {
+  db.prepare(`
+    UPDATE users
+    SET email_verified_at = terms_accepted_at
+    WHERE type = 'registered'
+      AND password_hash IS NOT NULL
+      AND email IS NOT NULL
+      AND email_verified_at IS NULL
+      AND terms_accepted_at IS NOT NULL
+      AND terms_version = ?
+  `).run(TERMS_VERSION);
+}
+
+
 
 function getPasswordUserByEmail(db, email) {
   return db.prepare(`
@@ -1902,35 +2338,67 @@ function getPasswordUserByEmail(db, email) {
   `).get(email);
 }
 
-function createPasswordUser(db, { email, password, nickname, nowIso }) {
+function getRegisteredUserByEmail(db, email) {
+  return db.prepare(`
+    SELECT *
+    FROM users
+    WHERE email = ? AND type = 'registered'
+    ORDER BY created_at ASC
+    LIMIT 1
+  `).get(email);
+}
+
+function insertPasswordUser(db, {
+  email,
+  passwordHash,
+  nickname,
+  displayName = null,
+  age = null,
+  termsVersion = null,
+  emailVerified = false,
+  nowIso
+}) {
   const normalizedEmail = normalizeRequiredEmail(email);
   const normalizedNickname = normalizeNickname(nickname);
+  const normalizedDisplayName = displayName === null ? normalizedNickname : normalizeRequiredDisplayName(displayName);
   const nicknameKey = normalizeNicknameKey(normalizedNickname);
-  const existingEmail = getPasswordUserByEmail(db, normalizedEmail);
-  if (existingEmail) {
-    throw new ApiError(409, "EMAIL_TAKEN", "Ese email ya tiene una cuenta.");
+  if (getRegisteredUserByEmail(db, normalizedEmail)) {
+    throw new ApiError(409, "EMAIL_TAKEN", "Ese email ya tiene cuenta.");
   }
   assertNicknameAvailable(db, nicknameKey);
 
   const userId = `user-${crypto.randomUUID()}`;
   db.prepare(`
     INSERT INTO users (
-      id, name, nickname, nickname_norm, type, role, score, status, email, password_hash,
-      profile_pending, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, 'registered', ?, 0, 'active', ?, ?, 0, ?, ?)
+      id, name, nickname, nickname_norm, type, role, score, status, email, email_verified_at, password_hash,
+      registration_age, terms_accepted_at, terms_version, profile_pending, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'registered', ?, 0, 'active', ?, ?, ?, ?, ?, ?, 0, ?, ?)
   `).run(
     userId,
-    normalizedNickname,
+    normalizedDisplayName,
     normalizedNickname,
     nicknameKey,
-    isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE,
+    emailVerified && isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE,
     normalizedEmail,
-    hashPassword(validatePassword(password)),
+    emailVerified ? nowIso : null,
+    passwordHash,
+    age,
+    termsVersion ? nowIso : null,
+    termsVersion,
     nowIso,
     nowIso
   );
 
   return db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+}
+
+function createPasswordUser(db, { email, password, nickname, nowIso }) {
+  return insertPasswordUser(db, {
+    email,
+    passwordHash: hashPassword(validatePassword(password)),
+    nickname,
+    nowIso
+  });
 }
 
 function getAuthenticatedPasswordUser(db, { email, password }) {
@@ -1956,24 +2424,19 @@ function getOrCreateAuthenticatedUser(db, {
   authProvider,
   authSubject,
   email,
+  emailVerified = false,
   displayName,
   avatarUrl,
   nowIso
 }) {
   const normalizedProvider = String(authProvider || "").trim();
   const normalizedSubject = String(authSubject || "").trim();
-  const normalizedEmail = normalizeOptionalEmail(email);
-  const normalizedSuggestedAvatarUrl = normalizeAvatarUrl(avatarUrl, { discardInvalid: true });
-  const normalizedSuggestedDisplayName = normalizeUserDisplayName(
-    displayName,
-    normalizedEmail ? normalizedEmail.split("@")[0] : "Usuario"
-  );
-  const resolvedRole = isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE;
 
   if (!normalizedProvider || !normalizedSubject) {
     throw new ApiError(400, "INVALID_AUTH_IDENTITY", "La identidad autenticada no es valida.");
   }
 
+  const normalizedSuggestedAvatarUrl = normalizeAvatarUrl(avatarUrl, { discardInvalid: true });
   const existingUser = db.prepare(`
     SELECT *
     FROM users
@@ -1981,8 +2444,45 @@ function getOrCreateAuthenticatedUser(db, {
     LIMIT 1
   `).get(normalizedProvider, normalizedSubject);
 
+  if (existingUser && emailVerified !== true) {
+    const nextSuggestedDisplayName = resolvePreservedSuggestedDisplayName(
+      displayName,
+      existingUser.profile_suggested_name
+    );
+    const nextSuggestedAvatarUrl = resolvePreservedOptionalValue(
+      normalizedSuggestedAvatarUrl,
+      existingUser.profile_suggested_avatar_url
+    );
+    db.prepare(`
+      UPDATE users
+      SET profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
+      WHERE id = ?
+    `).run(nextSuggestedDisplayName, nextSuggestedAvatarUrl, nowIso, existingUser.id);
+    return db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
+  }
+
+  if (emailVerified !== true) {
+    throw new ApiError(403, "OIDC_EMAIL_NOT_VERIFIED", "Google no confirmo que el email de la cuenta este verificado.");
+  }
+
+  const normalizedEmail = normalizeRequiredEmail(email);
+  const normalizedSuggestedDisplayName = normalizeUserDisplayName(
+    displayName,
+    normalizedEmail.split("@")[0]
+  );
+  const resolvedRole = isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE;
+  const matchingEmailUsers = db.prepare(`
+    SELECT *
+    FROM users
+    WHERE email = ? AND type = 'registered'
+    ORDER BY CASE WHEN email_verified_at IS NOT NULL THEN 0 ELSE 1 END, created_at ASC
+  `).all(normalizedEmail);
+
   if (existingUser) {
-    const nextEmail = resolvePreservedOptionalValue(normalizedEmail, existingUser.email);
+    if (matchingEmailUsers.some((candidate) => candidate.id !== existingUser.id)) {
+      throw new ApiError(409, "AUTH_EMAIL_CONFLICT", "Ese email ya pertenece a otra cuenta.");
+    }
+
     const nextSuggestedDisplayName = resolvePreservedSuggestedDisplayName(
       displayName,
       existingUser.profile_suggested_name
@@ -1996,11 +2496,13 @@ function getOrCreateAuthenticatedUser(db, {
       : DEFAULT_REGISTERED_ROLE;
     db.prepare(`
       UPDATE users
-      SET role = ?, email = ?, profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
+      SET role = ?, email = ?, email_verified_at = COALESCE(email_verified_at, ?),
+          profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
       WHERE id = ?
     `).run(
       nextRole,
-      nextEmail,
+      normalizedEmail,
+      nowIso,
       nextSuggestedDisplayName,
       nextSuggestedAvatarUrl,
       nowIso,
@@ -2009,18 +2511,55 @@ function getOrCreateAuthenticatedUser(db, {
     return db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
   }
 
+  if (matchingEmailUsers.length > 1) {
+    throw new ApiError(409, "AUTH_EMAIL_CONFLICT", "Ese email esta asociado a mas de una cuenta. Contacta a soporte.");
+  }
+
+  const existingEmailUser = matchingEmailUsers[0] || null;
+  if (existingEmailUser) {
+    if (!existingEmailUser.email_verified_at) {
+      throw new ApiError(
+        409,
+        "ACCOUNT_LINK_REQUIRED",
+        "Ese email pertenece a una cuenta anterior. Entra con tu contrasena o recuperala y luego vincula Google desde tu perfil."
+      );
+    }
+    if (existingEmailUser.auth_provider || existingEmailUser.auth_subject) {
+      throw new ApiError(409, "AUTH_EMAIL_CONFLICT", "Ese email ya esta vinculado a otra identidad.");
+    }
+
+    const nextRole = resolvedRole === ADMIN_ROLE || isModeratorRole(existingEmailUser.role || "")
+      ? (resolvedRole === ADMIN_ROLE ? ADMIN_ROLE : existingEmailUser.role)
+      : DEFAULT_REGISTERED_ROLE;
+    db.prepare(`
+      UPDATE users
+      SET role = ?, auth_provider = ?, auth_subject = ?, email_verified_at = COALESCE(email_verified_at, ?),
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      nextRole,
+      normalizedProvider,
+      normalizedSubject,
+      nowIso,
+      nowIso,
+      existingEmailUser.id
+    );
+    return db.prepare("SELECT * FROM users WHERE id = ?").get(existingEmailUser.id);
+  }
+
   const userId = `user-${crypto.randomUUID()}`;
   db.prepare(`
     INSERT INTO users (
-      id, name, type, role, score, status, auth_provider, auth_subject, email, avatar_url,
+      id, name, type, role, score, status, auth_provider, auth_subject, email, email_verified_at, avatar_url,
       profile_pending, profile_suggested_name, profile_suggested_avatar_url, created_at, updated_at
-    ) VALUES (?, 'Usuario', 'registered', ?, 0, 'active', ?, ?, ?, NULL, 1, ?, ?, ?, ?)
+    ) VALUES (?, 'Usuario', 'registered', ?, 0, 'active', ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?)
   `).run(
     userId,
     resolvedRole,
     normalizedProvider,
     normalizedSubject,
     normalizedEmail,
+    nowIso,
     normalizedSuggestedDisplayName,
     normalizedSuggestedAvatarUrl,
     nowIso,
@@ -2029,7 +2568,6 @@ function getOrCreateAuthenticatedUser(db, {
 
   return db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
 }
-
 function assertReportableEntity(db, entityType, entityId) {
   if (entityType === "topic") {
     return {
@@ -2203,6 +2741,83 @@ function listPendingAvatars(db, options = {}) {
   };
 }
 
+function attachReportTargets(db, items) {
+  const messageIds = items.filter((item) => item.entityType === "message").map((item) => item.entityId);
+  const topicIds = items.filter((item) => item.entityType === "topic").map((item) => item.entityId);
+  const userIds = items.filter((item) => item.entityType === "user").map((item) => item.entityId);
+
+  const messageTargets = new Map();
+  if (messageIds.length) {
+    db.prepare(`
+      SELECT
+        messages.id,
+        messages.text,
+        messages.topic_id,
+        messages.author_id,
+        users.name AS author_name,
+        topics.title AS topic_title
+      FROM messages
+      LEFT JOIN users ON users.id = messages.author_id
+      LEFT JOIN topics ON topics.id = messages.topic_id
+      WHERE messages.id IN (${messageIds.map(() => "?").join(", ")})
+    `).all(...messageIds).forEach((row) => {
+      messageTargets.set(String(row.id), {
+        kind: "message",
+        text: row.text,
+        authorId: row.author_id,
+        authorName: row.author_name || "Usuario eliminado",
+        topicId: row.topic_id,
+        topicTitle: row.topic_title || "Tema eliminado"
+      });
+    });
+  }
+
+  const topicTargets = new Map();
+  if (topicIds.length) {
+    db.prepare(`
+      SELECT topics.id, topics.title, topics.author_id, users.name AS author_name
+      FROM topics
+      LEFT JOIN users ON users.id = topics.author_id
+      WHERE topics.id IN (${topicIds.map(() => "?").join(", ")})
+    `).all(...topicIds).forEach((row) => {
+      topicTargets.set(String(row.id), {
+        kind: "topic",
+        title: row.title || "Tema eliminado",
+        authorId: row.author_id,
+        authorName: row.author_name || "Usuario eliminado"
+      });
+    });
+  }
+
+  const userTargets = new Map();
+  if (userIds.length) {
+    db.prepare(`
+      SELECT id, name, status
+      FROM users
+      WHERE id IN (${userIds.map(() => "?").join(", ")})
+    `).all(...userIds).forEach((row) => {
+      userTargets.set(String(row.id), {
+        kind: "user",
+        name: row.name || "Usuario eliminado",
+        status: row.status
+      });
+    });
+  }
+
+  return items.map((item) => {
+    if (item.entityType === "message") {
+      return { ...item, target: messageTargets.get(String(item.entityId)) || null };
+    }
+    if (item.entityType === "topic") {
+      return { ...item, target: topicTargets.get(String(item.entityId)) || null };
+    }
+    if (item.entityType === "user") {
+      return { ...item, target: userTargets.get(String(item.entityId)) || null };
+    }
+    return { ...item, target: null };
+  });
+}
+
 function listOpenReports(db, options = {}) {
   const pagination = normalizePaginationOptions(options, ADMIN_REPORT_PAGE_SIZE);
   const total = db.prepare(`
@@ -2237,7 +2852,7 @@ function listOpenReports(db, options = {}) {
   }));
 
   return {
-    items,
+    items: attachReportTargets(db, items),
     pagination: createPaginationMeta(total, pagination)
   };
 }
@@ -2273,6 +2888,430 @@ function assertCommentableTopic(row) {
   }
 }
 
+function createStoredEmailAuthChallenge(db, {
+  email,
+  nickname = "",
+  age = null,
+  acceptedTerms = false,
+  termsVersion = null,
+  password,
+  nowMs = Date.now()
+} = {}) {
+  const normalizedEmail = normalizeRequiredEmail(email);
+  const nowIso = new Date(nowMs).toISOString();
+  const recentChallenge = db.prepare(`
+    SELECT created_at
+    FROM auth_email_challenges
+    WHERE email = ? AND consumed_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(normalizedEmail);
+  const recentCreatedAtMs = Date.parse(recentChallenge?.created_at || "");
+  if (Number.isFinite(recentCreatedAtMs) && nowMs - recentCreatedAtMs < EMAIL_AUTH_RESEND_DELAY_MS) {
+    const retryAfterSeconds = Math.ceil((EMAIL_AUTH_RESEND_DELAY_MS - (nowMs - recentCreatedAtMs)) / 1000);
+    throw new ApiError(429, "EMAIL_CODE_RATE_LIMITED", `Espera ${retryAfterSeconds} segundos antes de pedir otro codigo.`, {
+      retryAfterSeconds
+    });
+  }
+
+  const normalizedNickname = normalizeNickname(nickname);
+  const normalizedAge = normalizeRegistrationAge(age);
+  assertTermsAccepted(acceptedTerms, termsVersion);
+  const normalizedTermsVersion = TERMS_VERSION;
+  const passwordHash = hashPassword(validatePassword(password));
+  if (getRegisteredUserByEmail(db, normalizedEmail)) {
+    throw new ApiError(409, "EMAIL_TAKEN", "Ese email ya tiene cuenta.");
+  }
+  assertNicknameAvailable(db, normalizeNicknameKey(normalizedNickname));
+
+  db.prepare(`
+    DELETE FROM auth_email_challenges
+    WHERE expires_at <= ? OR consumed_at IS NOT NULL
+  `).run(nowIso);
+
+  const challengeId = `email-code-${crypto.randomUUID()}`;
+  const code = String(crypto.randomInt(100000, 1_000_000));
+  const expiresAt = new Date(nowMs + EMAIL_AUTH_CODE_TTL_MS).toISOString();
+  db.prepare(`
+    INSERT INTO auth_email_challenges (
+      id, email, intent, code_hash, nickname, age, terms_version, password_hash,
+      expires_at, attempts, max_attempts, consumed_at, created_at
+    ) VALUES (?, ?, 'register', ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)
+  `).run(
+    challengeId,
+    normalizedEmail,
+    hashEmailAuthCode(challengeId, code),
+    normalizedNickname,
+    normalizedAge,
+    normalizedTermsVersion,
+    passwordHash,
+    expiresAt,
+    EMAIL_AUTH_MAX_ATTEMPTS,
+    nowIso
+  );
+
+  return {
+    challengeId,
+    code,
+    email: normalizedEmail,
+    expiresAt,
+    expiresInSeconds: Math.floor(EMAIL_AUTH_CODE_TTL_MS / 1000)
+  };
+}
+
+function verifyStoredEmailAuthChallenge(db, {
+  challengeId,
+  code,
+  sessionId,
+  selectedTopicId = null,
+  ipAddress = "",
+  rotateSession = false,
+  nowMs = Date.now()
+} = {}) {
+  const normalizedChallengeId = String(challengeId || "").trim();
+  const normalizedCode = String(code || "").trim();
+  if (!normalizedChallengeId || !/^\d{6}$/.test(normalizedCode)) {
+    throw new ApiError(400, "INVALID_EMAIL_CODE", "Ingresa el codigo de 6 digitos que recibiste por email.");
+  }
+
+  const result = withTransaction(db, () => {
+    const challenge = db.prepare(`
+      SELECT * FROM auth_email_challenges WHERE id = ? LIMIT 1
+    `).get(normalizedChallengeId);
+    const nowIso = new Date(nowMs).toISOString();
+    if (!challenge || challenge.consumed_at) {
+      return { error: new ApiError(400, "INVALID_EMAIL_CODE", "El codigo no es valido o ya fue usado.") };
+    }
+    if (Date.parse(challenge.expires_at) <= nowMs) {
+      return { error: new ApiError(410, "EMAIL_CODE_EXPIRED", "El codigo vencio. Solicita uno nuevo.") };
+    }
+    if (challenge.attempts >= challenge.max_attempts) {
+      return { error: new ApiError(429, "EMAIL_CODE_ATTEMPTS_EXCEEDED", "Superaste los intentos permitidos. Solicita un codigo nuevo.") };
+    }
+
+    const actualHash = hashEmailAuthCode(normalizedChallengeId, normalizedCode);
+    if (!codesMatch(actualHash, challenge.code_hash)) {
+      db.prepare("UPDATE auth_email_challenges SET attempts = attempts + 1 WHERE id = ?").run(normalizedChallengeId);
+      return { error: new ApiError(401, "INVALID_EMAIL_CODE", "El codigo ingresado no es correcto.") };
+    }
+
+    const normalizedSessionId = ensureViewerSessionId(sessionId);
+    const existingSessionRow = readSessionRow(db, normalizedSessionId);
+    assertContextNotBlocked(db, {
+      sessionId: normalizedSessionId,
+      sessionRow: existingSessionRow,
+      ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
+    });
+    const viewerRow = insertPasswordUser(db, {
+      email: challenge.email,
+      passwordHash: challenge.password_hash,
+      nickname: challenge.nickname,
+      age: challenge.age,
+      termsVersion: challenge.terms_version,
+      emailVerified: true,
+      nowIso
+    });
+
+    db.prepare("UPDATE auth_email_challenges SET consumed_at = ? WHERE id = ?").run(nowIso, normalizedChallengeId);
+    const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
+    const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+    invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
+    return { payload: buildFrontendPayload(db, context, selectedTopicId) };
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  return result.payload;
+}
+
+function createStoredPasswordResetChallenge(db, {
+  email,
+  ipAddress = "",
+  nowMs = Date.now()
+} = {}) {
+  const normalizedEmail = normalizeRequiredEmail(email);
+  const normalizedIpAddress = normalizeIpAddress(ipAddress) || "unknown";
+  const emailKey = createPrivateLookupKey("password-reset-email", normalizedEmail);
+  const requestIpKey = createPrivateLookupKey("password-reset-ip", normalizedIpAddress);
+  const nowIso = new Date(nowMs).toISOString();
+  const rateWindowStartIso = new Date(nowMs - PASSWORD_RESET_RATE_WINDOW_MS).toISOString();
+  const expiresAt = new Date(nowMs + PASSWORD_RESET_CODE_TTL_MS).toISOString();
+
+  db.prepare(`
+    DELETE FROM password_reset_challenges
+    WHERE created_at < ? AND (expires_at <= ? OR consumed_at IS NOT NULL)
+  `).run(rateWindowStartIso, nowIso);
+
+  const recentChallenge = db.prepare(`
+    SELECT created_at
+    FROM password_reset_challenges
+    WHERE email_key = ? AND consumed_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(emailKey);
+  const recentCreatedAtMs = Date.parse(recentChallenge?.created_at || "");
+  const emailHourlyCount = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM password_reset_challenges
+    WHERE email_key = ? AND created_at >= ?
+  `).get(emailKey, rateWindowStartIso)?.count ?? 0;
+  const ipHourlyCount = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM password_reset_challenges
+    WHERE request_ip_key = ? AND created_at >= ?
+  `).get(requestIpKey, rateWindowStartIso)?.count ?? 0;
+  const resendLimited = Number.isFinite(recentCreatedAtMs)
+    && nowMs - recentCreatedAtMs < PASSWORD_RESET_RESEND_DELAY_MS;
+  const rateLimited = resendLimited
+    || emailHourlyCount >= PASSWORD_RESET_EMAIL_HOURLY_MAX
+    || ipHourlyCount >= PASSWORD_RESET_IP_HOURLY_MAX;
+
+  if (rateLimited) {
+    return {
+      challengeId: `password-reset-${crypto.randomUUID()}`,
+      code: null,
+      email: null,
+      expiresAt,
+      expiresInSeconds: Math.floor(PASSWORD_RESET_CODE_TTL_MS / 1000),
+      deliveryRequired: false
+    };
+  }
+
+  const matchingUsers = db.prepare(`
+    SELECT *
+    FROM users
+    WHERE email = ? AND type = 'registered'
+    ORDER BY created_at ASC, id ASC
+  `).all(normalizedEmail);
+  const targetUser = matchingUsers.length === 1
+    && (matchingUsers[0].password_hash || matchingUsers[0].email_verified_at)
+    ? matchingUsers[0]
+    : null;
+  const challengeId = `password-reset-${crypto.randomUUID()}`;
+  const code = String(crypto.randomInt(100000, 1_000_000));
+
+  db.prepare(`
+    UPDATE password_reset_challenges
+    SET consumed_at = ?
+    WHERE email_key = ? AND consumed_at IS NULL
+  `).run(nowIso, emailKey);
+  db.prepare(`
+    INSERT INTO password_reset_challenges (
+      id, user_id, email_key, request_ip_key, code_hash, expires_at,
+      attempts, max_attempts, consumed_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)
+  `).run(
+    challengeId,
+    targetUser?.id ?? null,
+    emailKey,
+    requestIpKey,
+    hashPasswordResetCode(challengeId, code),
+    expiresAt,
+    PASSWORD_RESET_MAX_ATTEMPTS,
+    nowIso
+  );
+
+  return {
+    challengeId,
+    code: targetUser ? code : null,
+    email: targetUser ? normalizedEmail : null,
+    expiresAt,
+    expiresInSeconds: Math.floor(PASSWORD_RESET_CODE_TTL_MS / 1000),
+    deliveryRequired: Boolean(targetUser)
+  };
+}
+
+function verifyStoredPasswordResetChallenge(db, {
+  challengeId,
+  code,
+  newPassword,
+  sessionId,
+  selectedTopicId = null,
+  ipAddress = "",
+  rotateSession = true,
+  nowMs = Date.now()
+} = {}) {
+  const normalizedChallengeId = String(challengeId || "").trim();
+  const normalizedCode = String(code || "").trim();
+  if (!normalizedChallengeId || !/^\d{6}$/.test(normalizedCode)) {
+    throw new ApiError(400, "INVALID_PASSWORD_RESET_CODE", "Ingresa el codigo de 6 digitos que recibiste por email.");
+  }
+
+  const result = withTransaction(db, () => {
+    const challenge = db.prepare(`
+      SELECT * FROM password_reset_challenges WHERE id = ? LIMIT 1
+    `).get(normalizedChallengeId);
+    const nowIso = new Date(nowMs).toISOString();
+    if (!challenge || challenge.consumed_at) {
+      return { error: new ApiError(400, "INVALID_PASSWORD_RESET_CODE", "El codigo no es valido o ya fue usado.") };
+    }
+    if (Date.parse(challenge.expires_at) <= nowMs) {
+      return { error: new ApiError(410, "PASSWORD_RESET_CODE_EXPIRED", "El codigo vencio. Solicita uno nuevo.") };
+    }
+    if (challenge.attempts >= challenge.max_attempts) {
+      return { error: new ApiError(429, "PASSWORD_RESET_ATTEMPTS_EXCEEDED", "Superaste los intentos permitidos. Solicita un codigo nuevo.") };
+    }
+
+    const actualHash = hashPasswordResetCode(normalizedChallengeId, normalizedCode);
+    if (!codesMatch(actualHash, challenge.code_hash) || !challenge.user_id) {
+      db.prepare("UPDATE password_reset_challenges SET attempts = attempts + 1 WHERE id = ?").run(normalizedChallengeId);
+      return { error: new ApiError(401, "INVALID_PASSWORD_RESET_CODE", "El codigo ingresado no es correcto.") };
+    }
+
+    const userRow = db.prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1").get(challenge.user_id);
+    const expectedEmailKey = userRow?.email
+      ? createPrivateLookupKey("password-reset-email", normalizeRequiredEmail(userRow.email))
+      : "";
+    const matchingEmailUsers = userRow?.email
+      ? db.prepare("SELECT id FROM users WHERE email = ? AND type = 'registered'").all(userRow.email)
+      : [];
+    if (!userRow || !codesMatch(expectedEmailKey, challenge.email_key) || matchingEmailUsers.length !== 1) {
+      return { error: new ApiError(409, "PASSWORD_RESET_CONFLICT", "No se pudo recuperar esta cuenta de forma segura.") };
+    }
+
+    const nextPasswordHash = hashPassword(validatePassword(newPassword));
+    const normalizedSessionId = ensureViewerSessionId(sessionId);
+    const sourceSessionRow = readSessionRow(db, normalizedSessionId);
+    assertContextNotBlocked(db, {
+      sessionId: normalizedSessionId,
+      sessionRow: sourceSessionRow,
+      ipAddress: normalizeIpAddress(ipAddress || sourceSessionRow?.last_ip || "")
+    });
+    const nextRole = isAdminEmail(userRow.email)
+      ? ADMIN_ROLE
+      : (isModeratorRole(userRow.role || "") ? userRow.role : DEFAULT_REGISTERED_ROLE);
+    db.prepare(`
+      UPDATE users
+      SET password_hash = ?, email_verified_at = COALESCE(email_verified_at, ?), role = ?, updated_at = ?
+      WHERE id = ?
+    `).run(nextPasswordHash, nowIso, nextRole, nowIso, userRow.id);
+    db.prepare(`
+      UPDATE password_reset_challenges
+      SET consumed_at = ?
+      WHERE user_id = ? AND consumed_at IS NULL
+    `).run(nowIso, userRow.id);
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userRow.id);
+
+    const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
+    const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, null, userRow.id);
+    invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
+    return { payload: buildFrontendPayload(db, context, selectedTopicId) };
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  return result.payload;
+}
+
+function getIdentityLinkTarget(db, { sessionId, authMode, ipAddress = "", password } = {}) {
+  const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+  assertContextNotBlocked(db, context);
+  assertViewerCanParticipate(context.viewerRow);
+  if (context.viewer.type !== "registered" || !context.viewerRow.password_hash || !context.viewerRow.email) {
+    throw new ApiError(403, "ACCOUNT_LINK_NOT_AVAILABLE", "Esta cuenta no se puede vincular con Google.");
+  }
+  if (context.viewerRow.auth_provider || context.viewerRow.auth_subject) {
+    throw new ApiError(409, "ACCOUNT_ALREADY_LINKED", "Esta cuenta ya esta vinculada con un proveedor externo.");
+  }
+  if (!verifyPassword(password, context.viewerRow.password_hash)) {
+    throw new ApiError(401, "INVALID_CREDENTIALS", "La contrasena actual no es correcta.");
+  }
+  return {
+    userId: context.viewerRow.id,
+    email: normalizeRequiredEmail(context.viewerRow.email),
+    sessionId: context.sessionId
+  };
+}
+
+function linkIdentityToCurrentUser(db, {
+  sessionId,
+  sourceSessionId,
+  targetUserId,
+  expectedEmail,
+  selectedTopicId = null,
+  ipAddress = "",
+  authProvider,
+  authSubject,
+  email,
+  emailVerified = false
+} = {}) {
+  const normalizedProvider = String(authProvider || "").trim();
+  const normalizedSubject = String(authSubject || "").trim();
+  if (!normalizedProvider || !normalizedSubject || emailVerified !== true) {
+    throw new ApiError(403, "INVALID_ACCOUNT_LINK_IDENTITY", "Google no confirmo una identidad verificable.");
+  }
+
+  const normalizedSourceSessionId = ensureViewerSessionId(sourceSessionId);
+  const normalizedNextSessionId = ensureViewerSessionId(sessionId);
+  const normalizedExpectedEmail = normalizeRequiredEmail(expectedEmail);
+  const normalizedIdentityEmail = normalizeRequiredEmail(email);
+  if (normalizedIdentityEmail !== normalizedExpectedEmail) {
+    throw new ApiError(409, "ACCOUNT_LINK_EMAIL_MISMATCH", "La cuenta de Google debe usar el mismo email.");
+  }
+
+  return withTransaction(db, () => {
+    const sourceSessionRow = readSessionRow(db, normalizedSourceSessionId);
+    if (
+      !sourceSessionRow
+      || sourceSessionRow.auth_mode !== "registered"
+      || sourceSessionRow.user_id !== String(targetUserId || "")
+    ) {
+      throw new ApiError(401, "ACCOUNT_LINK_SESSION_EXPIRED", "La sesion para vincular la cuenta vencio. Intentalo de nuevo.");
+    }
+    assertContextNotBlocked(db, {
+      sessionId: normalizedSourceSessionId,
+      sessionRow: sourceSessionRow,
+      ipAddress: normalizeIpAddress(ipAddress || sourceSessionRow.last_ip || "")
+    });
+
+    const targetUser = db.prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1").get(targetUserId);
+    if (!targetUser || !targetUser.password_hash || normalizeOptionalEmail(targetUser.email) !== normalizedExpectedEmail) {
+      throw new ApiError(409, "ACCOUNT_LINK_TARGET_CHANGED", "La cuenta existente ya no coincide con la solicitud.");
+    }
+    assertViewerCanParticipate(targetUser);
+    if (targetUser.auth_provider || targetUser.auth_subject) {
+      throw new ApiError(409, "ACCOUNT_ALREADY_LINKED", "Esta cuenta ya esta vinculada con un proveedor externo.");
+    }
+
+    const identityOwner = db.prepare(`
+      SELECT id FROM users WHERE auth_provider = ? AND auth_subject = ? LIMIT 1
+    `).get(normalizedProvider, normalizedSubject);
+    if (identityOwner && identityOwner.id !== targetUser.id) {
+      throw new ApiError(409, "AUTH_IDENTITY_TAKEN", "Esa identidad de Google ya pertenece a otra cuenta.");
+    }
+    const emailOwners = db.prepare(`
+      SELECT id FROM users WHERE email = ? AND type = 'registered'
+    `).all(normalizedExpectedEmail);
+    if (emailOwners.length !== 1 || emailOwners[0].id !== targetUser.id) {
+      throw new ApiError(409, "AUTH_EMAIL_CONFLICT", "Ese email esta asociado a mas de una cuenta.");
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextRole = isAdminEmail(normalizedExpectedEmail)
+      ? ADMIN_ROLE
+      : (isModeratorRole(targetUser.role || "") ? targetUser.role : DEFAULT_REGISTERED_ROLE);
+    db.prepare(`
+      UPDATE users
+      SET auth_provider = ?, auth_subject = ?, email_verified_at = COALESCE(email_verified_at, ?),
+          role = ?, updated_at = ?
+      WHERE id = ?
+    `).run(normalizedProvider, normalizedSubject, nowIso, nextRole, nowIso, targetUser.id);
+
+    const context = createRegisteredSession(
+      db,
+      normalizedNextSessionId,
+      ipAddress,
+      nowIso,
+      readSessionRow(db, normalizedNextSessionId),
+      targetUser.id
+    );
+    invalidatePreviousSession(db, normalizedSourceSessionId, normalizedNextSessionId);
+    return buildFrontendPayload(db, context, selectedTopicId);
+  });
+}
+
 export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) {
   const dbConfig = resolveDbConfig(dbPath);
   const resolvedDbPath = dbConfig.dbPath;
@@ -2288,6 +3327,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
   } else {
     purgeDemoData(db);
   }
+  backfillVerifiedPasswordEmails(db);
+  backfillRegisteredNicknames(db);
 
   return {
     dbPath: resolvedDbPath,
@@ -2300,6 +3341,32 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
     },
     resetDailyMessageReactions({ now = new Date() } = {}) {
       return withTransaction(db, () => resetDailyMessageReactionsIfNeeded(db, now));
+    },
+    createEmailAuthChallenge(options = {}) {
+      return withTransaction(db, () => createStoredEmailAuthChallenge(db, options));
+    },
+    discardEmailAuthChallenge(challengeId) {
+      db.prepare("DELETE FROM auth_email_challenges WHERE id = ?").run(String(challengeId || ""));
+    },
+    verifyEmailAuthChallenge(options = {}) {
+      return verifyStoredEmailAuthChallenge(db, options);
+    },
+    createPasswordResetChallenge(options = {}) {
+      return withTransaction(db, () => createStoredPasswordResetChallenge(db, options));
+    },
+    discardPasswordResetChallenge(challengeId) {
+      db.prepare(`
+        UPDATE password_reset_challenges SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL
+      `).run(new Date().toISOString(), String(challengeId || ""));
+    },
+    verifyPasswordResetChallenge(options = {}) {
+      return verifyStoredPasswordResetChallenge(db, options);
+    },
+    prepareIdentityLink(options = {}) {
+      return getIdentityLinkTarget(db, options);
+    },
+    completeIdentityLink(options = {}) {
+      return linkIdentityToCurrentUser(db, options);
     },
     registerWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, nickname, rotateSession = false } = {}) {
       return withTransaction(db, () => {
@@ -2358,6 +3425,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
       authProvider,
       authSubject,
       email = null,
+      emailVerified = false,
       displayName = "",
       avatarUrl = null
     } = {}) {
@@ -2376,6 +3444,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           authProvider,
           authSubject,
           email,
+          emailVerified,
           displayName,
           avatarUrl,
           nowIso
@@ -2395,7 +3464,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({ sessionId, authMode, displayName = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateProfile({ sessionId, authMode, displayName = null, username = null, age = null, acceptedTerms = false, termsVersion = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, socialWhatsapp = "", socialInstagram = "", socialTiktok = "", socialFacebook = "", socialTwitter = "", socialDiscord = "", profileShowSocial = true, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -2404,10 +3473,35 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para editar el perfil.");
         }
 
-        const normalizedDisplayName = normalizeNickname(displayName || context.viewer.displayName || "Usuario");
-        const normalizedDisplayNameKey = normalizeNicknameKey(normalizedDisplayName);
+        const normalizedDisplayName = normalizeRequiredDisplayName(displayName || context.viewer.displayName || "Usuario");
+        const currentUsername = context.viewer.nickname || null;
+        const normalizedUsername = username === null
+          ? currentUsername
+          : normalizeNickname(username);
+        if (!normalizedUsername) {
+          throw new ApiError(400, "USERNAME_REQUIRED", "Elige un username unico para completar tu perfil.");
+        }
+
+        const normalizedUsernameKey = normalizeNicknameKey(normalizedUsername);
+        const currentUsernameKey = currentUsername ? normalizeNicknameKey(currentUsername) : null;
+        if (currentUsernameKey && currentUsernameKey !== normalizedUsernameKey && !context.viewer.profilePending) {
+          throw new ApiError(409, "USERNAME_IMMUTABLE", "El username no se puede cambiar despues de completar el perfil.");
+        }
+        assertNicknameAvailable(db, normalizedUsernameKey, context.viewer.id);
+        const completingProfile = context.viewer.profilePending;
+        const normalizedRegistrationAge = completingProfile
+          ? normalizeRegistrationAge(age)
+          : context.viewerRow.registration_age ?? null;
+        if (completingProfile) {
+          assertTermsAccepted(acceptedTerms, termsVersion);
+        }
         const normalizedDescription = normalizeProfileDescription(description);
-        assertNicknameAvailable(db, normalizedDisplayNameKey, context.viewer.id);
+        const normalizedSocialWhatsapp = normalizeSocialWhatsapp(socialWhatsapp);
+        const normalizedSocialInstagram = normalizeSocialHandle(socialInstagram, "Instagram");
+        const normalizedSocialTiktok = normalizeSocialHandle(socialTiktok, "TikTok");
+        const normalizedSocialFacebook = normalizeSocialHandle(socialFacebook, "Facebook");
+        const normalizedSocialTwitter = normalizeSocialHandle(socialTwitter, "Twitter/X");
+        const normalizedSocialDiscord = normalizeSocialHandle(socialDiscord, "Discord");
         const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
         const normalizedAvatarDataUrl = removeAvatar ? null : storeAvatarDataUrl(avatarDataUrl, avatarStorageDir);
         const nowIso = new Date().toISOString();
@@ -2420,13 +3514,40 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           : normalizedAvatarDataUrl
             ? "pending"
             : context.viewer.avatarReviewStatus ?? null;
+        const nextTermsAcceptedAt = completingProfile ? nowIso : context.viewerRow.terms_accepted_at ?? null;
+        const nextTermsVersion = completingProfile ? termsVersion : context.viewerRow.terms_version ?? null;
 
         db.prepare(`
           UPDATE users
-          SET name = ?, nickname = ?, nickname_norm = ?, description = ?, profile_show_description = ?, profile_show_joined_at = ?, avatar_url = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
+          SET name = ?, nickname = ?, nickname_norm = ?, description = ?, profile_show_description = ?, profile_show_joined_at = ?,
+              social_whatsapp = ?, social_instagram = ?, social_tiktok = ?, social_facebook = ?, social_twitter = ?, social_discord = ?, profile_show_social = ?,
+              avatar_url = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
+              registration_age = ?, terms_accepted_at = ?, terms_version = ?,
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
-        `).run(normalizedDisplayName, normalizedDisplayName, normalizedDisplayNameKey, normalizedDescription, profileShowDescription === false ? 0 : 1, profileShowJoinedAt === false ? 0 : 1, nextAvatarUrl, nextPendingUrl, nextReviewStatus, nowIso, context.viewer.id);
+        `).run(
+          normalizedDisplayName,
+          normalizedUsername,
+          normalizedUsernameKey,
+          normalizedDescription,
+          profileShowDescription === false ? 0 : 1,
+          profileShowJoinedAt === false ? 0 : 1,
+          normalizedSocialWhatsapp,
+          normalizedSocialInstagram,
+          normalizedSocialTiktok,
+          normalizedSocialFacebook,
+          normalizedSocialTwitter,
+          normalizedSocialDiscord,
+          profileShowSocial === false ? 0 : 1,
+          nextAvatarUrl,
+          nextPendingUrl,
+          nextReviewStatus,
+          normalizedRegistrationAge,
+          nextTermsAcceptedAt,
+          nextTermsVersion,
+          nowIso,
+          context.viewer.id
+        );
 
         const nextAvatarUrls = new Set([nextAvatarUrl, nextPendingUrl].filter(Boolean));
         scheduleStoredAvatarCleanup(

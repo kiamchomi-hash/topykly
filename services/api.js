@@ -172,12 +172,65 @@ export const api = {
     }));
   },
 
-  async registerWithPassword({ email, password, nickname, selectedTopicId = null, turnstileToken = "" } = {}) {
-    return normalizeBackendPayload(await readApiPayload("/api/auth/password/register", {
+  async requestEmailAuthCode({
+    email,
+    nickname = "",
+    age = null,
+    password = "",
+    acceptedTerms = false,
+    termsVersion = null,
+    turnstileToken = ""
+  } = {}) {
+    return readApiPayload("/api/auth/email/request-code", {
       method: "POST",
-      body: { email, password, nickname, selectedTopicId, turnstileToken }
+      body: {
+        email,
+        nickname,
+        age,
+        password,
+        acceptedTerms,
+        termsVersion,
+        turnstileToken
+      }
+    });
+  },
+  async verifyEmailAuthCode({ challengeId, code, selectedTopicId = null } = {}) {
+    return normalizeBackendPayload(await readApiPayload("/api/auth/email/verify-code", {
+      method: "POST",
+      body: { challengeId, code, selectedTopicId }
     }));
   },
+
+  async requestPasswordResetCode({ email, turnstileToken = "" } = {}) {
+    return readApiPayload("/api/auth/password/reset/request", {
+      method: "POST",
+      body: { email, turnstileToken }
+    });
+  },
+
+  async confirmPasswordReset({ challengeId, code, newPassword, selectedTopicId = null } = {}) {
+    return normalizeBackendPayload(await readApiPayload("/api/auth/password/reset/confirm", {
+      method: "POST",
+      body: { challengeId, code, newPassword, selectedTopicId }
+    }));
+  },
+
+  async startAccountLink({ password, selectedTopicId = null, turnstileToken = "" } = {}) {
+    const payload = await readApiPayload("/api/auth/account-link/start", {
+      method: "POST",
+      body: { password, selectedTopicId, turnstileToken }
+    });
+
+    if (payload.mode === "redirect" && payload.redirectUrl) {
+      if (typeof window !== "undefined" && typeof window.location?.assign === "function") {
+        window.location.assign(payload.redirectUrl);
+      }
+      return { redirected: true };
+    }
+
+    return payload;
+  },
+
   async logout(selectedTopicId = null) {
     return request("/api/auth/logout", {
       method: "POST",
@@ -185,14 +238,44 @@ export const api = {
     });
   },
 
-  async updateProfile({ displayName = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null } = {}) {
+  async updateProfile({
+    displayName = null,
+    username = null,
+    age = null,
+    acceptedTerms = false,
+    termsVersion = null,
+    description = "",
+    profileShowDescription = true,
+    profileShowJoinedAt = true,
+    socialWhatsapp = "",
+    socialInstagram = "",
+    socialTiktok = "",
+    socialFacebook = "",
+    socialTwitter = "",
+    socialDiscord = "",
+    profileShowSocial = true,
+    avatarDataUrl = null,
+    removeAvatar = false,
+    selectedTopicId = null
+  } = {}) {
     return request("/api/profile", {
       method: "PATCH",
       body: {
         displayName,
+        username,
+        age,
+        acceptedTerms,
+        termsVersion,
         description,
         profileShowDescription,
         profileShowJoinedAt,
+        socialWhatsapp,
+        socialInstagram,
+        socialTiktok,
+        socialFacebook,
+        socialTwitter,
+        socialDiscord,
+        profileShowSocial,
         avatarDataUrl,
         removeAvatar,
         selectedTopicId

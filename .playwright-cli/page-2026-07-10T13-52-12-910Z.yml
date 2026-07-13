@@ -1,0 +1,118 @@
+- generic [ref=f1e2]:
+  - banner [ref=f1e3]:
+    - generic "TOPYKLY" [ref=f1e16]:
+      - generic [ref=f1e23]:
+        - generic [ref=f1e24]: TOPY
+        - generic [ref=f1e25]: KLY
+    - generic [ref=f1e26]:
+      - button "Iniciar sesión" [ref=f1e27] [cursor=pointer]
+      - button "Abrir menú" [ref=f1e215] [cursor=pointer]
+  - main "Chat social" [ref=f1e29]:
+    - region [ref=f1e227]:
+      - generic [ref=f1e228]:
+        - generic [ref=f1e229]:
+          - button "Volver a temas" [ref=f1e230] [cursor=pointer]
+          - heading "dasda" [level=2] [ref=f1e234]
+        - generic [ref=f1e235]:
+          - button "Reportar tema" [ref=f1e236] [cursor=pointer]
+          - button "Actualizar contenido manualmente" [ref=f1e240] [cursor=pointer]
+      - generic [ref=f1e245]:
+        - article [ref=f1e246]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e247] [cursor=pointer]
+          - generic [ref=f1e253]:
+            - generic [ref=f1e254]:
+              - generic [ref=f1e255]: Matias_velazco
+              - generic [ref=f1e256]: 10:52 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e257] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e258] [cursor=pointer]
+            - paragraph [ref=f1e262]: dadad
+        - article [ref=f1e263]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e264] [cursor=pointer]
+          - generic [ref=f1e270]:
+            - generic [ref=f1e271]:
+              - generic [ref=f1e272]: Matias_velazco
+              - generic [ref=f1e273]: 01:06 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e274] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e275] [cursor=pointer]
+            - paragraph [ref=f1e279]: asasaDSas
+        - article [ref=f1e280]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e281] [cursor=pointer]
+          - generic [ref=f1e287]:
+            - generic [ref=f1e288]:
+              - generic [ref=f1e289]: Matias_velazco
+              - generic [ref=f1e290]: 08:22 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e291] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e292] [cursor=pointer]
+            - paragraph [ref=f1e296]: saada
+        - article [ref=f1e297]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e298] [cursor=pointer]
+          - generic [ref=f1e304]:
+            - generic [ref=f1e305]:
+              - generic [ref=f1e306]: Matias_velazco
+              - generic [ref=f1e307]: 08:22 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e308] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e309] [cursor=pointer]
+            - paragraph [ref=f1e313]: dasdasdasdas
+        - article [ref=f1e314]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e315] [cursor=pointer]
+          - generic [ref=f1e321]:
+            - generic [ref=f1e322]:
+              - generic [ref=f1e323]: Matias_velazco
+              - generic [ref=f1e324]: 08:51 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e325] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e326] [cursor=pointer]
+            - paragraph [ref=f1e330]: aaaaaaaaaaaaaadsas
+        - article [ref=f1e331]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e332] [cursor=pointer]
+          - generic [ref=f1e338]:
+            - generic [ref=f1e339]:
+              - generic [ref=f1e340]: Matias_velazco
+              - generic [ref=f1e341]: 10:14 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e342] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e343] [cursor=pointer]
+            - generic [ref=f1e347]:
+              - blockquote [ref=f1e348]:
+                - paragraph [ref=f1e349]: "@Matias_velazco"
+                - paragraph [ref=f1e350]: saada
+              - paragraph [ref=f1e351]: "> @Matias_velazco > dasdasdasdas"
+        - article [ref=f1e352]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e353] [cursor=pointer]
+          - generic [ref=f1e359]:
+            - generic [ref=f1e360]:
+              - generic [ref=f1e361]: Matias_velazco
+              - generic [ref=f1e362]: 10:15 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e363] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e364] [cursor=pointer]
+            - generic [ref=f1e368]:
+              - blockquote [ref=f1e369]:
+                - paragraph [ref=f1e370]: "@Matias_velazco"
+                - paragraph [ref=f1e371]: aaaaaaaaaaaaaadsas
+              - paragraph [ref=f1e372]: Lo sé...
+        - article [ref=f1e373]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e374] [cursor=pointer]
+          - generic [ref=f1e380]:
+            - generic [ref=f1e381]:
+              - generic [ref=f1e382]: Matias_velazco
+              - generic [ref=f1e383]: 10:32 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e384] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e385] [cursor=pointer]
+            - generic [ref=f1e389]:
+              - blockquote [ref=f1e390]:
+                - paragraph [ref=f1e391]: "@Matias_velazco"
+                - paragraph [ref=f1e392]: "> @Matias_velazco > aaaaaaaaaaaaaadsas Lo sé..."
+              - paragraph [ref=f1e393]: "> @Matias_velazco > > @Matias_velazco > aaaaaaaaaaaaaadsas Lo sé..."
+        - article [ref=f1e394]:
+          - button "Abrir opciones de Matias_velazco" [ref=f1e395] [cursor=pointer]
+          - generic [ref=f1e401]:
+            - generic [ref=f1e402]:
+              - generic [ref=f1e403]: Matias_velazco
+              - generic [ref=f1e404]: 10:33 p. m.
+              - button "Abrir opciones de reaccion del mensaje de Matias_velazco" [ref=f1e405] [cursor=pointer]: "0"
+              - button "Reportar mensaje de Matias_velazco" [ref=f1e406] [cursor=pointer]
+            - blockquote [ref=f1e411]:
+              - paragraph [ref=f1e412]: "@Matias_velazco"
+              - paragraph [ref=f1e413]: "> @Matias_velazco > > @Matias_velazco > aaaaaaaaaaaaaadsas Lo sé... > @Matias_velazco > > @Matias_velazco > aaaaaaaaaaaaaadsas Lo sé..."
+      - generic [ref=f1e57]:
+        - textbox "Comentario para el tema seleccionado" [ref=f1e414]:
+          - /placeholder: Escribe un comentario...
+        - button "Enviar comentario al tema seleccionado" [ref=f1e415] [cursor=pointer]: Enviar

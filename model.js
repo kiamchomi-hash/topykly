@@ -47,7 +47,7 @@ export function createTopic(authorId, title, messageText, now = Date.now()) {
 export function buildUsers(seedUsers) {
   return seedUsers.map((user, index) => ({
     ...user,
-    online: true,
+    online: user.online ?? true,
     connectedOrder: index,
     initials: user.name
       .split(" ")

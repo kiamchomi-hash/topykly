@@ -1,4 +1,4 @@
-import { bindTopbarEvents } from "./topbar.js?v=20260709-palettefocus5";
+import { bindTopbarEvents } from "./topbar.js?v=20260709-topicrace1";
 import { syncComposerTextareaHeight } from "./chat.js";
 
 const FOCUSABLE_SELECTOR = [
@@ -60,6 +60,15 @@ function getActiveFocusTrapContainer(dom) {
   }
 
   if (
+    dom.reportModal instanceof HTMLElement &&
+    dom.reportModalBackdrop &&
+    !dom.reportModalBackdrop.hidden &&
+    dom.reportModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.reportModal;
+  }
+
+  if (
     dom.profileModal instanceof HTMLElement &&
     dom.profileModalBackdrop &&
     !dom.profileModalBackdrop.hidden &&
@@ -97,33 +106,66 @@ function getActiveFocusTrapContainer(dom) {
   return null;
 }
 
+function getBeforeInputText(event) {
+  if (typeof event.data === "string") {
+    return event.data;
+  }
+
+  return event.dataTransfer?.getData?.("text") || "";
+}
+
+function shouldBlockTextareaInput(textarea, event) {
+  const maxLength = Number(textarea.maxLength);
+  if (!(maxLength > 0) || event.inputType?.startsWith?.("delete") || event.isComposing) {
+    return false;
+  }
+
+  const selectedLength = Math.max(0, textarea.selectionEnd - textarea.selectionStart);
+  const insertedText = getBeforeInputText(event);
+  const insertedLength = insertedText.length || (event.inputType === "insertLineBreak" ? 1 : 0);
+  return textarea.value.length - selectedLength + insertedLength > maxLength;
+}
+
+function shouldBlockQuoteEdit(textarea, event) {
+  const lockLength = Number(textarea.dataset?.quoteLockLength || 0);
+  if (!(lockLength > 0)) {
+    return false;
+  }
+
+  const { selectionStart, selectionEnd } = textarea;
+  if (selectionStart !== selectionEnd) {
+    return selectionStart < lockLength;
+  }
+
+  if (event.inputType === "deleteContentBackward") {
+    return selectionStart <= lockLength;
+  }
+
+  return selectionStart < lockLength;
+}
 export function bindPageEvents(dom, handlers) {
   bindTopbarEvents(dom, handlers);
 
-  function positionConnectedUserMenu(menu, userItem, pointer = null) {
-    const actions = userItem.querySelector(".user-item__actions");
-    const actionsRect = actions instanceof HTMLElement ? actions.getBoundingClientRect() : null;
+  function positionConnectedUserMenu(menu, userItem, clickPoint = null) {
+    const anchorRect = userItem.getBoundingClientRect();
     const menuRect = menu.getBoundingClientRect();
-    const gap = 8;
+    const gap = 6;
     const viewportPadding = 8;
-    const pointerX = Number.isFinite(pointer?.clientX) ? pointer.clientX : userItem.getBoundingClientRect().left;
-    const pointerY = Number.isFinite(pointer?.clientY) ? pointer.clientY : userItem.getBoundingClientRect().top;
-    const maxLeft = window.innerWidth - menuRect.width - viewportPadding;
-    const maxTop = window.innerHeight - menuRect.height - viewportPadding;
-    let left = Math.max(viewportPadding, Math.min(maxLeft, pointerX + gap));
-    const top = Math.max(viewportPadding, Math.min(maxTop, pointerY - menuRect.height / 2));
 
-    if (actionsRect) {
-      const overlapsActions =
-        left < actionsRect.right &&
-        left + menuRect.width > actionsRect.left &&
-        top < actionsRect.bottom &&
-        top + menuRect.height > actionsRect.top;
+    const hasClickX = clickPoint && typeof clickPoint.x === "number" && clickPoint.x > 0;
+    const anchorX = hasClickX ? clickPoint.x : anchorRect.left;
+    const anchorY = clickPoint && typeof clickPoint.y === "number" && clickPoint.y > 0 ? clickPoint.y : anchorRect.top;
 
-      if (overlapsActions) {
-        left = Math.max(viewportPadding, actionsRect.left - menuRect.width - gap);
-      }
-    }
+    // Open to the side opposite the click *within the card* so the menu never
+    // lands on top of the profile/message buttons at the card's right edge.
+    // (Comparing against the viewport instead of the card would always pick
+    // the same side on layouts where the users list sits off-center.)
+    const openToLeft = anchorX > anchorRect.left + anchorRect.width / 2;
+    let left = openToLeft ? anchorX - menuRect.width - gap : anchorX + gap;
+    left = Math.max(viewportPadding, Math.min(window.innerWidth - menuRect.width - viewportPadding, left));
+
+    let top = anchorY - menuRect.height / 2;
+    top = Math.max(viewportPadding, Math.min(window.innerHeight - menuRect.height - viewportPadding, top));
 
     menu.style.setProperty("--user-menu-left", `${left}px`);
     menu.style.setProperty("--user-menu-top", `${top}px`);
@@ -151,7 +193,7 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
-  function handleConnectedUserActivation(target, pointer = null) {
+  function handleConnectedUserActivation(target, clickPoint = null) {
     if (!(target instanceof Element)) {
       return false;
     }
@@ -173,35 +215,43 @@ export function bindPageEvents(dom, handlers) {
       const action = actionButton.dataset.userAction || "item";
       closeConnectedUserMenus();
       if (action === "report") {
-        handlers.reportEntity?.("user", userId, { trigger: actionButton });
+        handlers.openReportModal?.("user", userId, { trigger: actionButton });
         return true;
       }
       handlers.activateConnectedUser?.(userId, action);
       return true;
     }
 
-    const menuTrigger = target.closest("[data-user-menu-trigger]");
-    if (menuTrigger instanceof HTMLElement) {
-      const menuId = menuTrigger.dataset.userMenuTrigger || "";
-      const menu = userItem.querySelector(`[data-user-menu="${menuId}"]`);
-      if (menu instanceof HTMLElement) {
-        const willOpen = menu.hidden;
-        closeConnectedUserMenus(menu);
-        menu.hidden = !willOpen;
-        if (willOpen) {
-          positionConnectedUserMenu(menu, userItem, pointer);
-        }
-        userItem.querySelectorAll(`[data-user-menu-trigger="${menuId}"]`).forEach((trigger) => {
-          if (trigger instanceof HTMLElement) {
-            trigger.setAttribute("aria-expanded", String(willOpen));
-          }
-        });
+    // The buttons zone never opens the menu, including a margin to its left
+    // so clicks just before "Ver perfil" don't accidentally open the menu.
+    const actionsEl = userItem.querySelector(".user-item__actions");
+    if (actionsEl instanceof HTMLElement) {
+      const actionsDeadZoneMargin = 28;
+      const clickX = clickPoint && typeof clickPoint.x === "number" && clickPoint.x > 0 ? clickPoint.x : null;
+      const actionsRect = actionsEl.getBoundingClientRect();
+      const insideActionsDeadZone =
+        target.closest(".user-item__actions") || (clickX !== null && clickX >= actionsRect.left - actionsDeadZoneMargin);
+      if (insideActionsDeadZone) {
+        closeConnectedUserMenus();
+        return true;
       }
-      return true;
     }
 
-    closeConnectedUserMenus();
-    handlers.activateConnectedUser?.(userId, "item");
+    // Clicking anywhere else on the card (not just the name) opens the menu.
+    const menu = userItem.querySelector(`[data-user-menu="${userId}"]`);
+    if (menu instanceof HTMLElement) {
+      const willOpen = menu.hidden;
+      closeConnectedUserMenus(menu);
+      menu.hidden = !willOpen;
+      if (willOpen) {
+        positionConnectedUserMenu(menu, userItem, clickPoint);
+      }
+      userItem.querySelectorAll(`[data-user-menu-trigger="${userId}"]`).forEach((trigger) => {
+        if (trigger instanceof HTMLElement) {
+          trigger.setAttribute("aria-expanded", String(willOpen));
+        }
+      });
+    }
     return true;
   }
 
@@ -211,7 +261,7 @@ export function bindPageEvents(dom, handlers) {
     }
 
     listNode.addEventListener("click", (event) => {
-      handleConnectedUserActivation(event.target, event);
+      handleConnectedUserActivation(event.target, { x: event.clientX, y: event.clientY });
     });
   }
 
@@ -245,13 +295,35 @@ export function bindPageEvents(dom, handlers) {
         return;
       }
 
-      handlers.reportEntity?.("user", entityId, { trigger: target });
+      handlers.openReportModal?.("user", entityId, { trigger: target });
     });
   }
 
 
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileRecentCafes instanceof HTMLElement) {
+    dom.publicProfileRecentCafes.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const topicButton = event.target.closest("[data-public-profile-topic-id]");
+      if (!(topicButton instanceof HTMLElement)) {
+        return;
+      }
+
+      const topicId = topicButton.dataset.publicProfileTopicId || "";
+      if (!topicId) {
+        return;
+      }
+
+      handlers.closePublicProfileModal?.();
+      handlers.focusTopic?.(topicId);
+    });
+  }
+
   if (typeof HTMLElement !== "undefined" && dom.friendRequestsPanel instanceof HTMLElement) {
     dom.friendRequestsPanel.addEventListener("click", (event) => {
+      event.stopPropagation();
       if (!(event.target instanceof Element)) {
         return;
       }
@@ -259,6 +331,13 @@ export function bindPageEvents(dom, handlers) {
       const closeTarget = event.target.closest("[data-close-friend-requests]");
       if (closeTarget instanceof HTMLElement) {
         handlers.toggleFriendRequestsPanel?.(false);
+        return;
+      }
+
+      const tabTarget = event.target.closest("[data-friend-tab]");
+      if (tabTarget instanceof HTMLElement) {
+        const tab = tabTarget.dataset.friendTab;
+        handlers.setFriendRequestsTab?.(tab);
         return;
       }
 
@@ -277,6 +356,15 @@ export function bindPageEvents(dom, handlers) {
         handlers.rejectFriendRequest?.(userId);
       }
     });
+
+    dom.friendRequestsPanel.addEventListener("scroll", (event) => {
+      const list = event.target;
+      if (list instanceof HTMLElement && list.classList.contains("friend-request-panel__list")) {
+        if (list.scrollHeight - list.scrollTop - list.clientHeight < 20) {
+          handlers.loadMoreFriendRequests?.();
+        }
+      }
+    }, true);
   }
   if (typeof HTMLFormElement !== "undefined" && dom.messageForm instanceof HTMLFormElement) {
     dom.messageForm.addEventListener("submit", handlers.submitMessage);
@@ -309,6 +397,11 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
     });
   }
   if (typeof HTMLTextAreaElement !== "undefined" && dom.messageInput instanceof HTMLTextAreaElement) {
+    dom.messageInput.addEventListener("beforeinput", (event) => {
+      if (shouldBlockTextareaInput(dom.messageInput, event) || shouldBlockQuoteEdit(dom.messageInput, event)) {
+        event.preventDefault();
+      }
+    });
     dom.messageInput.addEventListener("input", () => {
       syncComposerTextareaHeight(dom.messageInput);
     });
@@ -326,20 +419,62 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
         return;
       }
 
-      handlers.reportEntity?.(entityType, entityId, { trigger: target });
+      handlers.openReportModal?.(entityType, entityId, { trigger: target });
     });
   }
 
+  function resetMessageActionMenuPosition(menu) {
+    menu.style.position = "";
+    menu.style.top = "";
+    menu.style.right = "";
+    menu.style.bottom = "";
+    menu.style.left = "";
+    menu.style.zIndex = "";
+  }
+
+  function getMessageActionMenuBody(menu) {
+    const trigger = dom.messageStream?.querySelector(`[data-message-menu-trigger="${menu.dataset.messageMenu}"]`);
+    const message = trigger instanceof HTMLElement ? trigger.closest(".message") : null;
+    const body = message instanceof HTMLElement ? message.querySelector(".message__body") : null;
+    return body instanceof HTMLElement ? body : null;
+  }
+
+  function restoreMessageActionMenu(menu) {
+    resetMessageActionMenuPosition(menu);
+    const body = getMessageActionMenuBody(menu);
+    if (body && menu.parentElement !== body) {
+      body.insertBefore(menu, body.firstChild);
+    }
+  }
+
+  function positionFloatingMessageActionMenu(menu) {
+    const body = getMessageActionMenuBody(menu);
+    if (!(body instanceof HTMLElement)) {
+      return;
+    }
+
+    const bodyRect = body.getBoundingClientRect();
+    if (menu.parentElement !== document.body) {
+      document.body.append(menu);
+    }
+    menu.style.position = "fixed";
+    menu.style.top = `${Math.round(bodyRect.bottom - menu.offsetHeight - 8)}px`;
+    menu.style.right = "auto";
+    menu.style.bottom = "auto";
+    menu.style.left = `${Math.round(bodyRect.left + 8)}px`;
+    menu.style.zIndex = "80";
+  }
   function closeMessageActionMenus(exceptMenu = null) {
     if (!(dom.messageStream instanceof HTMLElement)) {
       return;
     }
 
-    dom.messageStream.querySelectorAll("[data-message-menu]").forEach((menu) => {
+    document.querySelectorAll("[data-message-menu]").forEach((menu) => {
       if (!(menu instanceof HTMLElement) || menu === exceptMenu) {
         return;
       }
       menu.hidden = true;
+      restoreMessageActionMenu(menu);
       const trigger = dom.messageStream.querySelector(`[data-message-menu-trigger="${menu.dataset.messageMenu}"]`);
       if (trigger instanceof HTMLElement) {
         trigger.setAttribute("aria-expanded", "false");
@@ -363,6 +498,59 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
       }
     });
   }
+  // Shared by both listeners below: the floating action menu is reparented to
+  // document.body for positioning (see positionFloatingMessageActionMenu), so a
+  // single listener on messageStream can't catch clicks on it once it's open.
+  // Returns true when a profile/like/dislike/quote/report trigger was found and
+  // dispatched (closing both menus first), false otherwise.
+  function dispatchMessageActionClick(target) {
+    const profileTrigger = target.closest("[data-message-profile-author-id]");
+    if (profileTrigger instanceof HTMLElement) {
+      closeMessageReactionMenus();
+      closeMessageActionMenus();
+      handlers.activateConnectedUser?.(profileTrigger.dataset.messageProfileAuthorId || "", "profile");
+      return true;
+    }
+
+    const likeTrigger = target.closest("[data-like-message-id]");
+    if (likeTrigger instanceof HTMLElement) {
+      closeMessageReactionMenus();
+      closeMessageActionMenus();
+      handlers.toggleMessageLike?.(likeTrigger.dataset.likeMessageId || "", { trigger: likeTrigger });
+      return true;
+    }
+
+    const dislikeTrigger = target.closest("[data-dislike-message-id]");
+    if (dislikeTrigger instanceof HTMLElement) {
+      closeMessageReactionMenus();
+      closeMessageActionMenus();
+      handlers.toggleMessageDislike?.(dislikeTrigger.dataset.dislikeMessageId || "", { trigger: dislikeTrigger });
+      return true;
+    }
+
+    const quoteTrigger = target.closest("[data-quote-message-id]");
+    if (quoteTrigger instanceof HTMLElement) {
+      closeMessageReactionMenus();
+      closeMessageActionMenus();
+      handlers.quoteMessage?.(quoteTrigger.dataset.quoteMessageId || "", { trigger: quoteTrigger });
+      return true;
+    }
+
+    const reportTrigger = target.closest("[data-report-entity-type][data-report-entity-id]");
+    if (reportTrigger instanceof HTMLElement) {
+      closeMessageReactionMenus();
+      closeMessageActionMenus();
+      handlers.openReportModal?.(
+        reportTrigger.dataset.reportEntityType || "message",
+        reportTrigger.dataset.reportEntityId || "",
+        { trigger: reportTrigger }
+      );
+      return true;
+    }
+
+    return false;
+  }
+
   if (typeof HTMLElement !== "undefined" && dom.messageStream instanceof HTMLElement) {
     dom.messageStream.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) {
@@ -372,12 +560,17 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
       const menuTrigger = event.target.closest("[data-message-menu-trigger]");
       if (menuTrigger instanceof HTMLElement) {
         const menuId = menuTrigger.dataset.messageMenuTrigger || "";
-        const menu = dom.messageStream.querySelector(`[data-message-menu="${menuId}"]`);
+        const menu = document.querySelector(`[data-message-menu="${menuId}"]`);
         if (menu instanceof HTMLElement) {
           const willOpen = menu.hidden;
           closeMessageReactionMenus();
           closeMessageActionMenus(menu);
           menu.hidden = !willOpen;
+          if (willOpen) {
+            positionFloatingMessageActionMenu(menu);
+          } else {
+            restoreMessageActionMenu(menu);
+          }
           menuTrigger.setAttribute("aria-expanded", String(willOpen));
         }
         return;
@@ -396,59 +589,29 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
         }
         return;
       }
-      const profileTrigger = event.target.closest("[data-message-profile-author-id]");
-      if (profileTrigger instanceof HTMLElement) {
-        closeMessageReactionMenus();
-        closeMessageActionMenus();
-        handlers.activateConnectedUser?.(profileTrigger.dataset.messageProfileAuthorId || "", "profile");
-        return;
-      }
 
-      const likeTrigger = event.target.closest("[data-like-message-id]");
-      if (likeTrigger instanceof HTMLElement) {
-        closeMessageReactionMenus();
-        closeMessageActionMenus();
-        handlers.toggleMessageLike?.(likeTrigger.dataset.likeMessageId || "", { trigger: likeTrigger });
-        return;
-      }
-
-      const dislikeTrigger = event.target.closest("[data-dislike-message-id]");
-      if (dislikeTrigger instanceof HTMLElement) {
-        closeMessageReactionMenus();
-        closeMessageActionMenus();
-        handlers.toggleMessageDislike?.(dislikeTrigger.dataset.dislikeMessageId || "", { trigger: dislikeTrigger });
-        return;
-      }
-
-
-      const quoteTrigger = event.target.closest("[data-quote-message-id]");
-      if (quoteTrigger instanceof HTMLElement) {
-        closeMessageReactionMenus();
-        closeMessageActionMenus();
-        handlers.quoteMessage?.(quoteTrigger.dataset.quoteMessageId || "", { trigger: quoteTrigger });
-        return;
-      }
-      const trigger = event.target.closest("[data-report-entity-type][data-report-entity-id]");
-      if (!(trigger instanceof HTMLElement)) {
-        closeMessageReactionMenus();
-        closeMessageActionMenus();
+      if (dispatchMessageActionClick(event.target)) {
         return;
       }
 
       closeMessageReactionMenus();
       closeMessageActionMenus();
-      handlers.reportEntity?.(
-        trigger.dataset.reportEntityType || "message",
-        trigger.dataset.reportEntityId || "",
-        { trigger }
-      );
     });
   }
-
 
   document.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) {
       return;
+    }
+
+    const insideMessageActionMenu = event.target.closest("[data-message-menu]");
+    if (insideMessageActionMenu instanceof HTMLElement && dispatchMessageActionClick(event.target)) {
+      return;
+    }
+
+    const messageActionTrigger = event.target.closest("[data-message-menu-trigger]");
+    if (!insideMessageActionMenu && !messageActionTrigger) {
+      closeMessageActionMenus();
     }
 
     const insideFriendPanel = event.target.closest("#friendRequestsPanel");

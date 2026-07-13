@@ -1,0 +1,98 @@
+- generic [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - banner [ref=f4e3]:
+      - generic "TOPYKLY" [ref=f4e4]:
+        - img [ref=f4e6]
+        - generic [ref=f4e11]:
+          - generic [ref=f4e12]: TOPY
+          - generic [ref=f4e13]: KLY
+      - generic [ref=f4e14]:
+        - switch "Tema oscuro" [checked] [ref=f4e16] [cursor=pointer]:
+          - generic [ref=f4e17]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - img
+        - button "Iniciar sesión" [ref=f4e19] [cursor=pointer]:
+          - generic [ref=f4e20]: Iniciar sesión
+        - button "Abrir menú" [expanded] [ref=f4e21] [cursor=pointer]:
+          - img [ref=f4e23]
+    - main "Chat social" [ref=f4e25]:
+      - region "Temas" [ref=f4e26]:
+        - generic [ref=f4e27]:
+          - generic [ref=f4e31]:
+            - button "gola 4, Cooco" [ref=f4e34] [cursor=pointer]:
+              - generic [ref=f4e36]:
+                - generic [ref=f4e37]: gola
+                - generic [ref=f4e38]: 4, Cooco
+            - button "teste 2, Cooco" [ref=f4e39] [cursor=pointer]:
+              - generic [ref=f4e41]:
+                - generic [ref=f4e42]: teste
+                - generic [ref=f4e43]: 2, Cooco
+            - button "hola 3, Cooco" [ref=f4e44] [cursor=pointer]:
+              - generic [ref=f4e46]:
+                - generic [ref=f4e47]: hola
+                - generic [ref=f4e48]: 3, Cooco
+          - button "Crear nuevo tema" [ref=f4e33] [cursor=pointer]
+  - dialog "Menú móvil" [ref=f4e50]:
+    - generic [ref=f4e51]:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic: TOPY
+          - generic: KLY
+      - button "Cerrar menú" [ref=f4e52] [cursor=pointer]:
+        - generic [ref=f4e53]: ×
+    - generic [ref=f4e91]:
+      - generic [ref=f4e92]:
+        - button "Volver al menú" [active] [ref=f4e93] [cursor=pointer]:
+          - img [ref=f4e95]
+        - heading "Ranking" [level=3] [ref=f4e98]
+      - generic [ref=f4e99]:
+        - generic [ref=f4e100]:
+          - heading "Global" [level=3] [ref=f4e103]
+          - generic [ref=f4e104]:
+            - button "Ranking anterior" [ref=f4e105] [cursor=pointer]:
+              - img [ref=f4e107]
+            - 'button "Modo actual: TEMAS COMENTARIOS" [ref=f4e109] [cursor=pointer]':
+              - generic:
+                - generic: TEMAS COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=f4e110] [cursor=pointer]:
+              - img [ref=f4e112]
+          - generic [ref=f4e114]:
+            - article [ref=f4e115]:
+              - generic [ref=f4e116]: "1"
+              - generic [ref=f4e117]:
+                - paragraph [ref=f4e118]: gola
+                - paragraph [ref=f4e119]: 4 comentarios
+            - article [ref=f4e120]:
+              - generic [ref=f4e121]: "2"
+              - generic [ref=f4e122]:
+                - paragraph [ref=f4e123]: hola
+                - paragraph [ref=f4e124]: 3 comentarios
+            - article [ref=f4e125]:
+              - generic [ref=f4e126]: "3"
+              - generic [ref=f4e127]:
+                - paragraph [ref=f4e128]: teste
+                - paragraph [ref=f4e129]: 2 comentarios
+        - generic [ref=f4e130]:
+          - heading "Tema" [level=3] [ref=f4e133]
+          - generic [ref=f4e134]:
+            - button "Ranking anterior" [ref=f4e135] [cursor=pointer]:
+              - img [ref=f4e137]
+            - 'button "Modo actual: COMENTARIOS" [ref=f4e139] [cursor=pointer]':
+              - generic:
+                - generic: COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=f4e140] [cursor=pointer]:
+              - img [ref=f4e142]
+          - article [ref=f4e145]:
+            - generic [ref=f4e146]: "1"
+            - generic [ref=f4e147]:
+              - paragraph [ref=f4e148]: Selecciona un tema
+              - paragraph [ref=f4e149]: El ranking del tema aparece aca.

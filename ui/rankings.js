@@ -3,7 +3,6 @@ import { getActiveRankingStep, getScopeActiveRankingStep } from "../ranking-stat
 import { buildPostRankingEntries, buildUserRankingEntries } from "./ranking-data.js";
 import { renderIntoTargets } from "./render-utils.js";
 import {
-  resetRankingScroll,
   showRankingEmpty,
   showRankingList,
   showRankingLoading,
@@ -91,15 +90,26 @@ export function renderRankings(state, dom) {
       getRankingFadeKey(state.rankingScope, activeRankingStep),
       () => rankings.map((entry, index) => createRankingItem(entry, index, state.rankingScope)),
       state.rankingScope === "global",
-      () => {
+      ({ keyChanged }) => {
         syncRankingListHeights(dom);
-        resetRankingScroll(dom);
+        if (keyChanged) {
+          dom.rankingList.scrollTop = 0;
+        }
       }
     );
   }
 
-  // 2. Render Mobile Drawer (both lists)
+  // 2. Render Mobile Drawer (only the active scope is shown; both are kept rendered
+  // so switching scope via the tabs is instant, with no reload/flash)
   if (dom.drawerGlobalRankingList && dom.drawerTopicRankingList) {
+    const showGlobalScope = state.rankingScope !== "topic";
+    if (dom.drawerGlobalRankingPanel) {
+      dom.drawerGlobalRankingPanel.hidden = !showGlobalScope;
+    }
+    if (dom.drawerTopicRankingPanel) {
+      dom.drawerTopicRankingPanel.hidden = showGlobalScope;
+    }
+
     // A. Render Global List
     const globalStep = getScopeActiveRankingStep(state, "global");
     const globalBackend = state.rankings?.["global"]?.[globalStep.type]?.[globalStep.metric] ?? null;
@@ -115,17 +125,16 @@ export function renderRankings(state, dom) {
       getRankingFadeKey("global", globalStep),
       () => globalRankings.map((entry, index) => createRankingItem(entry, index, "global")),
       true,
-      () => {
+      ({ keyChanged }) => {
         syncRankingListHeights(dom);
-        resetRankingScroll(dom);
+        if (keyChanged) {
+          dom.drawerGlobalRankingList.scrollTop = 0;
+        }
       }
     );
 
     // B. Render Topic List
     const hasTopic = !!state.selectedTopicId;
-    if (dom.drawerTopicRankingPanel) {
-      dom.drawerTopicRankingPanel.hidden = false;
-    }
     dom.drawerTopicRankingList.hidden = false;
 
     const topicStep = getScopeActiveRankingStep(state, "topic");
@@ -138,16 +147,30 @@ export function renderRankings(state, dom) {
           ? buildUserRankingEntries(state.topics, state.users, state.currentUserId, topicStep.metric, state.selectedTopicId, "topic")
           : buildPostRankingEntries(state.topics, state.users, state.currentUserId, topicStep.metric, state.selectedTopicId, "topic")
       );
-      renderIntoTargets([dom.drawerTopicRankingList], "scroll-list ranking-list", () =>
-        topicRankings.map((entry, index) => createRankingItem(entry, index, "topic"))
+      renderRankingTarget(
+        dom.drawerTopicRankingList,
+        "scroll-list ranking-list",
+        getRankingFadeKey("topic", topicStep),
+        () => topicRankings.map((entry, index) => createRankingItem(entry, index, "topic")),
+        false,
+        ({ keyChanged }) => {
+          if (keyChanged) {
+            dom.drawerTopicRankingList.scrollTop = 0;
+          }
+        }
       );
     } else {
+      const wasTopicEmpty = dom.drawerTopicRankingList.dataset.rankingFadeKey === "topic:empty";
+      dom.drawerTopicRankingList.dataset.rankingFadeKey = "topic:empty";
       dom.drawerTopicRankingList.className = "scroll-list ranking-list ranking-list--empty";
       dom.drawerTopicRankingList.innerHTML = `
         <div class="ranking-empty">
           <div class="ranking-empty__text">Selecciona un tema para ver su actividad real</div>
         </div>
       `;
+      if (!wasTopicEmpty) {
+        dom.drawerTopicRankingList.scrollTop = 0;
+      }
     }
 
     const activeTopic = hasTopic ? state.topics.byId?.[state.selectedTopicId] ?? state.topics.find?.((topic) => topic.id === state.selectedTopicId) : null;
@@ -157,8 +180,8 @@ export function renderRankings(state, dom) {
     }
   }
 
+  syncRankingSkeletonHeights(dom);
   syncRankingListHeights(dom);
-  resetRankingScroll(dom);
 }
 
 function renderRankingTarget(target, className, key, buildNodes, shouldFade, onRendered) {
@@ -177,7 +200,7 @@ function renderRankingTarget(target, className, key, buildNodes, shouldFade, onR
     clearRankingFadeTimer(target);
     target.classList.remove("is-ranking-fading");
     renderIntoTargets([target], className, buildNodes);
-    onRendered?.();
+    onRendered?.({ keyChanged, target });
     return;
   }
 
@@ -185,7 +208,7 @@ function renderRankingTarget(target, className, key, buildNodes, shouldFade, onR
   target.classList.add("is-ranking-fading");
   target.__rankingFadeTimer = setTimeout(() => {
     renderIntoTargets([target], className, buildNodes);
-    onRendered?.();
+    onRendered?.({ keyChanged, target });
     scheduleAnimationFrame(() => {
       target.classList.remove("is-ranking-fading");
     });

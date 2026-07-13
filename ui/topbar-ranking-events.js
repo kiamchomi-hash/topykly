@@ -1,5 +1,9 @@
 export function bindTopbarRankingEvents(dom, handlers) {
   addListener(dom.rankingScopeButton, "click", handlers.toggleRankingScope);
+  addListener(dom.drawerGlobalScopePrev, "click", handlers.toggleRankingScope);
+  addListener(dom.drawerGlobalScopeNext, "click", handlers.toggleRankingScope);
+  addListener(dom.drawerTopicScopePrev, "click", handlers.toggleRankingScope);
+  addListener(dom.drawerTopicScopeNext, "click", handlers.toggleRankingScope);
   addListener(dom.rankingPrev, "click", () => handlers.setRankingStep(-1));
   addListener(dom.rankingNext, "click", () => handlers.setRankingStep(1));
   addListener(dom.drawerGlobalRankingPrev, "click", () => handlers.setScopeRankingStep("global", -1));

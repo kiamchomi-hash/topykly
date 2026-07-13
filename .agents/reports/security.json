@@ -1,13 +1,39 @@
 {
   "agentName": "Agente Auditor de Seguridad",
-  "status": "Alerta",
-  "lastChecked": "2026-07-07T16:10:00.000Z",
+  "status": "local_fixes_verified_production_deploy_pending",
+  "lastChecked": "2026-07-11T23:21:14.310Z",
   "findings": [
     {
+      "level": "critical",
+      "status": "fixed_locally",
+      "id": "public-user-email-exposure",
+      "message": "Removed email from public users payloads; email remains only on the authenticated viewer."
+    },
+    {
+      "level": "high",
+      "status": "fixed_locally",
+      "id": "unverified-oidc-email",
+      "message": "Unverified OIDC email claims can no longer create accounts, link identities or grant email-based admin privileges."
+    },
+    {
+      "level": "high",
+      "status": "fixed_locally",
+      "id": "duplicate-google-password-account",
+      "message": "Verified password and Google sign-ins reuse the same stable users.id; legacy unverified emails require explicit verification."
+    },
+    {
       "level": "warning",
-      "message": "Configurar la directiva Referrer-Policy en 'same-origin' o 'no-referrer' en las peticiones de recursos externos de avatares para evitar la fuga de URLs y parámetros de sesión a servidores externos.",
-      "id": "secqb3p",
-      "agent": "security"
+      "status": "production_pending",
+      "id": "missing-hsts",
+      "message": "The live site still omits Strict-Transport-Security until the local server fix is deployed."
     }
-  ]
+  ],
+  "liveAudit": {
+    "health": "OK",
+    "latencyMs": 842,
+    "sensitiveFilesExposed": false,
+    "sslValid": true,
+    "sslDaysRemaining": 80,
+    "hstsPresent": false
+  }
 }

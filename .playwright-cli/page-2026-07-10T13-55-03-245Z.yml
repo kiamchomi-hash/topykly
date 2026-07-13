@@ -1,0 +1,28 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - generic "TOPYKLY" [ref=f2e4]:
+      - generic [ref=f2e11]:
+        - generic [ref=f2e12]: TOPY
+        - generic [ref=f2e13]: KLY
+    - generic [ref=f2e14]:
+      - button "Iniciar sesión" [ref=f2e15] [cursor=pointer]
+      - button "Abrir menú" [ref=f2e17] [cursor=pointer]
+  - main "Chat social" [ref=f2e21]:
+    - region "Temas" [ref=f2e22]:
+      - generic [ref=f2e23]:
+        - generic [ref=f2e27]:
+          - button "dasda 9 , Matias_velazco" [ref=f2e28] [cursor=pointer]:
+            - generic [ref=f2e34]:
+              - generic [ref=f2e35]: dasda
+              - generic [ref=f2e36]:
+                - generic [ref=f2e37]: "9"
+                - generic [ref=f2e38]: ","
+                - generic [ref=f2e39]: Matias_velazco
+          - button "adada 1 , Matias_velazco" [ref=f2e40] [cursor=pointer]:
+            - generic [ref=f2e46]:
+              - generic [ref=f2e47]: adada
+              - generic [ref=f2e48]:
+                - generic [ref=f2e49]: "1"
+                - generic [ref=f2e50]: ","
+                - generic [ref=f2e51]: Matias_velazco
+        - button "Crear nuevo tema de chat" [ref=f2e53] [cursor=pointer]: Crear nuevo tema

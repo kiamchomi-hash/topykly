@@ -1,0 +1,66 @@
+- generic [ref=f10e1]:
+  - generic [ref=f10e2]:
+    - banner [ref=f10e3]:
+      - generic "TOPYKLY" [ref=f10e4]:
+        - img [ref=f10e6]
+        - generic [ref=f10e11]:
+          - generic [ref=f10e12]: TOPY
+          - generic [ref=f10e13]: KLY
+      - generic [ref=f10e14]:
+        - switch "Tema oscuro" [checked] [ref=f10e16] [cursor=pointer]:
+          - generic [ref=f10e17]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - img
+        - button "Iniciar sesión" [ref=f10e19] [cursor=pointer]:
+          - generic [ref=f10e20]: Iniciar sesión
+        - button "Abrir menú" [expanded] [ref=f10e21] [cursor=pointer]:
+          - img [ref=f10e23]
+    - main "Chat social" [ref=f10e25]:
+      - region "Temas" [ref=f10e26]:
+        - generic [ref=f10e27]:
+          - generic [ref=f10e31]:
+            - button "gola 4, Cooco" [ref=f10e32] [cursor=pointer]:
+              - generic [ref=f10e34]:
+                - generic [ref=f10e35]: gola
+                - generic [ref=f10e36]: 4, Cooco
+            - button "teste 2, Cooco" [ref=f10e37] [cursor=pointer]:
+              - generic [ref=f10e39]:
+                - generic [ref=f10e40]: teste
+                - generic [ref=f10e41]: 2, Cooco
+            - button "hola 3, Cooco" [ref=f10e42] [cursor=pointer]:
+              - generic [ref=f10e44]:
+                - generic [ref=f10e45]: hola
+                - generic [ref=f10e46]: 3, Cooco
+          - button "Crear nuevo tema" [ref=f10e48] [cursor=pointer]
+  - dialog "Menú móvil" [ref=f10e50]:
+    - generic [ref=f10e51]:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic: TOPY
+          - generic: KLY
+      - button "Cerrar menú" [active] [ref=f10e52] [cursor=pointer]:
+        - generic [ref=f10e53]: ×
+    - region "Acciones secundarias" [ref=f10e54]:
+      - generic [ref=f10e56]:
+        - generic:
+          - img
+        - textbox [ref=f10e57]:
+          - /placeholder: Buscar en menú
+      - generic [ref=f10e58]:
+        - button "Inicio" [ref=f10e59] [cursor=pointer]:
+          - img [ref=f10e61]
+          - generic [ref=f10e65]: Inicio
+        - button "Paletas" [ref=f10e66] [cursor=pointer]:
+          - img [ref=f10e68]
+          - generic [ref=f10e73]: Paletas
+        - button "Usuarios" [ref=f10e74] [cursor=pointer]:
+          - img [ref=f10e76]
+          - generic [ref=f10e83]: Usuarios
+        - button "Ranking" [ref=f10e84] [cursor=pointer]:
+          - img [ref=f10e86]
+          - generic [ref=f10e89]: Ranking

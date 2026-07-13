@@ -1,0 +1,66 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic "TOPYKLY" [ref=e16]:
+        - img [ref=e18]
+        - generic [ref=e23]:
+          - generic [ref=e24]: TOPY
+          - generic [ref=e25]: KLY
+      - generic [ref=e26]:
+        - switch "Tema oscuro" [checked] [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]:
+            - generic:
+              - generic:
+                - img
+              - generic:
+                - img
+        - button "Iniciar sesión" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]: Iniciar sesión
+        - button "Abrir menú" [expanded] [ref=e78] [cursor=pointer]:
+          - img [ref=e80]
+    - main "Chat social" [ref=e29]:
+      - region "Temas" [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e35]:
+            - button "gola 4, Cooco" [ref=e82] [cursor=pointer]:
+              - generic [ref=e84]:
+                - generic [ref=e85]: gola
+                - generic [ref=e86]: 4, Cooco
+            - button "teste 2, Cooco" [ref=e87] [cursor=pointer]:
+              - generic [ref=e89]:
+                - generic [ref=e90]: teste
+                - generic [ref=e91]: 2, Cooco
+            - button "hola 3, Cooco" [ref=e92] [cursor=pointer]:
+              - generic [ref=e94]:
+                - generic [ref=e95]: hola
+                - generic [ref=e96]: 3, Cooco
+          - button "Crear nuevo tema" [ref=e37] [cursor=pointer]
+  - dialog "Menú móvil" [ref=e98]:
+    - generic [ref=e99]:
+      - generic:
+        - generic:
+          - img
+        - generic:
+          - generic: TOPY
+          - generic: KLY
+      - button "Cerrar menú" [active] [ref=e100] [cursor=pointer]:
+        - generic [ref=e101]: ×
+    - region "Acciones secundarias" [ref=e102]:
+      - generic [ref=e104]:
+        - generic:
+          - img
+        - textbox [ref=e105]:
+          - /placeholder: Buscar en menú
+      - generic [ref=e106]:
+        - button "Inicio" [ref=e107] [cursor=pointer]:
+          - img [ref=e109]
+          - generic [ref=e113]: Inicio
+        - button "Paletas" [ref=e114] [cursor=pointer]:
+          - img [ref=e116]
+          - generic [ref=e121]: Paletas
+        - button "Usuarios" [ref=e122] [cursor=pointer]:
+          - img [ref=e124]
+          - generic [ref=e131]: Usuarios
+        - button "Ranking" [ref=e132] [cursor=pointer]:
+          - img [ref=e134]
+          - generic [ref=e137]: Ranking

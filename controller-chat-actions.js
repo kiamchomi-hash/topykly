@@ -1,7 +1,8 @@
 import { getSelectedTopic } from "./model.js";
 import { api, ApiError } from "./services/api.js";
 import { collectTopicNotifications, createNotificationStateUpdate } from "./ui/notifications.js";
-import { dispatch, reducers } from "./store-logic.js";
+import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
+import { composeReportReason } from "./report-reasons.js";
 
 export function createChatActions({
   state,
@@ -13,8 +14,8 @@ export function createChatActions({
   isMobileViewport = null,
   syncResponsiveView = null
 }) {
-  let refreshFeedbackTimer = 0;
   let submitLockTimer = 0;
+  let pendingReportTrigger = null;
 
   function setRefreshButtonState(isRefreshing) {
     if (!dom.refreshButton) {
@@ -23,6 +24,43 @@ export function createChatActions({
 
     dom.refreshButton.classList.toggle("is-refreshing", isRefreshing);
     dom.refreshButton.setAttribute("aria-busy", String(isRefreshing));
+  }
+
+  function setTopicsRefreshButtonState(isRefreshing) {
+    if (!dom.topicsRefreshButton) {
+      return;
+    }
+
+    dom.topicsRefreshButton.classList.toggle("is-refreshing", isRefreshing);
+    dom.topicsRefreshButton.setAttribute("aria-busy", String(isRefreshing));
+  }
+
+  // Shared debounce shape for the two "refresh" buttons: show the busy state
+  // immediately, run the action, and only clear the busy state after
+  // refreshFeedbackMs has elapsed (so quick responses still visibly spin).
+  function createDebouncedRefresh(setButtonState) {
+    let timer = 0;
+
+    return async function runWithFeedback(action) {
+      const startedAt = Date.now();
+      if (timer) {
+        clearTimeout(timer);
+      }
+
+      setButtonState(true);
+      try {
+        await action();
+      } catch (error) {
+        console.error(error);
+        showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
+      } finally {
+        const remainingMs = Math.max(0, refreshFeedbackMs - (Date.now() - startedAt));
+        timer = setTimeout(() => {
+          setButtonState(false);
+          timer = 0;
+        }, remainingMs);
+      }
+    };
   }
 
   function setComposerBusy(isBusy) {
@@ -115,27 +153,12 @@ export function createChatActions({
       requestAnimationFrame(applyScroll);
     }
   }
-  function requestReportReason(entityType) {
-    if (typeof window === "undefined" || typeof window.prompt !== "function") {
-      return "";
-    }
-
-    const promptLabel = entityType === "message"
-      ? "Motivo del reporte del mensaje:"
-      : entityType === "user"
-        ? "Motivo del reporte del usuario:"
-        : "Motivo del reporte del tema:";
-    const response = window.prompt(promptLabel, "");
-    if (response === null) {
-      return null;
-    }
-
-    return response;
-  }
-
-  async function syncBackendPayload(fetcher) {
+  // Preserves the topics list's on-screen order by default (own comments, likes,
+  // topic creation, etc. should not reshuffle it); pass reorder:true only for the
+  // explicit topics-list refresh action, which is meant to adopt the backend order.
+  async function syncBackendPayload(fetcher, { reorder = false } = {}) {
     const payload = await fetcher();
-    dispatch(state, reducers.hydrateFromBackend, payload);
+    dispatch(state, reorder ? reducers.hydrateFromBackend : reducers.mergeLiveTopics, payload);
   }
 
   function getActionErrorMessage(error, fallback) {
@@ -183,7 +206,10 @@ export function createChatActions({
     setComposerBusy(true);
     try {
       if (!topic) {
-        await syncBackendPayload(() => apiClient.createTopic(title, text));
+        // Creating a topic is the one action that should still surface at the
+        // top of the list immediately, unlike replies/likes/etc. which must
+        // not reshuffle the topics list until the user hits "Actualizar".
+        await syncBackendPayload(() => apiClient.createTopic(title, text), { reorder: true });
         if (titleInput) {
           titleInput.value = "";
         }
@@ -196,6 +222,9 @@ export function createChatActions({
       shouldScrollAfterSubmit = true;
 
       input.value = "";
+      if (input.dataset) {
+        delete input.dataset.quoteLockLength;
+      }
       render();
     } catch (error) {
       if (error instanceof ApiError && error.code === "TOPIC_EXPELLED_OR_BLOCKED") {
@@ -217,30 +246,24 @@ export function createChatActions({
     }
   }
 
+  const runTopicRefreshWithFeedback = createDebouncedRefresh(setRefreshButtonState);
+  const runTopicsListRefreshWithFeedback = createDebouncedRefresh(setTopicsRefreshButtonState);
+
   async function refreshCurrentTopic() {
-    const startedAt = Date.now();
-
-    if (refreshFeedbackTimer) {
-      clearTimeout(refreshFeedbackTimer);
-    }
-
-    setRefreshButtonState(true);
-    try {
+    await runTopicRefreshWithFeedback(async () => {
       const refreshedTopicId = state.selectedTopicId;
       await syncBackendPayload(() => apiClient.refreshTopics(refreshedTopicId));
       dispatch(state, reducers.markTopicRead, refreshedTopicId);
       dispatch(state, reducers.incrementRefreshCount);
       render();
-    } catch (error) {
-      console.error(error);
-      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
-    } finally {
-      const remainingMs = Math.max(0, refreshFeedbackMs - (Date.now() - startedAt));
-      refreshFeedbackTimer = setTimeout(() => {
-        setRefreshButtonState(false);
-        refreshFeedbackTimer = 0;
-      }, remainingMs);
-    }
+    });
+  }
+
+  async function refreshTopicsList() {
+    await runTopicsListRefreshWithFeedback(async () => {
+      await syncBackendPayload(() => apiClient.refreshTopics(state.selectedTopicId), { reorder: true });
+      render();
+    });
   }
 
   function createNewTopic() {
@@ -254,6 +277,9 @@ export function createChatActions({
     }
     if (dom.messageInput) {
       dom.messageInput.value = "";
+      if (dom.messageInput.dataset) {
+        delete dom.messageInput.dataset.quoteLockLength;
+      }
     }
     render();
 
@@ -266,26 +292,29 @@ export function createChatActions({
     }
   }
 
-  async function toggleMessageLike(messageId, { trigger = null } = {}) {
+  async function toggleMessageReaction(messageId, reactionType, { trigger = null } = {}) {
     if (!messageId) {
       return;
     }
 
     const previousTopics = state.topics;
     const reactionScrollState = getReactionScrollState(trigger);
+    const apiCall = reactionType === "dislike" ? apiClient.toggleMessageDislike : apiClient.toggleMessageLike;
+    const errorFallback = reactionType === "dislike" ? "No se pudo actualizar el dislike." : "No se pudo actualizar el like.";
+
     setReportTriggerState(trigger, true);
-    dispatch(state, reducers.applyMessageReaction, { messageId, reactionType: "like" });
+    dispatch(state, reducers.applyMessageReaction, { messageId, reactionType });
     render();
     restoreReactionScroll(reactionScrollState);
 
     try {
-      await syncBackendPayload(() => apiClient.toggleMessageLike(messageId, state.selectedTopicId));
+      await syncBackendPayload(() => apiCall(messageId, state.selectedTopicId));
       render();
       restoreReactionScroll(reactionScrollState);
     } catch (error) {
       dispatch(state, reducers.restoreTopics, previousTopics);
       console.error(error);
-      showFeedback?.(getActionErrorMessage(error, "No se pudo actualizar el like."), { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, errorFallback), { kind: "error" });
     } finally {
       setReportTriggerState(trigger, false);
       render();
@@ -293,31 +322,12 @@ export function createChatActions({
     }
   }
 
-  async function toggleMessageDislike(messageId, { trigger = null } = {}) {
-    if (!messageId) {
-      return;
-    }
+  function toggleMessageLike(messageId, options = {}) {
+    return toggleMessageReaction(messageId, "like", options);
+  }
 
-    const previousTopics = state.topics;
-    const reactionScrollState = getReactionScrollState(trigger);
-    setReportTriggerState(trigger, true);
-    dispatch(state, reducers.applyMessageReaction, { messageId, reactionType: "dislike" });
-    render();
-    restoreReactionScroll(reactionScrollState);
-
-    try {
-      await syncBackendPayload(() => apiClient.toggleMessageDislike(messageId, state.selectedTopicId));
-      render();
-      restoreReactionScroll(reactionScrollState);
-    } catch (error) {
-      dispatch(state, reducers.restoreTopics, previousTopics);
-      console.error(error);
-      showFeedback?.(getActionErrorMessage(error, "No se pudo actualizar el dislike."), { kind: "error" });
-    } finally {
-      setReportTriggerState(trigger, false);
-      render();
-      restoreReactionScroll(reactionScrollState);
-    }
+  function toggleMessageDislike(messageId, options = {}) {
+    return toggleMessageReaction(messageId, "dislike", options);
   }
 
 
@@ -332,7 +342,20 @@ export function createChatActions({
   }
 
   function getUserName(userId) {
-    return state.users?.find?.((user) => user.id === userId)?.name || "Alguien";
+    const user = state.users?.find?.((candidate) => candidate.id === userId);
+    return user?.nickname || user?.name || "Alguien";
+  }
+
+  function formatQuoteAuthor(name) {
+    const normalized = String(name || "Alguien").trim();
+    return normalized.startsWith("@") ? normalized : `@${normalized}`;
+  }
+
+  function formatQuoteText(text) {
+    return String(text || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 140);
   }
 
   function quoteMessage(messageId) {
@@ -347,14 +370,18 @@ export function createChatActions({
     }
 
     const author = getUserName(target.message.authorId);
-    const preview = String(target.message.text || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 140);
-    const quote = `> ${author}: ${preview}\n\n`;
-    input.value = input.value.trim()
-      ? `${quote}${input.value.trim()}`
+    const preview = formatQuoteText(target.message.text);
+    const quote = `> ${formatQuoteAuthor(author)}\n> ${preview}\n\n`;
+    const existingText = input.value.trim();
+    const nextValue = existingText
+      ? `${quote}${existingText}`
       : quote;
+    const maxLength = Number(input.maxLength);
+    input.value = maxLength > 0 ? nextValue.slice(0, maxLength) : nextValue;
+    const cursorPosition = Math.min(quote.length, input.value.length);
+    if (input.dataset) {
+      input.dataset.quoteLockLength = String(cursorPosition);
+    }
     render();
 
     if (isMobileViewport?.()) {
@@ -362,25 +389,29 @@ export function createChatActions({
       syncResponsiveView?.();
     }
 
+    scrollMessageStreamToBottom();
+
+    const scrollToCursor = () => {
+      input.scrollTop = input.scrollHeight;
+    };
+
     try {
       input.focus({ preventScroll: true });
-      input.setSelectionRange(input.value.length, input.value.length);
+      input.setSelectionRange(cursorPosition, cursorPosition);
+      scrollToCursor();
+      globalThis.requestAnimationFrame?.(scrollToCursor);
     } catch {
       input.focus?.();
+      scrollToCursor();
     }
   }
-  async function reportEntity(entityType, entityId, { trigger = null, reason = undefined } = {}) {
-    const requestedReason = reason ?? requestReportReason(entityType);
-    if (requestedReason === null) {
-      return;
-    }
-
+  async function reportEntity(entityType, entityId, { trigger = null, reason = "" } = {}) {
     setReportTriggerState(trigger, true);
     try {
       await syncBackendPayload(() => apiClient.reportEntity(
         entityType,
         entityId,
-        requestedReason || "",
+        reason || "",
         state.selectedTopicId
       ));
       render();
@@ -393,12 +424,53 @@ export function createChatActions({
     }
   }
 
+  function openReportModal(entityType, entityId, { trigger = null } = {}) {
+    pendingReportTrigger = typeof HTMLElement !== "undefined" && trigger instanceof HTMLElement ? trigger : null;
+    dispatch(state, reducers.setReportModalOpen, { isOpen: true, entityType, entityId });
+    render();
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        dom.reportReasonForm?.querySelector?.("input[type='radio']")?.focus?.();
+      });
+    }
+  }
+
+  function closeReportModal() {
+    const trigger = pendingReportTrigger;
+    pendingReportTrigger = null;
+    dispatch(state, reducers.setReportModalOpen, { isOpen: false, entityType: null, entityId: null });
+    render();
+    trigger?.focus?.();
+  }
+
+  async function submitReportModal(reasonValue, customText = "") {
+    const reportModal = state.reportModal || {};
+    if (!reportModal.isOpen || !reportModal.entityType || !reportModal.entityId) {
+      return;
+    }
+
+    const reason = composeReportReason(reasonValue, customText);
+    if (!reason) {
+      return;
+    }
+
+    const { entityType, entityId } = reportModal;
+    const trigger = pendingReportTrigger;
+    await reportEntity(entityType, entityId, { trigger, reason });
+    closeReportModal();
+  }
+
   return {
     createNewTopic,
     submitMessage,
     refreshCurrentTopic,
+    refreshTopicsList,
     toggleMessageLike,
     toggleMessageDislike,
-    reportEntity
+    quoteMessage,
+    reportEntity,
+    openReportModal,
+    closeReportModal,
+    submitReportModal
   };
 }

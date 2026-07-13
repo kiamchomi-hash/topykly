@@ -25,14 +25,72 @@ function getUserAvatarUrl(users, userId, currentUserId = null) {
   return user.avatarUrl || (user.id === currentUserId ? user.avatarPendingUrl : "") || "";
 }
 
+function parseLeadingQuote(text) {
+  const lines = String(text || "").split("\n");
+  const quoteLines = [];
+  let index = 0;
+
+  while (index < lines.length && /^>\s?/.test(lines[index])) {
+    quoteLines.push(lines[index].replace(/^>\s?/, ""));
+    index += 1;
+  }
+
+  if (quoteLines.length < 2) {
+    return null;
+  }
+
+  while (index < lines.length && !lines[index].trim()) {
+    index += 1;
+  }
+
+  return {
+    author: quoteLines[0].trim(),
+    text: quoteLines.slice(1).join("\n").trim(),
+    body: lines.slice(index).join("\n").trim()
+  };
+}
+
+function createMessageContent(text) {
+  const parsedQuote = parseLeadingQuote(text);
+  if (!parsedQuote) {
+    return el("p", "message__text", text);
+  }
+
+  const content = el("div", "message__content");
+  const quote = el("blockquote", "message__quote");
+  quote.append(
+    el("p", "message__quote-author", parsedQuote.author),
+    el("p", "message__quote-text", parsedQuote.text)
+  );
+  content.append(quote);
+
+  if (parsedQuote.body) {
+    content.append(el("p", "message__text", parsedQuote.body));
+  }
+
+  return content;
+}
+function createLikeDislikeActionButtons(message, author) {
+  const likeButton = el("button", `message__action-menu-button${message.likedByViewer ? " is-active" : ""}`, "LIKE");
+  likeButton.type = "button";
+  likeButton.dataset.likeMessageId = message.id;
+  likeButton.setAttribute("aria-label", `Marcar me gusta en el mensaje de ${author}`);
+
+  const dislikeButton = el("button", `message__action-menu-button${message.dislikedByViewer ? " is-active" : ""}`, "DISLIKE");
+  dislikeButton.type = "button";
+  dislikeButton.dataset.dislikeMessageId = message.id;
+  dislikeButton.setAttribute("aria-label", `Marcar no me gusta en el mensaje de ${author}`);
+
+  return [likeButton, dislikeButton];
+}
+
 function createReportIcon() {
   const icon = el("span", "report-icon");
   icon.setAttribute("aria-hidden", "true");
   icon.innerHTML = `
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 3 3.8 18.5h16.4L12 3Z"></path>
-      <path d="M12 9v4"></path>
-      <path d="M12 17h.01"></path>
+      <path d="M5 21V4"></path>
+      <path d="M5 4h13.5l-3 4.5 3 4.5H5"></path>
     </svg>`;
   return icon;
 }
@@ -105,10 +163,7 @@ export function createUserSkeleton(index) {
   info.append(el("div", "user-item__skeleton-line"));
 
   const actions = el("div", "user-item__actions");
-  actions.append(
-    el("div", "user-item__skeleton-circle"),
-    el("div", "user-item__skeleton-circle")
-  );
+  actions.append(el("div", "user-item__skeleton-circle"));
 
   node.append(info, actions);
   return node;
@@ -174,7 +229,6 @@ export function createMessageItem(message, users, { reported = false, currentUse
     avatarButton.setAttribute("aria-label", `Abrir opciones de ${author}`);
     avatarButton.setAttribute("aria-expanded", "false");
 
-    const hasViewerReaction = Boolean(message.likedByViewer || message.dislikedByViewer);
     const likeScore = (message.likes ?? 0) - (message.dislikes ?? 0);
     const likeToneClass = likeScore > 0
       ? " message__like-button--positive"
@@ -204,58 +258,39 @@ export function createMessageItem(message, users, { reported = false, currentUse
     reactionMenu.id = reactionMenuId;
     reactionMenu.hidden = true;
     reactionMenu.dataset.messageReactionMenu = message.id;
-    reactionMenu.append(
-      el("button", `message__action-menu-button${message.likedByViewer ? " is-active" : ""}`, "LIKE"),
-      el("button", `message__action-menu-button${message.dislikedByViewer ? " is-active" : ""}`, "DISLIKE")
-    );
-    const [reactionLikeAction, reactionDislikeAction] = reactionMenu.querySelectorAll("button");
-    reactionLikeAction.type = "button";
-    reactionLikeAction.dataset.likeMessageId = message.id;
-    reactionLikeAction.disabled = hasViewerReaction;
-    reactionLikeAction.setAttribute("aria-label", `Marcar me gusta en el mensaje de ${author}`);
-    reactionDislikeAction.type = "button";
-    reactionDislikeAction.dataset.dislikeMessageId = message.id;
-    reactionDislikeAction.disabled = hasViewerReaction;
-    reactionDislikeAction.setAttribute("aria-label", `Marcar no me gusta en el mensaje de ${author}`);
+    reactionMenu.append(...createLikeDislikeActionButtons(message, author));
     body.append(reactionMenu);
 
-    const actionMenu = el("div", "message__action-menu");
-    actionMenu.hidden = true;
-    actionMenu.dataset.messageMenu = message.id;
-    actionMenu.append(
-      el("button", "message__action-menu-button", "PERFIL"),
-      el("button", `message__action-menu-button${message.likedByViewer ? " is-active" : ""}`, "LIKE"),
-      el("button", `message__action-menu-button${message.dislikedByViewer ? " is-active" : ""}`, "DISLIKE"),
-      el("button", "message__action-menu-button", "CITAR"),
-      el("button", `message__action-menu-button${reported ? " is-active" : ""}`, "REPORTAR")
-    );
-    const [profileAction, likeAction, dislikeAction, quoteAction, reportAction] = actionMenu.querySelectorAll("button");
+    const profileAction = el("button", "message__action-menu-button", "PERFIL");
     profileAction.type = "button";
     profileAction.dataset.messageProfileAuthorId = message.authorId;
     profileAction.setAttribute("aria-label", `Abrir perfil de ${author}`);
-    likeAction.type = "button";
-    likeAction.dataset.likeMessageId = message.id;
-    likeAction.setAttribute("aria-label", `Marcar me gusta en el mensaje de ${author}`);
-    dislikeAction.type = "button";
-    dislikeAction.dataset.dislikeMessageId = message.id;
-    dislikeAction.setAttribute("aria-label", `Marcar no me gusta en el mensaje de ${author}`);
-    likeAction.disabled = hasViewerReaction;
-    dislikeAction.disabled = hasViewerReaction;
+
+    const [likeAction, dislikeAction] = createLikeDislikeActionButtons(message, author);
+
+    const quoteAction = el("button", "message__action-menu-button", "CITAR");
     quoteAction.type = "button";
     quoteAction.dataset.quoteMessageId = message.id;
     quoteAction.setAttribute("aria-label", `Citar el mensaje de ${author}`);
+
+    const reportAction = el("button", `message__action-menu-button${reported ? " is-active" : ""}`, "REPORTAR");
     reportAction.type = "button";
     reportAction.dataset.reportEntityType = "message";
     reportAction.dataset.reportEntityId = message.id;
     reportAction.disabled = reported;
     reportAction.setAttribute("aria-label", reported ? `Mensaje de ${author} ya reportado` : `Reportar mensaje de ${author}`);
+
+    const actionMenu = el("div", "message__action-menu");
+    actionMenu.hidden = true;
+    actionMenu.dataset.messageMenu = message.id;
+    actionMenu.append(profileAction, likeAction, dislikeAction, quoteAction, reportAction);
     body.append(actionMenu);
   } else {
     avatarButton.disabled = true;
     avatarButton.setAttribute("aria-hidden", "true");
   }
 
-  body.append(meta, el("p", "message__text", message.text));
+  body.append(meta, createMessageContent(message.text));
   node.append(avatarButton, body);
   return node;
 }
@@ -291,13 +326,13 @@ export function createUserItem(user, currentUserId, activeConnectedUserId = null
     trigger.setAttribute("aria-current", "true");
   }
   trigger.append(el("p", "user-item__name", user.name));
+  if (user.nickname) {
+    trigger.append(el("span", "user-item__username", `@${user.nickname}`));
+  }
   info.append(trigger);
 
   const actions = el("div", "user-item__actions");
-  actions.append(
-    createUserActionButton("Ver perfil", "profile"),
-    createUserActionButton("Mensaje directo", "message")
-  );
+  actions.append(createUserActionButton("Ver perfil", "profile"));
 
   const friendMenuButton = createUserMenuButton("Agregar amigo", "friend");
   const friendStatus = user.friendshipStatus || "none";
@@ -330,9 +365,48 @@ function createUserActionButton(label, kind, userId = "", menuId = "") {
 
   button.dataset.userAction = kind;
 
-  const iconName = kind === "profile" ? "userProfile" : "userMessage";
-  button.appendChild(createIcon(iconName));
+  button.appendChild(createIcon("userProfile"));
   return button;
+}
+
+const SOCIAL_PLATFORM_LABELS = {
+  whatsapp: "WhatsApp",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  facebook: "Facebook",
+  twitter: "Twitter/X",
+  discord: "Discord"
+};
+
+const SOCIAL_URL_BUILDERS = {
+  whatsapp: (handle) => `https://wa.me/${encodeURIComponent(handle.replace(/[^0-9]/g, ""))}`,
+  instagram: (handle) => `https://instagram.com/${encodeURIComponent(handle)}`,
+  tiktok: (handle) => `https://tiktok.com/@${encodeURIComponent(handle)}`,
+  facebook: (handle) => `https://facebook.com/${encodeURIComponent(handle)}`,
+  twitter: (handle) => `https://twitter.com/${encodeURIComponent(handle)}`
+};
+
+export function createSocialLinkButton(platform, handle) {
+  const label = SOCIAL_PLATFORM_LABELS[platform] || platform;
+  const urlBuilder = SOCIAL_URL_BUILDERS[platform];
+  const tag = urlBuilder ? "a" : "span";
+  const link = el(tag, "icon-button icon-button--compact social-link-button");
+  if (urlBuilder) {
+    link.href = urlBuilder(handle);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+  }
+  link.setAttribute("aria-label", `${label}: ${handle}`);
+  link.title = `${label}: ${handle}`;
+  link.dataset.socialPlatform = platform;
+
+  const iconContainer = el("span", `social-link-button__icon social-icon--${platform}`);
+  iconContainer.appendChild(createIcon(platform));
+  link.appendChild(iconContainer);
+
+  const handleText = el("span", "social-link-button__handle", handle);
+  link.append(handleText);
+  return link;
 }
 
 function createUserMenuButton(label, kind, status = "") {

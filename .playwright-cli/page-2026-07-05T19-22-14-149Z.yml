@@ -1,0 +1,124 @@
+- generic [ref=f1e2]:
+  - banner [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - button "Paletas" [ref=f1e5] [cursor=pointer]:
+        - generic [ref=f1e11]: Paletas
+      - switch "Tema oscuro" [checked] [ref=f1e13] [cursor=pointer]:
+        - generic [ref=f1e14]:
+          - generic:
+            - generic:
+              - img
+            - generic:
+              - img
+    - generic "TOPYKLY" [ref=f1e16]:
+      - img [ref=f1e18]
+      - generic [ref=f1e23]:
+        - generic [ref=f1e24]: TOPY
+        - generic [ref=f1e25]: KLY
+    - button "Iniciar sesión" [ref=f1e27] [cursor=pointer]:
+      - generic [ref=f1e28]: Iniciar sesión
+  - main "Chat social" [ref=f1e29]:
+    - region "Temas" [ref=f1e30]:
+      - generic [ref=f1e31]:
+        - generic [ref=f1e35]:
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+          - button [disabled]:
+            - generic:
+              - img
+        - button "Crear nuevo tema" [ref=f1e37] [cursor=pointer]
+    - region [ref=f1e38]
+    - region "Comunidad" [ref=f1e39]:
+      - heading "Comunidad" [level=2] [ref=f1e43]
+      - generic [ref=f1e44]:
+        - generic [ref=f1e45]:
+          - generic [ref=f1e46]:
+            - img [ref=f1e48]
+            - heading "Usuarios conectados" [level=3] [ref=f1e51]
+          - generic [ref=f1e52]:
+            - article
+            - article
+            - article
+            - article
+            - article
+            - article
+            - article
+            - article
+            - article
+            - article
+        - generic [ref=f1e53]:
+          - generic [ref=f1e55]:
+            - img [ref=f1e57]
+            - heading "Ranking" [level=3] [ref=f1e60]
+          - group "Alcance del ranking" [ref=f1e62]:
+            - button "GLOBAL" [pressed] [ref=f1e63] [cursor=pointer]
+            - button "TEMA" [ref=f1e64] [cursor=pointer]
+          - generic "Cambiar ranking" [ref=f1e65]:
+            - button "Ranking anterior" [ref=f1e66] [cursor=pointer]:
+              - img [ref=f1e68]
+            - 'button "Modo actual: TEMAS COMENTARIOS" [ref=f1e70] [cursor=pointer]':
+              - generic:
+                - generic: TEMAS COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=f1e71] [cursor=pointer]:
+              - img [ref=f1e73]
+          - generic [ref=f1e76]:
+            - article
+            - article
+            - article

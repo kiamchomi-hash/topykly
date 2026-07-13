@@ -71,40 +71,90 @@ function updateMessageReaction(topics, messageId, updater) {
   });
 }
 
-export const reducers = {
-  hydrateFromBackend: (state, payload) => {
-    const nextSelectedTopicId = payload.selectedTopicId && payload.topics.some((topic) => topic.id === payload.selectedTopicId)
-      ? payload.selectedTopicId
-      : null;
-    const nextActiveConnectedUserId = payload.users.some((user) => user.id === state.activeConnectedUserId)
-      ? state.activeConnectedUserId
-      : null;
-    const nextPublicProfileUserId = payload.users.some((user) => user.id === state.publicProfileUserId)
-      ? state.publicProfileUserId
-      : null;
-    const nextTopicIds = new Set(payload.topics.map((topic) => topic.id));
+function resolveHydratedSelectedTopicId(state, payload) {
+  const nextTopicIds = new Set((payload.topics ?? []).map((topic) => topic.id));
+  const currentSelectedTopicId = state.selectedTopicId || null;
+  const payloadSelectedTopicId = payload.selectedTopicId || null;
 
-    return {
-      ...state,
-      viewer: payload.viewer ?? state.viewer,
-      currentUserId: payload.viewer?.id ?? state.currentUserId,
-      reportedTopicIds: payload.reportedTopicIds ?? state.reportedTopicIds ?? [],
-      reportedMessageIds: payload.reportedMessageIds ?? state.reportedMessageIds ?? [],
-      rankings: payload.rankings ?? state.rankings ?? null,
-      friendships: payload.friendships ?? state.friendships ?? {
-        incoming: [],
-        outgoing: [],
-        friends: []
-      },
-      users: payload.users,
-      topics: payload.topics,
-      unreadTopicIds: getUnreadTopicIdsAfterHydration(state, payload),
-      followedTopicIds: (state.followedTopicIds ?? []).filter((topicId) => nextTopicIds.has(topicId)),
-      selectedTopicId: nextSelectedTopicId,
-      activeConnectedUserId: nextActiveConnectedUserId,
-      publicProfileUserId: nextPublicProfileUserId
-    };
-  },
+  if (currentSelectedTopicId && nextTopicIds.has(currentSelectedTopicId)) {
+    return currentSelectedTopicId;
+  }
+
+  return payloadSelectedTopicId && nextTopicIds.has(payloadSelectedTopicId)
+    ? payloadSelectedTopicId
+    : null;
+}
+
+// Reorders new topic data to match the position topics already held on screen,
+// appending topics that are new to the viewer at the end. Used to update topic
+// content (unread state, message counts) from the live poll without visibly
+// reshuffling the list; the explicit topics-list refresh applies the backend order instead.
+function reorderTopicsToMatchPreviousPositions(previousTopics, nextTopics) {
+  const previousOrder = Array.isArray(previousTopics) ? previousTopics : [];
+  const nextById = new Map(nextTopics.map((topic) => [topic.id, topic]));
+  const seenIds = new Set();
+  const ordered = [];
+
+  previousOrder.forEach((topic) => {
+    const nextTopic = nextById.get(topic.id);
+    if (nextTopic) {
+      seenIds.add(topic.id);
+      ordered.push(nextTopic);
+    }
+  });
+
+  nextTopics.forEach((topic) => {
+    if (!seenIds.has(topic.id)) {
+      ordered.push(topic);
+    }
+  });
+
+  return ordered;
+}
+
+function buildHydratedState(state, payload, topics) {
+  const nextSelectedTopicId = resolveHydratedSelectedTopicId(state, payload);
+  const nextActiveConnectedUserId = payload.users.some((user) => user.id === state.activeConnectedUserId)
+    ? state.activeConnectedUserId
+    : null;
+  const nextPublicProfileUserId = payload.users.some((user) => user.id === state.publicProfileUserId)
+    ? state.publicProfileUserId
+    : null;
+  const nextTopicIds = new Set(payload.topics.map((topic) => topic.id));
+
+  return {
+    ...state,
+    viewer: payload.viewer ?? state.viewer,
+    currentUserId: payload.viewer?.id ?? state.currentUserId,
+    reportedTopicIds: payload.reportedTopicIds ?? state.reportedTopicIds ?? [],
+    reportedMessageIds: payload.reportedMessageIds ?? state.reportedMessageIds ?? [],
+    rankings: payload.rankings ?? state.rankings ?? null,
+    friendships: payload.friendships ?? state.friendships ?? {
+      incoming: [],
+      outgoing: [],
+      friends: []
+    },
+    users: payload.users,
+    topics,
+    unreadTopicIds: getUnreadTopicIdsAfterHydration(state, payload),
+    followedTopicIds: (state.followedTopicIds ?? []).filter((topicId) => nextTopicIds.has(topicId)),
+    selectedTopicId: nextSelectedTopicId,
+    activeConnectedUserId: nextActiveConnectedUserId,
+    publicProfileUserId: nextPublicProfileUserId
+  };
+}
+
+export const reducers = {
+  hydrateFromBackend: (state, payload) => buildHydratedState(state, payload, payload.topics),
+
+  // Same as hydrateFromBackend but keeps the topics list in its current on-screen
+  // order instead of adopting the backend's order, so background live-polling
+  // updates message counts/unread state without reshuffling the topics list.
+  mergeLiveTopics: (state, payload) => buildHydratedState(
+    state,
+    payload,
+    reorderTopicsToMatchPreviousPositions(state.topics, payload.topics)
+  ),
 
   setTheme: (state, theme) => ({
     ...state,
@@ -226,6 +276,27 @@ export const reducers = {
     isFriendRequestsPanelOpen
   }),
 
+  setFriendRequestsTab: (state, friendRequestsTab) => ({
+    ...state,
+    friendRequestsTab
+  }),
+
+  increaseFriendRequestsLimit: (state, tab) => ({
+    ...state,
+    friendRequestsLimits: {
+      ...state.friendRequestsLimits,
+      [tab]: (state.friendRequestsLimits?.[tab] || 10) + 10
+    }
+  }),
+
+  resetFriendRequestsLimits: (state) => ({
+    ...state,
+    friendRequestsLimits: {
+      incoming: 10,
+      outgoing: 10
+    }
+  }),
+
   setNotificationsPanelOpen: (state, isNotificationsPanelOpen) => ({
     ...state,
     isNotificationsPanelOpen
@@ -239,6 +310,16 @@ export const reducers = {
   setAdminDashboard: (state, adminDashboard) => ({
     ...state,
     adminDashboard
+  }),
+
+  setReportModalOpen: (state, reportModal) => ({
+    ...state,
+    reportModal
+  }),
+
+  setAdminConfirmAction: (state, adminConfirmAction) => ({
+    ...state,
+    adminConfirmAction
   }),
 
   setFeedback: (state, feedback) => ({

@@ -1,1 +1,1 @@
-export { bootstrap } from "./controller-app.js?v=20260709-palettefocus5";
+export { bootstrap } from "./controller-app.js?v=20260709-topicrace1";

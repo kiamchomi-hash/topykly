@@ -1,5 +1,5 @@
 import { getActiveRankingIndex, getStoredRankingIndex, setStoredRankingIndex } from "./ranking-state.js";
-import { dispatch, reducers } from "./store-logic.js";
+import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 
 export function createRankingActions({ state, isMobileViewport, syncResponsiveView, render }) {
   function setRankingScope(scope) {

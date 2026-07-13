@@ -6,10 +6,7 @@ export function createUserSkeleton() {
   info.append(el("div", "user-item__skeleton-line"));
 
   const actions = el("div", "user-item__actions");
-  actions.append(
-    el("div", "user-item__skeleton-circle"),
-    el("div", "user-item__skeleton-circle")
-  );
+  actions.append(el("div", "user-item__skeleton-circle"));
 
   node.append(info, actions);
   return node;
@@ -27,25 +24,15 @@ function createUserActionButton(label, kind) {
   svg.setAttribute("fill", "none");
   svg.setAttribute("aria-hidden", "true");
 
-  if (kind === "profile") {
-    const head = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    head.setAttribute("cx", "12");
-    head.setAttribute("cy", "8.5");
-    head.setAttribute("r", "3.2");
+  const head = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  head.setAttribute("cx", "12");
+  head.setAttribute("cy", "8.5");
+  head.setAttribute("r", "3.2");
 
-    const shoulders = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    shoulders.setAttribute("d", "M5.5 19c1.4-3.6 4-5.4 6.5-5.4s5.1 1.8 6.5 5.4");
+  const shoulders = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  shoulders.setAttribute("d", "M5.5 19c1.4-3.6 4-5.4 6.5-5.4s5.1 1.8 6.5 5.4");
 
-    svg.append(head, shoulders);
-  } else {
-    const bubble = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    bubble.setAttribute("d", "M5 6.5h14v8H9.2L6 17.5V14.5H5z");
-
-    const dot = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    dot.setAttribute("d", "M9 10h6");
-
-    svg.append(bubble, dot);
-  }
+  svg.append(head, shoulders);
 
   button.appendChild(svg);
   return button;
@@ -64,10 +51,7 @@ export function createUserItem(user) {
   info.append(el("p", "user-item__name", user.name));
 
   const actions = el("div", "user-item__actions");
-  actions.append(
-    createUserActionButton("Ver perfil", "profile"),
-    createUserActionButton("Mensaje directo", "message")
-  );
+  actions.append(createUserActionButton("Ver perfil", "profile"));
 
   node.append(info, actions);
   return node;

@@ -9,15 +9,19 @@ import { createAuthService } from "../services/auth-service.js";
 import {
   getRequestIp,
   isLocalDevLoginAllowed,
+  startPreviewServer,
   shouldTrustProxy
 } from "../services/preview-server.js";
 import {
   createBackendStore,
+  MINIMUM_REGISTRATION_AGE,
   resolveDbConfig,
-  shouldSeedDemoData
+  shouldSeedDemoData,
+  TERMS_VERSION
 } from "../services/backend-store.js";
 import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
+import { composeReportReason, REPORT_REASONS } from "../report-reasons.js";
 import { initialUsers, topicSeedData } from "../data.js";
 import {
   appendMessageToTopic,
@@ -50,6 +54,7 @@ import { applyStoredTheme } from "../controller-theme.js";
 import { createActionHandlers } from "../controller-actions.js";
 import { reducers } from "../store-logic.js";
 import { api } from "../services/api.js";
+import { api as versionedApiForControllerActions } from "../services/api.js?v=20260709-topicrace1";
 import {
   buildCustomPaletteOption,
   CUSTOM_PALETTE_ID,
@@ -65,11 +70,13 @@ import {
   getActiveAccentColor
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
-import { createTopicItem } from "../components.js";
+import { selectOnlineUsers } from "../ui/users.js";
+import { createMessageItem, createTopicItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
 import { collectTopicNotifications, createNotificationStateUpdate, groupNotificationsForDisplay, createNotificationEmptyState } from "../ui/notifications.js";
+import { isFriendOnline, splitFriendsByPresence } from "../ui/friend-requests.js";
 import {
   formatJoinedDateParts,
   formatMessageTime,
@@ -271,6 +278,33 @@ await (async () => {
       ["u-current", "u-other"]
     );
   });
+
+  await test("selectOnlineUsers keeps backend rank order, filters offline users, with no cap", () => {
+    const state = {
+      currentUserId: "u-current",
+      users: [
+        { id: "u-b", name: "Bruno", online: true },
+        { id: "u-current", name: "Zeta", online: true },
+        { id: "u-a", name: "Alba", online: true },
+        { id: "u-offline", name: "Carla", online: false },
+        ...Array.from({ length: 12 }, (_, i) => ({
+          id: `u-extra-${i}`,
+          name: `Usuario ${String(i).padStart(2, "0")}`,
+          online: true
+        }))
+      ]
+    };
+
+    const ordered = selectOnlineUsers(state);
+
+    assert.equal(ordered.length, 15);
+    assert.deepEqual(
+      ordered.map((user) => user.id),
+      state.users.filter((user) => user.online).map((user) => user.id)
+    );
+    assert.equal(ordered.some((user) => user.id === "u-offline"), false);
+  });
+
   await test("buildTopics creates a topic per seed with rotating authors", () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -453,9 +487,10 @@ await (async () => {
     assert.equal(getVisibleTopics(nextState.topics).length, TOPIC_VISIBLE_LIMIT);
   });
 
-  await test("live topic sync hydrates remote activity in other topics", async () => {
+  await test("live topic sync hydrates remote activity in other topics without reordering the list", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const originalTopicOrder = topics.map((topic) => topic.id);
     const remoteMessage = createMessage(
       "u2",
       "Comentario remoto que debe aparecer sin refrescar la pagina.",
@@ -494,10 +529,39 @@ await (async () => {
 
     assert.equal(refreshed, true);
     assert.equal(renderCalls, 1);
-    assert.equal(state.topics[0].id, topics[1].id);
-    assert.equal(state.topics[0].messages.at(-1).id, remoteMessage.id);
+    // The topics list keeps its on-screen order; only the topic's content
+    // (message count, unread flag) updates from the background poll.
+    assert.deepEqual(state.topics.map((topic) => topic.id), originalTopicOrder);
+    const updatedTopic = state.topics.find((topic) => topic.id === topics[1].id);
+    assert.equal(updatedTopic.messages.at(-1).id, remoteMessage.id);
     assert.equal(state.selectedTopicId, topics[0].id);
     assert.deepEqual(state.unreadTopicIds, [topics[1].id]);
+  });
+
+  await test("mergeLiveTopics reducer preserves topic order while hydrateFromBackend adopts backend order", () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const originalOrder = topics.map((topic) => topic.id);
+    const remoteMessage = createMessage("u2", "Nuevo comentario remoto.", 0);
+    const reorderedTopics = reviveTopicWithMessage(topics, topics[1].id, remoteMessage);
+    assert.equal(reorderedTopics[0].id, topics[1].id, "sanity check: backend order bumps the active topic to the top");
+
+    const baseState = {
+      viewer: { id: "u1", type: "registered" },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topics[0].id
+    };
+    const payload = { viewer: baseState.viewer, users, topics: reorderedTopics, selectedTopicId: topics[0].id };
+
+    const mergedState = reducers.mergeLiveTopics(baseState, payload);
+    assert.deepEqual(mergedState.topics.map((topic) => topic.id), originalOrder);
+
+    const hydratedState = reducers.hydrateFromBackend(baseState, payload);
+    assert.deepEqual(hydratedState.topics.map((topic) => topic.id), reorderedTopics.map((topic) => topic.id));
   });
 
   await test("topic item marks only the unread count with palette accent", () => {
@@ -602,24 +666,22 @@ await (async () => {
   });
 
   await test("date utils centralize UI date and time formatting", () => {
+    const now = new Date(2026, 0, 2, 20, 0, 0);
     const timestamp = new Date(2026, 0, 2, 3, 4, 5);
+    const yesterday = new Date(2026, 0, 1, 23, 50, 0);
+    const olderDay = new Date(2025, 3, 13, 9, 15, 0);
     const joinedAt = new Date(2026, 0, 2, 12, 0, 0);
 
     assert.equal(
-      formatMessageTime(timestamp),
+      formatMessageTime(timestamp, "es-AR", now),
       timestamp.toLocaleTimeString("es-AR", {
         hour: "2-digit",
         minute: "2-digit"
       })
     );
-    assert.equal(
-      formatProfileJoinedDate(joinedAt),
-      `Registro: ${joinedAt.toLocaleDateString("es-AR", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-      })}`
-    );
+    assert.equal(formatMessageTime(yesterday, "es-AR", now), "Ene 1");
+    assert.equal(formatMessageTime(olderDay, "es-AR", now), "Abr 13");
+    assert.equal(formatProfileJoinedDate(joinedAt), "Registro: 02/01/26");
     assert.deepEqual(formatJoinedDateParts(joinedAt), ["02", "01", "2026"]);
     assert.equal(formatMessageTime(""), "");
     assert.equal(formatProfileJoinedDate(""), "Fecha de registro no disponible");
@@ -1035,6 +1097,35 @@ await (async () => {
 
     assert.deepEqual(nextState.unreadTopicIds, []);
   });
+  await test("hydrate preserves a newer local topic selection over stale payloads", () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const nextState = reducers.hydrateFromBackend(
+      {
+        viewer: { id: "u1", type: "registered" },
+        currentUserId: "u1",
+        selectedTopicId: topics[1].id,
+        activeConnectedUserId: null,
+        publicProfileUserId: null,
+        reportedTopicIds: [],
+        reportedMessageIds: [],
+        unreadTopicIds: [],
+        rankings: null,
+        topics,
+        users
+      },
+      {
+        viewer: { id: "u1", type: "registered" },
+        selectedTopicId: topics[0].id,
+        users,
+        topics,
+        reportedTopicIds: [],
+        reportedMessageIds: []
+      }
+    );
+
+    assert.equal(nextState.selectedTopicId, topics[1].id);
+  });
   await test("markTopicRead clears the selected topic after manual refresh", () => {
     const nextState = reducers.markTopicRead(
       {
@@ -1085,6 +1176,53 @@ await (async () => {
     assert.equal(nextMessage.likedByViewer, true);
     assert.equal(message.likes, 0);
     assert.equal(message.likedByViewer, undefined);
+  });
+
+  await test("setFriendRequestsTab reducer changes friendRequestsTab key in state", () => {
+    const baseState = { friendRequestsTab: "incoming" };
+    const nextState = reducers.setFriendRequestsTab(baseState, "outgoing");
+    assert.equal(nextState.friendRequestsTab, "outgoing");
+    assert.equal(baseState.friendRequestsTab, "incoming");
+  });
+
+  await test("increaseFriendRequestsLimit and resetFriendRequestsLimits reducers manage active limits", () => {
+    const baseState = {
+      friendRequestsLimits: {
+        incoming: 10,
+        outgoing: 10
+      }
+    };
+    const nextState = reducers.increaseFriendRequestsLimit(baseState, "incoming");
+    assert.equal(nextState.friendRequestsLimits.incoming, 20);
+    assert.equal(nextState.friendRequestsLimits.outgoing, 10);
+
+    const resetState = reducers.resetFriendRequestsLimits(nextState);
+    assert.equal(resetState.friendRequestsLimits.incoming, 10);
+    assert.equal(resetState.friendRequestsLimits.outgoing, 10);
+  });
+
+  await test("splitFriendsByPresence separates online and offline friends with users fallback", () => {
+    const state = {
+      users: [
+        { id: "u1", online: true },
+        { id: "u2", online: false }
+      ]
+    };
+    const friends = [
+      { id: "u1", name: "Ana" },
+      { id: "u2", name: "Beto" },
+      { id: "u3", name: "Caro", online: true },
+      { id: "u4", name: "Dani", online: false },
+      { id: "u5", name: "Emi" }
+    ];
+
+    assert.equal(isFriendOnline(friends[0], state), true);
+    assert.equal(isFriendOnline(friends[2], state), true);
+    assert.equal(isFriendOnline(friends[4], state), false);
+
+    const { online, offline } = splitFriendsByPresence(friends, state);
+    assert.deepEqual(online.map((user) => user.id), ["u1", "u3"]);
+    assert.deepEqual(offline.map((user) => user.id), ["u2", "u4", "u5"]);
   });
 
   await test("createTopic builds a new topic from title and first message", () => {
@@ -1324,6 +1462,7 @@ await (async () => {
       [
         "users_auth_identity_idx",
         "users_email_idx",
+        "users_verified_email_idx",
         "users_nickname_norm_idx",
         "users_password_email_idx",
         "users_frontend_active_idx",
@@ -1343,7 +1482,9 @@ await (async () => {
         "reports_entity_open_idx",
         "reports_status_created_idx",
         "guest_ip_rate_limits_updated_idx",
-        "moderation_actions_target_idx"
+        "moderation_actions_target_idx",
+        "auth_email_challenges_email_idx",
+        "auth_email_challenges_expiry_idx"
       ].forEach((indexName) => {
         assert.equal(indexNames.has(indexName), true, indexName);
       });
@@ -1491,6 +1632,94 @@ await (async () => {
       { seedDemoData: false }
     );
   });
+  await test("backend confirms password registration with a one-time email code", async () => {
+    await withTempStore(
+      (store) => {
+        assert.throws(
+          () => store.createEmailAuthChallenge({
+            email: "code@example.com",
+            nickname: "Code_user",
+            age: MINIMUM_REGISTRATION_AGE - 1,
+            acceptedTerms: true,
+            termsVersion: TERMS_VERSION,
+            password: "password-segura"
+          }),
+          (error) => error.code === "INVALID_AGE"
+        );
+        assert.throws(
+          () => store.createEmailAuthChallenge({
+            email: "code@example.com",
+            nickname: "Code_user",
+            age: MINIMUM_REGISTRATION_AGE,
+            acceptedTerms: false,
+            termsVersion: TERMS_VERSION,
+            password: "password-segura"
+          }),
+          (error) => error.code === "TERMS_REQUIRED"
+        );
+        assert.throws(
+          () => store.createEmailAuthChallenge({
+            email: "code@example.com",
+            nickname: "Code_user",
+            age: MINIMUM_REGISTRATION_AGE,
+            acceptedTerms: true,
+            termsVersion: TERMS_VERSION,
+            password: "short"
+          }),
+          (error) => error.code === "VALIDATION_ERROR"
+        );
+
+        const registration = store.createEmailAuthChallenge({
+          email: "Code@Example.com",
+          nickname: "Code_user",
+          age: MINIMUM_REGISTRATION_AGE,
+          acceptedTerms: true,
+          termsVersion: TERMS_VERSION,
+          password: "password-segura",
+          nowMs: Date.UTC(2026, 6, 10, 12)
+        });
+        assert.match(registration.code, /^\d{6}$/);
+        assert.throws(
+          () => store.verifyEmailAuthChallenge({
+            challengeId: registration.challengeId,
+            code: registration.code === "000000" ? "111111" : "000000",
+            sessionId: "session-email-code-wrong",
+            nowMs: Date.UTC(2026, 6, 10, 12, 1)
+          }),
+          (error) => error.code === "INVALID_EMAIL_CODE"
+        );
+
+        const registered = store.verifyEmailAuthChallenge({
+          challengeId: registration.challengeId,
+          code: registration.code,
+          sessionId: "session-email-code-register",
+          rotateSession: true,
+          nowMs: Date.UTC(2026, 6, 10, 12, 2)
+        });
+        assert.equal(registered.viewer.type, "registered");
+        assert.equal(registered.viewer.email, "code@example.com");
+        assert.equal(registered.viewer.nickname, "Code_user");
+        assert.throws(
+          () => store.verifyEmailAuthChallenge({
+            challengeId: registration.challengeId,
+            code: registration.code,
+            sessionId: "session-email-code-reuse",
+            nowMs: Date.UTC(2026, 6, 10, 12, 3)
+          }),
+          (error) => error.code === "INVALID_EMAIL_CODE"
+        );
+
+        const loggedIn = store.loginWithPassword({
+          sessionId: "session-email-code-login",
+          email: "code@example.com",
+          password: "password-segura",
+          rotateSession: true
+        });
+        assert.equal(loggedIn.viewer.id, registered.viewer.id);
+      },
+      { seedDemoData: false }
+    );
+  });
   await test("backend login rotates the session and logout clears the rotated session", async () => {
     await withTempStore((store) => {
       const initialPayload = store.bootstrap({
@@ -1572,6 +1801,7 @@ await (async () => {
 
       assert.equal(accepted.friendships.incoming.length, 0);
       assert.equal(accepted.friendships.friends[0].id, "u1");
+      assert.equal(accepted.friendships.friends[0].online, true);
       assert.equal(
         accepted.users.find((user) => user.id === "u1")?.friendshipStatus,
         "friend"
@@ -1593,6 +1823,7 @@ await (async () => {
         authProvider: "https://accounts.example.com",
         authSubject: "subject-123",
         email: "test@example.com",
+        emailVerified: true,
         displayName: "Test User",
         avatarUrl: "https://cdn.example.com/avatar.png"
       });
@@ -1619,35 +1850,74 @@ await (async () => {
         /Completa tu perfil/
       );
 
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-oidc-1",
+            displayName: "Abril",
+            username: "abril_uno",
+            age: MINIMUM_REGISTRATION_AGE
+          }),
+        (error) => error.code === "TERMS_REQUIRED"
+      );
+
       const completedPayload = store.updateProfile({
         sessionId: "session-oidc-1",
-        displayName: "Alias_elegido",
+        displayName: "Abril",
+        username: "abril_uno",
+        age: MINIMUM_REGISTRATION_AGE,
+        acceptedTerms: true,
+        termsVersion: TERMS_VERSION,
         avatarDataUrl: "data:image/png;base64,aGVsbG8="
       });
       assert.equal(completedPayload.viewer.profilePending, false);
-      assert.equal(completedPayload.viewer.displayName, "Alias_elegido");
-      assert.equal(completedPayload.viewer.nickname, "Alias_elegido");
+      assert.equal(completedPayload.viewer.displayName, "Abril");
+      assert.equal(completedPayload.viewer.nickname, "Abril_uno");
       assert.equal(completedPayload.viewer.avatarUrl, null);
       assert.match(completedPayload.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
       assert.doesNotMatch(completedPayload.viewer.avatarPendingUrl, /^data:/);
       assert.equal(completedPayload.viewer.avatarReviewStatus, "pending");
 
-      store.loginWithIdentity({
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-oidc-1",
+            displayName: "Abril",
+            username: "otro_username"
+          }),
+        (error) => error.code === "USERNAME_IMMUTABLE"
+      );
+
+      const duplicateNameLogin = store.loginWithIdentity({
         sessionId: "session-oidc-duplicate-name",
         sourceSessionId: "session-oidc-duplicate-name-source",
         authProvider: "https://accounts.example.com",
         authSubject: "subject-duplicate-name",
         email: "duplicate-name@example.com",
-        displayName: "Alias_elegido"
+        emailVerified: true,
+        displayName: "Abril"
       });
       assert.throws(
         () =>
           store.updateProfile({
             sessionId: "session-oidc-duplicate-name",
-            displayName: "alias_elegido"
+            displayName: "Abril",
+            username: "ABRIL_UNO"
           }),
         (error) => error.code === "NICKNAME_TAKEN"
       );
+      const duplicateDisplayName = store.updateProfile({
+        sessionId: "session-oidc-duplicate-name",
+        displayName: "Abril",
+        username: "abril_dos",
+        age: MINIMUM_REGISTRATION_AGE,
+        acceptedTerms: true,
+        termsVersion: TERMS_VERSION
+      });
+      assert.notEqual(duplicateDisplayName.viewer.id, completedPayload.viewer.id);
+      assert.equal(duplicateDisplayName.viewer.displayName, completedPayload.viewer.displayName);
+      assert.notEqual(duplicateDisplayName.viewer.nickname, completedPayload.viewer.nickname);
+      assert.notEqual(duplicateNameLogin.viewer.id, completedPayload.viewer.id);
 
       const secondPayload = store.loginWithIdentity({
         sessionId: "session-oidc-2",
@@ -1655,14 +1925,347 @@ await (async () => {
         authProvider: "https://accounts.example.com",
         authSubject: "subject-123",
         email: "test@example.com",
+        emailVerified: true,
         displayName: "Test User Renamed"
       });
 
       assert.equal(secondPayload.viewer.id, initialPayload.viewer.id);
-      assert.equal(secondPayload.viewer.displayName, "Alias_elegido");
+      assert.equal(secondPayload.viewer.displayName, "Abril");
       assert.equal(secondPayload.viewer.profilePending, false);
       assert.equal(secondPayload.viewer.profileSuggestedName, "Test User Renamed");
     });
+  });
+
+  await test("backend rejects unverified OIDC email claims without creating accounts", async () => {
+    await withTempStore((store) => {
+      assert.throws(
+        () =>
+          store.loginWithIdentity({
+            sessionId: "session-oidc-unverified",
+            sourceSessionId: "session-oidc-unverified-source",
+            authProvider: "https://accounts.example.com",
+            authSubject: "subject-unverified",
+            email: "admin@example.com",
+            emailVerified: false,
+            displayName: "Unverified Admin"
+          }),
+        (error) => error.code === "OIDC_EMAIL_NOT_VERIFIED"
+      );
+      assert.equal(store.getDiagnostics().users, 0);
+      assert.equal(store.getDiagnostics().sessions, 0);
+    }, { seedDemoData: false });
+  });
+
+  await test("backend links verified password and Google identities to the same stable user id", async () => {
+    await withTempStore((store) => {
+      const nowMs = Date.UTC(2026, 6, 11, 12);
+      const challenge = store.createEmailAuthChallenge({
+        email: "linked@example.com",
+        nickname: "linked_user",
+        age: MINIMUM_REGISTRATION_AGE,
+        acceptedTerms: true,
+        termsVersion: TERMS_VERSION,
+        password: "password-segura",
+        nowMs
+      });
+      const registered = store.verifyEmailAuthChallenge({
+        challengeId: challenge.challengeId,
+        code: challenge.code,
+        sessionId: "session-linked-password",
+        nowMs: nowMs + 1_000
+      });
+      const originalId = registered.viewer.id;
+
+      assert.equal(registered.viewer.emailVerified, true);
+      assert.equal(registered.viewer.nickname, "Linked_user");
+      assert.equal(Object.hasOwn(registered.viewer, "email"), true);
+      assert.equal(registered.users.every((user) => !Object.hasOwn(user, "email")), true);
+
+      const linked = store.loginWithIdentity({
+        sessionId: "session-linked-google",
+        sourceSessionId: "session-linked-google-source",
+        authProvider: "https://accounts.google.com",
+        authSubject: "google-linked-subject",
+        email: "linked@example.com",
+        emailVerified: true,
+        displayName: "Abril"
+      });
+      const passwordLogin = store.loginWithPassword({
+        sessionId: "session-linked-password-login",
+        email: "linked@example.com",
+        password: "password-segura"
+      });
+
+      assert.equal(linked.viewer.id, originalId);
+      assert.equal(passwordLogin.viewer.id, originalId);
+      assert.equal(linked.viewer.nickname, "Linked_user");
+      assert.equal(linked.viewer.displayName, "Linked_user");
+      assert.equal(linked.viewer.authProvider, "https://accounts.google.com");
+      assert.equal(linked.users.every((user) => !Object.hasOwn(user, "email")), true);
+      assert.equal(store.getDiagnostics().users, 1);
+    }, { seedDemoData: false });
+  });
+
+  await test("backend refuses to auto-link a legacy password email that was never verified", async () => {
+    await withTempStore((store) => {
+      const legacy = store.registerWithPassword({
+        sessionId: "session-legacy-password",
+        email: "legacy@example.com",
+        password: "password-segura",
+        nickname: "legacy_user"
+      });
+
+      assert.equal(legacy.viewer.emailVerified, false);
+      assert.throws(
+        () =>
+          store.loginWithIdentity({
+            sessionId: "session-legacy-google",
+            sourceSessionId: "session-legacy-google-source",
+            authProvider: "https://accounts.google.com",
+            authSubject: "legacy-google-subject",
+            email: "legacy@example.com",
+            emailVerified: true,
+            displayName: "Legacy User"
+          }),
+        (error) => error.code === "ACCOUNT_LINK_REQUIRED"
+      );
+      assert.equal(store.getDiagnostics().users, 1);
+    }, { seedDemoData: false });
+  });
+
+  await test("backend password reset is indistinguishable, rate limited and rotates credentials safely", async () => {
+    await withTempStore((store) => {
+      const nowMs = Date.UTC(2026, 6, 11, 12);
+      const registration = store.createEmailAuthChallenge({
+        email: "reset@example.com",
+        nickname: "reset_user",
+        age: MINIMUM_REGISTRATION_AGE,
+        acceptedTerms: true,
+        termsVersion: TERMS_VERSION,
+        password: "password-vieja",
+        nowMs
+      });
+      const registered = store.verifyEmailAuthChallenge({
+        challengeId: registration.challengeId,
+        code: registration.code,
+        sessionId: "session-reset-origin",
+        rotateSession: true,
+        nowMs: nowMs + 1_000
+      });
+      const originalId = registered.viewer.id;
+      const activeSessionId = registered.sessionId;
+      assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "registered");
+
+      const knownChallenge = store.createPasswordResetChallenge({
+        email: "reset@example.com",
+        ipAddress: "203.0.113.10",
+        nowMs: nowMs + 10_000
+      });
+      const unknownChallenge = store.createPasswordResetChallenge({
+        email: "nadie@example.com",
+        ipAddress: "203.0.113.11",
+        nowMs: nowMs + 10_000
+      });
+
+      assert.deepEqual(Object.keys(knownChallenge).sort(), Object.keys(unknownChallenge).sort());
+      assert.match(knownChallenge.challengeId, /^password-reset-/);
+      assert.match(unknownChallenge.challengeId, /^password-reset-/);
+      assert.equal(knownChallenge.expiresInSeconds, unknownChallenge.expiresInSeconds);
+      assert.equal(knownChallenge.deliveryRequired, true);
+      assert.match(knownChallenge.code, /^\d{6}$/);
+      assert.equal(unknownChallenge.deliveryRequired, false);
+      assert.equal(unknownChallenge.code, null);
+      assert.equal(unknownChallenge.email, null);
+
+      const cooldownChallenge = store.createPasswordResetChallenge({
+        email: "reset@example.com",
+        ipAddress: "203.0.113.10",
+        nowMs: nowMs + 20_000
+      });
+      assert.equal(cooldownChallenge.deliveryRequired, false);
+      assert.equal(cooldownChallenge.code, null);
+
+      const secondChallenge = store.createPasswordResetChallenge({
+        email: "reset@example.com",
+        ipAddress: "203.0.113.10",
+        nowMs: nowMs + 71_000
+      });
+      assert.equal(secondChallenge.deliveryRequired, true);
+      assert.throws(
+        () => store.verifyPasswordResetChallenge({
+          challengeId: knownChallenge.challengeId,
+          code: knownChallenge.code,
+          newPassword: "password-nueva",
+          sessionId: "session-reset-old-challenge",
+          nowMs: nowMs + 72_000
+        }),
+        (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
+      );
+
+      const wrongCode = secondChallenge.code === "000000" ? "111111" : "000000";
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        assert.throws(
+          () => store.verifyPasswordResetChallenge({
+            challengeId: secondChallenge.challengeId,
+            code: wrongCode,
+            newPassword: "password-nueva",
+            sessionId: "session-reset-wrong",
+            nowMs: nowMs + 73_000
+          }),
+          (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
+        );
+      }
+      assert.throws(
+        () => store.verifyPasswordResetChallenge({
+          challengeId: secondChallenge.challengeId,
+          code: secondChallenge.code,
+          newPassword: "password-nueva",
+          sessionId: "session-reset-locked",
+          nowMs: nowMs + 74_000
+        }),
+        (error) => error.code === "PASSWORD_RESET_ATTEMPTS_EXCEEDED"
+      );
+
+      const expiredChallenge = store.createPasswordResetChallenge({
+        email: "reset@example.com",
+        ipAddress: "203.0.113.10",
+        nowMs: nowMs + 140_000
+      });
+      assert.throws(
+        () => store.verifyPasswordResetChallenge({
+          challengeId: expiredChallenge.challengeId,
+          code: expiredChallenge.code,
+          newPassword: "password-nueva",
+          sessionId: "session-reset-expired",
+          nowMs: nowMs + 140_000 + 10 * 60_000 + 1
+        }),
+        (error) => error.code === "PASSWORD_RESET_CODE_EXPIRED"
+      );
+
+      const finalChallenge = store.createPasswordResetChallenge({
+        email: "reset@example.com",
+        ipAddress: "203.0.113.10",
+        nowMs: nowMs + 210_000
+      });
+      const resetPayload = store.verifyPasswordResetChallenge({
+        challengeId: finalChallenge.challengeId,
+        code: finalChallenge.code,
+        newPassword: "password-nueva",
+        sessionId: "session-reset-confirm",
+        rotateSession: true,
+        nowMs: nowMs + 220_000
+      });
+
+      assert.equal(resetPayload.viewer.id, originalId);
+      assert.equal(resetPayload.viewer.type, "registered");
+      assert.equal(resetPayload.viewer.emailVerified, true);
+      assert.notEqual(resetPayload.sessionId, "session-reset-confirm");
+
+      assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "guest");
+      assert.throws(
+        () => store.verifyPasswordResetChallenge({
+          challengeId: finalChallenge.challengeId,
+          code: finalChallenge.code,
+          newPassword: "password-replay",
+          sessionId: "session-reset-replay",
+          nowMs: nowMs + 230_000
+        }),
+        (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
+      );
+
+      assert.throws(
+        () => store.loginWithPassword({
+          sessionId: "session-reset-old-password",
+          email: "reset@example.com",
+          password: "password-vieja"
+        }),
+        (error) => error.code === "INVALID_CREDENTIALS"
+      );
+      const newLogin = store.loginWithPassword({
+        sessionId: "session-reset-new-password",
+        email: "reset@example.com",
+        password: "password-nueva",
+        rotateSession: true
+      });
+      assert.equal(newLogin.viewer.id, originalId);
+    }, { seedDemoData: false });
+  });
+
+  await test("backend account linking demands fresh password proof and a matching Google identity", async () => {
+    await withTempStore((store) => {
+      const registered = store.registerWithPassword({
+        sessionId: "session-link-owner",
+        email: "owner@example.com",
+        password: "password-segura",
+        nickname: "owner_user",
+        rotateSession: true
+      });
+      const ownerSessionId = registered.sessionId;
+      const ownerId = registered.viewer.id;
+      assert.equal(registered.viewer.hasPassword, true);
+      assert.equal(registered.viewer.canLinkGoogle, true);
+
+      assert.throws(
+        () => store.prepareIdentityLink({ sessionId: "session-link-guest", password: "password-segura" }),
+        (error) => error.code === "ACCOUNT_LINK_NOT_AVAILABLE"
+      );
+      assert.throws(
+        () => store.prepareIdentityLink({ sessionId: ownerSessionId, password: "password-mala" }),
+        (error) => error.code === "INVALID_CREDENTIALS"
+      );
+
+      const target = store.prepareIdentityLink({ sessionId: ownerSessionId, password: "password-segura" });
+      assert.equal(target.userId, ownerId);
+      assert.equal(target.email, "owner@example.com");
+
+      const baseLink = {
+        sessionId: "session-link-next",
+        sourceSessionId: target.sessionId,
+        targetUserId: target.userId,
+        expectedEmail: target.email,
+        authProvider: "https://accounts.google.com",
+        authSubject: "google-owner-subject",
+        email: "owner@example.com",
+        emailVerified: true
+      };
+
+      assert.throws(
+        () => store.completeIdentityLink({ ...baseLink, emailVerified: false }),
+        (error) => error.code === "INVALID_ACCOUNT_LINK_IDENTITY"
+      );
+      assert.throws(
+        () => store.completeIdentityLink({ ...baseLink, email: "otra@example.com" }),
+        (error) => error.code === "ACCOUNT_LINK_EMAIL_MISMATCH"
+      );
+      assert.throws(
+        () => store.completeIdentityLink({ ...baseLink, sourceSessionId: "session-link-stranger" }),
+        (error) => error.code === "ACCOUNT_LINK_SESSION_EXPIRED"
+      );
+
+      store.loginWithIdentity({
+        sessionId: "session-link-other",
+        sourceSessionId: "session-link-other-source",
+        authProvider: "https://accounts.google.com",
+        authSubject: "google-taken-subject",
+        email: "otra-cuenta@example.com",
+        emailVerified: true,
+        displayName: "Otra"
+      });
+      assert.throws(
+        () => store.completeIdentityLink({ ...baseLink, authSubject: "google-taken-subject" }),
+        (error) => error.code === "AUTH_IDENTITY_TAKEN"
+      );
+
+      const linked = store.completeIdentityLink(baseLink);
+      assert.equal(linked.viewer.id, ownerId);
+      assert.equal(linked.viewer.authProvider, "https://accounts.google.com");
+      assert.equal(linked.viewer.canLinkGoogle, false);
+
+      assert.throws(
+        () => store.prepareIdentityLink({ sessionId: linked.sessionId, password: "password-segura" }),
+        (error) => error.code === "ACCOUNT_ALREADY_LINKED"
+      );
+    }, { seedDemoData: false });
   });
 
   await test("backend loginWithIdentity preserves existing account data when provider data is incomplete", async () => {
@@ -1673,6 +2276,7 @@ await (async () => {
         authProvider: "https://accounts.example.com",
         authSubject: "subject-preserve",
         email: "preserve@example.com",
+        emailVerified: true,
         displayName: "Provider User",
         avatarUrl: "https://cdn.example.com/provider-avatar.png"
       });
@@ -1680,6 +2284,10 @@ await (async () => {
       const completedPayload = store.updateProfile({
         sessionId: "session-oidc-preserve-1",
         displayName: "Alias_protegido",
+        username: "alias_protegido",
+        age: MINIMUM_REGISTRATION_AGE,
+        acceptedTerms: true,
+        termsVersion: TERMS_VERSION,
         avatarDataUrl: "data:image/png;base64,c2FmZQ=="
       });
 
@@ -1726,6 +2334,7 @@ await (async () => {
         authProvider: "https://accounts.example.com",
         authSubject: "subject-long-avatar",
         email: "long-avatar@example.com",
+        emailVerified: true,
         displayName: "Long Avatar User",
         avatarUrl: longAvatarUrl
       });
@@ -1740,6 +2349,7 @@ await (async () => {
         authProvider: "https://accounts.example.com",
         authSubject: "subject-invalid-avatar",
         email: "invalid-avatar@example.com",
+        emailVerified: true,
         displayName: "Invalid Avatar User",
         avatarUrl: "javascript:alert(1)"
       });
@@ -1760,13 +2370,18 @@ await (async () => {
         authProvider: "https://accounts.example.com",
         authSubject: "persist-subject",
         email: "persist@example.com",
+        emailVerified: true,
         displayName: "Persist User"
       });
       const userId = firstLogin.viewer.id;
 
       store.updateProfile({
         sessionId: "session-persist-1",
-        displayName: "Persist_alias"
+        displayName: "Persist_alias",
+        username: "persist_alias",
+        age: MINIMUM_REGISTRATION_AGE,
+        acceptedTerms: true,
+        termsVersion: TERMS_VERSION
       });
       const created = store.createTopic({
         sessionId: "session-persist-1",
@@ -1783,6 +2398,7 @@ await (async () => {
         authProvider: "https://accounts.example.com",
         authSubject: "persist-subject",
         email: "persist@example.com",
+        emailVerified: true,
         displayName: "Persist User Renamed"
       });
       const persistedTopic = secondLogin.topics.find((topic) => topic.id === topicId);
@@ -1800,7 +2416,7 @@ await (async () => {
   });
   await test("backend updateProfile lets registered users change display name and request avatar review", async () => {
     await withTempStore(async (store) => {
-      store.login({
+      const beforeUpdate = store.login({
         sessionId: "session-profile",
         selectedTopicId: null
       });
@@ -1811,15 +2427,30 @@ await (async () => {
         description: "Descripcion breve del perfil",
         profileShowDescription: false,
         profileShowJoinedAt: false,
+        socialWhatsapp: "+5491133334444",
+        socialInstagram: "@abril.rosa",
+        socialTiktok: "abril_rosa",
+        socialFacebook: "abril.rosa",
+        socialTwitter: "abrilrosa",
+        socialDiscord: "abril_rosa_discord",
+        profileShowSocial: false,
         avatarDataUrl: "data:image/jpeg;base64,aW1hZ2U="
       });
 
       assert.equal(updated.viewer.type, "registered");
       assert.equal(updated.viewer.displayName, "Nombre_nuevo");
-      assert.equal(updated.viewer.nickname, "Nombre_nuevo");
+      assert.equal(updated.viewer.id, beforeUpdate.viewer.id);
+      assert.equal(updated.viewer.nickname, beforeUpdate.viewer.nickname);
       assert.equal(updated.viewer.description, "Descripcion breve del perfil");
       assert.equal(updated.viewer.profileShowDescription, false);
       assert.equal(updated.viewer.profileShowJoinedAt, false);
+      assert.equal(updated.viewer.socialWhatsapp, "+5491133334444");
+      assert.equal(updated.viewer.socialInstagram, "abril.rosa");
+      assert.equal(updated.viewer.socialTiktok, "abril_rosa");
+      assert.equal(updated.viewer.socialFacebook, "abril.rosa");
+      assert.equal(updated.viewer.socialTwitter, "abrilrosa");
+      assert.equal(updated.viewer.socialDiscord, "abril_rosa_discord");
+      assert.equal(updated.viewer.profileShowSocial, false);
       assert.equal(
         updated.users.find((user) => user.id === updated.viewer.id)?.description,
         "Descripcion breve del perfil"
@@ -1830,6 +2461,14 @@ await (async () => {
       );
       assert.equal(
         updated.users.find((user) => user.id === updated.viewer.id)?.profileShowJoinedAt,
+        false
+      );
+      assert.equal(
+        updated.users.find((user) => user.id === updated.viewer.id)?.socialInstagram,
+        "abril.rosa"
+      );
+      assert.equal(
+        updated.users.find((user) => user.id === updated.viewer.id)?.profileShowSocial,
         false
       );
       assert.equal(updated.viewer.avatarUrl, null);
@@ -1844,16 +2483,15 @@ await (async () => {
         path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl))
       );
       assert.equal(storedAvatar.toString("utf8"), "image");
-      assert.throws(
-        () =>
-          store.registerWithPassword({
-            sessionId: "session-profile-duplicate-register",
-            email: "profile-duplicate@example.com",
-            password: "password-segura",
-            nickname: "nombre_nuevo"
-          }),
-        (error) => error.code === "NICKNAME_TAKEN"
-      );
+      const sameDisplayName = store.registerWithPassword({
+        sessionId: "session-profile-duplicate-register",
+        email: "profile-duplicate@example.com",
+        password: "password-segura",
+        nickname: "nombre_nuevo"
+      });
+      assert.notEqual(sameDisplayName.viewer.id, updated.viewer.id);
+      assert.equal(sameDisplayName.viewer.displayName, updated.viewer.displayName);
+      assert.notEqual(sameDisplayName.viewer.nickname, updated.viewer.nickname);
 
       store.login({
         sessionId: "session-profile-moderator",
@@ -1951,6 +2589,43 @@ await (async () => {
           }),
         (error) => error.code === "VALIDATION_ERROR"
       );
+
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile",
+            displayName: "Nombre_nuevo",
+            socialInstagram: "a".repeat(41)
+          }),
+        (error) => error.code === "VALIDATION_ERROR"
+      );
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile",
+            displayName: "Nombre_nuevo",
+            socialInstagram: "javascript:alert(1)"
+          }),
+        (error) => error.code === "VALIDATION_ERROR"
+      );
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile",
+            displayName: "Nombre_nuevo",
+            socialFacebook: "../../etc"
+          }),
+        (error) => error.code === "VALIDATION_ERROR"
+      );
+      assert.throws(
+        () =>
+          store.updateProfile({
+            sessionId: "session-profile",
+            displayName: "Nombre_nuevo",
+            socialWhatsapp: "not-a-phone"
+          }),
+        (error) => error.code === "VALIDATION_ERROR"
+      );
     });
   });
 
@@ -1966,6 +2641,7 @@ await (async () => {
           authProvider: "https://accounts.example.com",
           authSubject: "existing-admin-subject",
           email: "existing-admin@example.com",
+          emailVerified: true,
           displayName: "Existing Admin"
         });
 
@@ -2001,6 +2677,7 @@ await (async () => {
           authProvider: "https://accounts.example.com",
           authSubject: "admin-subject",
           email: "admin@example.com",
+          emailVerified: true,
           displayName: "Admin User"
         });
 
@@ -2013,11 +2690,16 @@ await (async () => {
           authProvider: "https://accounts.example.com",
           authSubject: "review-user-subject",
           email: "review@example.com",
+          emailVerified: true,
           displayName: "Review User"
         });
         const pendingPayload = store.updateProfile({
           sessionId: "session-avatar-review-user",
           displayName: "Review_user",
+          username: "review_user",
+          age: MINIMUM_REGISTRATION_AGE,
+          acceptedTerms: true,
+          termsVersion: TERMS_VERSION,
           avatarDataUrl: "data:image/png;base64,aGVsbG8="
         });
 
@@ -2226,6 +2908,20 @@ await (async () => {
         total: 2,
         hasMore: false
       });
+
+      const reportedTopic = bootstrapPayload.topics[0];
+      const reportedMessage = reportedTopic.messages.find((message) => message.id === reportableMessageId);
+      const topicReport = openReports.reports.find((report) => report.entityType === "topic");
+      const messageReport = openReports.reports.find((report) => report.entityType === "message");
+
+      assert.equal(topicReport.target.kind, "topic");
+      assert.equal(topicReport.target.title, reportedTopic.title);
+      assert.equal(topicReport.target.authorId, reportedTopic.authorId);
+
+      assert.equal(messageReport.target.kind, "message");
+      assert.equal(messageReport.target.text, reportedMessage.text);
+      assert.equal(messageReport.target.authorId, reportedMessage.authorId);
+      assert.equal(messageReport.target.topicTitle, reportedTopic.title);
 
       const blockedPayload = store.applyModerationAction("block_topic", {
         sessionId: "session-moderator",
@@ -2846,6 +3542,53 @@ await (async () => {
     assert.deepEqual(state.unreadTopicIds, []);
     assert.equal(renderCalls >= 2, true);
   });
+
+  await test("submitting a comment updates the topic in place without reordering the topics list", async () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const originalOrder = topics.map((topic) => topic.id);
+    const topicId = topics[1].id;
+    const submittedMessage = createMessage("u1", "Nuevo comentario", 0, "user", 1_700_000_060_000);
+    // Mirrors the backend, which returns the commented topic bumped to the front
+    // (ordered by updated_at DESC) whenever a message is submitted.
+    const reorderedTopics = reviveTopicWithMessage(topics, topicId, submittedMessage);
+    assert.equal(reorderedTopics[0].id, topicId, "sanity check: the backend payload reorders topics");
+
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topicId,
+      unreadTopicIds: [],
+      refreshCount: 0
+    };
+    const actions = createChatActions({
+      state,
+      dom: {
+        messageInput: { value: "Nuevo comentario", readOnly: false },
+        messageStream: { scrollTop: 0, scrollHeight: 320 }
+      },
+      render: () => {},
+      apiClient: {
+        async submitMessage(selectedTopicId) {
+          return {
+            viewer: { id: "u1", type: "registered" },
+            users,
+            topics: reorderedTopics,
+            selectedTopicId
+          };
+        }
+      }
+    });
+
+    await actions.submitMessage({ preventDefault() {} });
+
+    assert.deepEqual(state.topics.map((topic) => topic.id), originalOrder);
+    const updatedTopic = state.topics.find((topic) => topic.id === topicId);
+    assert.equal(updatedTopic.messages.at(-1).id, submittedMessage.id);
+  });
+
   await test("create topic action opens the composer view on mobile", () => {
     const state = {
       selectedTopicId: "topic-1",
@@ -2925,6 +3668,99 @@ await (async () => {
     await actions.reportEntity("message", messageId, { reason: "Mensaje" });
     assert.deepEqual(state.reportedMessageIds, [messageId]);
     assert.equal(renderCalls >= 2, true);
+  });
+
+  await test("composeReportReason combines a preset reason with optional extra detail", () => {
+    assert.equal(composeReportReason("spam", ""), "Spam o publicidad");
+    assert.equal(composeReportReason("spam", "   "), "Spam o publicidad");
+    assert.equal(
+      composeReportReason("spam", "Ademas insulta a otros usuarios"),
+      "Spam o publicidad: Ademas insulta a otros usuarios"
+    );
+    assert.equal(composeReportReason("other", "  Explicacion libre  "), "Explicacion libre");
+    assert.equal(composeReportReason("other", ""), "");
+    assert.equal(composeReportReason("not-a-real-reason", "texto"), "");
+    assert.equal(REPORT_REASONS.some((reason) => reason.value === "other"), true);
+  });
+
+  await test("openReportModal then submitReportModal composes the reason and reports the entity", async () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const topicId = topics[0].id;
+    const messageId = topics[0].messages[0].id;
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      reportModal: { isOpen: false, entityType: null, entityId: null },
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topicId,
+      refreshCount: 0
+    };
+    let capturedReason = null;
+    const actions = createChatActions({
+      state,
+      dom: {},
+      render: () => {},
+      apiClient: {
+        async reportEntity(entityType, entityId, reason, selectedTopicId) {
+          capturedReason = reason;
+          return {
+            viewer: { id: "u1", type: "registered" },
+            users,
+            topics,
+            selectedTopicId,
+            reportedTopicIds: [],
+            reportedMessageIds: entityType === "message" ? [entityId] : []
+          };
+        }
+      }
+    });
+
+    actions.openReportModal("message", messageId, { trigger: null });
+    assert.deepEqual(state.reportModal, { isOpen: true, entityType: "message", entityId: messageId });
+
+    await actions.submitReportModal("spam", "Ademas es reincidente");
+    assert.equal(capturedReason, "Spam o publicidad: Ademas es reincidente");
+    assert.deepEqual(state.reportedMessageIds, [messageId]);
+    assert.equal(state.reportModal.isOpen, false);
+  });
+
+  await test("submitReportModal requires custom text when 'other' is selected without one", async () => {
+    const users = buildUsers(initialUsers);
+    const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const messageId = topics[0].messages[0].id;
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      reportModal: { isOpen: false, entityType: null, entityId: null },
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topics[0].id,
+      refreshCount: 0
+    };
+    let reportCalled = false;
+    const actions = createChatActions({
+      state,
+      dom: {},
+      render: () => {},
+      apiClient: {
+        async reportEntity() {
+          reportCalled = true;
+          return { viewer: { id: "u1", type: "registered" }, users, topics, reportedMessageIds: [] };
+        }
+      }
+    });
+
+    actions.openReportModal("message", messageId, { trigger: null });
+    await actions.submitReportModal("other", "   ");
+
+    assert.equal(reportCalled, false);
+    assert.equal(state.reportModal.isOpen, true);
   });
 
   await test("syncResponsiveView closes mobile drawers when returning to desktop", () => {
@@ -3541,6 +4377,162 @@ await (async () => {
     assert.equal(renderCount, 1);
   });
 
+  await test("notifications and friend requests panels never stay open at the same time", () => {
+    const state = {
+      isNotificationsPanelOpen: false,
+      isFriendRequestsPanelOpen: false,
+      friendRequestsTab: "friends",
+      friendRequestsLimits: { incoming: 20, outgoing: 10 }
+    };
+
+    const handlers = createActionHandlers({
+      state,
+      dom: {
+        refreshButton: null,
+        paletteOptionGrid: null
+      },
+      renderRef: {
+        current() {}
+      },
+      syncResponsiveView() {},
+      isMobileViewport() {
+        return false;
+      },
+      closeDrawers() {}
+    });
+
+    handlers.toggleNotificationsPanel();
+    assert.equal(state.isNotificationsPanelOpen, true);
+
+    handlers.toggleFriendRequestsPanel();
+    assert.equal(state.isFriendRequestsPanelOpen, true);
+    assert.equal(state.isNotificationsPanelOpen, false);
+    assert.equal(state.friendRequestsTab, "incoming");
+
+    handlers.toggleNotificationsPanel();
+    assert.equal(state.isNotificationsPanelOpen, true);
+    assert.equal(state.isFriendRequestsPanelOpen, false);
+
+    handlers.toggleNotificationsPanel();
+    assert.equal(state.isNotificationsPanelOpen, false);
+    assert.equal(state.isFriendRequestsPanelOpen, false);
+  });
+
+  await test("applyAdminAction requires a second confirming click for destructive actions", async () => {
+    const state = {
+      theme: "dark",
+      paletteId: DEFAULT_PALETTE_ID,
+      customPaletteHex: DEFAULT_CUSTOM_PALETTE_HEX,
+      isPaletteModalOpen: false,
+      isAdminPanelOpen: true,
+      adminDashboard: { loaded: true, reports: [], pendingAvatars: [] },
+      adminConfirmAction: null,
+      selectedTopicId: null,
+      rankingScope: "global",
+      globalRankingIndex: 0,
+      topicRankingIndex: 0,
+      refreshCount: 0,
+      mobileView: "browse",
+      currentUserId: "u1",
+      topics: [],
+      users: []
+    };
+
+    let applyCalls = 0;
+    const originalApplyModerationAction = versionedApiForControllerActions.applyModerationAction;
+    const originalGetAdminDashboard = versionedApiForControllerActions.getAdminDashboard;
+
+    try {
+      versionedApiForControllerActions.applyModerationAction = async () => {
+        applyCalls += 1;
+        return {};
+      };
+      versionedApiForControllerActions.getAdminDashboard = async () => ({ reports: [], pendingAvatars: [] });
+
+      const handlers = createActionHandlers({
+        state,
+        dom: { adminPanelButton: null },
+        renderRef: { current() {} },
+        syncResponsiveView() {},
+        isMobileViewport() {
+          return false;
+        },
+        closeDrawers() {}
+      });
+
+      await handlers.applyAdminAction("delete_message", "message", "42");
+      assert.equal(applyCalls, 0);
+      assert.equal(state.adminConfirmAction?.key, "delete_message:message:42");
+
+      await handlers.applyAdminAction("delete_message", "message", "42");
+      assert.equal(applyCalls, 1);
+      assert.equal(state.adminConfirmAction, null);
+
+      await handlers.applyAdminAction("approve_avatar", "user", "u9");
+      assert.equal(applyCalls, 2);
+      assert.equal(state.adminConfirmAction, null);
+    } finally {
+      versionedApiForControllerActions.applyModerationAction = originalApplyModerationAction;
+      versionedApiForControllerActions.getAdminDashboard = originalGetAdminDashboard;
+    }
+  });
+
+  await test("changing topic clears the message composer draft", () => {
+    const state = {
+      theme: "light",
+      paletteId: DEFAULT_PALETTE_ID,
+      customPaletteHex: DEFAULT_CUSTOM_PALETTE_HEX,
+      isPaletteModalOpen: false,
+      selectedTopicId: "topic-1",
+      rankingScope: "global",
+      globalRankingIndex: 0,
+      topicRankingIndex: 0,
+      refreshCount: 0,
+      mobileView: "browse",
+      unreadTopicIds: [],
+      followedTopicIds: [],
+      currentUserId: "u1",
+      activeConnectedUserId: null,
+      topics: [
+        { id: "topic-1", title: "Uno", messages: [] },
+        { id: "topic-2", title: "Dos", messages: [] }
+      ],
+      users: [{ id: "u1", name: "Coco Mora", online: true }]
+    };
+    const removedClasses = [];
+    const messageInput = {
+      value: "> @Sergio\n> Mensaje\n\n",
+      scrollTop: 12,
+      classList: {
+        remove(token) {
+          removedClasses.push(token);
+        }
+      }
+    };
+    const handlers = createActionHandlers({
+      state,
+      dom: {
+        messageInput,
+        refreshButton: null,
+        paletteOptionGrid: null
+      },
+      renderRef: { current() {} },
+      syncResponsiveView() {},
+      isMobileViewport() {
+        return false;
+      },
+      closeDrawers() {}
+    });
+
+    handlers.focusTopic("topic-1");
+    assert.equal(messageInput.value, "> @Sergio\n> Mensaje\n\n");
+
+    handlers.focusTopic("topic-2");
+    assert.equal(state.selectedTopicId, "topic-2");
+    assert.equal(messageInput.value, "");
+    assert.equal(messageInput.scrollTop, 0);
+    assert.deepEqual(removedClasses, ["is-scrollable"]);
+  });
   await test("custom palette picker opens only after Coloris emits open", async () => {
     const topbarActionEvents = await read("ui/topbar-action-events.js");
     const palettePickerEvents = await read("ui/palette-picker-events.js");
@@ -3716,6 +4708,7 @@ await (async () => {
     assert.equal(unconfigured.checks.clientSecret, false);
     assert.equal(unconfigured.checks.sessionSecret, false);
     assert.deepEqual(unconfigured.turnstile, { configured: false, siteKey: null });
+    assert.deepEqual(unconfigured.emailCode, { configured: false });
 
     const configured = createAuthService({
       env: {
@@ -3728,6 +4721,8 @@ await (async () => {
         TOPYKLY_COOKIE_SECURE: "true",
         TOPYKLY_TURNSTILE_SITE_KEY: "site-key",
         TOPYKLY_TURNSTILE_SECRET_KEY: "secret-key",
+        TOPYKLY_RESEND_API_KEY: "resend-key",
+        TOPYKLY_RESEND_FROM: "TOPYKLY <access@topykly.com>",
         TOPYKLY_TRUST_PROXY: "true"
       },
       fetchImpl() {}
@@ -3739,6 +4734,7 @@ await (async () => {
     assert.equal(configured.redirectUri, "https://topykly.com/auth/oidc/callback");
     assert.equal(configured.cookieSecure, true);
     assert.deepEqual(configured.turnstile, { configured: true, siteKey: "site-key" });
+    assert.deepEqual(configured.emailCode, { configured: true });
     assert.deepEqual(configured.checks, {
       issuer: true,
       clientId: true,
@@ -3748,6 +4744,162 @@ await (async () => {
     });
     assert.equal(Object.prototype.hasOwnProperty.call(configured, "clientSecret"), false);
     assert.equal(Object.prototype.hasOwnProperty.call(configured, "clientId"), false);
+  });
+
+  await test("OIDC callback only forwards provider emails marked as verified", async () => {
+    async function completeCallback(emailVerified) {
+      const authService = createAuthService({
+        env: {
+          TOPYKLY_OIDC_ISSUER: "https://accounts.google.com",
+          TOPYKLY_OIDC_CLIENT_ID: "client-id",
+          TOPYKLY_OIDC_CLIENT_SECRET: "client-secret",
+          TOPYKLY_SESSION_SECRET: "session-secret",
+          TOPYKLY_PUBLIC_ORIGIN: "https://topykly.com"
+        },
+        async fetchImpl(url) {
+          if (String(url).includes(".well-known/openid-configuration")) {
+            return {
+              ok: true,
+              async text() {
+                return JSON.stringify({
+                  authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+                  token_endpoint: "https://oauth2.googleapis.com/token",
+                  userinfo_endpoint: "https://openidconnect.googleapis.com/v1/userinfo"
+                });
+              }
+            };
+          }
+          if (String(url) === "https://oauth2.googleapis.com/token") {
+            return {
+              ok: true,
+              async text() {
+                return JSON.stringify({ access_token: "access-token" });
+              }
+            };
+          }
+          return {
+            ok: true,
+            async text() {
+              return JSON.stringify({
+                sub: "google-subject",
+                email: "person@example.com",
+                email_verified: emailVerified,
+                name: "Abril"
+              });
+            }
+          };
+        }
+      });
+      const req = {
+        headers: { host: "127.0.0.1:4173" },
+        socket: { encrypted: false }
+      };
+      const loginResponse = await authService.createLoginResponse({
+        req,
+        sessionId: "session-oidc-callback"
+      });
+      const authUrl = new URL(loginResponse.payload.redirectUrl);
+      const flowCookie = loginResponse.cookies
+        .find((cookie) => cookie.startsWith("topykly_auth_flow="))
+        .split(";", 1)[0]
+        .slice("topykly_auth_flow=".length);
+
+      return authService.handleCallback({
+        req,
+        cookies: { topykly_auth_flow: decodeURIComponent(flowCookie) },
+        query: {
+          code: "authorization-code",
+          state: authUrl.searchParams.get("state")
+        }
+      });
+    }
+
+    const verified = await completeCallback(true);
+    const unverified = await completeCallback(false);
+
+    assert.equal(verified.identity.email, "person@example.com");
+    assert.equal(verified.identity.emailVerified, true);
+    assert.equal(unverified.identity.email, null);
+    assert.equal(unverified.identity.emailVerified, false);
+  });
+
+  await test("auth service sends one-time access codes through Resend", async () => {
+    const calls = [];
+    const authService = createAuthService({
+      env: {
+        TOPYKLY_RESEND_API_KEY: "resend-key",
+        TOPYKLY_RESEND_FROM: "TOPYKLY <access@topykly.com>"
+      },
+      async fetchImpl(url, options) {
+        calls.push({ url, options });
+        return {
+          ok: true,
+          async text() {
+            return JSON.stringify({ id: "email-resend-1" });
+          }
+        };
+      }
+    });
+
+    const result = await authService.sendEmailCode({
+      email: "person@example.com",
+      code: "123456",
+      challengeId: "email-code-challenge-1"
+    });
+    const body = JSON.parse(calls[0].options.body);
+
+    assert.deepEqual(result, { id: "email-resend-1" });
+    assert.equal(calls[0].url, "https://api.resend.com/emails");
+    assert.equal(calls[0].options.headers.Authorization, "Bearer resend-key");
+    assert.equal(calls[0].options.headers["Idempotency-Key"], "email-code-challenge-1");
+    assert.deepEqual(body.to, ["person@example.com"]);
+    assert.match(body.subject, /Confirma tu cuenta/);
+    assert.match(body.text, /123456/);
+    assert.match(body.html, /123456/);
+    assert.match(body.html, /TOPYKLY/);
+    assert.match(body.html, /No se creó ninguna cuenta/);
+  });
+
+  await test("auth service recovery emails use the password reset copy", async () => {
+    const calls = [];
+    const authService = createAuthService({
+      env: {
+        TOPYKLY_RESEND_API_KEY: "resend-key",
+        TOPYKLY_RESEND_FROM: "TOPYKLY <access@topykly.com>"
+      },
+      async fetchImpl(url, options) {
+        calls.push({ url, options });
+        return {
+          ok: true,
+          async text() {
+            return JSON.stringify({ id: "email-resend-2" });
+          }
+        };
+      }
+    });
+
+    await authService.sendEmailCode({
+      email: "person@example.com",
+      code: "654321",
+      challengeId: "password-reset-challenge-1",
+      purpose: "password_reset"
+    });
+    const body = JSON.parse(calls[0].options.body);
+
+    assert.match(body.subject, /Recupera tu cuenta/);
+    assert.match(body.text, /cambiar tu contrasena/);
+    assert.match(body.text, /Tu contraseña no cambió/);
+    assert.match(body.html, /Tu contraseña no cambió/);
+    assert.equal(body.html.includes("No se creó ninguna cuenta"), false);
+
+    await assert.rejects(
+      authService.sendEmailCode({
+        email: "person@example.com",
+        code: "654321",
+        purpose: "unknown"
+      }),
+      (error) => error.code === "INVALID_EMAIL_CODE_PURPOSE"
+    );
   });
 
   await test("preview server disables local dev login in production", () => {
@@ -3792,6 +4944,122 @@ await (async () => {
       value: "camera=(), microphone=(), geolocation=()"
     });
   });
+
+  await test("preview auth requires Turnstile, blocks unverified registration and scopes HSTS to production HTTPS", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousVercelEnv = process.env.VERCEL_ENV;
+    const previousTurnstileSiteKey = process.env.TOPYKLY_TURNSTILE_SITE_KEY;
+    const previousTurnstileSecretKey = process.env.TOPYKLY_TURNSTILE_SECRET_KEY;
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-auth-"));
+    let preview = null;
+
+    try {
+      process.env.NODE_ENV = "production";
+      delete process.env.VERCEL_ENV;
+      process.env.TOPYKLY_TURNSTILE_SITE_KEY = "test-site-key";
+      process.env.TOPYKLY_TURNSTILE_SECRET_KEY = "test-secret-key";
+      preview = startPreviewServer({
+        port: 0,
+        host: "127.0.0.1",
+        log() {},
+        dbPath: path.join(tempDir, "preview.sqlite")
+      });
+      if (!preview.server.listening) {
+        await new Promise((resolve, reject) => {
+          preview.server.once("listening", resolve);
+          preview.server.once("error", reject);
+        });
+      }
+
+      const address = preview.server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const localResponse = await fetch(`${origin}/index.html`);
+      assert.equal(localResponse.headers.get("strict-transport-security"), null);
+      await localResponse.arrayBuffer();
+
+      const secureResponse = await fetch(`${origin}/index.html`, {
+        headers: { "x-forwarded-proto": "https" }
+      });
+      assert.match(
+        secureResponse.headers.get("strict-transport-security") || "",
+        /^max-age=31536000; includeSubDomains$/
+      );
+      await secureResponse.arrayBuffer();
+
+      const googleWithoutTurnstile = await fetch(`${origin}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedTopicId: null })
+      });
+      const googleWithoutTurnstilePayload = await googleWithoutTurnstile.json();
+      assert.equal(googleWithoutTurnstile.status, 403);
+      assert.equal(
+        googleWithoutTurnstilePayload.error?.code,
+        "TURNSTILE_REQUIRED"
+      );
+
+      const blockedResponse = await fetch(`${origin}/api/auth/password/register`, {
+        method: "POST",
+        headers: { "x-forwarded-proto": "https" }
+      });
+      const blockedPayload = await blockedResponse.json();
+      assert.equal(blockedResponse.status, 410);
+      assert.equal(
+        blockedPayload.error?.code,
+        "REGISTRATION_REQUIRES_EMAIL_VERIFICATION"
+      );
+    } finally {
+      if (preview) {
+        const closed = new Promise((resolve) => preview.server.once("close", resolve));
+        preview.close();
+        await closed;
+      }
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousVercelEnv === undefined) {
+        delete process.env.VERCEL_ENV;
+      } else {
+        process.env.VERCEL_ENV = previousVercelEnv;
+      }
+      if (previousTurnstileSiteKey === undefined) {
+        delete process.env.TOPYKLY_TURNSTILE_SITE_KEY;
+      } else {
+        process.env.TOPYKLY_TURNSTILE_SITE_KEY = previousTurnstileSiteKey;
+      }
+      if (previousTurnstileSecretKey === undefined) {
+        delete process.env.TOPYKLY_TURNSTILE_SECRET_KEY;
+      } else {
+        process.env.TOPYKLY_TURNSTILE_SECRET_KEY = previousTurnstileSecretKey;
+      }
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  await test("client auth surface has no direct password registration bypass", async () => {
+    const apiSource = await read("services/api.js");
+    const actionsSource = await read("controller-actions.js");
+    const controllerSource = await read("controller-app.js");
+
+    assert.equal("registerWithPassword" in api, false);
+    assert.doesNotMatch(apiSource, /registerWithPassword|\/api\/auth\/password\/register/);
+    assert.doesNotMatch(actionsSource, /registerWithPassword/);
+    assert.doesNotMatch(controllerSource, /registerWithPassword/);
+  });
+
+  await test("fallback Google auth keeps its label stable and reports modal errors", async () => {
+    const fallback = await read("auth-fallback.js");
+
+    assert.match(fallback, /button\.disabled = pending/);
+    assert.match(fallback, /button\.setAttribute\("aria-busy", String\(pending\)\)/);
+    assert.match(fallback, /button\.classList\.toggle\("is-pending", pending\)/);
+    assert.match(fallback, /document\.getElementById\("authStatus"\)/);
+    assert.doesNotMatch(fallback, /Verificando acceso|actionFeedback/);
+    assert.doesNotMatch(fallback, /authGoogleButton[\s\S]*textContent\s*=/);
+  });
+
   await test("auth service validates Turnstile tokens server-side when configured", async () => {
     const req = {
       headers: { host: "127.0.0.1:4173", "cf-connecting-ip": "203.0.113.8" },
@@ -4002,12 +5270,12 @@ await (async () => {
       createTopicButton: new FakeElement(),
       friendRequestsButton: new FakeElement(),
       notificationsButton: new FakeElement(),
-      messagesButton: new FakeElement(),
       authButton,
       authTools,
       authModalBackdrop: new FakeElement(),
       authModal: new FakeElement(),
       authGoogleButton: new FakeElement(),
+      authGoogleTermsInput: { checked: true },
       authTurnstile: new FakeElement(),
       authTurnstileToken: { value: "" },
       authPasswordForm: new FakeElement(),
@@ -4093,14 +5361,14 @@ await (async () => {
       assert.equal(loginCalls, 1);
       assert.equal(state.viewer.type, "registered");
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
-      assert.equal(flashCalls.at(-1), "Sesion iniciada");
+      assert.equal(flashCalls.at(-1), "Sesión iniciada");
 
       authButton.dispatch("click");
       await flushAsyncEvents();
 
       assert.equal(logoutCalls, 0);
       assert.equal(state.viewer.type, "registered");
-      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesion");
+      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesión");
 
       authButton.dispatch("click");
       await flushAsyncEvents();
@@ -4113,7 +5381,7 @@ await (async () => {
       assert.equal(logoutCalls, 1);
       assert.equal(state.viewer.type, "guest");
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
-      assert.equal(flashCalls.at(-1), "Sesion cerrada");
+      assert.equal(flashCalls.at(-1), "Sesión cerrada");
     } finally {
       globalThis.localStorage = previousLocalStorage;
       globalThis.document = previousDocument;
@@ -4122,10 +5390,11 @@ await (async () => {
     }
   });
 
-  await test("email registration returns to the topic active when auth started", async () => {
+  await test("email registration validates and navigates credentials, profile and verify steps", async () => {
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
     const previousHTMLElement = globalThis.HTMLElement;
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
 
     class FakeElement {
       constructor() {
@@ -4164,7 +5433,11 @@ await (async () => {
         child.parentElement = this;
       }
 
-      focus() {}
+      focus() {
+        if (globalThis.document) {
+          globalThis.document.activeElement = this;
+        }
+      }
 
       setAttribute(name, value) {
         this[name] = value;
@@ -4179,7 +5452,8 @@ await (async () => {
     authButton.label = { textContent: "" };
     const themeToggle = new FakeElement();
     const themeToggleDesktopSlot = new FakeElement();
-    let registeredPayload = null;
+    let requestedChallengePayload = null;
+    let verifiedPayload = null;
 
     const dom = {
       themeToggle,
@@ -4199,32 +5473,42 @@ await (async () => {
       createTopicButton: new FakeElement(),
       friendRequestsButton: new FakeElement(),
       notificationsButton: new FakeElement(),
-      messagesButton: new FakeElement(),
       authButton,
       authTools: new FakeElement(),
       authModalBackdrop: new FakeElement(),
       authModal: new FakeElement(),
       authGoogleButton: new FakeElement(),
+      authGoogleTermsInput: { checked: true },
       authTurnstile: new FakeElement(),
       authTurnstileToken: { value: "" },
       authPasswordForm: new FakeElement(),
       authLoginModeButton: new FakeElement(),
       authRegisterModeButton: new FakeElement(),
+      authBackButton: new FakeElement(),
       authNicknameInput: new FakeElement(),
       authEmailInput: new FakeElement(),
+      authAgeInput: new FakeElement(),
       authPasswordInput: new FakeElement(),
+      authTermsField: new FakeElement(),
+      authTermsInput: new FakeElement(),
+      authCodeInput: new FakeElement(),
       authPasswordButton: new FakeElement(),
+      authSendCodeAgainButton: new FakeElement(),
       closeAuthModalButton: new FakeElement()
     };
-    dom.authEmailInput.value = "new@example.com";
-    dom.authPasswordInput.value = "password123";
-    dom.authNicknameInput.value = "Nuevo";
+    dom.authLoginModeButton.dataset.authMode = "login";
+    dom.authRegisterModeButton.dataset.authMode = "register";
 
     try {
       globalThis.Element = FakeElement;
       globalThis.HTMLElement = FakeElement;
+      globalThis.requestAnimationFrame = (task) => {
+        task();
+        return 0;
+      };
       globalThis.document = {
         documentElement: { dataset: {} },
+        activeElement: null,
         addEventListener() {},
         querySelector() {
           return null;
@@ -4249,8 +5533,12 @@ await (async () => {
         async getAuthStatus() {
           return { turnstile: { configured: false, siteKey: null } };
         },
-        async registerWithPassword(payload) {
-          registeredPayload = payload;
+        async requestEmailAuthCode(payload) {
+          requestedChallengePayload = payload;
+          return { challengeId: "email-code-register-topic", email: payload.email };
+        },
+        async verifyEmailAuthCode(payload) {
+          verifiedPayload = payload;
           state.viewer = { id: "u-new", type: "registered" };
           return {
             viewer: state.viewer,
@@ -4263,22 +5551,326 @@ await (async () => {
 
       authButton.dispatch("click");
       await flushAsyncEvents();
+
       state.selectedTopicId = "topic-after-modal-open";
       dom.authRegisterModeButton.dispatch("click");
+
+      assert.equal(dom.authPasswordForm.dataset.authStep, "credentials");
+      assert.equal(dom.authBackButton.hidden, true);
+
+      dom.authEmailInput.value = "email-invalido";
+      dom.authPasswordInput.value = "corta";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authPasswordForm.dataset.authStep, "credentials");
+      assert.equal(requestedChallengePayload, null);
+      assert.equal(dom.authEmailInput["aria-invalid"], "true");
+      assert.equal(dom.authPasswordInput["aria-invalid"], "true");
+      assert.equal(
+        dom.authPasswordButton.textContent,
+        "Completa tu email y contraseña."
+      );
+
+      dom.authEmailInput.value = "new@example.com";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authEmailInput["aria-invalid"], "false");
+      assert.equal(dom.authPasswordInput["aria-invalid"], "true");
+      assert.equal(dom.authPasswordButton.textContent, "La contraseña debe tener al menos 8 caracteres.");
+
+      dom.authPasswordInput.value = "password123";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authPasswordForm.dataset.authStep, "profile");
+      assert.equal(dom.authBackButton.hidden, false);
+      assert.equal(globalThis.document.activeElement, dom.authNicknameInput);
+      assert.equal(dom.authEmailInput.value, "new@example.com");
+      assert.equal(dom.authPasswordInput.value, "password123");
+      assert.equal(requestedChallengePayload, null);
+
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authPasswordForm.dataset.authStep, "profile");
+      assert.equal(requestedChallengePayload, null);
+      assert.equal(dom.authNicknameInput["aria-invalid"], "true");
+      assert.equal(dom.authAgeInput["aria-invalid"], "true");
+      assert.equal(dom.authTermsInput["aria-invalid"], "true");
+      assert.equal(
+        dom.authPasswordButton.textContent,
+        "El nombre de usuario debe tener 3 a 24 caracteres y empezar con una letra."
+      );
+
+      dom.authNicknameInput.value = "Nuevo";
+      dom.authTermsInput.checked = true;
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authNicknameInput["aria-invalid"], "false");
+      assert.equal(dom.authAgeInput["aria-invalid"], "true");
+      assert.equal(dom.authTermsInput["aria-invalid"], "false");
+      assert.equal(dom.authPasswordButton.textContent, "Completa tu fecha de nacimiento.");
+
+      dom.authAgeInput.value = "15";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(
+        dom.authPasswordButton.textContent,
+        `Debes tener al menos ${MINIMUM_REGISTRATION_AGE} años para registrarte.`
+      );
+
+      dom.authAgeInput.value = String(MINIMUM_REGISTRATION_AGE);
+      dom.authTermsInput.checked = false;
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authAgeInput["aria-invalid"], "false");
+      assert.equal(dom.authTermsInput["aria-invalid"], "true");
+      assert.equal(dom.authPasswordButton.textContent, "Acepta los Términos y Condiciones para continuar.");
+
+      dom.authTermsInput.checked = true;
+      dom.authBackButton.dispatch("click");
+
+      assert.equal(dom.authPasswordForm.dataset.authStep, "credentials");
+      assert.equal(dom.authNicknameInput.value, "Nuevo");
+      assert.equal(dom.authAgeInput.value, String(MINIMUM_REGISTRATION_AGE));
+
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
       dom.authPasswordForm.dispatch("submit");
       await flushAsyncEvents();
       await flushAsyncEvents();
 
-      assert.equal(registeredPayload?.selectedTopicId, "topic-original");
+      assert.equal(requestedChallengePayload?.password, "password123");
+      assert.equal(requestedChallengePayload?.nickname, "Nuevo");
+      assert.equal(dom.authPasswordForm.dataset.authStep, "verify");
+      assert.equal(dom.authBackButton.hidden, true);
+      assert.equal(dom.authLoginModeButton.disabled, true);
+      assert.equal(dom.authRegisterModeButton.disabled, true);
+      assert.equal(dom.authModalBackdrop.hidden, false);
+
+      dom.authBackButton.dispatch("click");
+      assert.equal(dom.authPasswordForm.dataset.authStep, "verify");
+
+      dom.authCodeInput.value = "12";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authCodeInput["aria-invalid"], "true");
+      assert.equal(
+        dom.authPasswordButton.textContent,
+        "Ingresa el código de 6 dígitos que te enviamos por email."
+      );
+      assert.equal(dom.authPasswordForm.dataset.authStep, "verify");
+
+      dom.authCodeInput.value = "654321";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(verifiedPayload?.selectedTopicId, "topic-original");
       assert.equal(dom.authModalBackdrop.hidden, true);
+      assert.equal(dom.authPasswordForm.dataset.authStep, "credentials");
+      assert.equal(dom.authEmailInput.value, "");
+      assert.equal(dom.authPasswordInput.value, "");
+      assert.equal(dom.authNicknameInput.value, "");
+      assert.equal(dom.authAgeInput.value, "");
+      assert.equal(dom.authCodeInput.value, "");
+      assert.equal(dom.authTermsInput.checked, false);
     } finally {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
       globalThis.document = previousDocument;
       globalThis.Element = previousElement;
       globalThis.HTMLElement = previousHTMLElement;
     }
   });
 
-  await test("auth modal shows recovery help after three invalid password attempts", async () => {
+  await test("auth modal auto-opens the register profile step to complete a pending Google account, not the edit-profile modal", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.className = "";
+        this.textContent = "";
+        this.value = "";
+        this.parentElement = null;
+        this.classList = createClassList();
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector() {
+        return null;
+      }
+
+      querySelectorAll() {
+        return [];
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {
+        if (globalThis.document) {
+          globalThis.document.activeElement = this;
+        }
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+    }
+
+    const state = {
+      viewer: { id: "u-oidc-pending", type: "registered", profilePending: true, profileSuggestedName: "Abril" },
+      selectedTopicId: "topic-original"
+    };
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    let completedProfilePayload = null;
+
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      openRightDrawer: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      themeToggleDesktopSlot: new FakeElement(),
+      themeToggleMobileSlot: new FakeElement(),
+      themeToggleDrawerSlot: new FakeElement(),
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      authButton,
+      authTools: new FakeElement(),
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authModalTitle: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authBackButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authAgeInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authTermsField: new FakeElement(),
+      authTermsInput: new FakeElement(),
+      authCodeInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
+      authSendCodeAgainButton: new FakeElement(),
+      closeAuthModalButton: new FakeElement()
+    };
+    dom.authLoginModeButton.dataset.authMode = "login";
+    dom.authRegisterModeButton.dataset.authMode = "register";
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.requestAnimationFrame = (task) => {
+        task();
+        return 0;
+      };
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        activeElement: null,
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        state,
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {},
+        async getAuthStatus() {
+          return { turnstile: { configured: false, siteKey: null } };
+        },
+        async completeOidcProfile(payload) {
+          completedProfilePayload = payload;
+          state.viewer = { id: "u-oidc-pending", type: "registered", profilePending: false };
+          return { viewer: state.viewer, users: [], topics: [] };
+        }
+      });
+
+      // bindTopbarActionEvents syncs the auth UI once on init, which must already
+      // detect the pending Google profile and open the register modal's profile step.
+      assert.equal(dom.authModalBackdrop.hidden, false);
+      assert.equal(dom.authPasswordForm.dataset.authStep, "profile");
+      assert.equal(dom.authModalTitle.textContent, "Completa tu registro");
+      assert.equal(dom.authLoginModeButton.disabled, true);
+      assert.equal(dom.authRegisterModeButton.disabled, true);
+      assert.equal(dom.authBackButton.hidden, false);
+      assert.equal(dom.authBackButton.textContent, "Más tarde");
+
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authNicknameInput["aria-invalid"], "true");
+      assert.equal(completedProfilePayload, null);
+
+      dom.authNicknameInput.value = "Abril";
+      dom.authAgeInput.value = String(MINIMUM_REGISTRATION_AGE);
+      dom.authTermsInput.checked = true;
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(completedProfilePayload?.username, "Abril");
+      assert.equal(completedProfilePayload?.age, MINIMUM_REGISTRATION_AGE);
+      assert.equal(completedProfilePayload?.acceptedTerms, true);
+      assert.equal(dom.authModalBackdrop.hidden, true);
+    } finally {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+
+  await test("auth modal marks an invalid email code field in red until the user edits it", async () => {
     const previousDocument = globalThis.document;
     const previousElement = globalThis.Element;
     const previousHTMLElement = globalThis.HTMLElement;
@@ -4329,13 +5921,11 @@ await (async () => {
     const authButton = new FakeElement();
     authButton.label = { textContent: "" };
     const authStatus = new FakeElement();
-    const authRecoveryHelp = new FakeElement();
-    authRecoveryHelp.hidden = true;
     const state = {
-      viewer: { id: "guest-invalid-password", type: "guest" },
+      viewer: { id: "guest-invalid-code", type: "guest" },
       selectedTopicId: "topic-auth"
     };
-    let loginAttempts = 0;
+    let verifyAttempts = 0;
 
     const dom = {
       themeToggle: new FakeElement(),
@@ -4355,7 +5945,6 @@ await (async () => {
       createTopicButton: new FakeElement(),
       friendRequestsButton: new FakeElement(),
       notificationsButton: new FakeElement(),
-      messagesButton: new FakeElement(),
       authButton,
       authTools: new FakeElement(),
       authModalBackdrop: new FakeElement(),
@@ -4369,15 +5958,17 @@ await (async () => {
       authRegisterModeButton: new FakeElement(),
       authNicknameInput: new FakeElement(),
       authEmailInput: new FakeElement(),
-      authPasswordInput: new FakeElement(),
+      authAgeInput: new FakeElement(),
+      authCodeInput: new FakeElement(),
+      authTermsField: new FakeElement(),
+      authTermsInput: new FakeElement(),
       authPasswordButton: new FakeElement(),
-      authRecoveryHelp,
+      authSendCodeAgainButton: new FakeElement(),
       closeAuthModalButton: new FakeElement()
     };
     dom.authLoginModeButton.dataset.authMode = "login";
     dom.authRegisterModeButton.dataset.authMode = "register";
-    dom.authEmailInput.value = "user@example.com";
-    dom.authPasswordInput.value = "wrong-password";
+    dom.authPasswordInput = new FakeElement();
 
     try {
       globalThis.Element = FakeElement;
@@ -4409,37 +6000,585 @@ await (async () => {
         async getAuthStatus() {
           return { turnstile: { configured: false, siteKey: null } };
         },
-        async loginWithPassword() {
-          loginAttempts += 1;
-          const error = new Error("Email o contrasena incorrectos.");
-          error.code = "INVALID_CREDENTIALS";
+        async requestEmailAuthCode() {
+          return {
+            challengeId: "email-code-test",
+            email: "user@example.com"
+          };
+        },
+        async verifyEmailAuthCode() {
+          verifyAttempts += 1;
+          const error = new Error("El codigo ingresado no es correcto.");
+          error.code = "INVALID_EMAIL_CODE";
           throw error;
         }
       });
 
       authButton.dispatch("click");
       await flushAsyncEvents();
+      dom.authRegisterModeButton.dispatch("click");
+      dom.authEmailInput.value = "user@example.com";
+      dom.authPasswordInput.value = "password123";
+      dom.authNicknameInput.value = "Coco_mora";
+      dom.authAgeInput.value = String(MINIMUM_REGISTRATION_AGE);
+      dom.authTermsInput.checked = true;
 
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        dom.authPasswordForm.dispatch("submit");
-        await flushAsyncEvents();
-        await flushAsyncEvents();
-        assert.equal(authRecoveryHelp.hidden, true);
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      dom.authCodeInput.value = "123456";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(verifyAttempts, 1);
+      assert.equal(dom.authCodeInput["aria-invalid"], "true");
+      assert.match(authStatus.textContent, /codigo ingresado/);
+
+      dom.authCodeInput.dispatch("input");
+      assert.equal(dom.authCodeInput["aria-invalid"], "false");
+    } finally {
+      console.error = previousConsoleError;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+  await test("auth modal walks the password recovery flow from request to confirmation", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousConsoleError = console.error;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.textContent = "";
+        this.value = "";
+        this.classList = createClassList();
       }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        return selector === ".button-label" ? this.label : null;
+      }
+
+      querySelectorAll() {
+        return [];
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {}
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const authStatus = new FakeElement();
+    const state = {
+      viewer: { id: "guest-recovery", type: "guest" },
+      selectedTopicId: "topic-auth"
+    };
+    let resetRequest = null;
+    let resetConfirm = null;
+
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      openRightDrawer: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      themeToggleDesktopSlot: new FakeElement(),
+      themeToggleMobileSlot: new FakeElement(),
+      themeToggleDrawerSlot: new FakeElement(),
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      authButton,
+      authTools: new FakeElement(),
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
+      authStatus,
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authEmailField: new FakeElement(),
+      authAgeInput: new FakeElement(),
+      authCodeInput: new FakeElement(),
+      authTermsField: new FakeElement(),
+      authTermsInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authPasswordField: new FakeElement(),
+      authPasswordConfirmInput: new FakeElement(),
+      authPasswordConfirmField: new FakeElement(),
+      authPasswordButton: new FakeElement(),
+      authRecoveryButton: new FakeElement(),
+      authBackButton: new FakeElement(),
+      authSendCodeAgainButton: new FakeElement(),
+      closeAuthModalButton: new FakeElement()
+    };
+    dom.authLoginModeButton.dataset.authMode = "login";
+    dom.authRegisterModeButton.dataset.authMode = "register";
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      console.error = () => {};
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        state,
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {},
+        async getAuthStatus() {
+          return { turnstile: { configured: false, siteKey: null } };
+        },
+        async requestPasswordResetCode(payload) {
+          resetRequest = payload;
+          return {
+            challengeId: "password-reset-test",
+            expiresInSeconds: 600,
+            message: "Si existe una cuenta con ese email, enviamos un código de recuperación."
+          };
+        },
+        async confirmPasswordReset(payload) {
+          resetConfirm = payload;
+          state.viewer = { id: "u-recovered", type: "registered" };
+          return { viewer: state.viewer, users: [], topics: [] };
+        }
+      });
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authModalBackdrop.hidden, false);
+      assert.equal(dom.authRecoveryButton.hidden, false);
+
+      dom.authRecoveryButton.dispatch("click");
+
+      assert.equal(dom.authPasswordForm.dataset.authMode, "recovery");
+      assert.equal(dom.authPasswordForm.dataset.authStep, "request");
+      assert.equal(dom.authEmailField.hidden, false);
+      assert.equal(dom.authPasswordField.hidden, true);
+      assert.equal(dom.authRecoveryButton.hidden, true);
+      assert.equal(dom.authBackButton.hidden, false);
+
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(resetRequest, null);
+      assert.equal(dom.authEmailInput["aria-invalid"], "true");
+
+      dom.authEmailInput.value = "person@example.com";
+      dom.authEmailInput.dispatch("input");
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(resetRequest?.email, "person@example.com");
+      assert.equal(dom.authPasswordForm.dataset.authStep, "verify");
+      assert.equal(dom.authEmailField.hidden, true);
+      assert.equal(dom.authPasswordField.hidden, false);
+      assert.equal(dom.authPasswordConfirmField.hidden, false);
+      assert.equal(dom.authSendCodeAgainButton.hidden, false);
+      // The restore label must follow the mode so error/pending flashes never
+      // revert the button to a previous mode's text.
+      assert.equal(dom.authPasswordButton.dataset.defaultAuthLabel, "Cambiar contraseña");
+
+      dom.authCodeInput.value = "123456";
+      dom.authPasswordInput.value = "password-nueva";
+      dom.authPasswordConfirmInput.value = "password-distinta";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(resetConfirm, null);
+      assert.equal(dom.authPasswordConfirmInput["aria-invalid"], "true");
+
+      dom.authPasswordConfirmInput.value = "password-nueva";
+      dom.authPasswordConfirmInput.dispatch("input");
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(resetConfirm?.challengeId, "password-reset-test");
+      assert.equal(resetConfirm?.code, "123456");
+      assert.equal(resetConfirm?.newPassword, "password-nueva");
+      assert.equal(dom.authModalBackdrop.hidden, true);
+    } finally {
+      console.error = previousConsoleError;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+  await test("switching between login and register clears the red error state on the continue button", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+    const previousConsoleError = console.error;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.textContent = "";
+        this.value = "";
+        this.classList = createClassList();
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        return selector === ".button-label" ? this.label : null;
+      }
+
+      querySelectorAll() {
+        return [];
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {}
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const authStatus = new FakeElement();
+    const state = {
+      viewer: { id: "guest-mode-switch", type: "guest" },
+      selectedTopicId: "topic-auth"
+    };
+
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      openRightDrawer: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      themeToggleDesktopSlot: new FakeElement(),
+      themeToggleMobileSlot: new FakeElement(),
+      themeToggleDrawerSlot: new FakeElement(),
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      authButton,
+      authTools: new FakeElement(),
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
+      authStatus,
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authAgeInput: new FakeElement(),
+      authCodeInput: new FakeElement(),
+      authTermsField: new FakeElement(),
+      authTermsInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
+      authSendCodeAgainButton: new FakeElement(),
+      closeAuthModalButton: new FakeElement()
+    };
+    dom.authLoginModeButton.dataset.authMode = "login";
+    dom.authRegisterModeButton.dataset.authMode = "register";
+    dom.authPasswordInput = new FakeElement();
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      console.error = () => {};
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        state,
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {},
+        async getAuthStatus() {
+          return { turnstile: { configured: false, siteKey: null } };
+        }
+      });
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+
+      dom.authEmailInput.value = "email-invalido";
+      dom.authPasswordInput.value = "corta";
+      dom.authPasswordForm.dispatch("submit");
+      await flushAsyncEvents();
+
+      assert.equal(dom.authPasswordButton.classList.contains("is-error"), true);
+      assert.equal(
+        dom.authPasswordButton.textContent,
+        "Completa tu email y contraseña."
+      );
+
+      dom.authRegisterModeButton.dispatch("click");
+
+      assert.equal(dom.authPasswordButton.classList.contains("is-error"), false);
+      assert.equal(dom.authPasswordButton.textContent, "Siguiente");
+    } finally {
+      console.error = previousConsoleError;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+    }
+  });
+  await test("auth modal submits login with a password instead of an email code even when the code input exists", async () => {
+    const previousDocument = globalThis.document;
+    const previousElement = globalThis.Element;
+    const previousHTMLElement = globalThis.HTMLElement;
+
+    class FakeElement {
+      constructor() {
+        this.dataset = {};
+        this.listeners = new Map();
+        this.hidden = false;
+        this.textContent = "";
+        this.value = "";
+        this.classList = createClassList();
+      }
+
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+
+      dispatch(type, event = {}) {
+        this.listeners.get(type)?.({
+          preventDefault() {},
+          stopImmediatePropagation() {},
+          ...event,
+          target: event.target || this
+        });
+      }
+
+      querySelector(selector) {
+        return selector === ".button-label" ? this.label : null;
+      }
+
+      querySelectorAll() {
+        return [];
+      }
+
+      setAttribute(name, value) {
+        this[name] = value;
+      }
+
+      append(child) {
+        child.parentElement = this;
+      }
+
+      focus() {}
+    }
+
+    const authButton = new FakeElement();
+    authButton.label = { textContent: "" };
+    const state = {
+      viewer: { id: "guest-login", type: "guest" },
+      selectedTopicId: "topic-login"
+    };
+    let loginCalls = 0;
+    let requestCodeCalls = 0;
+    let loggedInPayload = null;
+
+    const dom = {
+      themeToggle: new FakeElement(),
+      refreshButton: new FakeElement(),
+      messageForm: new FakeElement(),
+      profileButton: new FakeElement(),
+      openRightDrawer: new FakeElement(),
+      backToTopics: new FakeElement(),
+      storeButton: new FakeElement(),
+      paletteButton: new FakeElement(),
+      themeToggleDesktopSlot: new FakeElement(),
+      themeToggleMobileSlot: new FakeElement(),
+      themeToggleDrawerSlot: new FakeElement(),
+      closePaletteModalButton: new FakeElement(),
+      paletteModalBackdrop: new FakeElement(),
+      paletteOptionGrid: new FakeElement(),
+      createTopicButton: new FakeElement(),
+      friendRequestsButton: new FakeElement(),
+      notificationsButton: new FakeElement(),
+      authButton,
+      authTools: new FakeElement(),
+      authModalBackdrop: new FakeElement(),
+      authModal: new FakeElement(),
+      authGoogleButton: new FakeElement(),
+      authGoogleTermsInput: { checked: true },
+      authTurnstile: new FakeElement(),
+      authTurnstileToken: { value: "" },
+      authPasswordForm: new FakeElement(),
+      authLoginModeButton: new FakeElement(),
+      authRegisterModeButton: new FakeElement(),
+      authNicknameInput: new FakeElement(),
+      authEmailInput: new FakeElement(),
+      authAgeInput: new FakeElement(),
+      authPasswordInput: new FakeElement(),
+      authTermsField: new FakeElement(),
+      authTermsInput: new FakeElement(),
+      authCodeInput: new FakeElement(),
+      authPasswordButton: new FakeElement(),
+      authSendCodeAgainButton: new FakeElement(),
+      closeAuthModalButton: new FakeElement()
+    };
+    dom.authLoginModeButton.dataset.authMode = "login";
+    dom.authRegisterModeButton.dataset.authMode = "register";
+
+    try {
+      globalThis.Element = FakeElement;
+      globalThis.HTMLElement = FakeElement;
+      globalThis.document = {
+        documentElement: { dataset: {} },
+        addEventListener() {},
+        querySelector() {
+          return null;
+        }
+      };
+
+      bindTopbarActionEvents(dom, {
+        state,
+        toggleTheme() {},
+        refreshCurrentTopic() {},
+        submitMessage() {},
+        flashTitle() {},
+        backToTopics() {},
+        openPaletteModal() {},
+        closePaletteModal() {},
+        updateCustomPaletteHex() {
+          return true;
+        },
+        randomizeCustomPalette() {},
+        selectPalette() {},
+        createNewTopic() {},
+        async getAuthStatus() {
+          return { turnstile: { configured: false, siteKey: null } };
+        },
+        async loginWithPassword(payload) {
+          loginCalls += 1;
+          loggedInPayload = payload;
+          state.viewer = { id: "u-login", type: "registered" };
+          return {
+            viewer: state.viewer,
+            selectedTopicId: payload.selectedTopicId,
+            users: [],
+            topics: []
+          };
+        },
+        async requestEmailAuthCode() {
+          requestCodeCalls += 1;
+          return { challengeId: "should-not-be-used", email: "login-user@example.com" };
+        }
+      });
+
+      authButton.dispatch("click");
+      await flushAsyncEvents();
+      dom.authEmailInput.value = "login-user@example.com";
+      dom.authPasswordInput.value = "password123";
 
       dom.authPasswordForm.dispatch("submit");
       await flushAsyncEvents();
       await flushAsyncEvents();
 
-      assert.equal(loginAttempts, 3);
-      assert.equal(authRecoveryHelp.hidden, false);
-      assert.match(authStatus.textContent, /enlace de recuperacion/);
-
-      dom.authPasswordInput.dispatch("input");
-      assert.equal(authRecoveryHelp.hidden, true);
-      assert.equal(authStatus.hidden, true);
+      assert.equal(loginCalls, 1);
+      assert.equal(requestCodeCalls, 0);
+      assert.equal(loggedInPayload?.email, "login-user@example.com");
+      assert.equal(loggedInPayload?.password, "password123");
+      assert.equal(dom.authModalBackdrop.hidden, true);
     } finally {
-      console.error = previousConsoleError;
       globalThis.document = previousDocument;
       globalThis.Element = previousElement;
       globalThis.HTMLElement = previousHTMLElement;
@@ -4556,7 +6695,6 @@ await (async () => {
           createTopicButton: new FakeElement(),
           friendRequestsButton: new FakeElement(),
           notificationsButton: new FakeElement(),
-          messagesButton: new FakeElement(),
           authButton,
           authTools: new FakeElement(),
           authModalBackdrop: new FakeElement(),
@@ -4728,12 +6866,12 @@ await (async () => {
           createTopicButton: new FakeElement(),
           friendRequestsButton: new FakeElement(),
           notificationsButton: new FakeElement(),
-          messagesButton: new FakeElement(),
           authButton,
           authTools: new FakeElement(),
           authModalBackdrop: new FakeElement(),
           authModal: new FakeElement(),
           authGoogleButton,
+          authGoogleTermsInput: { checked: true },
           authTurnstile,
           authTurnstileToken,
           authPasswordForm: new FakeElement(),
@@ -4976,12 +7114,12 @@ await (async () => {
       createTopicButton: new FakeElement(),
       friendRequestsButton: new FakeElement(),
       notificationsButton: new FakeElement(),
-      messagesButton: new FakeElement(),
       authButton,
       authTools,
       authModalBackdrop: new FakeElement(),
       authModal: new FakeElement(),
       authGoogleButton: new FakeElement(),
+      authGoogleTermsInput: { checked: true },
       authTurnstile: new FakeElement(),
       authTurnstileToken: { value: "" },
       authPasswordForm: new FakeElement(),
@@ -5094,7 +7232,7 @@ await (async () => {
       assert.equal(menuAuthButton.hidden, false);
       assert.equal(loginCalls, 1);
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
-      assert.equal(flashCalls.at(-1), "Sesion iniciada");
+      assert.equal(flashCalls.at(-1), "Sesión iniciada");
       assert.equal(authButton.hidden, true);
 
       usersPanelButton.setAttribute = FakeElement.prototype.setAttribute;
@@ -5138,7 +7276,7 @@ await (async () => {
 
       assert.equal(logoutCalls, 0);
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
-      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesion");
+      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesión");
 
       mobileTopbarMenu.dispatch("click", { target: menuAuthButton });
       await flushAsyncEvents();
@@ -5234,7 +7372,17 @@ await (async () => {
     const authButton = new FakeElement();
     authButton.label = { textContent: "" };
     const authGoogleButton = new FakeElement();
+    authGoogleButton.authLabel = { textContent: "Continuar con Google" };
+    authGoogleButton.querySelector = (selector) =>
+      [".auth-google-button__label", "span:last-child", "span"].includes(selector)
+        ? authGoogleButton.authLabel
+        : null;
+    const authStatus = new FakeElement();
     const flashCalls = [];
+    let resolveRedirect;
+    const redirectPromise = new Promise((resolve) => {
+      resolveRedirect = resolve;
+    });
     const state = {
       viewer: { id: "guest-redirect", type: "guest" }
     };
@@ -5274,14 +7422,15 @@ await (async () => {
           createTopicButton: new FakeElement(),
           friendRequestsButton: new FakeElement(),
           notificationsButton: new FakeElement(),
-          messagesButton: new FakeElement(),
           authButton,
           authTools: new FakeElement(),
           authModalBackdrop: new FakeElement(),
           authModal: new FakeElement(),
           authGoogleButton,
+          authGoogleTermsInput: { checked: true },
           authTurnstile: new FakeElement(),
           authTurnstileToken: { value: "" },
+          authStatus,
           authPasswordForm: new FakeElement(),
           authLoginModeButton: new FakeElement(),
           authRegisterModeButton: new FakeElement(),
@@ -5300,7 +7449,7 @@ await (async () => {
           },
           state,
           async login() {
-            return { redirected: true };
+            return redirectPromise;
           },
           async logout() {},
           backToTopics() {},
@@ -5321,9 +7470,23 @@ await (async () => {
       await flushAsyncEvents();
       await flushAsyncEvents();
 
+      assert.equal(authGoogleButton.authLabel.textContent, "Continuar con Google");
+      assert.equal(authGoogleButton["aria-busy"], "true");
+      assert.equal(authGoogleButton.disabled, true);
+      assert.equal(authStatus.textContent, "");
+      assert.equal(authStatus.hidden, false);
+      assert.equal(authStatus.dataset.statusKind, "off");
       assert.deepEqual(flashCalls, []);
       assert.equal(state.viewer.type, "guest");
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
+
+      resolveRedirect({ redirected: true });
+      await flushAsyncEvents();
+      await flushAsyncEvents();
+
+      assert.equal(authGoogleButton.authLabel.textContent, "Continuar con Google");
+      assert.equal(authGoogleButton["aria-busy"], "false");
+      assert.equal(authGoogleButton.disabled, false);
     } finally {
       globalThis.document = previousDocument;
       globalThis.Element = previousElement;
@@ -5371,6 +7534,125 @@ await (async () => {
     }
   });
 
+  await test("quote action writes author and message lines with cursor after the quote", () => {
+    const quotedMessage = createMessage("u2", "Mensaje citado con    espacios", 0, "user", 1_700_000_070_000);
+    quotedMessage.id = "message-quoted";
+    const topics = [{ id: "topic-quote", title: "Tema", messages: [quotedMessage] }];
+    const users = [{ id: "u2", name: "Sergio13134" }];
+    const state = {
+      topics,
+      users,
+      selectedTopicId: "topic-quote",
+      unreadTopicIds: [],
+      followedTopicIds: []
+    };
+    const selection = [];
+    const messageInput = {
+      value: "",
+      maxLength: 240,
+      scrollTop: 0,
+      scrollHeight: 118,
+      focusOptions: null,
+      focus(options = null) {
+        this.focusOptions = options;
+      },
+      setSelectionRange(start, end) {
+        selection.push([start, end]);
+      }
+    };
+    let renderCalls = 0;
+    const actions = createChatActions({
+      state,
+      dom: { messageInput },
+      render: () => {
+        renderCalls += 1;
+      }
+    });
+
+    actions.quoteMessage("message-quoted");
+
+    const expectedQuote = "> @Sergio13134\n> Mensaje citado con espacios\n\n";
+    assert.equal(messageInput.value, expectedQuote);
+    assert.deepEqual(selection.at(-1), [expectedQuote.length, expectedQuote.length]);
+    assert.equal(messageInput.scrollTop, 118);
+    assert.equal(renderCalls, 1);
+  });
+
+  await test("quoted messages render the quote in a framed block above the reply", () => {
+    const previousDocument = globalThis.document;
+
+    class MockNode {
+      constructor(tagName) {
+        this.tagName = tagName;
+        this.children = [];
+        this.dataset = {};
+        this.attributes = new Map();
+        this.className = "";
+        this.textContent = "";
+        this.hidden = false;
+        this.classList = {
+          add: (...tokens) => {
+            this.className = [this.className, ...tokens].filter(Boolean).join(" ");
+          },
+          contains: (token) => this.className.split(/\s+/).includes(token)
+        };
+      }
+
+      append(...nodes) {
+        this.children.push(...nodes);
+      }
+
+      appendChild(node) {
+        this.children.push(node);
+        return node;
+      }
+
+      setAttribute(name, value) {
+        this.attributes.set(name, value);
+      }
+
+      querySelectorAll(selector) {
+        const matches = [];
+        const visit = (node) => {
+          if (selector === "button" && node.tagName === "button") {
+            matches.push(node);
+          }
+          node.children.forEach(visit);
+        };
+        this.children.forEach(visit);
+        return matches;
+      }
+    }
+
+    function findByClass(node, className) {
+      if (node.className.split(/\s+/).includes(className)) {
+        return node;
+      }
+      for (const child of node.children) {
+        const match = findByClass(child, className);
+        if (match) {
+          return match;
+        }
+      }
+      return null;
+    }
+
+    try {
+      globalThis.document = {
+        createElement: (tagName) => new MockNode(tagName),
+        createElementNS: (namespace, tagName) => new MockNode(tagName)
+      };
+
+      const message = createMessage("u2", "> @Sergio13134\n> Mensaje citado\n\nRespuesta propia", 0, "user", 1_700_000_070_000);
+      const node = createMessageItem(message, [{ id: "u2", name: "Sergio13134" }]);
+
+      assert.equal(findByClass(node, "message__quote-author").textContent, "@Sergio13134");
+      assert.equal(findByClass(node, "message__quote-text").textContent, "Mensaje citado");
+      assert.equal(findByClass(node, "message__text").textContent, "Respuesta propia");
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
   await test("source files stay free of mojibake markers", async () => {
     const files = await collectSourceFiles(rootDir);
     const offenders = [];
@@ -5437,7 +7719,7 @@ await (async () => {
     const backendStore = await read("services/backend-store.js");
     assert.match(
       previewServer,
-      /const authLoginResponse = await authService\.createLoginResponse[\s\S]*await authService\.validateTurnstile/
+      /await authService\.validateTurnstile[\s\S]*const authLoginResponse = await authService\.createLoginResponse/
     );
     assert.match(
       previewServer,
@@ -5445,6 +7727,10 @@ await (async () => {
     );
     assert.match(previewServer, /segments\.some\(\(segment\) => segment\.startsWith\("\."\)\)/);
     assert.match(previewServer, /PUBLIC_SERVICE_MODULES/);
+    assert.match(
+      previewServer,
+      /socialWhatsapp: body\.socialWhatsapp,[\s\S]*socialInstagram: body\.socialInstagram,[\s\S]*socialTiktok: body\.socialTiktok,[\s\S]*socialFacebook: body\.socialFacebook,[\s\S]*socialTwitter: body\.socialTwitter,[\s\S]*socialDiscord: body\.socialDiscord,[\s\S]*profileShowSocial: body\.profileShowSocial !== false/
+    );
     assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES/);
     assert.match(previewServer, /PROTECTED_STATIC_ROOT_FILES/);
     assert.match(previewServer, /segments\[0\] === "services"/);
@@ -5463,8 +7749,9 @@ await (async () => {
     assert.match(previewServer, /"Content-Security-Policy"/);
     assert.match(previewServer, /base-uri 'self'/);
     assert.match(previewServer, /frame-ancestors 'none'/);
-    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: false \}\)/);
-    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: extension === "\.html" \}\)/);
+    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: false, req: (?:res\.req|req) \}\)/);
+    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: extension === "\.html", req: res\.req \}\)/);
+    assert.match(previewServer, /"Strict-Transport-Security"/);
     assert.match(previewServer, /DEFAULT_GUEST_CLEANUP_INTERVAL_MS/);
     assert.match(previewServer, /DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS/);
     assert.match(previewServer, /MAX_JSON_BODY_BYTES = 3 \* 1024 \* 1024/);
@@ -5481,6 +7768,10 @@ await (async () => {
     assert.match(backendStore, /created_at AS createdAt/);
     assert.match(backendStore, /profile_show_description AS profileShowDescription/);
     assert.match(backendStore, /profile_show_joined_at AS profileShowJoinedAt/);
+    assert.match(backendStore, /social_whatsapp AS socialWhatsapp/);
+    assert.match(backendStore, /profile_show_social AS profileShowSocial/);
+    assert.match(backendStore, /function normalizeSocialHandle\(value, label\)/);
+    assert.match(backendStore, /function normalizeSocialWhatsapp\(value\)/);
     assert.match(backendStore, /function getFrontendUsers\(db, viewerId, profileUserIds = \[\]\)/);
     assert.match(
       backendStore,
@@ -5550,12 +7841,27 @@ await (async () => {
     assert.match(html, /class="palette-modal__body"/);
     assert.match(html, /id="paletteOptionGrid"/);
     assert.match(html, /id="authGoogleButton"[\s\S]*id="authPasswordForm"/);
+    assert.doesNotMatch(html, /id="authGoogleTermsInput"/);
+    assert.match(
+      html,
+      /id="authGoogleButton"[^>]*disabled[\s\S]*Continuar con Google[\s\S]*auth-google-button__spinner/
+    );
     assert.match(html, /data-auth-mode="register">Crear cuenta<\/button>/);
+    assert.match(html, /id="authBackButton"[^>]*>[\s\S]*Volver[\s\S]*<\/button>/);
     assert.match(html, /Nombre de Usuario[\s\S]*id="authNicknameInput"/);
     assert.match(html, /Email[\s\S]*id="authEmailInput"[\s\S]*required/);
-    assert.match(html, /Contraseña[\s\S]*id="authPasswordInput"[\s\S]*required/);
+    assert.match(
+      html,
+      /Fecha de nacimiento[\s\S]*id="authBirthDay"[\s\S]*id="authBirthMonth"[\s\S]*id="authBirthYear"[\s\S]*id="authAgeInput"[\s\S]*type="hidden"[\s\S]*min="16"/
+    );
+    assert.match(
+      html,
+      /Código de acceso[\s\S]*id="authCodeBoxes"[\s\S]*(?:class="auth-code-box"[\s\S]*autocomplete="one-time-code"[\s\S]*){6}id="authCodeInput"[\s\S]*type="hidden"/
+    );
+    assert.match(html, /id="authTermsInput"[\s\S]*Términos y Condiciones/);
+    assert.match(html, /id="authSendCodeAgainButton"/);
     assert.match(html, /class="auth-field-error-marker"[\s\S]*>\*<\/span>/);
-    assert.doesNotMatch(html, /id="auth(?:Nickname|Email|Password)Input"[^>]*placeholder=/);
+    assert.doesNotMatch(html, /id="auth(?:Nickname|Email|Age|Code)Input"[^>]*placeholder=/);
     assert.match(html, /<h2 class="profile-modal__title">Perfil<\/h2>/);
     assert.match(
       html,
@@ -5591,6 +7897,23 @@ await (async () => {
       html,
       /id="profileDescriptionVisibilityButton"[\s\S]*data-profile-visibility="description"/
     );
+    assert.match(
+      html,
+      /id="profileSocialVisibilityButton"[\s\S]*data-profile-visibility="social"/
+    );
+    assert.match(html, /id="socialWhatsappInput"/);
+    assert.match(html, /id="socialInstagramInput"/);
+    assert.match(html, /id="socialTiktokInput"/);
+    assert.match(html, /id="socialFacebookInput"/);
+    assert.match(html, /id="socialTwitterInput"/);
+    assert.match(html, /id="socialDiscordInput"/);
+    assert.match(html, /id="publicProfileSocial"/);
+    assert.match(
+      html,
+      /id="socialWhatsappInput"[^>]*readonly[^>]*aria-readonly="true"[\s\S]*profile-modal__social-edit[\s\S]*type="button"[\s\S]*data-profile-social-edit/
+    );
+    assert.doesNotMatch(html, /profile-modal__social-edit" type="submit"/);
+    assert.match(styles, /\.profile-modal__social-field\.is-editing \.profile-modal__social-check-icon\s*\{[\s\S]*display:\s*block;/);
     assert.match(html, /id="profileAvatarPickButton"[\s\S]*Elegir avatar/);
     assert.doesNotMatch(
       html,
@@ -5891,35 +8214,35 @@ await (async () => {
     );
     assert.match(styles, /\.profile-modal__header\s*\{[\s\S]*padding:\s*16px 24px 14px;/);
     assert.match(styles, /\.profile-modal__title\s*\{[\s\S]*font-size:\s*1\.45rem;/);
-    assert.match(styles, /\.profile-modal__actions\s*\{[\s\S]*padding:\s*11px 24px;/);
+    assert.match(styles, /\.profile-modal__bottom-row\s*\{[\s\S]*grid-row:\s*4;[\s\S]*justify-content:\s*space-between;/);
     assert.match(
       styles,
       /\.profile-modal__actions \.primary-button,[\s\S]*\.profile-modal__actions \.text-button\s*\{[\s\S]*min-height:\s*38px;/
     );
     assert.match(
       styles,
-      /\.profile-modal__body\s*\{[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/
+      /\.profile-modal__body\s*\{[\s\S]*padding:\s*12px 18px 16px;/
     );
     assert.match(
       styles,
-      /\.profile-modal__preview\s*\{[\s\S]*grid-row:\s*2;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/
+      /\.profile-modal__preview\s*\{[\s\S]*grid-row:\s*2;[\s\S]*width:\s*min\(176px, 100%\);[\s\S]*justify-self:\s*center;/
     );
     assert.match(styles, /\.profile-modal__field--name\s*\{[\s\S]*grid-row:\s*1;/);
     assert.match(
       styles,
-      /\.profile-modal__field--avatar\s*\{[\s\S]*grid-row:\s*4;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/
+      /\.profile-modal__avatar-meta\s*\{[\s\S]*grid-row:\s*3;[\s\S]*justify-self:\s*center;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*border-bottom:\s*1px solid/
     );
     assert.match(
       styles,
-      /\.profile-modal__joined\s*\{[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*justify-self:\s*center;/
+      /\.profile-modal__joined\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/
     );
     assert.match(
       styles,
-      /\.profile-modal__visibility-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/
+      /\.profile-modal__visibility-button\s*\{[\s\S]*width:\s*30px;[\s\S]*height:\s*30px;/
     );
     assert.match(
       styles,
-      /\.profile-modal__field--description\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 4;/
+      /\.profile-modal__field--description\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 3;/
     );
     assert.match(
       styles,
@@ -5939,7 +8262,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.profile-modal__edit-button\s*\{[\s\S]*width:\s*34px;[\s\S]*height:\s*34px;/
+      /\.profile-modal__edit-button\s*\{[\s\S]*width:\s*30px;[\s\S]*height:\s*30px;/
     );
     assert.match(
       styles,
@@ -5984,11 +8307,15 @@ await (async () => {
     assert.match(styles, /\.public-profile-modal\s*\{[\s\S]*background:\s*var\(--bg\);/);
     assert.match(
       styles,
+      /\.public-profile-modal__social\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*3;[\s\S]*align-self:\s*start;[\s\S]*align-content:\s*flex-start;/
+    );
+    assert.match(
+      styles,
       /\.public-profile-modal \.profile-modal__header,[\s\S]*\.public-profile-modal \.public-profile-modal__actions\s*\{[\s\S]*background:\s*var\(--bg\);/
     );
     assert.match(
       styles,
-      /\.public-profile-modal__body\s*\{[\s\S]*grid-template-columns:\s*minmax\(220px, 260px\) minmax\(0, 1fr\);[\s\S]*min-height:\s*560px;[\s\S]*padding:\s*18px 28px 28px;/
+      /\.public-profile-modal__body\s*\{[\s\S]*grid-template-columns:\s*minmax\(220px, 260px\) minmax\(0, 1fr\);[\s\S]*padding:\s*18px 28px 28px;/
     );
     assert.match(
       styles,
@@ -5996,7 +8323,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.public-profile-modal__meta\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ span 3;[\s\S]*grid-template-rows:\s*auto minmax\(0, 1fr\);/
+      /\.public-profile-modal__meta\s*\{[\s\S]*grid-column:\s*2;[\s\S]*grid-row:\s*1 \/ 3;[\s\S]*min-height:\s*0;/
     );
     assert.match(
       styles,
@@ -6004,7 +8331,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.public-profile-modal__description\s*\{[\s\S]*height:\s*100%;[\s\S]*min-height:\s*100%;[\s\S]*border:\s*1px solid var\(--line-strong\);[\s\S]*border-radius:\s*0 0 8px 8px;/
+      /\.public-profile-modal__description\s*\{[\s\S]*min-height:\s*0;[\s\S]*overflow-y:\s*auto;[\s\S]*border:\s*1px solid var\(--line-strong\);[\s\S]*border-radius:\s*0 0 8px 8px;/
     );
     assert.match(
       styles,
@@ -6016,11 +8343,15 @@ await (async () => {
     );
     assert.match(
       styles,
+      /\.public-profile-modal__joined span\s*\{[\s\S]*display:\s*flex;[\s\S]*align-items:\s*center;[\s\S]*justify-content:\s*center;/
+    );
+    assert.match(
+      styles,
       /\.public-profile-modal__cafes\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*align-self:\s*stretch;/
     );
     assert.match(
       styles,
-      /\.public-profile-modal__cafes ul\s*\{[\s\S]*grid-template-rows:\s*repeat\(3, minmax\(0, 1fr\)\);/
+      /\.public-profile-modal__cafes ul\s*\{[\s\S]*display:\s*grid;[\s\S]*align-content:\s*start;[\s\S]*gap:\s*7px;/
     );
     assert.match(
       styles,
@@ -6057,7 +8388,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.auth-modal\s*\{[\s\S]*display:\s*grid;[\s\S]*box-sizing:\s*border-box;[\s\S]*overflow:\s*hidden;[\s\S]*height:\s*min\(540px, calc\(100vh - 40px\)\);/
+      /\.auth-modal\s*\{[\s\S]*display:\s*grid;[\s\S]*box-sizing:\s*border-box;[\s\S]*overflow:\s*hidden;[\s\S]*height:\s*min\(560px, calc\(100vh - 40px\)\);[\s\S]*max-height:\s*min\(620px, calc\(100vh - 40px\)\);/
     );
     assert.match(
       styles,
@@ -6077,16 +8408,13 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.auth-email-form\s*\{[\s\S]*display:\s*flex;[\s\S]*flex:\s*1 0 286px;[\s\S]*min-height:\s*286px;/
+      /\.auth-email-form\s*\{[\s\S]*display:\s*flex;[\s\S]*flex:\s*1 0 auto;[\s\S]*flex-direction:\s*column;/
     );
     assert.match(
       styles,
-      /\.auth-email-submit\s*\{[\s\S]*order:\s*4;[\s\S]*margin-top:\s*auto;/
+      /\.auth-email-submit\s*\{[\s\S]*order:\s*4;[\s\S]*min-height:\s*44px;/
     );
-    assert.match(
-      styles,
-      /\.auth-email-form:not\(\[data-auth-mode="register"\]\) \.auth-email-form__field\[for="authEmailInput"\]\s*\{[\s\S]*margin-top:\s*auto;/
-    );
+    assert.match(styles, /\.auth-form-actions\s*\{[\s\S]*?margin-top:\s*auto;[\s\S]*?\}/);
     assert.match(
       styles,
       /\.auth-mode-tabs\s*\{[\s\S]*grid-template-columns:\s*1fr 1fr;[\s\S]*border-radius:\s*8px;/
@@ -6481,7 +8809,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /html\.is-mobile-viewport \.drawer\s*\{[\s\S]*width:\s*min\(84vw,\s*360px\);[\s\S]*max-width:\s*calc\(100vw - 52px\);/
+      /html\.is-mobile-viewport \.drawer\s*\{[\s\S]*width:\s*100%;[\s\S]*max-width:\s*none;/
     );
     assert.match(
       styles,
@@ -6671,13 +8999,18 @@ await (async () => {
     );
     assert.match(
       styles,
-      /textarea\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*hidden;[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*max-height:\s*10rem;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb\) transparent;/
+      /textarea\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*hidden;[\s\S]*overflow-wrap:\s*anywhere;[\s\S]*max-height:\s*10rem;[\s\S]*scrollbar-color:\s*var\(--scrollbar-thumb\) transparent;[\s\S]*scrollbar-gutter:\s*stable;/
     );
     assert.match(
       styles,
       /textarea::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--scrollbar-thumb\);[\s\S]*border-radius:\s*999px;[\s\S]*background-clip:\s*content-box;/
     );
-    assert.match(styles, /textarea\.is-scrollable\s*\{[\s\S]*overflow-y:\s*auto;/);
+    assert.match(html, /<label class="composer__field composer__field--message">/);
+    assert.match(styles, /\.composer__field--message\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*16px;/);
+    assert.match(styles, /#messageInput\s*\{[\s\S]*height:\s*74px;[\s\S]*min-height:\s*74px;[\s\S]*max-height:\s*74px;/);
+    assert.match(styles, /#messageInput\.is-scrollable\s*\{[\s\S]*clip-path:\s*inset\(0 round 16px\);/);
+    assert.match(styles, /\.composer--topic-create #messageInput\s*\{[\s\S]*height:\s*130px;[\s\S]*min-height:\s*130px;[\s\S]*max-height:\s*130px;/);
+    assert.match(styles, /textarea\.is-scrollable\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*background-clip:\s*padding-box;/);
     assert.match(
       styles,
       /#messageInput:not\(\.is-scrollable\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*0;[\s\S]*height:\s*0;/
@@ -6702,11 +9035,12 @@ await (async () => {
       styles,
       /html\[data-theme="light"\] \.rankings-section\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top:\s*1px solid/
     );
-    assert.match(app, /from "\.\/controller\.js\?v=20260709-palettefocus5"/);
+    assert.match(app, /from "\.\/controller\.js\?v=20260709-topicrace1"/);
     assert.match(components, /createProfileAvatar/);
     assert.match(components, /message__avatar/);
     assert.match(components, /Abrir opciones de reaccion del mensaje de/);
     assert.match(components, /Marcar me gusta en el mensaje de/);
+    assert.doesNotMatch(components, /disabled = hasViewerReaction/);
     assert.match(components, /Marcar no me gusta en el mensaje de/);
     assert.match(components, /Reportar mensaje de/);
     assert.match(components, /Abrir perfil de/);
@@ -6744,7 +9078,7 @@ await (async () => {
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
     assert.match(
       controller,
-      /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260709-palettefocus5";/
+      /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260709-topicrace1";/
     );
     assert.match(controllerApp, /from "\.\/ui\/transition-utils\.js"/);
     assert.match(controllerTheme, /export function applyStoredTheme/);
@@ -6756,10 +9090,11 @@ await (async () => {
     assert.match(controllerViewport, /syncRankingListHeights/);
     assert.match(controllerApp, /from "\.\/app-store\.js"/);
     assert.match(controllerApp, /from "\.\/ui\/dom\.js"/);
-    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260709-palettefocus5"/);
-    assert.match(controllerApp, /from "\.\/controller-actions\.js\?v=20260709-palettefocus5"/);
+    assert.match(controllerApp, /quoteMessage: actions\.quoteMessage/);
+    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260709-topicrace1"/);
+    assert.match(controllerApp, /from "\.\/controller-actions\.js\?v=20260709-topicrace1"/);
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
-    assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260709-palettefocus5"/);
+    assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260709-topicrace1"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
     assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;/);
     assert.match(
@@ -6781,7 +9116,7 @@ await (async () => {
       controllerApp,
       /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/
     );
-    assert.match(actions, /from "\.\/services\/api\.js\?v=20260709-palettefocus5"/);
+    assert.match(actions, /from "\.\/services\/api\.js\?v=20260709-topicrace1"/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
     assert.match(actions, /openPaletteModal/);
@@ -6817,7 +9152,7 @@ await (async () => {
     assert.match(palettes, /export function parseHexColor/);
     assert.match(responsiveController, /export function createResponsiveHelpers/);
     assert.match(renderController, /export function createRenderers/);
-    assert.match(renderController, /from "\.\/ui\/palette-modal\.js\?v=20260709-palettefocus5"/);
+    assert.match(renderController, /from "\.\/ui\/palette-modal\.js\?v=20260709-topicrace1"/);
     assert.match(renderController, /renderPaletteModal/);
     assert.match(renderController, /renderPublicProfileModal/);
     assert.match(chat, /renderChat/);
@@ -6828,7 +9163,10 @@ await (async () => {
     assert.match(chat, /Enviar comentario al tema seleccionado/);
     assert.match(chat, /No se pueden enviar mensajes en este tema cerrado/);
     assert.match(chatActions, /Inicia sesion o crea una cuenta para participar/);
-    assert.match(chatActions, /Motivo del reporte del usuario/);
+    assert.match(chatActions, /function openReportModal\(entityType, entityId/);
+    assert.match(chatActions, /function closeReportModal\(\)/);
+    assert.match(chatActions, /function submitReportModal\(reasonValue, customText/);
+    assert.doesNotMatch(chatActions, /window\.prompt/);
     assert.match(chatActions, /function getReactionScrollState\(trigger\)/);
     assert.match(chatActions, /restoreReactionScroll\(reactionScrollState\);/);
     assert.match(rankings, /renderRankings/);
@@ -6838,6 +9176,9 @@ await (async () => {
     assert.match(rankings, /syncRankingSkeletonHeights/);
     assert.match(rankings, /const GLOBAL_RANKING_FADE_MS = 150;/);
     assert.match(rankings, /function renderRankingTarget/);
+    assert.match(rankings, /onRendered\?\.\(\{ keyChanged, target \}\)/);
+    assert.match(rankings, /if \(keyChanged\) \{[\s\S]*scrollTop = 0;/);
+    assert.doesNotMatch(rankings, /syncRankingListHeights\(dom\);\s*resetRankingScroll\(dom\);/);
     assert.match(rankings, /setTimeout\(\(\) => \{[\s\S]*renderIntoTargets\(\[target\]/);
     assert.match(rankings, /is-ranking-fading/);
     assert.match(rankingPanelState, /export function syncRankingListHeights/);
@@ -6871,6 +9212,18 @@ await (async () => {
     assert.doesNotMatch(paletteModal, /palette-option__description/);
     assert.match(icons, /image\.width = 84;[\s\S]*image\.height = 84;/);
     assert.match(icons, /size: AVATAR_INTRINSIC_SIZE/);
+    assert.match(icons, /17\.472 14\.382/);
+    assert.match(icons, /9\.101 23\.691/);
+    assert.match(icons, /20\.317 4\.3698/);
+    assert.match(styles, /--social-color/);
+    assert.match(profileModal, /ensureSocialIcons/);
+    assert.match(profileModal, /export function setSocialFieldEditing/);
+    assert.match(profileModal, /input\.readOnly = !isEditing/);
+    assert.match(profileModal, /if \(justOpened \|\| input\.dataset\.renderedValue !== value\)/);
+    assert.match(topbarActionEvents, /setSocialFieldEditing\(field, !isEditing\)/);
+    assert.match(topbarActionEvents, /resetSocialEditing\(dom\);[\s\S]*handlers\.saveProfile\(event\)/);
+    assert.match(actions, /dispatch\(state, reducers\.mergeLiveTopics, payload\);[\s\S]*dispatch\(state, reducers\.setProfileModalOpen, false\);/);
+    assert.doesNotMatch(html, /profile-modal__social-prefix" aria-hidden="true">\+<\/span>/);
     assert.match(
       sharedBaseComponents,
       /svg\.setAttribute\("width", "84"\);[\s\S]*svg\.setAttribute\("height", "84"\);/
@@ -6906,12 +9259,25 @@ await (async () => {
     assert.match(publicProfileModal, /profileShowJoinedAt/);
     assert.match(publicProfileModal, /const publicAvatarUrl = isCurrentUser \? user\.avatarPendingUrl \|\| user\.avatarUrl \|\| "" : user\.avatarUrl \|\| "";/);
     assert.match(publicProfileModal, /getRecentUserCafes/);
+    assert.match(publicProfileModal, /isTopicAvailable/);
+    assert.match(publicProfileModal, /dataset.publicProfileTopicId/);
+    assert.match(publicProfileModal, /Ir al tema/);
     assert.match(publicProfileModal, /\u00daltimos temas/);
     assert.match(publicProfileModal, /publicProfileRecentCafes/);
     assert.match(publicProfileModal, /publicProfileDescription/);
     assert.match(publicProfileModal, /publicProfileJoinedAt/);
+    assert.match(publicProfileModal, /joinedAtContainer.hidden = !joinedDate.length/);
     assert.match(publicProfileModal, /publicProfileActions\.hidden = isCurrentUser/);
     assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isCurrentUser/);
+    assert.match(publicProfileModal, /profileShowSocial/);
+    assert.match(publicProfileModal, /publicProfileSocial/);
+    assert.match(publicProfileModal, /createSocialLinkButton/);
+    assert.match(publicProfileModal, /Redes sociales/);
+    assert.match(publicProfileModal, /public-profile-modal__social-empty/);
+    assert.match(html, /public-profile-modal__joined-label">Miembro desde/);
+    assert.ok(eventsModule.includes('dom.publicProfileRecentCafes.addEventListener("click",'));
+    assert.ok(eventsModule.includes("handlers.focusTopic?.(topicId)"));
+    assert.match(controllerApp, /focusTopic: actions.focusTopic/);
     assert.doesNotMatch(
       publicProfileModal,
       /comment|comentario|likes received|likesRecibidos|online|estado/i
@@ -6923,6 +9289,10 @@ await (async () => {
     assert.match(users, /renderUsers/);
     assert.match(users, /const isLoading = !state\.viewer/);
     assert.match(users, /if \(!ordered\.length\) \{\s*return \[\];\s*\}/);
+    assert.match(users, /user-item--leaving/);
+    assert.match(users, /buildMergedUserItemsForTarget/);
+    assert.match(users, /scheduleLeaveCleanup/);
+    assert.match(styles, /\.user-item--leaving/);
     assert.match(chat, /const isLoading = !state\.viewer/);
     assert.match(components, /export function createMessageSkeleton/);
     assert.match(chat, /createMessageSkeleton/);
@@ -6949,8 +9319,18 @@ await (async () => {
     assert.match(domModule, /paletteOptionGrid/);
     assert.match(domModule, /assertRequiredDom/);
     assert.match(domModule, /Missing required DOM nodes/);
-    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260709-palettefocus5"/);
+    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260709-topicrace1"/);
     assert.match(eventsModule, /syncComposerTextareaHeight/);
+    assert.match(eventsModule, /function shouldBlockTextareaInput\(textarea, event\)/);
+    assert.match(eventsModule, /messageInput\.addEventListener\("beforeinput", \(event\) => \{[\s\S]*event\.preventDefault\(\);/);
+    assert.match(eventsModule, /function positionFloatingMessageActionMenu\(menu\)/);
+    assert.match(eventsModule, /menu\.style\.position = "fixed"/);
+    assert.match(eventsModule, /document\.querySelector\(\`\[data-message-menu=/);
+    assert.match(eventsModule, /bodyRect\.bottom - menu\.offsetHeight - 8/);
+    assert.match(eventsModule, /document\.body\.append\(menu\)/);
+    assert.match(eventsModule, /function restoreMessageActionMenu\(menu\)/);
+    assert.match(eventsModule, /body\.insertBefore\(menu, body\.firstChild\)/);
+    assert.match(eventsModule, /if \(insideMessageActionMenu instanceof HTMLElement && dispatchMessageActionClick\(event\.target\)\) \{/);
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
     assert.match(
@@ -6962,13 +9342,19 @@ await (async () => {
       /messageInput\.addEventListener\("input", \(\) => \{[\s\S]*syncComposerTextareaHeight\(dom\.messageInput\);/
     );
     assert.match(chat, /export function syncComposerTextareaHeight/);
+    assert.match(chat, /textarea\.style\.height = ""/);
+    assert.doesNotMatch(chat, /textarea\.style\.height = `\$\{nextHeight\}px`/);
     assert.match(chat, /classList\.toggle\(\s*"is-scrollable"/);
     assert.match(previewServer, /const topicId = segments\[2\] \|\| "";/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
-    assert.match(styles, /\.message-stream\s*\{[\s\S]*padding:\s*0 16px 72px 0;[\s\S]*scroll-padding-bottom:\s*72px;/);
+    assert.match(styles, /\.message-stream\s*\{[\s\S]*padding:\s*0 16px 0 0;[\s\S]*scroll-padding-bottom:\s*0;/);
     assert.match(chat, /function getMessageBodyMeasuredScrollHeight\(body\)/);
+    assert.match(chat, /const MESSAGE_CARD_MIN_HEIGHT_PX = 112;/);
+    assert.match(chat, /Math\.max\(MESSAGE_CARD_MIN_HEIGHT_PX, getMessageBodyMeasuredScrollHeight\(body\)\)/);
+    assert.doesNotMatch(chat, /MESSAGE_LAST_CARD_MIN_HEIGHT_PX|lastElementChild/);
     assert.match(chat, /if \(card\.style\.minHeight !== nextMinHeight\)/);
     assert.match(chat, /\.message__action-menu:not\(\[hidden\]\), \.message__reaction-menu:not\(\[hidden\]\)/);
+    assert.match(styles, /\.message__action-menu\s*\{[\s\S]*top:\s*auto;[\s\S]*bottom:\s*8px;/);
     assert.match(
       styles,
       /\.message__reaction-menu\s*\{[\s\S]*display:\s*grid;[\s\S]*min-width:\s*112px;/
@@ -6994,7 +9380,7 @@ await (async () => {
     assert.match(renderUtils, /function shouldPreserveMessageLayoutStyle/);
     assert.match(renderUtils, /existing\.classList\?\.contains\?\.\("message"\)/);
     assert.match(drawers, /getTransitionDurationMs/);
-    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260709-palettefocus5"/);
+    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260709-topicrace1"/);
     assert.match(topbar, /bindTopbarEvents/);
     assert.match(topbarActionEvents, /openPaletteModal/);
     assert.match(topbarActionEvents, /closePaletteModal/);
@@ -7048,11 +9434,27 @@ await (async () => {
       /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/
     );
     assert.match(topbarActionEvents, /target\.dataset\.mobileTopbarAction === "auth"/);
-    assert.match(topbarActionEvents, /Toca de nuevo para cerrar sesion/);
-    assert.match(topbarActionEvents, /function validateAuthPasswordFields/);
-    assert.match(topbarActionEvents, /dom\.authPasswordForm\.dataset\.authMode = authPasswordMode/);
+    assert.match(topbarActionEvents, /Toca de nuevo para cerrar sesión/);
+    assert.match(topbarActionEvents, /function validateAuthEmailFields/);
+    assert.match(topbarActionEvents, /dom\.authPasswordForm\.dataset\.authMode = isAccountLink \? "link" : isRecovery \? "recovery" : authPasswordMode/);
+    assert.match(topbarActionEvents, /dom\.authPasswordForm\.dataset\.authStep =/);
+    assert.match(topbarActionEvents, /handlers\.requestEmailAuthCode/);
+    assert.match(topbarActionEvents, /handlers\.verifyEmailAuthCode/);
+    assert.match(topbarActionEvents, /handlers\.requestPasswordResetCode/);
+    assert.match(topbarActionEvents, /handlers\.confirmPasswordReset/);
+    assert.match(topbarActionEvents, /handlers\.startAccountLink/);
+    assert.match(topbarActionEvents, /addListener\(dom\.authRecoveryButton,\s*"click"/);
+    assert.match(topbarActionEvents, /addListener\(dom\.profileLinkGoogleButton,\s*"click"/);
     assert.match(topbarActionEvents, /setAuthFieldInvalid\(dom\.authNicknameInput, true\)/);
-    assert.match(topbarActionEvents, /setAuthStatusMessage\("Revisa los campos marcados\.", "error"\)/);
+    assert.match(topbarActionEvents, /const message = authValidationMessage \|\| "Revisa los campos marcados\."/);
+    assert.match(topbarActionEvents, /flashAuthButtonError\(dom\.authPasswordButton, message\)/);
+    assert.match(topbarActionEvents, /Ingresa un email válido/);
+    assert.match(topbarActionEvents, /La contraseña debe tener al menos 8 caracteres/);
+    assert.match(topbarActionEvents, /Completa tu fecha de nacimiento/);
+    assert.match(topbarActionEvents, /Debes tener al menos \$\{AUTH_MINIMUM_AGE\} años para registrarte/);
+    assert.match(topbarActionEvents, /Acepta los Términos y Condiciones para continuar/);
+    assert.match(topbarActionEvents, /Ingresa el código de 6 dígitos que te enviamos por email/);
+    assert.match(topbarActionEvents, /const authModalTitle = authOidcCompletion[\s\S]*?"Completa tu registro"[\s\S]*?"Recuperar contraseña"[\s\S]*?"Vincular con Google"[\s\S]*?"Regístrate" : "Iniciar Sesión"/);
     assert.match(topbarActionEvents, /requestLogoutConfirmation\(\)/);
     assert.match(topbarActionEvents, /data-mobile-topbar-action/);
     assert.match(topbarActionEvents, /setMobileDrawerPanel/);

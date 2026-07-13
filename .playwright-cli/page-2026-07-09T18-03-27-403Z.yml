@@ -1,0 +1,94 @@
+- generic [ref=f1e2]:
+  - banner [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - button "Paletas" [ref=f1e5] [cursor=pointer]:
+        - generic [ref=f1e11]: Paletas
+      - switch "Tema oscuro" [checked] [ref=f1e13] [cursor=pointer]:
+        - generic [ref=f1e14]:
+          - generic:
+            - generic:
+              - img
+            - generic:
+              - img
+    - generic "TOPYKLY" [ref=f1e16]:
+      - img [ref=f1e18]
+      - generic [ref=f1e23]:
+        - generic [ref=f1e24]: TOPY
+        - generic [ref=f1e25]: KLY
+    - button "Iniciar sesión" [ref=f1e27] [cursor=pointer]:
+      - generic [ref=f1e28]: Iniciar sesión
+  - main "Chat social" [ref=f1e29]:
+    - region "Temas" [ref=f1e30]:
+      - generic [ref=f1e31]:
+        - generic [ref=f1e35]:
+          - button "adada 1, Matias_velazco" [ref=f1e36] [cursor=pointer]:
+            - img [ref=f1e38]
+            - generic [ref=f1e42]:
+              - generic [ref=f1e43]: adada
+              - generic [ref=f1e44]: 1, Matias_velazco
+          - button "dasda 2, Matias_velazco" [ref=f1e45] [cursor=pointer]:
+            - img [ref=f1e47]
+            - generic [ref=f1e51]:
+              - generic [ref=f1e52]: dasda
+              - generic [ref=f1e53]: 2, Matias_velazco
+        - button "Crear nuevo tema de chat" [ref=f1e55] [cursor=pointer]: Crear nuevo tema
+    - region "Nuevo tema" [ref=f1e56]:
+      - generic [ref=f1e57]:
+        - textbox "Titulo del nuevo tema" [ref=f1e59]:
+          - /placeholder: Titulo del tema
+        - textbox "Primer mensaje del nuevo tema" [ref=f1e61]:
+          - /placeholder: Primer mensaje
+        - button "Crear tema con el primer mensaje" [ref=f1e62] [cursor=pointer]:
+          - generic [ref=f1e63]: Crear tema
+    - region "Comunidad" [ref=f1e64]:
+      - heading "Comunidad" [level=2] [ref=f1e68]
+      - generic [ref=f1e69]:
+        - generic [ref=f1e70]:
+          - generic [ref=f1e71]:
+            - img [ref=f1e73]
+            - heading "Usuarios conectados" [level=3] [ref=f1e76]
+          - generic [ref=f1e77]:
+            - article [ref=f1e78] [cursor=pointer]:
+              - 'button "Seleccionar usuario: Usuario" [ref=f1e80]':
+                - paragraph [ref=f1e81]: Usuario
+              - generic [ref=f1e82]:
+                - button "Ver perfil" [ref=f1e83]:
+                  - img [ref=f1e84]
+                - button "Mensaje directo" [ref=f1e87]:
+                  - img [ref=f1e88]
+            - article [ref=f1e90] [cursor=pointer]:
+              - 'button "Seleccionar usuario: Matias_velazco" [ref=f1e92]':
+                - paragraph [ref=f1e93]: Matias_velazco
+              - generic [ref=f1e94]:
+                - button "Ver perfil" [ref=f1e95]:
+                  - img [ref=f1e96]
+                - button "Mensaje directo" [ref=f1e99]:
+                  - img [ref=f1e100]
+        - generic [ref=f1e102]:
+          - generic [ref=f1e104]:
+            - img [ref=f1e106]
+            - heading "Ranking" [level=3] [ref=f1e109]
+          - group "Alcance del ranking" [ref=f1e111]:
+            - button "GLOBAL" [pressed] [ref=f1e112] [cursor=pointer]
+            - button "TEMA" [ref=f1e113] [cursor=pointer]
+          - generic "Cambiar ranking" [ref=f1e114]:
+            - button "Ranking anterior" [ref=f1e115] [cursor=pointer]:
+              - img [ref=f1e117]
+            - 'button "Modo actual: TEMAS COMENTARIOS" [ref=f1e119] [cursor=pointer]':
+              - generic:
+                - generic: TEMAS COMENTARIOS
+                - generic:
+                  - img
+            - button "Ranking siguiente" [ref=f1e120] [cursor=pointer]:
+              - img [ref=f1e122]
+          - generic [ref=f1e125]:
+            - article [ref=f1e126]:
+              - generic [ref=f1e127]: "1"
+              - generic [ref=f1e128]:
+                - paragraph [ref=f1e129]: dasda
+                - paragraph [ref=f1e130]: 2 comentarios
+            - article [ref=f1e131]:
+              - generic [ref=f1e132]: "2"
+              - generic [ref=f1e133]:
+                - paragraph [ref=f1e134]: adada
+                - paragraph [ref=f1e135]: 1 comentario

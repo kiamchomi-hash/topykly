@@ -1,15 +1,15 @@
 import { openDrawer, closeDrawers } from "./ui/drawers.js";
-import { bindPageEvents } from "./ui/events.js?v=20260709-palettefocus5";
+import { bindPageEvents } from "./ui/events.js?v=20260709-topicrace1";
 import { cacheDom } from "./ui/dom.js";
-import { createActionHandlers } from "./controller-actions.js?v=20260709-palettefocus5";
+import { createActionHandlers } from "./controller-actions.js?v=20260709-topicrace1";
 import { createResponsiveHelpers } from "./controller-responsive.js";
-import { createRenderers } from "./controller-render.js?v=20260709-palettefocus5";
+import { createRenderers } from "./controller-render.js?v=20260709-topicrace1";
 import { closeTimerRef, dom, state } from "./app-store.js";
 import { applyStoredTheme, createBackToTopicsHandler, createResizeHandler } from "./controller-runtime.js";
-import { dispatch, reducers } from "./store-logic.js";
+import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
-import { api } from "./services/api.js?v=20260709-palettefocus5";
+import { api } from "./services/api.js?v=20260709-topicrace1";
 import {
   collectTopicNotifications,
   createNotificationStateUpdate,
@@ -25,6 +25,7 @@ function readBootstrapLocationParams() {
     return {
       selectedTopicId: null,
       authError: null,
+      authAction: null,
       fakeSocial: false
     };
   }
@@ -33,6 +34,7 @@ function readBootstrapLocationParams() {
   return {
     selectedTopicId: url.searchParams.get("selectedTopicId") || null,
     authError: url.searchParams.get("authError") || null,
+    authAction: url.searchParams.get("authAction") || null,
     fakeSocial: FAKE_SOCIAL_PARAM_VALUES.has(String(url.searchParams.get("fakeSocial") || "").trim().toLowerCase())
   };
 }
@@ -63,6 +65,10 @@ export function getAuthErrorFeedbackMessage(authError) {
     return "El proveedor de login no respondio correctamente.";
   }
 
+  if (code === "account_link_required") {
+    return "Ese email ya tiene una cuenta. Entra con tu contrasena o recuperala para vincular Google.";
+  }
+
   return "No se pudo completar el inicio de sesion.";
 }
 
@@ -74,6 +80,7 @@ function clearBootstrapLocationParams() {
   const url = new URL(window.location.href);
   url.searchParams.delete("selectedTopicId");
   url.searchParams.delete("authError");
+  url.searchParams.delete("authAction");
   window.history.replaceState({}, "", url.toString());
 }
 
@@ -85,7 +92,8 @@ function createFakeSocialPreview(payload, now = Date.now()) {
   const summarizeUser = (user) => ({
     id: user.id,
     name: user.name,
-    avatarUrl: user.avatarUrl || null
+    avatarUrl: user.avatarUrl || null,
+    online: Boolean(user.online)
   });
   const friendships = {
     incoming: candidates.slice(0, 3).map(summarizeUser),
@@ -252,9 +260,6 @@ async function hydrateInitialData(render, initialSelectedTopicId = null, { fakeS
       });
       dispatch(state, reducers.setNotificationsPanelOpen, true);
     }
-    if (nextPayload.viewer?.profilePending) {
-      dispatch(state, reducers.setProfileModalOpen, true);
-    }
   } catch (error) {
     console.error(error);
   }
@@ -292,7 +297,7 @@ export function createLiveTopicSync({
     try {
       const payload = await apiClient.refreshTopics(state.selectedTopicId);
       const notifications = collectTopicNotifications(state, payload);
-      dispatch(state, reducers.hydrateFromBackend, payload);
+      dispatch(state, reducers.mergeLiveTopics, payload);
       const notificationStateUpdate = createNotificationStateUpdate(state, notifications);
       if (notificationStateUpdate) {
         dispatch(state, reducers.addNotifications, notificationStateUpdate);
@@ -378,14 +383,22 @@ export function bootstrap() {
 
   bindPageEvents(dom, {
     state: actions.state,
+    initialAuthAction: bootstrapLocationParams.authAction,
     setAuthUiSync: actions.setAuthUiSync,
+    setOpenOidcProfileCompletionSync: actions.setOpenOidcProfileCompletionSync,
+    completeOidcProfile: actions.completeOidcProfile,
     toggleTheme: actions.toggleTheme,
     setRankingScope: actions.setRankingScope,
     toggleRankingScope: actions.toggleRankingScope,
     refreshCurrentTopic: actions.refreshCurrentTopic,
+    refreshTopicsList: actions.refreshTopicsList,
     toggleMessageLike: actions.toggleMessageLike,
     toggleMessageDislike: actions.toggleMessageDislike,
+    quoteMessage: actions.quoteMessage,
     reportEntity: actions.reportEntity,
+    openReportModal: actions.openReportModal,
+    closeReportModal: actions.closeReportModal,
+    submitReportModal: actions.submitReportModal,
     createNewTopic: actions.createNewTopic,
     submitMessage: actions.submitMessage,
     setRankingStep: actions.setRankingStep,
@@ -411,15 +424,22 @@ export function bootstrap() {
     getAuthStatus: actions.getAuthStatus,
     login: actions.login,
     loginWithPassword: actions.loginWithPassword,
-    registerWithPassword: actions.registerWithPassword,
+    requestEmailAuthCode: actions.requestEmailAuthCode,
+    verifyEmailAuthCode: actions.verifyEmailAuthCode,
+    requestPasswordResetCode: actions.requestPasswordResetCode,
+    confirmPasswordReset: actions.confirmPasswordReset,
+    startAccountLink: actions.startAccountLink,
     logout: actions.logout,
     enableWebNotifications: actions.enableWebNotifications,
     toggleFriendRequestsPanel: actions.toggleFriendRequestsPanel,
+    setFriendRequestsTab: actions.setFriendRequestsTab,
+    loadMoreFriendRequests: actions.loadMoreFriendRequests,
     toggleNotificationsPanel: actions.toggleNotificationsPanel,
     acceptFriendRequest: actions.acceptFriendRequest,
     rejectFriendRequest: actions.rejectFriendRequest,
     dismissNotification: actions.dismissNotification,
     openNotificationTopic: actions.openNotificationTopic,
+    focusTopic: actions.focusTopic,
     backToTopics,
     onResize: handleResize,
     onWheel: responsive.handleScrollableWheel
@@ -427,6 +447,9 @@ export function bootstrap() {
 
   if (bootstrapLocationParams.authError) {
     actions.showFeedback(getAuthErrorFeedbackMessage(bootstrapLocationParams.authError), { kind: "error" });
+  }
+  if (bootstrapLocationParams.authAction === "google-linked") {
+    actions.showFeedback("Cuenta de Google vinculada correctamente.");
   }
 
   clearBootstrapLocationParams();

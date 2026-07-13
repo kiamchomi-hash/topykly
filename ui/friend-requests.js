@@ -17,7 +17,23 @@ function createFriendAvatar(user) {
   return avatar;
 }
 
-function createFriendRow(user, actions = []) {
+export function isFriendOnline(user, state) {
+  if (typeof user?.online === "boolean") {
+    return user.online;
+  }
+  return Boolean(state?.users?.find?.((candidate) => candidate.id === user?.id)?.online);
+}
+
+export function splitFriendsByPresence(friends, state) {
+  const online = [];
+  const offline = [];
+  (friends || []).forEach((user) => {
+    (isFriendOnline(user, state) ? online : offline).push(user);
+  });
+  return { online, offline };
+}
+
+function createFriendRow(user, actions = [], presence = null) {
   const row = document.createElement("article");
   row.className = "friend-request-panel__row";
   row.dataset.friendUserId = user.id;
@@ -27,7 +43,26 @@ function createFriendRow(user, actions = []) {
   const name = document.createElement("strong");
   name.className = "friend-request-panel__name";
   name.textContent = user.name || "Usuario";
-  identity.append(createFriendAvatar(user), name);
+
+  if (presence) {
+    row.dataset.presence = presence;
+    const avatarWrap = document.createElement("span");
+    avatarWrap.className = "friend-request-panel__avatar-wrap";
+    const dot = document.createElement("span");
+    dot.className = "friend-request-panel__presence-dot";
+    dot.setAttribute("aria-hidden", "true");
+    avatarWrap.append(createFriendAvatar(user), dot);
+
+    const text = document.createElement("span");
+    text.className = "friend-request-panel__text";
+    const status = document.createElement("span");
+    status.className = "friend-request-panel__status";
+    status.textContent = presence === "online" ? "En linea" : "Desconectado";
+    text.append(name, status);
+    identity.append(avatarWrap, text);
+  } else {
+    identity.append(createFriendAvatar(user), name);
+  }
 
   const actionGroup = document.createElement("div");
   actionGroup.className = "friend-request-panel__actions";
@@ -45,7 +80,72 @@ function createFriendRow(user, actions = []) {
   return row;
 }
 
-function createSection(title, items, renderRow, emptyText) {
+function createEmptyState(title, copy) {
+  const empty = document.createElement("div");
+  empty.className = "friend-request-panel__empty";
+  const heading = document.createElement("strong");
+  heading.className = "friend-request-panel__empty-title";
+  heading.textContent = title;
+  const detail = document.createElement("span");
+  detail.className = "friend-request-panel__empty-copy";
+  detail.textContent = copy;
+  empty.append(heading, detail);
+  return empty;
+}
+
+function createPresenceGroupTitle(label, count, presence) {
+  const heading = document.createElement("h3");
+  heading.className = "friend-request-panel__group-title";
+  heading.dataset.presence = presence;
+  heading.textContent = label;
+  const badge = document.createElement("span");
+  badge.className = "friend-request-panel__group-count";
+  badge.textContent = String(count);
+  heading.append(badge);
+  return heading;
+}
+
+function createFriendsSection(friends, state) {
+  const section = document.createElement("section");
+  section.className = "friend-request-panel__section";
+
+  const heading = document.createElement("h2");
+  heading.className = "friend-request-panel__section-title";
+  heading.textContent = "Amigos";
+  section.append(heading);
+
+  if (!friends.length) {
+    section.append(createEmptyState(
+      "Todavia no agregaste amigos",
+      "Cuando aceptes solicitudes vas a poder ver aca quien esta en linea."
+    ));
+    return section;
+  }
+
+  const { online, offline } = splitFriendsByPresence(friends, state);
+  const list = document.createElement("div");
+  list.className = "friend-request-panel__list";
+
+  list.append(createPresenceGroupTitle("En linea", online.length, "online"));
+  if (online.length) {
+    list.append(...online.map((user) => createFriendRow(user, [], "online")));
+  } else {
+    const empty = document.createElement("p");
+    empty.className = "friend-request-panel__empty friend-request-panel__empty--group";
+    empty.textContent = "Ningun amigo esta en linea.";
+    list.append(empty);
+  }
+
+  if (offline.length) {
+    list.append(createPresenceGroupTitle("Desconectados", offline.length, "offline"));
+    list.append(...offline.map((user) => createFriendRow(user, [], "offline")));
+  }
+
+  section.append(list);
+  return section;
+}
+
+function createSection(title, items, renderRow, emptyState) {
   const section = document.createElement("section");
   section.className = "friend-request-panel__section";
 
@@ -55,10 +155,7 @@ function createSection(title, items, renderRow, emptyText) {
   section.append(heading);
 
   if (!items.length) {
-    const empty = document.createElement("p");
-    empty.className = "friend-request-panel__empty";
-    empty.textContent = emptyText;
-    section.append(empty);
+    section.append(createEmptyState(emptyState.title, emptyState.copy));
     return section;
   }
 
@@ -80,9 +177,17 @@ function positionFriendRequestsPanel(panel, button) {
     return;
   }
 
+  if (!rect.width && !rect.height) {
+    // Anchor button hidden (mobile drawer flow): fall back to the CSS default position.
+    panel.style.removeProperty("--friend-panel-width");
+    panel.style.removeProperty("--friend-panel-right");
+    panel.style.removeProperty("--friend-panel-top");
+    return;
+  }
+
   const gap = 10;
   const viewportPadding = 12;
-  const panelWidth = Math.min(360, Math.max(280, window.innerWidth - viewportPadding * 2));
+  const panelWidth = Math.min(400, Math.max(280, window.innerWidth - viewportPadding * 2));
   const right = Math.max(viewportPadding, window.innerWidth - rect.right);
   const top = Math.min(
     window.innerHeight - viewportPadding,
@@ -135,28 +240,92 @@ export function renderFriendRequests(state, dom) {
   closeButton.dataset.closeFriendRequests = "true";
   header.append(title, closeButton);
 
-  panel.replaceChildren(
-    header,
-    createSection(
+  const activeTab = state.friendRequestsTab || "incoming";
+  panel.dataset.activeTab = activeTab;
+  const tabsContainer = document.createElement("div");
+  tabsContainer.className = "friend-request-panel__tabs";
+
+  const tabsData = [
+    { id: "incoming", label: "Recibidas", count: friendships.incoming?.length || 0, isIncoming: true },
+    { id: "outgoing", label: "Enviadas", count: friendships.outgoing?.length || 0 },
+    { id: "friends", label: "Amigos", count: friendships.friends?.length || 0 }
+  ];
+
+  tabsData.forEach((tab) => {
+    const tabBtn = document.createElement("button");
+    tabBtn.className = `friend-request-panel__tab${tab.id === activeTab ? " friend-request-panel__tab--active" : ""}`;
+    tabBtn.type = "button";
+    tabBtn.dataset.friendTab = tab.id;
+    tabBtn.textContent = tab.label;
+
+    if (tab.count > 0) {
+      const badge = document.createElement("span");
+      badge.className = `friend-request-panel__tab-badge${tab.isIncoming ? " friend-request-panel__tab-badge--incoming" : ""}`;
+      badge.textContent = tab.count;
+      tabBtn.append(badge);
+    }
+
+    tabsContainer.append(tabBtn);
+  });
+
+  const limits = state.friendRequestsLimits || { incoming: 10, outgoing: 10 };
+
+  let activeSection;
+  if (activeTab === "incoming") {
+    const limit = limits.incoming || 10;
+    activeSection = createSection(
       "Solicitudes recibidas",
-      friendships.incoming || [],
+      (friendships.incoming || []).slice(0, limit),
       (user) => createFriendRow(user, [
         { kind: "accept", label: "Aceptar" },
         { kind: "reject", label: "Rechazar" }
       ]),
-      "No hay solicitudes pendientes."
-    ),
-    createSection(
+      {
+        title: "No hay solicitudes pendientes",
+        copy: "Cuando alguien te envie una solicitud de amistad, va a aparecer aca."
+      }
+    );
+  } else if (activeTab === "outgoing") {
+    const limit = limits.outgoing || 10;
+    activeSection = createSection(
       "Solicitudes enviadas",
-      friendships.outgoing || [],
+      (friendships.outgoing || []).slice(0, limit),
       (user) => createFriendRow(user),
-      "No hay solicitudes enviadas."
-    ),
-    createSection(
-      "Amigos",
-      friendships.friends || [],
-      (user) => createFriendRow(user),
-      "Todavia no agregaste amigos."
-    )
+      {
+        title: "No hay solicitudes enviadas",
+        copy: "Las solicitudes de amistad que envies van a aparecer aca."
+      }
+    );
+  } else {
+    activeSection = createFriendsSection(friendships.friends || [], state);
+  }
+
+  const lastTab = panel.dataset.lastTab || "";
+  const lastOpen = panel.dataset.lastOpen === "true";
+  const currentTab = activeTab;
+  const currentOpen = Boolean(state.isFriendRequestsPanelOpen);
+
+  let savedScrollTop = 0;
+  if (currentOpen && lastOpen && currentTab === lastTab) {
+    const listEl = panel.querySelector(".friend-request-panel__list");
+    if (listEl) {
+      savedScrollTop = listEl.scrollTop;
+    }
+  }
+
+  panel.dataset.lastTab = currentTab;
+  panel.dataset.lastOpen = String(currentOpen);
+
+  panel.replaceChildren(
+    header,
+    tabsContainer,
+    activeSection
   );
+
+  if (savedScrollTop > 0) {
+    const listEl = panel.querySelector(".friend-request-panel__list");
+    if (listEl) {
+      listEl.scrollTop = savedScrollTop;
+    }
+  }
 }

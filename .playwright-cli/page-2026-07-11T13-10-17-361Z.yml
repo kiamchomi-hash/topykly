@@ -1,0 +1,183 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - button "Paletas" [ref=e5] [cursor=pointer]
+        - switch "Tema oscuro" [checked] [ref=e13] [cursor=pointer]
+      - generic "TOPYKLY" [ref=e16]:
+        - generic [ref=e23]:
+          - generic [ref=e24]: TOPY
+          - generic [ref=e25]: KLY
+      - button "Iniciar sesión" [ref=e27] [cursor=pointer]
+    - main "Chat social" [ref=e29]:
+      - region "Temas" [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e35]:
+            - button "Tema demo compartido 2, Sube_b_30035" [ref=e83] [cursor=pointer]:
+              - generic [ref=e89]:
+                - generic [ref=e90]: Tema demo compartido
+                - generic [ref=e91]: 2, Sube_b_30035
+            - button "Tema demo compartido 2, Sube_b_28632" [ref=e92] [cursor=pointer]:
+              - generic [ref=e98]:
+                - generic [ref=e99]: Tema demo compartido
+                - generic [ref=e100]: 2, Sube_b_28632
+            - button "Tema demo de Ficticio Dos 2, Ficticio_dos_91749" [ref=e101] [cursor=pointer]:
+              - generic [ref=e107]:
+                - generic [ref=e108]: Tema demo de Ficticio Dos
+                - generic [ref=e109]: 2, Ficticio_dos_91749
+            - button "Tema demo de Ficticio Uno 1, Ficticio_uno_91749" [ref=e110] [cursor=pointer]:
+              - generic [ref=e116]:
+                - generic [ref=e117]: Tema demo de Ficticio Uno
+                - generic [ref=e118]: 1, Ficticio_uno_91749
+            - button "Tema demo de Ficticio Dos 2, Ficticio_dos_93740" [ref=e119] [cursor=pointer]:
+              - generic [ref=e125]:
+                - generic [ref=e126]: Tema demo de Ficticio Dos
+                - generic [ref=e127]: 2, Ficticio_dos_93740
+            - button "Tema demo de Ficticio Uno 1, Ficticio_uno_93740" [ref=e128] [cursor=pointer]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: Tema demo de Ficticio Uno
+                - generic [ref=e136]: 1, Ficticio_uno_93740
+            - button "Tema demo de Ficticio Dos 2, Ficticio_dos_46712" [ref=e137] [cursor=pointer]:
+              - generic [ref=e143]:
+                - generic [ref=e144]: Tema demo de Ficticio Dos
+                - generic [ref=e145]: 2, Ficticio_dos_46712
+            - button "Tema demo de Ficticio Uno 1, Ficticio_uno_46712" [ref=e146] [cursor=pointer]:
+              - generic [ref=e152]:
+                - generic [ref=e153]: Tema demo de Ficticio Uno
+                - generic [ref=e154]: 1, Ficticio_uno_46712
+            - button "Tema demo de Ficticio Dos 2, Ficticio_dos_37324" [ref=e155] [cursor=pointer]:
+              - generic [ref=e161]:
+                - generic [ref=e162]: Tema demo de Ficticio Dos
+                - generic [ref=e163]: 2, Ficticio_dos_37324
+            - button "Tema demo de Ficticio Uno 1, Ficticio_uno_37324" [ref=e164] [cursor=pointer]:
+              - generic [ref=e170]:
+                - generic [ref=e171]: Tema demo de Ficticio Uno
+                - generic [ref=e172]: 1, Ficticio_uno_37324
+            - button "Tema demo de Ficticio Dos 4, Ficticio_dos_51049" [ref=e173] [cursor=pointer]:
+              - generic [ref=e179]:
+                - generic [ref=e180]: Tema demo de Ficticio Dos
+                - generic [ref=e181]: 4, Ficticio_dos_51049
+            - button "Tema demo de Ficticio Uno 1, Ficticio_uno_51049" [ref=e182] [cursor=pointer]:
+              - generic [ref=e188]:
+                - generic [ref=e189]: Tema demo de Ficticio Uno
+                - generic [ref=e190]: 1, Ficticio_uno_51049
+            - button "Tema demo de Ficticio Dos 4, Ficticio_dos" [ref=e191] [cursor=pointer]:
+              - generic [ref=e197]:
+                - generic [ref=e198]: Tema demo de Ficticio Dos
+                - generic [ref=e199]: 4, Ficticio_dos
+            - button "Tema demo de Ficticio Uno 1, Ficticio_uno" [ref=e200] [cursor=pointer]:
+              - generic [ref=e206]:
+                - generic [ref=e207]: Tema demo de Ficticio Uno
+                - generic [ref=e208]: 1, Ficticio_uno
+            - button "adada 5, Matias_velazco" [ref=e209] [cursor=pointer]:
+              - generic [ref=e215]:
+                - generic [ref=e216]: adada
+                - generic [ref=e217]: 5, Matias_velazco
+            - button "dasda 13, Matias_velazco" [ref=e218] [cursor=pointer]:
+              - generic [ref=e224]:
+                - generic [ref=e225]: dasda
+                - generic [ref=e226]: 13, Matias_velazco
+            - button "Tema CDP 1783729981970 1, Ordertester1783729976774" [ref=e227] [cursor=pointer]:
+              - generic [ref=e233]:
+                - generic [ref=e234]: Tema CDP 1783729981970
+                - generic [ref=e235]: 1, Ordertester1783729976774
+            - button "dasdsadas 2, Ordertester1783729976774" [ref=e236] [cursor=pointer]:
+              - generic [ref=e242]:
+                - generic [ref=e243]: dasdsadas
+                - generic [ref=e244]: 2, Ordertester1783729976774
+          - generic [ref=e36]:
+            - button "Crear nuevo tema de chat" [ref=e37] [cursor=pointer]: Crear nuevo tema
+            - button "Actualizar orden de la lista de temas" [ref=e38] [cursor=pointer]
+      - region "Nuevo tema" [ref=e43]:
+        - generic [ref=e245]:
+          - textbox "Titulo del nuevo tema" [ref=e247]:
+            - /placeholder: Titulo del tema
+          - textbox "Primer mensaje del nuevo tema" [ref=e249]:
+            - /placeholder: Primer mensaje
+          - button "Crear tema con el primer mensaje" [ref=e250] [cursor=pointer]:
+            - generic [ref=e251]: Crear tema
+      - region [ref=e45]:
+        - heading "Comunidad" [level=2] [ref=e49]
+        - generic [ref=e50]:
+          - heading "Usuarios conectados" [level=3] [ref=e57]
+          - generic [ref=e59]:
+            - heading "Ranking" [level=3] [ref=e66]
+            - group "Alcance del ranking" [ref=e68]:
+              - button "GLOBAL" [pressed] [ref=e69] [cursor=pointer]
+              - button "TEMA" [ref=e70] [cursor=pointer]
+            - generic "Cambiar ranking" [ref=e71]:
+              - button "Ranking anterior" [ref=e72] [cursor=pointer]
+              - 'button "Modo actual: TEMAS COMENTARIOS" [ref=e76] [cursor=pointer]':
+                - generic: TEMAS COMENTARIOS
+              - button "Ranking siguiente" [ref=e77] [cursor=pointer]
+            - generic [ref=e82]:
+              - article [ref=e255]:
+                - generic [ref=e256]: "1"
+                - generic [ref=e257]:
+                  - paragraph [ref=e258]: dasda
+                  - paragraph [ref=e259]: 13 comentarios
+              - article [ref=e260]:
+                - generic [ref=e261]: "2"
+                - generic [ref=e262]:
+                  - paragraph [ref=e263]: adada
+                  - paragraph [ref=e264]: 5 comentarios
+              - article [ref=e265]:
+                - generic [ref=e266]: "3"
+                - generic [ref=e267]:
+                  - paragraph [ref=e268]: Tema demo de Ficticio Dos
+                  - paragraph [ref=e269]: 4 comentarios
+              - article [ref=e270]:
+                - generic [ref=e271]: "4"
+                - generic [ref=e272]:
+                  - paragraph [ref=e273]: Tema demo de Ficticio Dos
+                  - paragraph [ref=e274]: 4 comentarios
+              - article [ref=e275]:
+                - generic [ref=e276]: "5"
+                - generic [ref=e277]:
+                  - paragraph [ref=e278]: Tema demo compartido
+                  - paragraph [ref=e279]: 2 comentarios
+              - article [ref=e280]:
+                - generic [ref=e281]: "6"
+                - generic [ref=e282]:
+                  - paragraph [ref=e283]: Tema demo compartido
+                  - paragraph [ref=e284]: 2 comentarios
+              - article [ref=e285]:
+                - generic [ref=e286]: "7"
+                - generic [ref=e287]:
+                  - paragraph [ref=e288]: Tema demo de Ficticio Dos
+                  - paragraph [ref=e289]: 2 comentarios
+              - article [ref=e290]:
+                - generic [ref=e291]: "8"
+                - generic [ref=e292]:
+                  - paragraph [ref=e293]: Tema demo de Ficticio Dos
+                  - paragraph [ref=e294]: 2 comentarios
+              - article [ref=e295]:
+                - generic [ref=e296]: "9"
+                - generic [ref=e297]:
+                  - paragraph [ref=e298]: Tema demo de Ficticio Dos
+                  - paragraph [ref=e299]: 2 comentarios
+              - article [ref=e300]:
+                - generic [ref=e301]: "10"
+                - generic [ref=e302]:
+                  - paragraph [ref=e303]: Tema demo de Ficticio Dos
+                  - paragraph [ref=e304]: 2 comentarios
+  - dialog "Iniciar sesion" [ref=e313]:
+    - generic [ref=e314]:
+      - generic [ref=e315]:
+        - paragraph [ref=e316]: Sesion
+        - heading "Iniciar sesion" [level=2] [ref=e317]
+      - button "Cerrar inicio de sesion" [ref=e318] [cursor=pointer]
+    - generic [ref=e322]:
+      - button "Continuar con Google" [active] [ref=e323] [cursor=pointer]
+      - generic [ref=e332]: o
+      - generic [ref=e334]:
+        - group "Modo de acceso" [ref=e335]:
+          - button "Entrar" [pressed] [ref=e336] [cursor=pointer]
+          - button "Crear cuenta" [ref=e337] [cursor=pointer]
+        - generic [ref=e338]:
+          - generic [ref=e339]: Email
+          - textbox "Email" [ref=e340]
+        - generic [ref=e341]:
+          - generic [ref=e342]: Contraseña
+          - textbox "Contraseña" [ref=e343]
+        - button "Iniciar sesión" [ref=e345] [cursor=pointer]

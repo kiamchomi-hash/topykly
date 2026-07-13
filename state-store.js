@@ -5,9 +5,16 @@ export const state = {
   isPaletteModalOpen: false,
   isProfileModalOpen: false,
   isFriendRequestsPanelOpen: false,
+  friendRequestsTab: "incoming",
+  friendRequestsLimits: {
+    incoming: 10,
+    outgoing: 10
+  },
   isNotificationsPanelOpen: false,
   isAdminPanelOpen: false,
   adminDashboard: null,
+  reportModal: { isOpen: false, entityType: null, entityId: null },
+  adminConfirmAction: null,
   feedback: null,
   viewer: null,
   reportedTopicIds: [],
