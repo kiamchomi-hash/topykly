@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 
 import { createAuthService } from "../services/auth-service.js";
 import {
@@ -6234,6 +6235,24 @@ await (async () => {
     assert.equal(image.readUInt32BE(20), TOPIC_SOCIAL_CARD_SIZE.height);
     assert.equal(image.length > 1_000, true);
     assert.equal(image.subarray(-12).toString("hex"), "0000000049454e44ae426082");
+
+    const fallbackAuthorImage = await renderTopicSocialCard({
+      title: "Tema sin autor",
+      messages: [],
+      commentCount: 0
+    });
+    const { data: authorOverflowBand, info: authorOverflowInfo } = await sharp(fallbackAuthorImage)
+      .extract({ left: 326, top: 410, width: 52, height: 48 })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    for (let index = 0; index < authorOverflowBand.length; index += authorOverflowInfo.channels) {
+      assert.deepEqual(
+        [...authorOverflowBand.subarray(index, index + 3)],
+        [20, 17, 29],
+        "el nombre del autor debe permanecer dentro de la columna lateral"
+      );
+    }
   });
 
   await test("preview server renders crawlable topic pages with canonical redirects", async () => {

@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente Revisor de Frontend",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-14T15:54:01.644Z",
+    "lastChecked":  "2026-07-14T20:18:30.000Z",
     "findings":  [
                      {
                          "level":  "suggestion",
@@ -37,6 +37,12 @@
                          "level":  "fixed",
                          "message":  "El encabezado fijo del perfil propio combina una base opaca con la superficie de la paleta, impidiendo que el formulario se transparente durante el scroll.",
                          "id":  "mobile-profile-header-opaque",
+                         "agent":  "frontend"
+                     },
+                     {
+                         "level":  "fixed",
+                         "message":  "El nombre del autor de las tarjetas sociales se ajusta y queda recortado al limite de la columna lateral, evitando que Comunidad TOPYKLY invada el contenido del tema.",
+                         "id":  "social-card-author-column-overflow",
                          "agent":  "frontend"
                      }
                  ]

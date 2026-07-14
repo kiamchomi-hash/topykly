@@ -111,10 +111,15 @@ export async function renderTopicSocialCard(topic, { avatarBuffer = null } = {})
         .brand { fill: #f8f5ff; font: 800 38px Arial, sans-serif; letter-spacing: 2px; }
         .title { fill: #f8f5ff; font: 800 54px Arial, sans-serif; letter-spacing: -1px; }
         .excerpt { fill: #cfc5db; font: 400 25px Arial, sans-serif; }
-        .author { fill: #f8f5ff; font: 750 28px Arial, sans-serif; }
+        .author { fill: #f8f5ff; font: 750 25px Arial, sans-serif; }
         .nickname { fill: #a99dbc; font: 400 20px Arial, sans-serif; }
         .meta { fill: #b9a8ff; font: 700 20px Arial, sans-serif; letter-spacing: 1px; }
       </style>
+      <defs>
+        <clipPath id="author-column-clip">
+          <rect x="52" y="410" width="274" height="48"/>
+        </clipPath>
+      </defs>
       <rect width="1200" height="630" fill="#14111d"/>
       <rect width="326" height="630" fill="#1d1728"/>
       <rect width="10" height="630" fill="#7c5cff"/>
@@ -129,7 +134,7 @@ export async function renderTopicSocialCard(topic, { avatarBuffer = null } = {})
       </g>
       <text x="122" y="88" class="brand">TOPY<tspan fill="#ff8b5c">KLY</tspan></text>
 
-      <text x="52" y="442" class="author">${escapeXml(truncateText(authorName, 18))}</text>
+      <text x="52" y="442" class="author" clip-path="url(#author-column-clip)">${escapeXml(truncateText(authorName, 18))}</text>
       <text x="52" y="474" class="nickname">${escapeXml(authorNickname ? `@${truncateText(authorNickname, 20)}` : "Autor del tema")}</text>
 
       ${renderTextLines(titleLines, { x: 378, y: 138, lineHeight: 64, className: "title" })}
