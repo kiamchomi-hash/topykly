@@ -29,7 +29,7 @@ export const EMAIL_AUTH_RESEND_DELAY_MS = 60_000;
 export const PASSWORD_RESET_CODE_TTL_MS = 10 * 60_000;
 export const PASSWORD_RESET_RESEND_DELAY_MS = 60_000;
 export const MINIMUM_REGISTRATION_AGE = 16;
-export const TERMS_VERSION = "2026-07-10";
+export const TERMS_VERSION = "2026-07-14";
 const EMAIL_AUTH_MAX_ATTEMPTS = 5;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 const PASSWORD_RESET_EMAIL_HOURLY_MAX = 5;
@@ -65,6 +65,7 @@ const PROGRESSIVE_SANCTION_STEPS = [
 ];
 const GUEST_DISPLAY_NAME = "*topy";
 const GUEST_SESSION_TTL_MS = 7 * 24 * 60 * 60_000;
+const REGISTERED_SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
 const GUEST_SESSION_MAX_PER_IP = 25;
 const GUEST_SESSION_MAX_TOTAL = 1000;
 const MESSAGE_REACTION_RESET_TIME_ZONE = "America/New_York";
@@ -1093,13 +1094,26 @@ function seedUsers(db) {
   }
 
   const insertUser = db.prepare(`
-    INSERT INTO users (id, name, type, role, score, status, created_at, updated_at)
-    VALUES (?, ?, 'registered', ?, ?, 'active', ?, ?)
+    INSERT INTO users (
+      id, name, nickname, nickname_norm, type, role, score, status, description,
+      profile_indexable, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'registered', ?, ?, 'active', ?, 1, ?, ?)
   `);
 
   const nowIso = new Date().toISOString();
   initialUsers.forEach((user) => {
-    insertUser.run(user.id, user.name, user.role || "", user.score ?? 0, nowIso, nowIso);
+    const nickname = user.nickname ? normalizeNickname(user.nickname) : null;
+    insertUser.run(
+      user.id,
+      user.name,
+      nickname,
+      nickname ? normalizeUniqueNameKey(nickname) : null,
+      user.role || "",
+      user.score ?? 0,
+      normalizeProfileDescription(user.description || ""),
+      nowIso,
+      nowIso
+    );
   });
 }
 
@@ -1128,7 +1142,7 @@ function seedTopics(db) {
   const seeds = getSeedTopicEntries();
   const baseMs = Date.now() - seeds.length * 90 * 60_000;
 
-  seeds.forEach(([title, subtitle], topicIndex) => {
+  seeds.forEach(([title, subtitle, seededReplies = []], topicIndex) => {
     const topicId = `topic-${topicIndex + 1}`;
     const authorId = users[topicIndex % users.length];
     const createdAt = createIsoTimestamp(topicIndex * 4, baseMs);
@@ -1151,17 +1165,20 @@ function seedTopics(db) {
     let lastActivityAt = createdAt;
     let subtitlePreview = summarizeText(rootText);
 
-    for (let replyIndex = 0; replyIndex < 5; replyIndex += 1) {
-      const replyAuthorId = users[(topicIndex + replyIndex + 1) % users.length];
-      const replyText = [
+    const replies = Array.isArray(seededReplies) && seededReplies.length
+      ? seededReplies
+      : Array.from({ length: 5 }, (_, replyIndex) => [
         `Respuesta ${replyIndex + 1} en ${normalizeTopicTitle(title)}.`,
         `Sigue la conversacion del tema ${topicIndex + 1}.`
-      ].join(" ");
+      ].join(" "));
+
+    replies.forEach((replyText, replyIndex) => {
+      const replyAuthorId = users[(topicIndex + replyIndex + 1) % users.length];
       const replyCreatedAt = createIsoTimestamp(topicIndex * 4 + replyIndex + 1, baseMs);
       const replyResult = insertMessage.run(
         topicId,
         replyAuthorId,
-        replyText,
+        normalizeMessageText(replyText),
         1 + ((topicIndex + replyIndex) % 5),
         0,
         replyCreatedAt
@@ -1169,7 +1186,7 @@ function seedTopics(db) {
       lastMessageId = Number(replyResult.lastInsertRowid);
       lastActivityAt = replyCreatedAt;
       subtitlePreview = summarizeText(replyText);
-    }
+    });
 
     updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
   });
@@ -1223,14 +1240,145 @@ function seedFakeFriendRequests(db) {
   }
 }
 
-function seedDatabase(db) {
+function seedDatabase(db, { includeFakeFriendRequests = true } = {}) {
   seedUsers(db);
   seedTopics(db);
 
   const isRunningTests = process.argv[1] && (process.argv[1].endsWith("run.mjs") || process.argv[1].includes("tests"));
-  if (!isRunningTests) {
+  if (includeFakeFriendRequests && !isRunningTests) {
     seedFakeFriendRequests(db);
   }
+}
+
+function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
+  const limit = normalizePositiveInteger(requestedLimit, 5, { min: 1, max: topicSeedData.length });
+  const entries = topicSeedData.slice(0, limit)
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => !db.prepare("SELECT 1 FROM topics WHERE title = ? LIMIT 1").get(entry[0]));
+
+  if (!entries.length) {
+    return { requested: limit, insertedTopics: 0, insertedUsers: 0, archivedTopicIds: [] };
+  }
+
+  const nowIso = new Date().toISOString();
+  const editorialUserIds = new Map();
+  let insertedUsers = 0;
+  const insertUser = db.prepare(`
+    INSERT INTO users (
+      id, name, nickname, nickname_norm, type, role, score, status, description,
+      profile_indexable, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'registered', ?, ?, 'active', ?, 1, ?, ?)
+  `);
+
+  initialUsers.forEach((user) => {
+    const nickname = normalizeNickname(user.nickname);
+    const nicknameKey = normalizeUniqueNameKey(nickname);
+    const existingByNickname = db.prepare("SELECT id, role FROM users WHERE nickname_norm = ? LIMIT 1").get(nicknameKey);
+    if (existingByNickname) {
+      if (existingByNickname.role !== "Cuenta editorial") {
+        throw new ApiError(409, "EDITORIAL_NICKNAME_CONFLICT", `El usuario @${nickname} ya existe y no es una cuenta editorial.`);
+      }
+      editorialUserIds.set(user.id, existingByNickname.id);
+      return;
+    }
+
+    const editorialUserId = `editorial-${user.id}`;
+    const existingById = db.prepare("SELECT nickname FROM users WHERE id = ? LIMIT 1").get(editorialUserId);
+    if (existingById) {
+      throw new ApiError(409, "EDITORIAL_USER_ID_CONFLICT", `El id editorial ${editorialUserId} ya está ocupado.`);
+    }
+
+    insertUser.run(
+      editorialUserId,
+      user.name,
+      nickname,
+      nicknameKey,
+      user.role,
+      user.score ?? 0,
+      normalizeProfileDescription(user.description),
+      nowIso,
+      nowIso
+    );
+    editorialUserIds.set(user.id, editorialUserId);
+    insertedUsers += 1;
+  });
+
+  const activeTopicIdsBefore = new Set(getOrderedActiveTopicRows(db).map((row) => row.id));
+  const insertTopic = db.prepare(`
+    INSERT INTO topics (
+      id, title, subtitle, author_id, status, active_rank, last_message_id, last_activity_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+  `);
+  const insertMessage = db.prepare(`
+    INSERT INTO messages (topic_id, author_id, text, kind, likes, is_root, created_at)
+    VALUES (?, ?, ?, 'user', ?, ?, ?)
+  `);
+  const updateTopic = db.prepare(`
+    UPDATE topics
+    SET subtitle = ?, last_message_id = ?, last_activity_at = ?, updated_at = ?
+    WHERE id = ?
+  `);
+
+  entries.forEach(({ entry: [title, subtitle, replies = []], index }, insertionIndex) => {
+    const topicId = `editorial-topic-${index + 1}`;
+    const existingId = db.prepare("SELECT title FROM topics WHERE id = ? LIMIT 1").get(topicId);
+    if (existingId) {
+      throw new ApiError(409, "EDITORIAL_TOPIC_ID_CONFLICT", `El id editorial ${topicId} ya está ocupado.`);
+    }
+
+    const authorSeed = initialUsers[index % initialUsers.length];
+    const authorId = editorialUserIds.get(authorSeed.id);
+    const createdAt = createIsoTimestamp(insertionIndex * 4, Date.now() - entries.length * 10 * 60_000);
+    const normalizedTitle = normalizeTopicTitle(title);
+    const rootText = `${normalizedTitle}. ${normalizeMessageText(subtitle)}`;
+    insertTopic.run(
+      topicId,
+      normalizedTitle,
+      summarizeText(rootText),
+      authorId,
+      TOPIC_STATUS_ACTIVE,
+      createdAt,
+      createdAt,
+      createdAt
+    );
+
+    const rootResult = insertMessage.run(topicId, authorId, rootText, 1 + (index % 4), 1, createdAt);
+    let lastMessageId = Number(rootResult.lastInsertRowid);
+    let lastActivityAt = createdAt;
+    let subtitlePreview = summarizeText(rootText);
+
+    replies.forEach((replyText, replyIndex) => {
+      const replyAuthorSeed = initialUsers[(index + replyIndex + 1) % initialUsers.length];
+      const replyAuthorId = editorialUserIds.get(replyAuthorSeed.id);
+      const replyCreatedAt = createIsoTimestamp(insertionIndex * 4 + replyIndex + 1, Date.now() - entries.length * 10 * 60_000);
+      const replyResult = insertMessage.run(
+        topicId,
+        replyAuthorId,
+        normalizeMessageText(replyText),
+        1 + ((index + replyIndex) % 5),
+        0,
+        replyCreatedAt
+      );
+      lastMessageId = Number(replyResult.lastInsertRowid);
+      lastActivityAt = replyCreatedAt;
+      subtitlePreview = summarizeText(replyText);
+    });
+
+    updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
+  });
+
+  rebuildActiveTopicRanks(db);
+  const archivedTopicIds = [...activeTopicIdsBefore].filter((topicId) => {
+    const row = db.prepare("SELECT status FROM topics WHERE id = ?").get(topicId);
+    return row?.status === TOPIC_STATUS_EXPELLED;
+  });
+
+  return {
+    requested: limit,
+    insertedTopics: entries.length,
+    insertedUsers,
+    archivedTopicIds
+  };
 }
 
 function purgeDemoData(db) {
@@ -1389,6 +1537,8 @@ function getOrCreateGuestUser(db) {
 
 function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionId = "") {
   const expiresBeforeIso = new Date(nowMs - GUEST_SESSION_TTL_MS).toISOString();
+  const registeredExpiresBeforeIso = new Date(nowMs - REGISTERED_SESSION_TTL_MS).toISOString();
+  const nowIso = new Date(nowMs).toISOString();
   const perIpOffset = keepSessionId ? Math.max(0, GUEST_SESSION_MAX_PER_IP - 1) : GUEST_SESSION_MAX_PER_IP;
   const totalOffset = keepSessionId ? Math.max(0, GUEST_SESSION_MAX_TOTAL - 1) : GUEST_SESSION_MAX_TOTAL;
   let deletedSessions = 0;
@@ -1428,9 +1578,27 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
     WHERE updated_at < ?
   `).run(expiresBeforeIso).changes ?? 0;
 
+  const deletedRegisteredSessions = db.prepare(`
+    DELETE FROM sessions
+    WHERE auth_mode = 'registered' AND updated_at < ? AND id <> ?
+  `).run(registeredExpiresBeforeIso, keepSessionId).changes ?? 0;
+
+  const deletedExpiredAuthChallenges = db.prepare(`
+    DELETE FROM auth_email_challenges
+    WHERE expires_at <= ?
+  `).run(nowIso).changes ?? 0;
+
+  const deletedExpiredPasswordResetChallenges = db.prepare(`
+    DELETE FROM password_reset_challenges
+    WHERE expires_at <= ?
+  `).run(nowIso).changes ?? 0;
+
   return {
     deletedSessions,
-    deletedGuestIpRateLimits
+    deletedGuestIpRateLimits,
+    deletedRegisteredSessions,
+    deletedExpiredAuthChallenges,
+    deletedExpiredPasswordResetChallenges
   };
 }
 
@@ -1843,6 +2011,7 @@ function hydrateTopic(db, row, { forceVisible = null, viewerId = null } = {}) {
     subtitle: row.subtitle,
     authorId: row.author_id,
     status: row.status,
+    isArchived: row.status === TOPIC_STATUS_EXPELLED,
     activeRank: row.active_rank,
     isVisible,
     visible: isVisible,
@@ -1883,6 +2052,7 @@ function rebuildActiveTopicRanks(db) {
   });
 
   droppedRows.forEach((row) => {
+    trimTopicReplies(db, row.id);
     expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
   });
 
@@ -2095,7 +2265,10 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     };
   };
   const topics = activeTopicRows
-    .map((row) => hydrateTopic(db, row, { viewerId: context.viewer.id }))
+    .map((row, index) => hydrateTopic(db, row, {
+      forceVisible: index < VISIBLE_TOPIC_LIMIT,
+      viewerId: context.viewer.id
+    }))
     .map(hideBlockedMessages);
   const reportSnapshot = getReportSnapshot(db, context.sessionId);
   const friendships = getFriendshipsForFrontend(db, context.viewer.id);
@@ -2433,6 +2606,11 @@ function assertLikeableMessage(db, messageId) {
   if (messageRow.kind === "system") {
     throw new ApiError(409, "INVALID_LIKE_TARGET", "Este mensaje no acepta likes.");
   }
+  if (messageRow.topic_status === TOPIC_STATUS_EXPELLED || messageRow.topic_status === TOPIC_STATUS_BLOCKED) {
+    throw new ApiError(409, "TOPIC_EXPELLED_OR_BLOCKED", "Este tema archivado es solo de lectura.", {
+      topicStatus: messageRow.topic_status
+    });
+  }
 
   return messageRow;
 }
@@ -2613,11 +2791,13 @@ function insertPasswordUser(db, {
   assertNicknameAvailable(db, nicknameKey);
 
   const userId = `user-${crypto.randomUUID()}`;
+  const isMinorRegistration = Number.isInteger(age) && age < 18;
   db.prepare(`
     INSERT INTO users (
       id, name, nickname, nickname_norm, type, role, score, status, email, email_verified_at, password_hash,
-      registration_age, terms_accepted_at, terms_version, profile_pending, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, 'registered', ?, 0, 'active', ?, ?, ?, ?, ?, ?, 0, ?, ?)
+      registration_age, terms_accepted_at, terms_version, profile_pending, profile_indexable,
+      notifications_friends_only, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'registered', ?, 0, 'active', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
   `).run(
     userId,
     normalizedDisplayName,
@@ -2630,6 +2810,8 @@ function insertPasswordUser(db, {
     age,
     termsVersion ? nowIso : null,
     termsVersion,
+    isMinorRegistration ? 0 : 1,
+    isMinorRegistration ? 1 : 0,
     nowIso,
     nowIso
   );
@@ -3659,7 +3841,7 @@ function linkIdentityToCurrentUser(db, {
   });
 }
 
-export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) {
+export function createBackendStore({ dbPath = null, seedDemoData = true, includeFakeFriendRequests = true } = {}) {
   const dbConfig = resolveDbConfig(dbPath);
   const resolvedDbPath = dbConfig.dbPath;
   const storageDir = path.dirname(resolvedDbPath);
@@ -3670,7 +3852,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
 
   initSchema(db);
   if (seedDemoData) {
-    seedDatabase(db);
+    seedDatabase(db, { includeFakeFriendRequests });
   } else {
     purgeDemoData(db);
   }
@@ -3863,15 +4045,21 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
             : context.viewer.avatarReviewStatus ?? null;
         const nextTermsAcceptedAt = completingProfile ? nowIso : context.viewerRow.terms_accepted_at ?? null;
         const nextTermsVersion = completingProfile ? termsVersion : context.viewerRow.terms_version ?? null;
-        const nextProfileIndexable = profileIndexable === null
-          ? (context.viewerRow.profile_indexable !== 0 ? 1 : 0)
-          : (profileIndexable === false ? 0 : 1);
+        const completingMinorProfile = completingProfile && normalizedRegistrationAge < 18;
+        const nextProfileIndexable = completingMinorProfile
+          ? 0
+          : profileIndexable === null
+            ? (context.viewerRow.profile_indexable !== 0 ? 1 : 0)
+            : (profileIndexable === false ? 0 : 1);
+        const nextNotificationsFriendsOnly = completingMinorProfile
+          ? 1
+          : (context.viewerRow.notifications_friends_only === 1 ? 1 : 0);
 
         db.prepare(`
           UPDATE users
           SET name = ?, nickname = ?, nickname_norm = ?, description = ?, profile_show_description = ?, profile_show_joined_at = ?,
               social_whatsapp = ?, social_instagram = ?, social_tiktok = ?, social_facebook = ?, social_twitter = ?, social_discord = ?, profile_show_social = ?,
-              profile_indexable = ?,
+              profile_indexable = ?, notifications_friends_only = ?,
               avatar_url = ?, avatar_pending_url = ?, avatar_review_status = ?, profile_pending = 0,
               registration_age = ?, terms_accepted_at = ?, terms_version = ?,
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
@@ -3891,6 +4079,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
           normalizedSocialDiscord,
           profileShowSocial === false ? 0 : 1,
           nextProfileIndexable,
+          nextNotificationsFriendsOnly,
           nextAvatarUrl,
           nextPendingUrl,
           nextReviewStatus,
@@ -3980,6 +4169,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
               social_facebook = '', social_twitter = '', social_discord = '',
               avatar_url = NULL, avatar_pending_url = NULL, avatar_review_status = NULL,
               profile_pending = 0, profile_suggested_name = NULL, profile_suggested_avatar_url = NULL,
+              registration_age = NULL,
               role = '', status = 'deleted', updated_at = ?
           WHERE id = ?
         `).run(nowIso, userId);
@@ -4001,6 +4191,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         return buildFrontendPayload(db, context, selectedTopicId);
       });
+    },
+    seedEditorialContent({ limit = 5 } = {}) {
+      return withTransaction(db, () => seedEditorialContentIntoDatabase(db, limit));
     },
     openTopic(topicId, { sessionId, authMode, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
@@ -4731,6 +4924,32 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT
       }));
     },
+    getSeoArchivedTopicEntries() {
+      return db.prepare(`
+        SELECT
+          topics.id,
+          topics.title,
+          topics.last_activity_at,
+          (
+            SELECT COUNT(*)
+            FROM messages
+            WHERE messages.topic_id = topics.id
+              AND messages.kind = 'user'
+              AND messages.is_root = 0
+          ) AS comment_count
+        FROM topics
+        WHERE topics.status = ?
+        ORDER BY topics.last_activity_at DESC, topics.created_at DESC
+        LIMIT 5000
+      `).all(TOPIC_STATUS_EXPELLED).map((row) => ({
+        id: row.id,
+        title: row.title,
+        lastActivityAt: row.last_activity_at,
+        commentCount: Number(row.comment_count ?? 0),
+        isArchived: true,
+        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT
+      }));
+    },
     getTopicPageData(topicId) {
       const normalizedId = String(topicId || "").trim();
       const topicRow = normalizedId
@@ -4779,6 +4998,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         createdAt: topicRow.created_at,
         lastActivityAt: topicRow.last_activity_at,
         isExpelled: topicRow.status === TOPIC_STATUS_EXPELLED,
+        isArchived: topicRow.status === TOPIC_STATUS_EXPELLED,
         isBlocked: false,
         isThin: commentCount < SEO_THIN_TOPIC_COMMENT_COUNT,
         author: {
@@ -4796,7 +5016,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
       const key = normalizeUniqueNameKey(nickname);
       const row = key
         ? db.prepare(`
-          SELECT id, name, nickname, description, created_at, updated_at, avatar_url,
+          SELECT id, name, nickname, role, description, created_at, updated_at, avatar_url,
                  profile_show_description, profile_show_joined_at, profile_indexable
           FROM users
           WHERE nickname_norm = ? AND type = 'registered' AND status = 'active'
@@ -4826,6 +5046,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
       return {
         name: row.name,
         nickname: row.nickname,
+        isEditorial: row.role === "Cuenta editorial",
         avatarUrl: row.avatar_url ?? null,
         description: row.profile_show_description !== 0 ? row.description || "" : "",
         joinedAt: row.profile_show_joined_at !== 0 ? row.created_at : null,

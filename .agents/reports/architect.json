@@ -1,13 +1,24 @@
 {
   "agentName": "Agente Arquitecto",
   "status": "implemented",
-  "lastChecked": "2026-07-11T23:21:14.310Z",
+  "lastChecked": "2026-07-14T16:30:00.000Z",
+  "guidelinesReviewed": [
+    "AGENTS.md",
+    "GEMINI.md"
+  ],
+  "decisions": [
+    "Reuse the persisted expelled topic state as the archive state to avoid a disruptive SQLite status migration.",
+    "Keep the 40-topic active feed unchanged and expose archived topics only through permanent topic URLs, the crawlable archive hub and the sitemap.",
+    "Enforce read-only behavior in both the backend and the UI so direct API calls cannot add comments, likes or dislikes.",
+    "Keep seed content in data.js and the existing seed functions; expose one explicit idempotent script for applying a chosen subset to an existing database.",
+    "Identify every seeded profile as a fictional editorial account rather than presenting invented testimonials as real users."
+  ],
   "implemented": [
-    "users.id remains the immutable identity for sessions, topics, messages and friendships.",
-    "users.name is now a repeatable display name while users.nickname remains the unique username.",
-    "Existing completed accounts without a username are backfilled deterministically without changing user ids.",
-    "Password and verified Google identities can resolve to the same user row instead of creating duplicate accounts.",
-    "Public UI and mentions distinguish duplicate display names through the unique username."
+    "Archived topic hydration now exposes isArchived while preserving the compatible expelled database value.",
+    "Archived messages reject reactions at the service boundary and render without interactive reaction or quote controls.",
+    "SEO pages index substantive archived discussions, provide /archivo and include archive entries in sitemap.xml.",
+    "Fresh opt-in demo databases receive 20 descriptive Spanish topics, substantive replies and indexable editorial profile descriptions.",
+    "Existing databases can add a bounded subset with npm run seed:editorial -- --limit=N --apply; the command reports which active topics were archived by rotation."
   ],
   "proposals": []
 }

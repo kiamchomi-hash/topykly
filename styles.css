@@ -2739,6 +2739,17 @@ html[data-theme] .topic-item.is-active:focus-visible::after {
   border-top: 1px solid color-mix(in srgb, #c25b4b 32%, var(--line));
 }
 
+.composer--read-only::before {
+  content: "Este tema está archivado. Puedes leerlo y compartir su enlace, pero ya no admite comentarios ni reacciones.";
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  border-radius: 12px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface-strong));
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 input,
 textarea {
   box-sizing: border-box;
@@ -6959,8 +6970,11 @@ html.is-mobile-viewport .ranking-mode-list__label {
   );
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   width: min(920px, 100%);
   max-height: min(760px, calc(100vh - 32px));
+  max-height: min(760px, calc(100dvh - 32px));
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 24px 80px color-mix(in srgb, #000 34%, transparent);
@@ -6995,6 +7009,9 @@ html.is-mobile-viewport .ranking-mode-list__label {
 }
 
 .profile-modal__header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   gap: 14px;
   align-items: center;
@@ -7646,13 +7663,24 @@ html.is-mobile-viewport .ranking-mode-list__label {
   .profile-modal-backdrop {
     align-items: end;
     overflow-x: hidden;
-    padding: 12px;
+    height: 100vh;
+    height: 100dvh;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
   }
 
   .profile-modal {
     width: 100%;
     max-width: 100%;
     max-height: calc(100vh - 24px);
+    max-height: calc(
+      100dvh
+      - max(12px, env(safe-area-inset-top))
+      - max(12px, env(safe-area-inset-bottom))
+    );
   }
 
   .profile-modal__header {
@@ -7852,6 +7880,7 @@ html.is-mobile-viewport .ranking-mode-list__label {
   flex-direction: column;
   overflow: hidden;
   height: min(680px, calc(100vh - 32px));
+  height: min(680px, calc(100dvh - 32px));
   background: var(--bg);
 }
 
@@ -7859,6 +7888,7 @@ html.is-mobile-viewport .ranking-mode-list__label {
   width: min(440px, 100%);
   height: auto;
   max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
 }
 
 .public-profile-modal .profile-modal__header {
@@ -8233,6 +8263,19 @@ html.is-mobile-viewport .ranking-mode-list__label {
 @media (max-width: 920px) {
   .public-profile-modal {
     height: calc(100vh - 24px);
+    height: calc(
+      100dvh
+      - max(12px, env(safe-area-inset-top))
+      - max(12px, env(safe-area-inset-bottom))
+    );
+  }
+
+  .public-profile-modal.is-guest-profile {
+    max-height: calc(
+      100dvh
+      - max(12px, env(safe-area-inset-top))
+      - max(12px, env(safe-area-inset-bottom))
+    );
   }
 
   .public-profile-modal__body {
@@ -11550,6 +11593,18 @@ button.icon-button.profile-modal__close {
   max-width: 480px;
   width: min(480px, calc(100vw - 32px));
   max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+}
+
+@media (max-width: 920px) {
+  .settings-modal {
+    max-height: calc(100vh - 24px);
+    max-height: calc(
+      100dvh
+      - max(12px, env(safe-area-inset-top))
+      - max(12px, env(safe-area-inset-bottom))
+    );
+  }
 }
 
 .settings-modal__body {

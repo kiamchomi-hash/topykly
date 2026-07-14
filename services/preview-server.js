@@ -11,6 +11,7 @@ import {
   renderRobots,
   renderSitemap,
   renderTopicPage,
+  renderTopicsArchivePage,
   renderTopicsIndexPage,
   resolvePublicOrigin,
   slugify,
@@ -978,11 +979,12 @@ function resolveGuestCleanupIntervalMs(env = process.env) {
 function runGuestCleanup(store, log) {
   try {
     const result = store.cleanupInactiveGuests();
-    if (result.deletedSessions || result.deletedGuestIpRateLimits) {
-      log(`guest cleanup removed ${result.deletedSessions} sessions and ${result.deletedGuestIpRateLimits} rate-limit rows`);
+    const deletedChallengeCount = result.deletedExpiredAuthChallenges + result.deletedExpiredPasswordResetChallenges;
+    if (result.deletedSessions || result.deletedGuestIpRateLimits || result.deletedRegisteredSessions || deletedChallengeCount) {
+      log(`privacy cleanup removed ${result.deletedSessions} guest sessions, ${result.deletedRegisteredSessions} registered sessions, ${result.deletedGuestIpRateLimits} rate-limit rows and ${deletedChallengeCount} expired auth challenges`);
     }
   } catch (error) {
-    log(`guest cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+    log(`privacy cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -1024,9 +1026,15 @@ function buildSitemapXml(store) {
   const entries = [
     { loc: `${origin}/` },
     { loc: `${origin}/temas` },
+    { loc: `${origin}/archivo` },
     { loc: `${origin}/terms.html` }
   ];
   store.getSeoTopicEntries()
+    .filter((topic) => !topic.isThin)
+    .forEach((topic) => {
+      entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
+    });
+  store.getSeoArchivedTopicEntries()
     .filter((topic) => !topic.isThin)
     .forEach((topic) => {
       entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
@@ -1038,7 +1046,8 @@ function buildSitemapXml(store) {
 }
 
 function isSeoPagePath(pathname) {
-  return pathname === "/temas"
+  return pathname === "/archivo"
+    || pathname === "/temas"
     || pathname === "/tema"
     || pathname.startsWith("/tema/")
     || pathname === "/u"
@@ -1096,6 +1105,13 @@ function handleSeoPageRequest(store, req, res, url) {
 
   if (url.pathname === "/temas") {
     sendHtml(res, req, 200, renderTopicsIndexPage(store.getSeoTopicEntries(), { origin }), {
+      "Cache-Control": "public, max-age=300"
+    });
+    return;
+  }
+
+  if (url.pathname === "/archivo") {
+    sendHtml(res, req, 200, renderTopicsArchivePage(store.getSeoArchivedTopicEntries(), { origin }), {
       "Cache-Control": "public, max-age=300"
     });
     return;

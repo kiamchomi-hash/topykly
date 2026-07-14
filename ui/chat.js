@@ -78,6 +78,7 @@ export function shouldScrollChatToBottom(previousState, nextState, wasNearBottom
 
 export function renderChat(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
+  const isReadOnlyTopic = Boolean(topic && topic.status !== "active" && topic.status !== "pinned");
   const isLoading = !state.viewer;
   const reportedMessageIds = new Set(state.reportedMessageIds || []);
   const isTopicReported = Boolean(topic && state.reportedTopicIds?.includes?.(topic.id));
@@ -124,7 +125,8 @@ export function renderChat(state, dom) {
       reported: reportedMessageIds.has(message.id),
       currentUserId: state.viewer?.id || null,
       blocked: (state.blockedUsers || []).some((user) => user.id === message.authorId),
-      hiddenBlockedQuoteAuthors
+      hiddenBlockedQuoteAuthors,
+      readOnly: isReadOnlyTopic
     }))
   );
 
@@ -198,6 +200,7 @@ function syncMessageCardHeights(messageStream) {
 function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
   const isCreatingTopic = !topic;
   const isCommentableTopic = !topic || topic.status === "active" || topic.status === "pinned";
+  const isArchivedTopic = topic?.status === "expelled" || topic?.isArchived === true;
   const topicTitleField = dom.topicTitleInput?.closest(".composer__field");
   const chatHeader = dom.chatTitle?.closest(".panel__header--chat");
   const chatPanel = dom.messageForm?.closest(".panel--chat");
@@ -216,7 +219,13 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
   if (dom.messageForm) {
     dom.messageForm.hidden = isLoading;
     dom.messageForm.classList.toggle("composer--topic-create", isCreatingTopic);
+    dom.messageForm.classList.toggle("composer--read-only", !isCreatingTopic && !isCommentableTopic);
     dom.messageForm.dataset.topicStatus = topic?.status || "draft";
+    dom.messageForm.setAttribute("aria-label", isArchivedTopic
+      ? "Tema archivado disponible solo para lectura"
+      : isCreatingTopic
+        ? "Crear un tema"
+        : "Publicar un comentario");
   }
   if (dom.messageInput) {
     dom.messageInput.disabled = !isCreatingTopic && !isCommentableTopic;
@@ -224,7 +233,9 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
       ? "Primer mensaje"
       : isCommentableTopic
         ? "Escribe un comentario..."
-        : "Tema cerrado para comentarios";
+        : isArchivedTopic
+          ? "Tema archivado: solo lectura"
+          : "Tema cerrado para comentarios";
     dom.messageInput.rows = isCreatingTopic ? 4 : 2;
     dom.messageInput.setAttribute("aria-label", isCreatingTopic ? "Primer mensaje del nuevo tema" : "Comentario para el tema seleccionado");
     syncComposerTextareaHeight(dom.messageInput);
@@ -232,11 +243,21 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
   if (submitButton) {
     submitButton.disabled = isLoading || (!isCreatingTopic && !isCommentableTopic);
     submitButton.setAttribute("aria-disabled", String(submitButton.disabled));
-    submitButton.setAttribute("aria-label", !isCreatingTopic && !isCommentableTopic ? "No se pueden enviar mensajes en este tema cerrado" : isCreatingTopic ? "Crear tema con el primer mensaje" : "Enviar comentario al tema seleccionado");
+    submitButton.setAttribute("aria-label", !isCreatingTopic && !isCommentableTopic
+      ? isArchivedTopic
+        ? "Tema archivado: no admite nuevos mensajes"
+        : "No se pueden enviar mensajes en este tema cerrado"
+      : isCreatingTopic
+        ? "Crear tema con el primer mensaje"
+        : "Enviar comentario al tema seleccionado");
   }
   if (submitLabel) {
-    submitLabel.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : isCreatingTopic ? "Crear tema" : "Enviar";
+    submitLabel.textContent = !isCreatingTopic && !isCommentableTopic
+      ? isArchivedTopic ? "Archivado" : "Bloqueado"
+      : isCreatingTopic ? "Crear tema" : "Enviar";
   } else if (submitButton) {
-    submitButton.textContent = !isCreatingTopic && !isCommentableTopic ? "Bloqueado" : isCreatingTopic ? "Crear tema" : "Enviar";
+    submitButton.textContent = !isCreatingTopic && !isCommentableTopic
+      ? isArchivedTopic ? "Archivado" : "Bloqueado"
+      : isCreatingTopic ? "Crear tema" : "Enviar";
   }
 }

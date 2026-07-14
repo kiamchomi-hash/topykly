@@ -227,7 +227,7 @@ export function createMessageSkeleton(index) {
 export function createMessageItem(
   message,
   users,
-  { reported = false, currentUserId = null, blocked = false, hiddenBlockedQuoteAuthors = [] } = {}
+  { reported = false, currentUserId = null, blocked = false, hiddenBlockedQuoteAuthors = [], readOnly = false } = {}
 ) {
   const node = el("article", `message${message.kind === "system" ? " message--system" : ""}`);
   node.dataset.id = message.id;
@@ -260,11 +260,16 @@ export function createMessageItem(
     const reactionMenuId = `message-reaction-menu-${message.id}`;
     const likeButton = el("button", `message__like-button${message.likedByViewer ? " is-liked" : ""}${likeToneClass}`, likeLabel);
     likeButton.type = "button";
-    likeButton.dataset.messageReactionTrigger = message.id;
-    likeButton.setAttribute("aria-controls", reactionMenuId);
-    likeButton.setAttribute("aria-expanded", "false");
+    likeButton.disabled = readOnly;
+    if (!readOnly) {
+      likeButton.dataset.messageReactionTrigger = message.id;
+      likeButton.setAttribute("aria-controls", reactionMenuId);
+      likeButton.setAttribute("aria-expanded", "false");
+    }
     likeButton.setAttribute("aria-pressed", String(Boolean(message.likedByViewer)));
-    likeButton.setAttribute("aria-label", `Abrir opciones de reaccion del mensaje de ${author}`);
+    likeButton.setAttribute("aria-label", readOnly
+      ? `Puntaje del mensaje de ${author}: ${likeLabel}. Tema archivado`
+      : `Abrir opciones de reaccion del mensaje de ${author}`);
 
     const reportButton = el("button", `message__report-button${reported ? " is-reported" : ""}`);
     reportButton.type = "button";
@@ -275,12 +280,14 @@ export function createMessageItem(
     reportButton.append(createReportIcon(), el("span", "button-label", reported ? "Reportado" : "Reportar"));
     meta.append(likeButton, reportButton);
 
-    const reactionMenu = el("div", "message__reaction-menu");
-    reactionMenu.id = reactionMenuId;
-    reactionMenu.hidden = true;
-    reactionMenu.dataset.messageReactionMenu = message.id;
-    reactionMenu.append(...createLikeDislikeActionButtons(message, author));
-    body.append(reactionMenu);
+    if (!readOnly) {
+      const reactionMenu = el("div", "message__reaction-menu");
+      reactionMenu.id = reactionMenuId;
+      reactionMenu.hidden = true;
+      reactionMenu.dataset.messageReactionMenu = message.id;
+      reactionMenu.append(...createLikeDislikeActionButtons(message, author));
+      body.append(reactionMenu);
+    }
 
     const profileAction = el("button", "message__action-menu-button", "PERFIL");
     profileAction.type = "button";
@@ -317,7 +324,10 @@ export function createMessageItem(
     const actionMenu = el("div", "message__action-menu");
     actionMenu.hidden = true;
     actionMenu.dataset.messageMenu = message.id;
-    actionMenu.append(profileAction, likeAction, dislikeAction, quoteAction);
+    actionMenu.append(profileAction);
+    if (!readOnly) {
+      actionMenu.append(likeAction, dislikeAction, quoteAction);
+    }
     if (canBlockAuthor) {
       actionMenu.append(blockAction);
     }

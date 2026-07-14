@@ -44,6 +44,7 @@ import {
   reviveTopicWithMessage,
   summarizeTopicMessage,
   TOPIC_ACTIVE_LIMIT,
+  TOPIC_TOTAL_MESSAGE_LIMIT,
   TOPIC_VISIBLE_LIMIT,
   trimMessages
 } from "../model.js";
@@ -257,7 +258,7 @@ await (async () => {
     assert.equal(users.length, initialUsers.length);
     assert.equal(users[0].online, true);
     assert.equal(users[6].online, true);
-    assert.equal(users[0].initials, "CM");
+    assert.equal(users[0].initials, "GT");
   });
 
   await test("users view hides the current user while profile name is pending", () => {
@@ -751,7 +752,7 @@ await (async () => {
       assert.equal(readCount.className.includes("topic-item__meta-count--unread"), false);
       assert.equal(unreadCount.textContent, "2");
       assert.equal(unreadCount.className.includes("topic-item__meta-count--unread"), true);
-      assert.equal(unreadUser.textContent, "Nadia");
+      assert.equal(unreadUser.textContent, initialUsers[1].name);
       assert.equal(unreadUser.className.includes("topic-item__meta-count--unread"), false);
       assert.equal(unreadMeta.dataset.lastAuthorId, "u2");
       assert.equal(unreadTopicItem.attributes.get("aria-pressed"), "false");
@@ -924,13 +925,14 @@ await (async () => {
   await test("collects mention and followed topic notifications from backend activity", () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+    const viewer = users[0];
     const followedMessage = createMessage("u2", "Actualizacion para el tema seguido", 0);
-    const mentionMessage = createMessage("u3", "Ping @cami para revisar esto", 0);
+    const mentionMessage = createMessage("u3", `Ping @${viewer.nickname} para revisar esto`, 0);
     const followedUpdate = reviveTopicWithMessage(topics, topics[1].id, followedMessage);
     const mentionUpdate = reviveTopicWithMessage(followedUpdate, topics[2].id, mentionMessage);
     const notifications = collectTopicNotifications(
       {
-        viewer: { id: "u1", name: "Cami" },
+        viewer,
         currentUserId: "u1",
         followedTopicIds: [topics[1].id],
         notifiedMessageIds: [],
@@ -938,7 +940,7 @@ await (async () => {
         topics
       },
       {
-        viewer: { id: "u1", name: "Cami" },
+        viewer,
         users,
         topics: mentionUpdate,
         selectedTopicId: topics[0].id
@@ -1233,6 +1235,7 @@ await (async () => {
     assert.doesNotMatch(notificationSource, /Cuando alguien comente/);
     assert.doesNotMatch(friendRequestSource, /Cuando alguien te envie/);
     assert.doesNotMatch(friendRequestSource, /Las solicitudes de amistad que envies/);
+    assert.doesNotMatch(friendRequestSource, /Cuando aceptes solicitudes/);
     assert.match(
       styles,
       /\.notification-panel__empty\s*\{[^}]*width:\s*calc\(100% - 28px\);[^}]*border:\s*1px dashed[^}]*border-radius:\s*10px;/
@@ -1694,6 +1697,11 @@ await (async () => {
       assert.match(payload.viewer.displayName, /^\*topy\d{2}$/);
       assert.equal(payload.topics.length, TOPIC_ACTIVE_LIMIT);
       assert.equal(payload.topics.filter((topic) => topic.visible).length, TOPIC_VISIBLE_LIMIT);
+      assert.equal(payload.topics.some((topic) => topic.title.startsWith("¿Cómo")), true);
+      assert.equal(
+        payload.users.some((user) => user.role === "Cuenta editorial" && user.description.includes("Perfil editorial ficticio")),
+        true
+      );
       assert.equal(
         payload.users.some((user) => user.id === payload.viewer.id),
         false
@@ -1785,6 +1793,34 @@ await (async () => {
     );
   });
 
+  await test("backend editorial seeding is explicit and idempotent for an existing database", async () => {
+    await withTempStore(
+      (store) => {
+        const firstRun = store.seedEditorialContent({ limit: 3 });
+        assert.equal(firstRun.insertedTopics, 3);
+        assert.equal(firstRun.insertedUsers, initialUsers.length);
+        assert.deepEqual(firstRun.archivedTopicIds, []);
+
+        const payload = store.bootstrap({ sessionId: "session-editorial-seed" });
+        assert.equal(payload.topics.length, 3);
+        assert.equal(payload.topics.every((topic) => topic.messages.length >= 4), true);
+        assert.equal(
+          payload.users.every((user) => user.role === "Cuenta editorial" && user.description.includes("Perfil editorial ficticio")),
+          true
+        );
+        const editorialProfile = store.getPublicProfileByNickname("guias_topykly");
+        assert.equal(editorialProfile.isEditorial, true);
+        assert.equal(editorialProfile.indexable, true);
+
+        const secondRun = store.seedEditorialContent({ limit: 3 });
+        assert.equal(secondRun.insertedTopics, 0);
+        assert.equal(secondRun.insertedUsers, 0);
+        assert.equal(store.getDiagnostics().topics, 3);
+      },
+      { seedDemoData: false }
+    );
+  });
+
   await test("backend caps materialized guest storage for rotating report sessions", async () => {
     await withTempStore((store) => {
       const topicId = store.createTopic({
@@ -1829,7 +1865,15 @@ await (async () => {
 
       assert.equal(result.deletedSessions, 1);
       assert.equal(result.deletedGuestIpRateLimits, 0);
+      assert.equal(result.deletedRegisteredSessions, 0);
       assert.equal(store.getDiagnostics().sessions, 1);
+
+      const registeredResult = store.cleanupInactiveGuests({
+        nowMs: Date.now() + 31 * 24 * 60 * 60_000
+      });
+
+      assert.equal(registeredResult.deletedRegisteredSessions, 1);
+      assert.equal(store.getDiagnostics().sessions, 0);
     });
   });
   await test("backend initializes SQLite indexes for operational queries", async () => {
@@ -2079,6 +2123,8 @@ await (async () => {
         assert.equal(registered.viewer.type, "registered");
         assert.equal(registered.viewer.email, "code@example.com");
         assert.equal(registered.viewer.nickname, "Code_user");
+        assert.equal(registered.viewer.profileIndexable, false);
+        assert.equal(registered.viewer.notificationsFriendsOnly, true);
         assert.throws(
           () => store.verifyEmailAuthChallenge({
             challengeId: registration.challengeId,
@@ -2243,6 +2289,34 @@ await (async () => {
       assert.equal(unblocked.topics.some((topic) => topic.authorId === "u2"), true);
     });
   });
+  await test("backend fills a blocked viewer's 20 visible slots only from the global active 40", async () => {
+    await withTempStore((store) => {
+      const viewer = store.login({ sessionId: "session-block-many-u1", userId: "u1" });
+      let personalized = viewer;
+
+      for (const targetUserId of ["u2", "u3", "u4", "u5", "u6"]) {
+        personalized = store.blockUser(targetUserId, {
+          sessionId: viewer.sessionId,
+          hideContent: true
+        });
+      }
+
+      assert.equal(personalized.topics.length, 20);
+      assert.equal(personalized.topics.filter((topic) => topic.visible).length, 20);
+      assert.equal(personalized.topics.some((topic) => topic.visible && topic.activeRank >= 20), true);
+      assert.equal(personalized.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT), true);
+      assert.equal(personalized.topics.every((topic) => topic.status !== "expelled"), true);
+
+      const fewerThanTwenty = store.blockUser("u7", {
+        sessionId: viewer.sessionId,
+        hideContent: true
+      });
+      assert.equal(fewerThanTwenty.topics.length, 16);
+      assert.equal(fewerThanTwenty.topics.filter((topic) => topic.visible).length, 16);
+      assert.equal(fewerThanTwenty.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT), true);
+      assert.equal(fewerThanTwenty.topics.every((topic) => topic.status !== "expelled"), true);
+    });
+  });
   await test("backend loginWithIdentity creates and reuses a registered user from the provider identity", async () => {
     await withTempStore((store) => {
       const initialPayload = store.loginWithIdentity({
@@ -2305,6 +2379,8 @@ await (async () => {
       assert.match(completedPayload.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
       assert.doesNotMatch(completedPayload.viewer.avatarPendingUrl, /^data:/);
       assert.equal(completedPayload.viewer.avatarReviewStatus, "pending");
+      assert.equal(completedPayload.viewer.profileIndexable, false);
+      assert.equal(completedPayload.viewer.notificationsFriendsOnly, true);
 
       assert.throws(
         () =>
@@ -3711,31 +3787,86 @@ await (async () => {
     });
   });
 
-  await test("backend rejects comments on expelled topics and enforces registered message rate limits across sessions", async () => {
+  await test("backend cumulatively archives every topic displaced after the 40 active slots", async () => {
     await withTempStore((store) => {
       const initialPayload = store.bootstrap({
         sessionId: "session-expel-bootstrap",
         authMode: "registered"
       });
-      const expelledCandidateId = initialPayload.topics[TOPIC_ACTIVE_LIMIT - 1].id;
+      const expelledCandidateIds = initialPayload.topics
+        .slice(TOPIC_ACTIVE_LIMIT - 3)
+        .map((topic) => topic.id);
 
-      store.createTopic({
-        sessionId: "session-expel-create",
-        authMode: "registered",
-        title: "Tema que expulsa al ultimo",
-        text: "Empuja la ventana activa"
+      for (let index = 0; index < expelledCandidateIds.length; index += 1) {
+        const creatorSessionId = `session-expel-create-${index}`;
+        store.registerWithPassword({
+          sessionId: creatorSessionId,
+          email: `archive-creator-${index}@example.com`,
+          password: "password-segura",
+          nickname: `archive_creator_${index}`
+        });
+        store.createTopic({
+          sessionId: creatorSessionId,
+          authMode: "registered",
+          title: `Tema nuevo que desplaza al anterior ${index + 1}`,
+          text: `Empuja la ventana activa por vez ${index + 1}`
+        });
+      }
+
+      const activeAfterRotation = store.bootstrap({
+        sessionId: "session-after-cumulative-archive",
+        authMode: "registered"
       });
-
-      assert.throws(
-        () => {
-          store.addMessage(expelledCandidateId, {
-            sessionId: "session-expel-comment",
-            authMode: "registered",
-            text: "No deberia entrar"
-          });
-        },
-        (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled"
+      assert.equal(activeAfterRotation.topics.length, TOPIC_ACTIVE_LIMIT);
+      assert.equal(
+        expelledCandidateIds.every((topicId) => !activeAfterRotation.topics.some((topic) => topic.id === topicId)),
+        true
       );
+
+      const archivedSeoIds = new Set(store.getSeoArchivedTopicEntries().map((topic) => topic.id));
+      assert.equal(expelledCandidateIds.every((topicId) => archivedSeoIds.has(topicId)), true);
+
+      for (const expelledCandidateId of expelledCandidateIds) {
+        assert.throws(
+          () => {
+            store.addMessage(expelledCandidateId, {
+              sessionId: `session-expel-comment-${expelledCandidateId}`,
+              authMode: "registered",
+              text: "No deberia entrar"
+            });
+          },
+          (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled"
+        );
+
+        const archivedPayload = store.openTopic(expelledCandidateId, {
+          sessionId: `session-archive-open-${expelledCandidateId}`,
+          authMode: "registered"
+        });
+        const archivedTopic = archivedPayload.topics.find((topic) => topic.id === expelledCandidateId);
+        assert.ok(archivedTopic, "cada tema archivado debe seguir abriendo por su id");
+        assert.equal(archivedPayload.selectedTopicId, expelledCandidateId);
+        assert.equal(archivedTopic.status, "expelled");
+        assert.equal(archivedTopic.isArchived, true);
+        assert.equal(archivedTopic.visible, false);
+        assert.equal(archivedTopic.messages[0].isRoot, true);
+        assert.equal(archivedTopic.messages.length <= TOPIC_TOTAL_MESSAGE_LIMIT, true);
+
+        const archivedMessageId = archivedTopic.messages[0].id;
+        for (const toggleReaction of [store.toggleMessageLike, store.toggleMessageDislike]) {
+          assert.throws(
+            () => toggleReaction.call(store, archivedMessageId, {
+              sessionId: `session-archive-reaction-${expelledCandidateId}`,
+              authMode: "registered",
+              selectedTopicId: expelledCandidateId
+            }),
+            (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled"
+          );
+        }
+
+        const archivedPage = store.getTopicPageData(expelledCandidateId);
+        assert.equal(archivedPage.isArchived, true);
+        assert.equal(archivedPage.messages.length <= TOPIC_TOTAL_MESSAGE_LIMIT, true);
+      }
 
       const activeTopicId = store.bootstrap({
         sessionId: "session-rate-bootstrap",
@@ -6036,6 +6167,15 @@ await (async () => {
     assert.equal(html.includes(`<link rel="canonical" href="https://topykly.com/tema/topic-xss/script-alert-1-script">`), true);
     assert.equal(html.includes(`"@type":"DiscussionForumPosting"`), true);
     assert.equal(html.includes("\\u003cscript"), true);
+
+    const archivedHtml = renderTopicPage({
+      ...xssTopic,
+      isExpelled: true,
+      isArchived: true
+    }, { origin: "https://topykly.com" });
+    assert.equal(archivedHtml.includes(`<meta name="robots" content="index,follow">`), true);
+    assert.equal(archivedHtml.includes("Tema archivado:"), true);
+    assert.equal(archivedHtml.includes("ya no admite comentarios ni reacciones"), true);
   });
 
   await test("preview server renders crawlable topic pages with canonical redirects", async () => {
@@ -6115,6 +6255,12 @@ await (async () => {
       const hubHtml = await hubResponse.text();
       assert.equal(hubHtml.includes("El mejor tema de fútbol"), true);
       assert.equal(hubHtml.includes(`<link rel="canonical" href="https://topykly.com/temas">`), true);
+
+      const archiveResponse = await fetch(`${origin}/archivo`);
+      assert.equal(archiveResponse.status, 200);
+      const archiveHtml = await archiveResponse.text();
+      assert.equal(archiveHtml.includes("Temas archivados de TOPYKLY"), true);
+      assert.equal(archiveHtml.includes(`<link rel="canonical" href="https://topykly.com/archivo">`), true);
 
       const missingResponse = await fetch(`${origin}/tema/topic-inexistente`);
       assert.equal(missingResponse.status, 404);
@@ -6335,6 +6481,7 @@ await (async () => {
       const sitemapBody = await sitemapResponse.text();
       assert.equal(sitemapBody.includes("<loc>https://topykly.com/</loc>"), true);
       assert.equal(sitemapBody.includes("<loc>https://topykly.com/temas</loc>"), true);
+      assert.equal(sitemapBody.includes("<loc>https://topykly.com/archivo</loc>"), true);
       assert.equal(sitemapBody.includes(`/tema/${richTopicId}/`), true);
       assert.equal(sitemapBody.includes(thinTopicId), false);
       assert.equal(sitemapBody.includes("/u/Sitemap_autor"), true);
@@ -9005,6 +9152,16 @@ await (async () => {
       assert.equal(findByClass(hiddenQuoteNode, "message__quote-text").textContent, "-");
       assert.equal(findByClass(hiddenQuoteNode, "message__quote-text--blocked").textContent, "-");
       assert.equal(findByClass(hiddenQuoteNode, "message__text").textContent, "Respuesta propia");
+
+      const archivedNode = createMessageItem(
+        message,
+        [{ id: "u2", name: "Sergio13134" }],
+        { readOnly: true }
+      );
+      const archivedLikeButton = findByClass(archivedNode, "message__like-button");
+      assert.equal(archivedLikeButton.disabled, true);
+      assert.equal(archivedLikeButton.dataset.messageReactionTrigger, undefined);
+      assert.equal(findByClass(archivedNode, "message__reaction-menu"), null);
     } finally {
       globalThis.document = previousDocument;
     }
@@ -9029,7 +9186,8 @@ await (async () => {
       "services/backend-store.js",
       "services/seo-pages.js",
       "ui/notifications.js",
-      "terms.html"
+      "terms.html",
+      "privacy.html"
     ];
     const voseoPattern = /\b(?:aceptás|autorizás|buscás|conservás|debés|detectás|destapá|escribí|pensá|podés|publicás|respetá|sos|tenés|tomá|volvé)\b/giu;
     const offenders = [];
@@ -9043,6 +9201,35 @@ await (async () => {
     }
 
     assert.equal(offenders.length, 0, offenders.join("\n"));
+  });
+
+  await test("legal surfaces disclose privacy, consent and the current acceptance version", async () => {
+    const html = await read("index.html");
+    const terms = await read("terms.html");
+    const privacy = await read("privacy.html");
+    const backendStore = await read("services/backend-store.js");
+    const authEvents = await read("ui/topbar-action-events.js");
+    const reportReasons = await read("report-reasons.js");
+
+    assert.match(html, /href="\/privacy\.html">Política de privacidad/);
+    assert.match(html, /consiento el tratamiento y las transferencias necesarias/);
+    assert.match(terms, /Versión 2026-07-14/);
+    assert.match(terms, /al menos 16 años/);
+    assert.match(terms, /Usuario eliminado/);
+    assert.match(privacy, /Agencia de Acceso a la Información Pública/);
+    assert.match(privacy, /dentro de 10 días corridos/);
+    assert.match(privacy, /dentro de 5 días hábiles/);
+    assert.match(privacy, /topykly_sid/);
+    assert.match(privacy, /Cloudflare Turnstile/);
+    assert.match(privacy, /Resend/);
+    assert.match(backendStore, /MINIMUM_REGISTRATION_AGE = 16/);
+    assert.match(backendStore, /isMinorRegistration = Number\.isInteger\(age\) && age < 18/);
+    assert.match(backendStore, /completingMinorProfile/);
+    assert.match(backendStore, /TERMS_VERSION = "2026-07-14"/);
+    assert.match(authEvents, /AUTH_TERMS_VERSION = "2026-07-14"/);
+    assert.match(reportReasons, /Derechos de autor o marca/);
+    assert.match(reportReasons, /Datos personales o suplantación/);
+    assert.match(reportReasons, /Otra actividad o contenido ilegal/);
   });
 
   await test("index and app structure stay trimmed", async () => {
@@ -9231,6 +9418,9 @@ await (async () => {
       html,
       /Fecha de nacimiento[\s\S]*id="authBirthDay"[\s\S]*id="authBirthMonth"[\s\S]*id="authBirthYear"[\s\S]*id="authAgeInput"[\s\S]*type="hidden"[\s\S]*min="16"/
     );
+    assert.match(html, /<option value="" disabled hidden selected>Día<\/option>/);
+    assert.match(html, /<option value="" disabled hidden selected>Mes<\/option>/);
+    assert.match(html, /<option value="" disabled hidden selected>Año<\/option>/);
     assert.match(
       html,
       /Código de acceso[\s\S]*id="authCodeBoxes"[\s\S]*(?:class="auth-code-box"[\s\S]*autocomplete="one-time-code"[\s\S]*){6}id="authCodeInput"[\s\S]*type="hidden"/
@@ -9407,8 +9597,8 @@ await (async () => {
       html,
       /createTopicForm|mobileCreateTopicForm|Nuevo tema|Ordenados por presencia/
     );
-    assert.match(data, /"Caf\u00e9 de madrugada"/);
-    assert.match(data, /"Moderaci\u00f3n"/);
+    assert.match(data, /"¿Cómo mejorar la señal WiFi en un departamento\?"/);
+    assert.match(data, /"Cuenta editorial"/);
     assert.match(
       styles,
       /\.topic-item__title,\s*\.topic-item__meta\s*\{[\s\S]*text-overflow:\s*ellipsis;/
@@ -10951,6 +11141,28 @@ await (async () => {
     const settingsIndex = indexSource.indexOf('id="settingsButton"');
     const paletteIndex = indexSource.indexOf('id="paletteButton"');
     assert.equal(profileIndex < settingsIndex && settingsIndex < paletteIndex, true);
+  });
+
+  await test("profile and settings modals stay closable in the real mobile visual viewport", async () => {
+    const stylesSource = await read("styles.css");
+    const controllerActionsSource = await read("controller-actions.js");
+
+    assert.match(
+      stylesSource,
+      /\.profile-modal-backdrop\s*\{[\s\S]*?height:\s*100vh;[\s\S]*?height:\s*100dvh;[\s\S]*?safe-area-inset-top[\s\S]*?safe-area-inset-bottom/
+    );
+    assert.match(
+      stylesSource,
+      /\.profile-modal__header\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?top:\s*0;/
+    );
+    assert.match(
+      stylesSource,
+      /\.settings-modal\s*\{[\s\S]*?max-height:\s*calc\([\s\S]*?100dvh[\s\S]*?safe-area-inset-top[\s\S]*?safe-area-inset-bottom/
+    );
+    assert.match(
+      controllerActionsSource,
+      /function openProfileModal\(\)[\s\S]*?dom\.profileModal\.scrollTop = 0;[\s\S]*?focus\?\.\(\{ preventScroll: true \}\)/
+    );
   });
 
   await test("settings button click opens the modal through the page event wiring", async () => {

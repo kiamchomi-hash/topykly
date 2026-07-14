@@ -124,10 +124,7 @@ function createFriendsSection(friends, state) {
   section.append(heading);
 
   if (!friends.length) {
-    section.append(createEmptyState(
-      "Todavía no tienes amigos",
-      "Cuando aceptes solicitudes, podrás ver aquí quién está en línea."
-    ));
+    section.append(createEmptyState("Todavía no tienes amigos"));
     return section;
   }
 

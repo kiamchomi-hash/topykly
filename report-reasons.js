@@ -6,6 +6,9 @@ export const REPORT_REASONS = [
   { value: "hate", label: "Discurso de odio o discriminación" },
   { value: "violence", label: "Violencia o contenido perturbador" },
   { value: "sexual", label: "Contenido sexual inapropiado" },
+  { value: "privacy", label: "Datos personales o suplantación" },
+  { value: "copyright", label: "Derechos de autor o marca" },
+  { value: "illegal", label: "Otra actividad o contenido ilegal" },
   { value: REPORT_OTHER_REASON_VALUE, label: "Otro" }
 ];
 

@@ -275,7 +275,19 @@ export function createActionHandlers({
     }
     dispatch(state, reducers.setProfileModalOpen, true);
     render();
-    setTimeout(() => dom.profileNameEditButton?.focus?.(), 0);
+    if (dom.profileModal) {
+      dom.profileModal.scrollTop = 0;
+    }
+    setTimeout(() => {
+      try {
+        dom.profileNameEditButton?.focus?.({ preventScroll: true });
+      } catch {
+        dom.profileNameEditButton?.focus?.();
+      }
+      if (dom.profileModal) {
+        dom.profileModal.scrollTop = 0;
+      }
+    }, 0);
   }
 
   async function openAdminPanel() {

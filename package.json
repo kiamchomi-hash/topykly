@@ -13,7 +13,8 @@
     "test": "node tests/run.mjs",
     "test:smoke": "node tests/smoke.mjs",
     "qa": "node tests/run.mjs && node tests/smoke.mjs",
-    "backup:sqlite": "node scripts/backup-sqlite.mjs"
+    "backup:sqlite": "node scripts/backup-sqlite.mjs",
+    "seed:editorial": "node scripts/seed-editorial-content.mjs"
   },
   "repository": {
     "type": "git",

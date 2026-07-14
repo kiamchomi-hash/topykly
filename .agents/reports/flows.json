@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente de Flujos de Usabilidad",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-13T00:00:00.000Z",
+    "lastChecked":  "2026-07-14T13:32:00.000Z",
     "suggestions":  [
                         {
                             "level":  "suggestion",
@@ -55,6 +55,18 @@
                             "level":  "fix",
                             "message":  "Los likes optimistas ya no vuelven temporalmente a cero: el sondeo en vivo descarta respuestas iniciadas antes de una reaccion y espera a que la operacion termine antes de hidratar el tema.",
                             "id":  "message-reaction-live-sync-race",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "Perfil reinicia su scroll al abrir sin permitir que el foco desplace el encabezado, y Perfil y Configuracion conservan una salida visible durante todo el recorrido.",
+                            "id":  "mobile-modal-close-flow",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "La lista personalizada oculta autores bloqueados y rellena hasta 20 lugares recorriendo solo los 40 temas activos globales; nunca revive ni muestra temas archivados para completar huecos.",
+                            "id":  "blocked-topic-window-boundary",
                             "agent":  "flows"
                         }
                     ]

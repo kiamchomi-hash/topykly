@@ -347,7 +347,10 @@
       </main>
       <footer class="app-footer" aria-label="Enlaces del sitio">
         <a href="/temas">Temas activos</a>
+        <a href="/archivo">Temas archivados</a>
         <a href="/terms.html">Términos y condiciones</a>
+        <a href="/privacy.html">Política de privacidad</a>
+        <a href="mailto:soporte@topykly.com">Contacto y reclamos</a>
       </footer>
     </div>
 
@@ -459,7 +462,7 @@
               <span class="auth-email-form__label-text" id="authBirthdateLabel">Fecha de nacimiento <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
               <div class="auth-birthdate" role="group" aria-labelledby="authBirthdateLabel">
                 <select id="authBirthDay" class="auth-birthdate__select auth-birthdate__select--day" autocomplete="bday-day" aria-label="Día" aria-describedby="authStatus">
-                  <option value="">Día</option>
+                  <option value="" disabled hidden selected>Día</option>
                   <option value="1">1</option>
                   <option value="2">2</option>
                   <option value="3">3</option>
@@ -493,7 +496,7 @@
                   <option value="31">31</option>
                 </select>
                 <select id="authBirthMonth" class="auth-birthdate__select auth-birthdate__select--month" autocomplete="bday-month" aria-label="Mes" aria-describedby="authStatus">
-                  <option value="">Mes</option>
+                  <option value="" disabled hidden selected>Mes</option>
                   <option value="1">Enero</option>
                   <option value="2">Febrero</option>
                   <option value="3">Marzo</option>
@@ -508,7 +511,7 @@
                   <option value="12">Diciembre</option>
                 </select>
                 <select id="authBirthYear" class="auth-birthdate__select auth-birthdate__select--year" autocomplete="bday-year" aria-label="Año" aria-describedby="authStatus">
-                  <option value="">Año</option>
+                  <option value="" disabled hidden selected>Año</option>
                 </select>
               </div>
               <input id="authAgeInput" type="hidden" min="16" max="120" value="" />
@@ -542,7 +545,7 @@
             </div>
             <label class="auth-terms auth-profile-step" id="authTermsField" hidden>
               <input id="authTermsInput" type="checkbox" />
-              <span>Acepto los <a href="/terms.html" target="_blank" rel="noopener">Términos y Condiciones</a>.</span>
+              <span>Acepto los <a href="/terms.html" target="_blank" rel="noopener">Términos y Condiciones</a> y consiento el tratamiento y las transferencias necesarias de mis datos según la <a href="/privacy.html" target="_blank" rel="noopener">Política de Privacidad</a>.</span>
             </label>
             <div class="auth-form-actions">
               <button class="auth-back-button" id="authBackButton" type="button" hidden>Volver</button>

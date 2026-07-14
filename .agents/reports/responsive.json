@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente de Pruebas Responsive",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-14T07:38:30.000Z",
+    "lastChecked":  "2026-07-14T13:32:00.000Z",
     "suggestions":  [
                         {
                             "level":  "suggestion",
@@ -43,6 +43,12 @@
                             "level":  "fixed",
                             "message":  "Bloquear y desbloquear muestran una confirmacion opaca superpuesta que no desplaza el contenido del perfil.",
                             "id":  "public-profile-block-confirm-overlay",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "Los modales basados en perfil usan el viewport visual dinamico y areas seguras en mobile, evitando que las barras reales del navegador recorten el encabezado.",
+                            "id":  "mobile-modal-dynamic-viewport",
                             "agent":  "responsive"
                         }
                     ]

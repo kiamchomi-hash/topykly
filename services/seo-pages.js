@@ -145,6 +145,7 @@ export function renderPageShell({
       <footer class="seo-footer">
         <a href="/">Inicio</a>
         <a href="/temas">Temas</a>
+        <a href="/archivo">Archivo</a>
         <a href="/terms.html">Términos</a>
       </footer>
     </div>
@@ -182,7 +183,8 @@ export function topicPath(topic) {
 
 export function renderTopicPage(topic, { origin }) {
   const canonicalUrl = `${origin}${topicPath(topic)}`;
-  const isIndexable = !topic.isThin && !topic.isExpelled && !topic.isBlocked;
+  const isArchived = topic.isArchived === true || topic.isExpelled === true;
+  const isIndexable = !topic.isThin && !topic.isBlocked;
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "DiscussionForumPosting",
@@ -213,6 +215,7 @@ export function renderTopicPage(topic, { origin }) {
   const bodyHtml = `<article>
         <h1 class="seo-title">${escapeHtml(topic.title)}</h1>
         <p class="seo-meta">Por ${escapeHtml(topic.author?.name || "Usuario de TOPYKLY")} · ${escapeHtml(formatDate(topic.createdAt))} · ${escapeHtml(commentLabel)}</p>
+        ${isArchived ? `<p class="seo-meta"><strong>Tema archivado:</strong> esta conversación se conserva para consulta y ya no admite comentarios ni reacciones.</p>` : ""}
         ${topic.messages.map(renderMessageBlock).join("\n      ")}
         <a class="seo-cta" href="/?selectedTopicId=${escapeHtml(encodeURIComponent(topic.id))}">Abrir en TOPYKLY</a>
       </article>
@@ -245,7 +248,8 @@ export function renderTopicsIndexPage(topics, { origin }) {
   const bodyHtml = `<h1 class="seo-title">Temas activos en TOPYKLY</h1>
       <p class="seo-meta">Conversaciones abiertas ahora en la comunidad.</p>
       ${topics.length ? `<ul class="seo-list">\n        ${items}\n      </ul>` : "<p>No hay temas activos en este momento.</p>"}
-      <a class="seo-cta" href="/">Abrir TOPYKLY</a>`;
+      <a class="seo-cta" href="/">Abrir TOPYKLY</a>
+      <p><a href="/archivo">Consultar temas archivados</a></p>`;
 
   return renderPageShell({
     title: "Temas activos — TOPYKLY",
@@ -257,8 +261,38 @@ export function renderTopicsIndexPage(topics, { origin }) {
       name: "Temas activos — TOPYKLY",
       url: `${origin}/temas`
     },
-    bodyHtml,
-    redirectUrl: "/"
+    bodyHtml
+  });
+}
+
+export function renderTopicsArchivePage(topics, { origin }) {
+  const items = topics
+    .map((topic) => {
+      const commentLabel = topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
+      return `<li>
+          <a href="${escapeHtml(topicPath(topic))}">${escapeHtml(topic.title)}</a>
+          <span class="seo-item-meta">${escapeHtml(commentLabel)} · archivado ${escapeHtml(formatDate(topic.lastActivityAt))}</span>
+        </li>`;
+    })
+    .join("\n        ");
+
+  const bodyHtml = `<h1 class="seo-title">Temas archivados de TOPYKLY</h1>
+      <p class="seo-meta">Conversaciones cerradas que se conservan para consulta. No admiten nuevos comentarios ni reacciones.</p>
+      ${topics.length ? `<ul class="seo-list">\n        ${items}\n      </ul>` : "<p>Todavía no hay temas archivados.</p>"}
+      <p><a href="/temas">Ver temas activos</a></p>
+      <a class="seo-cta" href="/">Abrir TOPYKLY</a>`;
+
+  return renderPageShell({
+    title: "Temas archivados — TOPYKLY",
+    description: "Archivo de conversaciones en español de TOPYKLY, disponibles para lectura y consulta mediante su enlace permanente.",
+    canonicalUrl: `${origin}/archivo`,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: "Temas archivados — TOPYKLY",
+      url: `${origin}/archivo`
+    },
+    bodyHtml
   });
 }
 
@@ -269,7 +303,7 @@ export function renderProfilePage(profile, { origin }) {
     "@type": "ProfilePage",
     url: canonicalUrl,
     mainEntity: {
-      "@type": "Person",
+      "@type": profile.isEditorial ? "Organization" : "Person",
       name: profile.name,
       alternateName: profile.nickname,
       ...(profile.description ? { description: profile.description } : {}),

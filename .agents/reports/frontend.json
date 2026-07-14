@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente Revisor de Frontend",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-08T15:57:44.475Z",
+    "lastChecked":  "2026-07-14T15:05:30.221Z",
     "findings":  [
                      {
                          "level":  "suggestion",
@@ -13,6 +13,18 @@
                          "level":  "fixed",
                          "message":  "Reemplazada la X textual corrupta del drawer mobile por un SVG de cierre independiente de codificacion.",
                          "id":  "mobile-drawer-close-icon",
+                         "agent":  "frontend"
+                     },
+                     {
+                         "level":  "fixed",
+                         "message":  "Los encabezados de los modales de perfil y configuracion permanecen visibles durante el scroll, manteniendo siempre accesible la accion de cierre.",
+                         "id":  "mobile-modal-sticky-close-header",
+                         "agent":  "frontend"
+                     },
+                     {
+                         "level":  "fixed",
+                         "message":  "El estado sin amigos elimina la explicacion solicitada y los selectores de nacimiento conservan Dia, Mes y Ano como indicaciones iniciales deshabilitadas y ocultas del listado de opciones.",
+                         "id":  "auth-birthdate-hidden-placeholders",
                          "agent":  "frontend"
                      }
                  ]
