@@ -114,11 +114,17 @@ export function renderChat(state, dom) {
 
   const previousRenderState = readRenderedChatState(dom.messageStream);
   const wasNearBottom = previousRenderState.topicId ? isNearMessageStreamBottom(dom.messageStream) : true;
+  const hiddenBlockedQuoteAuthors = (state.blockedUsers || [])
+    .filter((user) => user.hideContent)
+    .flatMap((user) => [user.nickname, user.name])
+    .filter(Boolean);
 
   renderIntoTargets([dom.messageStream], "message-stream", () =>
     topic.messages.map((message) => createMessageItem(message, state.users, {
       reported: reportedMessageIds.has(message.id),
-      currentUserId: state.viewer?.id || null
+      currentUserId: state.viewer?.id || null,
+      blocked: (state.blockedUsers || []).some((user) => user.id === message.authorId),
+      hiddenBlockedQuoteAuthors
     }))
   );
 

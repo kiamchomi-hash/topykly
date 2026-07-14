@@ -50,6 +50,12 @@
                             "message":  "La seccion de sanciones activas permite anular una decision incorrecta y conserva el historial de auditoria; el contador de reportes se actualiza durante el sondeo en vivo sin abrir el panel.",
                             "id":  "sanction-restoration-and-live-reports",
                             "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "Los likes optimistas ya no vuelven temporalmente a cero: el sondeo en vivo descarta respuestas iniciadas antes de una reaccion y espera a que la operacion termine antes de hidratar el tema.",
+                            "id":  "message-reaction-live-sync-race",
+                            "agent":  "flows"
                         }
                     ]
 }

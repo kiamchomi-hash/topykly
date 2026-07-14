@@ -1,13 +1,13 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-13T18:31:22.5455734-03:00",
+  "lastChecked": "2026-07-13T20:27:59.0168313-03:00",
   "tests": [
     {
       "name": "unit and integration suite",
       "command": "npm test",
       "status": "passed",
-      "summary": "all tests passed, including progressive sanctions, restoration, live moderation counts and admin queue refresh coverage"
+      "summary": "all tests passed, including stable mascot coloring across light and dark themes"
     },
     {
       "name": "HTTP smoke suite",
@@ -22,16 +22,10 @@
       "summary": "no whitespace errors"
     },
     {
-      "name": "auth modal layout",
-      "command": "playwright-cli geometry check",
+      "name": "mascot visual integration",
+      "command": "playwright-cli screenshot checks",
       "status": "passed",
-      "summary": "off and silent Turnstile states keep a 0px height and the auth tabs fixed at the same vertical position"
-    },
-    {
-      "name": "admin moderation flow",
-      "command": "playwright-cli desktop and 390px mobile checks",
-      "status": "passed",
-      "summary": "pending badge, report grouping, sanctions tab, restoration confirmation, solid surfaces and responsive navigation verified"
+      "summary": "approved silhouette and clean palette halo are preserved; eyes and mouth render as solid neutral black in the light interface"
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente de Pruebas Responsive",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-08T16:36:36.080Z",
+    "lastChecked":  "2026-07-14T07:38:30.000Z",
     "suggestions":  [
                         {
                             "level":  "suggestion",
@@ -19,6 +19,30 @@
                             "level":  "fixed",
                             "message":  "El avatar de los temas en mobile queda pegado al borde izquierdo del item: se removio el gutter izquierdo del scroll y el borde interno del avatar.",
                             "id":  "mobile-topic-avatar-flush-left",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "El avatar del perfil publico mantiene proporcion cuadrada y tamano estable en mobile, incluso cuando el modal necesita scroll.",
+                            "id":  "public-profile-mobile-avatar-square",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "El perfil publico usa un unico scroll en el cuerpo; Ultimos temas ya no crea una zona de desplazamiento propia.",
+                            "id":  "public-profile-single-scroll",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "El modal oculta la barra nativa y muestra un indicador superpuesto solo durante el desplazamiento, sin reservar ancho ni mover el contenido.",
+                            "id":  "public-profile-overlay-scroll-indicator",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "Bloquear y desbloquear muestran una confirmacion opaca superpuesta que no desplaza el contenido del perfil.",
+                            "id":  "public-profile-block-confirm-overlay",
                             "agent":  "responsive"
                         }
                     ]

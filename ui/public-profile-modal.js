@@ -54,6 +54,63 @@ function isTopicAvailable(topic) {
   return topic?.visible !== false && topic?.status !== "blocked" && topic?.status !== "expelled";
 }
 
+function syncPublicProfileBlockActions(state, dom, user, { isGuest, isCurrentUser }) {
+  const canBlock = !isGuest && !isCurrentUser && state.viewer?.type === "registered";
+  const blockedUser = canBlock
+    ? (state.blockedUsers || []).find((entry) => entry.id === user.id) || null
+    : null;
+  const confirming = canBlock && Boolean(state.publicProfileBlockConfirming);
+  const isUnblocking = Boolean(blockedUser);
+  const pending = state.blockedUserActionPending === user.id;
+
+  dom.publicProfileModal?.classList.toggle("is-block-confirming", confirming);
+
+  if (dom.publicProfileBlockActions) {
+    dom.publicProfileBlockActions.hidden = !confirming;
+  }
+  if (dom.publicProfileBlockConfirm) {
+    dom.publicProfileBlockConfirm.hidden = !confirming;
+  }
+  if (dom.publicProfileBlockPrompt) {
+    dom.publicProfileBlockPrompt.textContent = isUnblocking
+      ? "¿Desbloquear esta cuenta?"
+      : "¿Bloquear esta cuenta?";
+  }
+  if (dom.publicProfileBlockChoice) {
+    dom.publicProfileBlockChoice.hidden = isUnblocking;
+  }
+  if (dom.publicProfileBlockButton) {
+    const label = dom.publicProfileBlockButton.querySelector?.(".button-label");
+    if (label) {
+      label.textContent = blockedUser ? "Desbloquear" : "Bloquear";
+    }
+    dom.publicProfileBlockButton.hidden = !canBlock;
+    dom.publicProfileBlockButton.setAttribute(
+      "aria-label",
+      blockedUser ? `Desbloquear a ${user.name}` : `Bloquear a ${user.name}`
+    );
+    dom.publicProfileBlockButton.dataset.blockAction = "request";
+    dom.publicProfileBlockButton.dataset.blockedUserId = user.id;
+    dom.publicProfileBlockButton.disabled = pending;
+  }
+  if (dom.publicProfileHideContentToggle) {
+    const hideContent = state.publicProfileBlockHideContent !== false;
+    dom.publicProfileHideContentToggle.classList.toggle("is-on", hideContent);
+    dom.publicProfileHideContentToggle.setAttribute("aria-checked", String(hideContent));
+    dom.publicProfileHideContentToggle.disabled = pending;
+  }
+  if (dom.publicProfileBlockCancelButton) {
+    dom.publicProfileBlockCancelButton.disabled = pending;
+  }
+  if (dom.publicProfileBlockConfirmButton) {
+    dom.publicProfileBlockConfirmButton.textContent = isUnblocking ? "Desbloquear cuenta" : "Bloquear cuenta";
+    dom.publicProfileBlockConfirmButton.disabled = pending;
+    dom.publicProfileBlockConfirmButton.setAttribute("aria-busy", String(pending));
+    dom.publicProfileBlockConfirmButton.dataset.blockAction = isUnblocking ? "unblock" : "block";
+    dom.publicProfileBlockConfirmButton.dataset.blockedUserId = user.id;
+  }
+}
+
 export function renderPublicProfileModal(state, dom) {
   const user = state.users.find((candidate) => candidate.id === state.publicProfileUserId) || null;
   const isOpen = Boolean(user);
@@ -95,6 +152,8 @@ export function renderPublicProfileModal(state, dom) {
   if (dom.publicProfileGuestNotice) {
     dom.publicProfileGuestNotice.hidden = !isGuest;
   }
+
+  syncPublicProfileBlockActions(state, dom, user, { isGuest, isCurrentUser });
 
   if (isGuest) {
     if (dom.publicProfileAvatar) {

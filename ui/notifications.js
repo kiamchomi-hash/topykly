@@ -1,5 +1,5 @@
-import { getActiveAccentColor } from "../palettes.js";
 import { filterDisplayText } from "../profanity-filter.js";
+import { createTopyklyMascot } from "./mascot.js";
 import { reconcile } from "./render-utils.js";
 
 const NOTIFICATION_LIMIT = 120;
@@ -225,27 +225,42 @@ function collectLikeNotifications({ previousTopic, topic, viewerId, users, notif
       return [];
     }
 
+    const knownLikerIsViewer = Boolean(
+      message.lastLikeById && String(message.lastLikeById) === String(viewerId)
+    );
+    const viewerLikeAdded = knownLikerIsViewer || Boolean(
+      message.likedByViewer === true && previousMessage.likedByViewer !== true
+    );
+    const delta = nextLikes - previousLikes;
+    const externalDelta = delta - (viewerLikeAdded ? 1 : 0);
+    if (externalDelta <= 0) {
+      return [];
+    }
+
     if (message.isRoot && suppressRootPostLike) {
       return [];
     }
 
     const kind = message.isRoot ? "post-like" : "comment-like";
-    const delta = nextLikes - previousLikes;
-    const knownLiker = delta === 1 && message.lastLikeByName
+    const knownLiker = externalDelta === 1 && delta === 1 && message.lastLikeByName && !knownLikerIsViewer
       ? { id: message.lastLikeById || message.lastLikeByName, name: message.lastLikeByName, avatarUrl: null }
       : null;
+    const totalCount = Math.max(
+      externalDelta,
+      nextLikes - (message.likedByViewer === true || knownLikerIsViewer ? 1 : 0)
+    );
     return [{
       id: `toast-${kind}-${messageId}-${nextLikes}`,
       kind,
       topicId: topic.id,
       messageId: `like-${messageId}-${nextLikes}`,
       targetMessageId: messageId,
-      totalCount: nextLikes,
+      totalCount,
       actors: [knownLiker || { name: "Alguien", avatarUrl: null }],
       title: getNotificationTitle(kind),
       body: knownLiker
         ? `${knownLiker.name} le dio like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`
-        : `${delta === 1 ? "Alguien dio" : `${delta} personas dieron`} like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`,
+        : `${externalDelta === 1 ? "Alguien dio" : `${externalDelta} personas dieron`} like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`,
       topicTitle: topic.title || "Tema",
       createdAt: now
     }];
@@ -1003,42 +1018,18 @@ function getProceduralMascot(hexColor) {
   `;
 }
 
-export function createNotificationEmptyState(state) {
+export function createNotificationEmptyState() {
   const empty = document.createElement("section");
   empty.className = "notification-panel__empty";
   empty.setAttribute("aria-live", "polite");
 
-  const hexColor = state
-    ? getActiveAccentColor(state.theme, state.paletteId, state.customPaletteHex)
-    : "#B25B33";
-
-  const rawCustomHex = state?.customPaletteHex || "#B25B33";
-  const isCustom = state && state.paletteId === "custom";
-  const brand = isCustom ? findBrand(rawCustomHex) : null;
-  let mascotSvg = "";
-  let titleText = "Aun no hay comentarios";
-
-  if (brand) {
-    mascotSvg = brand.draw(rawCustomHex);
-  } else {
-    mascotSvg = getProceduralMascot(hexColor);
-  }
-
-  const mascot = document.createElement("span");
-  mascot.className = "notification-panel__empty-mascot";
-  mascot.setAttribute("aria-hidden", "true");
-  mascot.style.setProperty("--accent", hexColor);
-  mascot.innerHTML = mascotSvg;
+  const mascot = createTopyklyMascot("notification-panel__empty-mascot");
 
   const title = document.createElement("strong");
   title.className = "notification-panel__empty-title";
-  title.textContent = titleText;
+  title.textContent = "Aún no hay notificaciones";
 
-  const copy = document.createElement("span");
-  copy.className = "notification-panel__empty-copy";
-  copy.textContent = "Cuando alguien comente, cite o reaccione a tus posteos, aparecera aca.";
-
-  empty.append(mascot, title, copy);
+  empty.append(mascot, title);
   return empty;
 }
 

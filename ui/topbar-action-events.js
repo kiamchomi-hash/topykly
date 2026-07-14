@@ -2172,7 +2172,22 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   });
   addListener(dom.settingsModal, "click", (event) => {
-    const toggleTarget = resolveEventElement(event)?.closest?.("[data-setting-toggle]") ?? null;
+    const eventElement = resolveEventElement(event);
+    const blockedUserTarget = eventElement?.closest?.("[data-blocked-user-action][data-blocked-user-id]") ?? null;
+    if (blockedUserTarget instanceof HTMLElement) {
+      const userId = blockedUserTarget.dataset.blockedUserId || "";
+      if (blockedUserTarget.dataset.blockedUserAction === "unblock") {
+        void handlers.unblockUser?.(userId);
+        return;
+      }
+      if (blockedUserTarget.dataset.blockedUserAction === "toggle-content") {
+        const hideContent = blockedUserTarget.getAttribute("aria-checked") !== "true";
+        void handlers.updateBlockedUser?.(userId, hideContent);
+        return;
+      }
+    }
+
+    const toggleTarget = eventElement?.closest?.("[data-setting-toggle]") ?? null;
     if (toggleTarget instanceof HTMLElement) {
       void handlers.toggleSetting?.(toggleTarget.dataset.settingToggle);
     }

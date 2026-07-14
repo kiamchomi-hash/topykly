@@ -119,6 +119,7 @@ function normalizeBackendPayload(payload) {
       outgoing: [],
       friends: []
     },
+    blockedUsers: Array.isArray(payload.blockedUsers) ? payload.blockedUsers : [],
     pendingModerationCount: Number.isFinite(payload.pendingModerationCount)
       ? payload.pendingModerationCount
       : 0,
@@ -373,6 +374,26 @@ export const api = {
   async rejectFriendRequest(userId, selectedTopicId = null) {
     return request(`/api/friends/${encodeURIComponent(userId)}/reject`, {
       method: "POST",
+      body: { selectedTopicId }
+    });
+  },
+  async blockUser(userId, hideContent = true, selectedTopicId = null) {
+    return request(`/api/blocks/${encodeURIComponent(userId)}`, {
+      method: "POST",
+      body: { hideContent, selectedTopicId }
+    });
+  },
+
+  async updateBlockedUser(userId, hideContent, selectedTopicId = null) {
+    return request(`/api/blocks/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: { hideContent, selectedTopicId }
+    });
+  },
+
+  async unblockUser(userId, selectedTopicId = null) {
+    return request(`/api/blocks/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
       body: { selectedTopicId }
     });
   },

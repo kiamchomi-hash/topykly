@@ -1,3 +1,4 @@
+import { createTopyklyMascot } from "./mascot.js";
 import { reconcile } from "./render-utils.js";
 
 function createFriendAvatar(user) {
@@ -83,16 +84,20 @@ function createFriendRow(user, actions = [], presence = null) {
   return row;
 }
 
-function createEmptyState(title, copy) {
+function createEmptyState(title, copy = "") {
   const empty = document.createElement("div");
   empty.className = "friend-request-panel__empty";
+  const mascot = createTopyklyMascot("friend-request-panel__empty-mascot");
   const heading = document.createElement("strong");
   heading.className = "friend-request-panel__empty-title";
   heading.textContent = title;
-  const detail = document.createElement("span");
-  detail.className = "friend-request-panel__empty-copy";
-  detail.textContent = copy;
-  empty.append(heading, detail);
+  empty.append(mascot, heading);
+  if (copy) {
+    const detail = document.createElement("span");
+    detail.className = "friend-request-panel__empty-copy";
+    detail.textContent = copy;
+    empty.append(detail);
+  }
   return empty;
 }
 
@@ -120,8 +125,8 @@ function createFriendsSection(friends, state) {
 
   if (!friends.length) {
     section.append(createEmptyState(
-      "Todavia no agregaste amigos",
-      "Cuando aceptes solicitudes vas a poder ver aca quien esta en linea."
+      "Todavía no tienes amigos",
+      "Cuando aceptes solicitudes, podrás ver aquí quién está en línea."
     ));
     return section;
   }
@@ -130,13 +135,13 @@ function createFriendsSection(friends, state) {
   const list = document.createElement("div");
   list.className = "friend-request-panel__list";
 
-  list.append(createPresenceGroupTitle("En linea", online.length, "online"));
+  list.append(createPresenceGroupTitle("En línea", online.length, "online"));
   if (online.length) {
     list.append(...online.map((user) => createFriendRow(user, [], "online")));
   } else {
     const empty = document.createElement("p");
     empty.className = "friend-request-panel__empty friend-request-panel__empty--group";
-    empty.textContent = "Ningun amigo esta en linea.";
+    empty.textContent = "Ningún amigo está en línea.";
     list.append(empty);
   }
 
@@ -287,8 +292,7 @@ export function renderFriendRequests(state, dom) {
         { kind: "reject", label: "Rechazar" }
       ]),
       {
-        title: "No hay solicitudes pendientes",
-        copy: "Cuando alguien te envie una solicitud de amistad, va a aparecer aca."
+        title: "No hay solicitudes pendientes"
       }
     );
   } else if (activeTab === "outgoing") {
@@ -298,8 +302,7 @@ export function renderFriendRequests(state, dom) {
       (friendships.outgoing || []).slice(0, limit),
       (user) => createFriendRow(user),
       {
-        title: "No hay solicitudes enviadas",
-        copy: "Las solicitudes de amistad que envies van a aparecer aca."
+        title: "No hay solicitudes enviadas"
       }
     );
   } else {

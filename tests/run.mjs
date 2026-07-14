@@ -59,7 +59,7 @@ import { createResponsiveHelpers } from "../controller-responsive.js";
 import { createResizeHandler } from "../controller-runtime.js";
 import { applyStoredTheme } from "../controller-theme.js";
 import { createActionHandlers } from "../controller-actions.js";
-import { reducers } from "../store-logic.js";
+import { dispatch, reducers } from "../store-logic.js";
 import { api } from "../services/api.js";
 import { api as versionedApiForControllerActions } from "../services/api.js?v=20260709-topicrace1";
 import {
@@ -73,8 +73,7 @@ import {
   normalizeHexColor,
   parseHexColor,
   PALETTE_OPTIONS,
-  isPaletteId,
-  getActiveAccentColor
+  isPaletteId
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
 import { selectOnlineUsers } from "../ui/users.js";
@@ -547,6 +546,60 @@ await (async () => {
     assert.deepEqual(state.unreadTopicIds, [topics[1].id]);
   });
 
+  await test("live topic sync ignores a stale payload while a message reaction is pending", async () => {
+    const users = buildUsers(initialUsers);
+    const message = createMessage("u2", "Mensaje votable", 0);
+    const topics = [{
+      id: "topic-like-race",
+      title: "Tema con like concurrente",
+      authorId: "u2",
+      visible: true,
+      messages: [message]
+    }];
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      pendingMessageReactionIds: [],
+      messageReactionRevision: 0,
+      topics,
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topics[0].id
+    };
+    let releaseRefresh;
+    let renderCalls = 0;
+    const sync = createLiveTopicSync({
+      state,
+      render: () => {
+        renderCalls += 1;
+      },
+      intervalMs: 0,
+      apiClient: {
+        async refreshTopics(selectedTopicId) {
+          return new Promise((resolve) => {
+            releaseRefresh = () => resolve({
+              viewer: state.viewer,
+              users,
+              topics,
+              selectedTopicId
+            });
+          });
+        }
+      }
+    });
+
+    const refreshPromise = sync.refreshNow();
+    dispatch(state, reducers.setMessageReactionPending, { messageId: message.id, pending: true });
+    dispatch(state, reducers.applyMessageReaction, { messageId: message.id, reactionType: "like" });
+    releaseRefresh();
+
+    assert.equal(await refreshPromise, false);
+    assert.equal(state.topics[0].messages[0].likes, 1);
+    assert.equal(state.topics[0].messages[0].likedByViewer, true);
+    assert.equal(renderCalls, 0);
+  });
+
   await test("live topic sync refreshes an open admin queue when its pending count changes", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -913,6 +966,79 @@ await (async () => {
     );
   });
 
+  await test("does not notify the viewer about own likes or comments", () => {
+    const users = [{ id: "u1", name: "Cami" }];
+    const rootMessage = {
+      ...createMessage("u1", "Post original", 0, "user", 1_700_000_000_000, true),
+      id: "root-1",
+      likes: 0,
+      likedByViewer: false
+    };
+    const previousTopic = {
+      id: "topic-1",
+      title: "Tema propio",
+      authorId: "u1",
+      messages: [rootMessage]
+    };
+    const notificationState = {
+      viewer: { id: "u1", name: "Cami" },
+      currentUserId: "u1",
+      followedTopicIds: [],
+      notifiedMessageIds: [],
+      users,
+      topics: [previousTopic]
+    };
+
+    const selfLikeNotifications = collectTopicNotifications(
+      notificationState,
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users,
+        topics: [{
+          ...previousTopic,
+          messages: [{
+            ...rootMessage,
+            likes: 1,
+            likedByViewer: true,
+            lastLikeById: "u1",
+            lastLikeByName: "Cami"
+          }]
+        }]
+      },
+      1_700_000_001_000
+    );
+    assert.deepEqual(selfLikeNotifications, []);
+
+    const ownComment = {
+      ...createMessage("u1", "Comentario propio", 0, "user", 1_700_000_002_000),
+      id: "reply-1"
+    };
+    const selfCommentNotifications = collectTopicNotifications(
+      notificationState,
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users,
+        topics: [{ ...previousTopic, messages: [rootMessage, ownComment] }]
+      },
+      1_700_000_002_000
+    );
+    assert.deepEqual(selfCommentNotifications, []);
+
+    const anonymousSelfLikeNotifications = collectTopicNotifications(
+      notificationState,
+      {
+        viewer: { id: "u1", name: "Cami" },
+        users,
+        topics: [{
+          ...previousTopic,
+          messages: [{ ...rootMessage, likes: 1, likedByViewer: true }]
+        }]
+      },
+      1_700_000_003_000
+    );
+    assert.deepEqual(anonymousSelfLikeNotifications, []);
+  });
+
   await test("first post comment uses root post-like notification without duplicate", () => {
     const rootMessage = {
       ...createMessage("u1", "Post original", 0, "user", 1_700_000_000_000, true),
@@ -1077,21 +1203,48 @@ await (async () => {
     assert.equal(grouped[0].body, "Iara, Nico y 1 persona mas comentaron tu posteo.");
   });
 
-  await test("notification empty state uses a quiet illustrated layout", async () => {
+  await test("approved mascot is reused in notification and friend empty states", async () => {
     const notificationSource = await read("ui/notifications.js");
+    const friendRequestSource = await read("ui/friend-requests.js");
+    const chatSource = await read("ui/chat.js");
+    const mascotSource = await read("ui/mascot.js");
     const styles = await read("styles.css");
 
-    assert.ok(notificationSource.includes('document.createElement("section")'));
-    assert.ok(notificationSource.includes("notification-panel__empty-mascot"));
-    assert.ok(notificationSource.includes("Aun no hay comentarios"));
-    assert.ok(styles.includes(".notification-panel__empty"));
-    assert.ok(styles.includes("background: transparent"));
-    assert.ok(styles.includes(".notification-panel__empty-mascot"));
-    assert.ok(styles.includes("place-items: center"));
-    assert.ok(styles.includes("width: 72px"));
+    assert.match(notificationSource, /createTopyklyMascot\("notification-panel__empty-mascot"\)/);
+    assert.match(friendRequestSource, /createTopyklyMascot\("friend-request-panel__empty-mascot"\)/);
+    assert.doesNotMatch(chatSource, /createTopyklyMascot/);
+    assert.match(mascotSource, /assets\/mascot\/topy-concept-v8\.png/);
+    assert.match(mascotSource, /flood-color="var\(--mascot-accent\)"/);
+    assert.match(mascotSource, /in2="SourceAlpha"/);
+    assert.match(mascotSource, /class="topykly-mascot__neutral-face" fill="#000"/);
+    assert.match(mascotSource, /stroke="#000"/);
+    assert.match(styles, /mask: url\("\.\/assets\/mascot\/topy-concept-v8\.png"\)/);
+    assert.match(styles, /transform: scale\(1\.012\)/);
+    assert.ok(styles.includes(".topykly-mascot"));
+    assert.ok(styles.includes("width: 92px"));
   });
 
-  await test("notification empty state custom and brand/satirical mascots", () => {
+  await test("social empty states use contained layouts without explanatory request copy", async () => {
+    const notificationSource = await read("ui/notifications.js");
+    const friendRequestSource = await read("ui/friend-requests.js");
+    const styles = await read("styles.css");
+
+    assert.match(notificationSource, /Aún no hay notificaciones/);
+    assert.doesNotMatch(notificationSource, /Cuando alguien comente/);
+    assert.doesNotMatch(friendRequestSource, /Cuando alguien te envie/);
+    assert.doesNotMatch(friendRequestSource, /Las solicitudes de amistad que envies/);
+    assert.match(
+      styles,
+      /\.notification-panel__empty\s*\{[^}]*width:\s*calc\(100% - 28px\);[^}]*border:\s*1px dashed[^}]*border-radius:\s*10px;/
+    );
+    assert.match(
+      styles,
+      /\.notification-panel__body > \.notification-panel__empty\s*\{[^}]*margin:\s*12px 14px;/
+    );
+    assert.match(styles, /\.notification-toasts\s*\{[^}]*height:\s*auto;[^}]*max-height:/);
+  });
+
+  await test("notification empty state always uses the single approved mascot", () => {
     const previousDocument = globalThis.document;
 
     class MockNode {
@@ -1135,49 +1288,32 @@ await (async () => {
     };
 
     try {
-      // 1. Check brand/satirical mascot (Coca-Cola #F40009)
-      const stateCoke = {
+      const firstState = {
         theme: "light",
         paletteId: "custom",
         customPaletteHex: "#F40009"
       };
-      const elementCoke = createNotificationEmptyState(stateCoke);
-      const mascotCoke = elementCoke.children[0];
-      const titleCoke = elementCoke.children[1];
-      assert.equal(titleCoke.textContent, "Aun no hay comentarios");
-      assert.ok(mascotCoke.innerHTML.includes("fill=\"#F40009\""));
-
-      // 2. Check brand/satirical mascot (Pepsi #003087)
-      const statePepsi = {
+      const secondState = {
         theme: "dark",
         paletteId: "custom",
         customPaletteHex: "#003087"
       };
-      const elementPepsi = createNotificationEmptyState(statePepsi);
-      const titlePepsi = elementPepsi.children[1];
-      assert.equal(titlePepsi.textContent, "Aun no hay comentarios");
+      const firstElement = createNotificationEmptyState(firstState);
+      const secondElement = createNotificationEmptyState(secondState);
+      const firstMascot = firstElement.children[0];
+      const secondMascot = secondElement.children[0];
 
-      // 3. Check brand/satirical mascot with slightly off brand color (proximity matching, e.g. #F30008, close to Coke)
-      const stateCloseCoke = {
-        theme: "light",
-        paletteId: "custom",
-        customPaletteHex: "#F30008"
-      };
-      const elementCloseCoke = createNotificationEmptyState(stateCloseCoke);
-      const titleCloseCoke = elementCloseCoke.children[1];
-      assert.equal(titleCloseCoke.textContent, "Aun no hay comentarios");
-
-      // 4. Check procedural/custom mascot for normal color (e.g. #B25B33)
-      const stateNormal = {
-        theme: "light",
-        paletteId: "custom",
-        customPaletteHex: "#B25B33"
-      };
-      const elementNormal = createNotificationEmptyState(stateNormal);
-      const mascotNormal = elementNormal.children[0];
-      const titleNormal = elementNormal.children[1];
-      assert.equal(titleNormal.textContent, "Aun no hay comentarios");
-      assert.equal(mascotNormal.style.getPropertyValue("--accent"), getActiveAccentColor(stateNormal.theme, stateNormal.paletteId, stateNormal.customPaletteHex));
+      assert.equal(firstElement.children[1].textContent, "Aún no hay notificaciones");
+      assert.equal(secondElement.children[1].textContent, "Aún no hay notificaciones");
+      assert.equal(firstElement.children.length, 2);
+      assert.equal(secondElement.children.length, 2);
+      assert.match(firstMascot.className, /topykly-mascot/);
+      assert.match(secondMascot.className, /topykly-mascot/);
+      assert.ok(firstMascot.innerHTML.includes("topy-concept-v8.png"));
+      assert.ok(secondMascot.innerHTML.includes("topy-concept-v8.png"));
+      assert.ok(firstMascot.innerHTML.includes("var(--mascot-accent)"));
+      assert.ok(!firstMascot.innerHTML.includes("#F40009"));
+      assert.ok(!secondMascot.innerHTML.includes("#003087"));
     } finally {
       globalThis.document = previousDocument;
     }
@@ -1400,6 +1536,26 @@ await (async () => {
     assert.equal(nextMessage.likedByViewer, true);
     assert.equal(message.likes, 0);
     assert.equal(message.likedByViewer, undefined);
+  });
+
+  await test("message reaction pending state advances the live-sync revision", () => {
+    const initialState = {
+      pendingMessageReactionIds: [],
+      messageReactionRevision: 0
+    };
+    const pendingState = reducers.setMessageReactionPending(initialState, {
+      messageId: "message-1",
+      pending: true
+    });
+    const settledState = reducers.setMessageReactionPending(pendingState, {
+      messageId: "message-1",
+      pending: false
+    });
+
+    assert.deepEqual(pendingState.pendingMessageReactionIds, ["message-1"]);
+    assert.equal(pendingState.messageReactionRevision, 1);
+    assert.deepEqual(settledState.pendingMessageReactionIds, []);
+    assert.equal(settledState.messageReactionRevision, 2);
   });
 
   await test("setFriendRequestsTab reducer changes friendRequestsTab key in state", () => {
@@ -2037,6 +2193,54 @@ await (async () => {
         refreshedFirstUser.users.find((user) => user.id === "u2")?.friendshipStatus,
         "friend"
       );
+    });
+  });
+  await test("backend persists user blocks and hides blocked content on demand", async () => {
+    await withTempStore((store) => {
+      const firstUser = store.login({ sessionId: "session-block-u1", userId: "u1" });
+      const secondUser = store.login({ sessionId: "session-block-u2", userId: "u2" });
+      const topicBySecondUser = firstUser.topics.find((topic) => topic.authorId === "u2");
+
+      assert.ok(topicBySecondUser);
+      store.sendFriendRequest("u2", { sessionId: firstUser.sessionId });
+      store.acceptFriendRequest("u1", { sessionId: secondUser.sessionId });
+
+      const blocked = store.blockUser("u2", {
+        sessionId: firstUser.sessionId,
+        hideContent: true,
+        selectedTopicId: topicBySecondUser.id
+      });
+
+      assert.deepEqual(
+        blocked.blockedUsers.map(({ id, hideContent }) => ({ id, hideContent })),
+        [{ id: "u2", hideContent: true }]
+      );
+      assert.equal(blocked.friendships.friends.length, 0);
+      assert.equal(blocked.selectedTopicId, null);
+      assert.equal(blocked.topics.some((topic) => topic.authorId === "u2"), false);
+      assert.equal(
+        blocked.topics.some((topic) => topic.messages.some((message) => message.authorId === "u2")),
+        false
+      );
+      assert.throws(
+        () => store.sendFriendRequest("u1", { sessionId: secondUser.sessionId }),
+        (error) => error.code === "USER_BLOCKED"
+      );
+
+      const visibleAgain = store.updateBlockedUser("u2", {
+        sessionId: firstUser.sessionId,
+        hideContent: false
+      });
+      assert.equal(visibleAgain.blockedUsers[0].hideContent, false);
+      assert.equal(visibleAgain.topics.some((topic) => topic.authorId === "u2"), true);
+
+      const refreshed = store.refresh({ sessionId: firstUser.sessionId });
+      assert.equal(refreshed.blockedUsers[0].id, "u2");
+      assert.equal(refreshed.blockedUsers[0].hideContent, false);
+
+      const unblocked = store.unblockUser("u2", { sessionId: firstUser.sessionId });
+      assert.deepEqual(unblocked.blockedUsers, []);
+      assert.equal(unblocked.topics.some((topic) => topic.authorId === "u2"), true);
     });
   });
   await test("backend loginWithIdentity creates and reuses a registered user from the provider identity", async () => {
@@ -3920,6 +4124,68 @@ await (async () => {
     assert.equal(buttonAttributes.get("aria-busy"), "false");
   });
 
+  await test("message like action keeps its live-sync guard until the backend settles", async () => {
+    const users = buildUsers(initialUsers);
+    const message = createMessage("u2", "Like protegido de polls viejos", 0);
+    const topic = {
+      id: "topic-like-action",
+      title: "Tema con guard de like",
+      authorId: "u2",
+      visible: true,
+      messages: [message]
+    };
+    const state = {
+      viewer: { id: "u1", type: "registered" },
+      reportedTopicIds: [],
+      reportedMessageIds: [],
+      pendingMessageReactionIds: [],
+      messageReactionRevision: 0,
+      unreadTopicIds: [],
+      followedTopicIds: [],
+      topics: [topic],
+      users,
+      currentUserId: "u1",
+      selectedTopicId: topic.id
+    };
+    let releaseLike;
+    const actions = createChatActions({
+      state,
+      dom: {},
+      render() {},
+      apiClient: {
+        async toggleMessageLike(messageId, selectedTopicId) {
+          assert.equal(messageId, message.id);
+          assert.equal(selectedTopicId, topic.id);
+          return new Promise((resolve) => {
+            releaseLike = () => resolve({
+              viewer: state.viewer,
+              users,
+              topics: [{
+                ...topic,
+                messages: [{ ...message, likes: 1, likedByViewer: true }]
+              }],
+              selectedTopicId
+            });
+          });
+        }
+      }
+    });
+
+    const reactionPromise = actions.toggleMessageLike(message.id);
+
+    assert.deepEqual(state.pendingMessageReactionIds, [message.id]);
+    assert.equal(state.messageReactionRevision, 1);
+    assert.equal(state.topics[0].messages[0].likes, 1);
+
+    releaseLike();
+    await reactionPromise;
+
+    assert.deepEqual(state.pendingMessageReactionIds, []);
+    assert.equal(state.messageReactionRevision, 2);
+    assert.equal(state.topics[0].messages[0].likes, 1);
+    assert.equal(state.topics[0].messages[0].likedByViewer, true);
+  });
+
   await test("submitting a comment scrolls the message stream to the bottom", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -4517,6 +4783,10 @@ await (async () => {
     assert.match(lightVars["--surface"], /0\.86\)$/);
     assert.match(lightVars["--surface-muted"], /0\.72\)$/);
     assert.match(lightVars["--line-strong"], /0\.38\)$/);
+    assert.equal(
+      lightVars["--mascot-accent"],
+      getCustomPaletteVars("#4A90E2", "dark")["--mascot-accent"]
+    );
     assert.equal(normalizeHexColor("#abc"), "#AABBCC");
     assert.equal(parseHexColor("#4a90e2"), "#4A90E2");
     assert.equal(parseHexColor("zzz"), null);
@@ -8726,6 +8996,15 @@ await (async () => {
       assert.equal(findByClass(node, "message__quote-author").textContent, "@Sergio13134");
       assert.equal(findByClass(node, "message__quote-text").textContent, "Mensaje citado");
       assert.equal(findByClass(node, "message__text").textContent, "Respuesta propia");
+
+      const hiddenQuoteNode = createMessageItem(
+        message,
+        [{ id: "u2", name: "Sergio13134", nickname: "Sergio13134" }],
+        { hiddenBlockedQuoteAuthors: ["Sergio13134"] }
+      );
+      assert.equal(findByClass(hiddenQuoteNode, "message__quote-text").textContent, "-");
+      assert.equal(findByClass(hiddenQuoteNode, "message__quote-text--blocked").textContent, "-");
+      assert.equal(findByClass(hiddenQuoteNode, "message__text").textContent, "Respuesta propia");
     } finally {
       globalThis.document = previousDocument;
     }
@@ -9424,6 +9703,22 @@ await (async () => {
     );
     assert.match(
       styles,
+      /\.public-profile-modal__body\s*\{[^}]*overflow-y:\s*auto;[^}]*scrollbar-width:\s*none;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__scroll-indicator\s*\{[^}]*position:\s*absolute;[^}]*right:\s*4px;[^}]*opacity:\s*0;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__scroll-indicator\.is-visible\s*\{[^}]*opacity:\s*1;/
+    );
+    assert.match(
+      styles,
+      /\.public-profile-modal__block\s*\{[^}]*position:\s*absolute;[^}]*top:\s*100%;[^}]*background:\s*var\(--bg\);/
+    );
+    assert.match(
+      styles,
       /\.public-profile-modal__avatar\s*\{[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*image-rendering:\s*auto;/
     );
     assert.match(
@@ -9452,9 +9747,16 @@ await (async () => {
     );
     assert.match(
       styles,
-      /\.public-profile-modal__cafes\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*3;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*align-self:\s*stretch;/
+      /\.public-profile-modal__cafes\s*\{[\s\S]*grid-column:\s*1;[\s\S]*grid-row:\s*3;[\s\S]*align-self:\s*start;[\s\S]*width:\s*min\(232px, 100%\);/
     );
-    assert.match(styles, /\.public-profile-modal__cafes\s*\{[^}]*min-height:\s*184px;/);
+    assert.match(
+      styles,
+      /\.public-profile-modal__cafes\s*\{[^}]*min-height:\s*auto;[^}]*overflow:\s*visible;/
+    );
+    assert.match(
+      styles,
+      /--public-profile-avatar-size:\s*min\(232px, calc\(100vw - 64px\)\);[\s\S]*height:\s*var\(--public-profile-avatar-size\);[\s\S]*aspect-ratio:\s*1 \/ 1;/
+    );
     assert.match(
       styles,
       /\.public-profile-modal__cafes ul\s*\{[\s\S]*display:\s*grid;[\s\S]*align-content:\s*start;[\s\S]*gap:\s*7px;/
@@ -10082,7 +10384,15 @@ await (async () => {
     );
     assert.match(
       styles,
-      /html\[data-theme="light"\] \.panel--chat\.panel--topic-create\s*\{[\s\S]*border-top:\s*0;/
+      /html\[data-theme="light"\]\.is-desktop-viewport \.panel--chat\.panel--topic-create\s*\{[\s\S]*border-top:\s*0;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.panel--chat\.panel--topic-create #refreshButton\s*\{[\s\S]*display:\s*none;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.panel--chat\.panel--topic-create #chatTitle\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*50%;[\s\S]*transform:\s*translateX\(-50%\);/
     );
     assert.match(
       styles,
@@ -10171,6 +10481,9 @@ await (async () => {
     assert.match(components, /dataset\.messageProfileAuthorId/);
     assert.match(components, /dataset\.likeMessageId/);
     assert.match(components, /dataset\.dislikeMessageId/);
+    assert.match(components, /dataset\.blockUserId/);
+    assert.match(components, /blocked \? "DESBLOQUEAR" : "BLOQUEAR"/);
+    assert.doesNotMatch(components, /message__action-menu-button--block/);
     assert.match(components, /message__report-button/);
     assert.match(components, /dataset\.reportEntityType = "message"/);
     assert.match(components, /dataset\.connectedUserId/);
@@ -10376,6 +10689,12 @@ await (async () => {
     assert.match(publicProfileModal, /joinedAtContainer.hidden = !joinedDate.length/);
     assert.match(publicProfileModal, /publicProfileCopyLinkButton\.hidden = !canShareProfile/);
     assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isGuest \|\| isCurrentUser/);
+    assert.match(publicProfileModal, /publicProfileBlockButton\.hidden = !canBlock/);
+    assert.match(publicProfileModal, /const confirming = canBlock && Boolean\(state\.publicProfileBlockConfirming\)/);
+    assert.match(publicProfileModal, /isUnblocking \? "Desbloquear cuenta" : "Bloquear cuenta"/);
+    assert.match(publicProfileModal, /dataset\.blockAction = isUnblocking \? "unblock" : "block"/);
+    assert.match(html, /id="publicProfileBlockButton"[\s\S]*id="publicProfileReportButton"/);
+    assert.match(html, /id="publicProfileBlockPrompt"[\s\S]*id="publicProfileBlockChoice"/);
     assert.match(html, /id="publicProfileReportButton"[\s\S]*id="publicProfileCopyLinkButton"/);
     assert.match(renderController, /export function getAppLocationPath/);
     assert.match(renderController, /return `\/u\/\$\{encodeURIComponent\(profileUser\.nickname\)\}`;/);
@@ -10487,6 +10806,19 @@ await (async () => {
     assert.match(eventsModule, /closePublicProfileModal/);
     assert.match(eventsModule, /reportEntity/);
     assert.match(eventsModule, /data-report-entity-type/);
+    assert.match(eventsModule, /data-block-user-id/);
+    assert.match(eventsModule, /handlers\.requestUserBlock\?\.\(userId\)/);
+    assert.match(
+      eventsModule,
+      /publicProfileBlockConfirmButton\.dataset\.blockAction === "unblock"[\s\S]*handlers\.unblockUser\?\.\(userId\)/
+    );
+    assert.doesNotMatch(
+      eventsModule,
+      /publicProfileBlockButton\.dataset\.blockAction === "unblock"[\s\S]*handlers\.unblockUser/
+    );
+    assert.match(eventsModule, /indicator\.classList\.add\("is-visible"\)/);
+    assert.match(eventsModule, /indicator\.classList\.remove\("is-visible"\)/);
+    assert.match(eventsModule, /publicProfileBody\.offsetTop/);
     assert.match(eventsModule, /data-connected-user-id/);
     assert.match(eventsModule, /data-user-action/);
     assert.match(renderUtils, /renderIntoTargets/);
@@ -10603,6 +10935,7 @@ await (async () => {
       "settingsProfileIndexableToggle",
       "settingsFilterProfanityToggle",
       "settingsFriendsOnlyToggle",
+      "settingsBlockedUsers",
       "settingsDeleteAccountButton",
       "settingsDeleteConfirmRow",
       "settingsDeleteCancelButton",
@@ -10630,7 +10963,13 @@ await (async () => {
       "toggleSetting",
       "requestAccountDeletion",
       "cancelAccountDeletion",
-      "confirmAccountDeletion"
+      "confirmAccountDeletion",
+      "requestUserBlock",
+      "cancelUserBlock",
+      "setPublicProfileBlockHideContent",
+      "blockUser",
+      "updateBlockedUser",
+      "unblockUser"
     ]) {
       assert.match(
         controllerAppSource,

@@ -705,6 +705,23 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (["POST", "PATCH", "DELETE"].includes(req.method) && url.pathname.startsWith("/api/blocks/")) {
+      const userId = url.pathname.split("/").filter(Boolean)[2] || "";
+      const body = await readJsonBody(req);
+      const methodByHttpVerb = {
+        POST: "blockUser",
+        PATCH: "updateBlockedUser",
+        DELETE: "unblockUser"
+      };
+      const storeMethod = methodByHttpVerb[req.method];
+      sendBackendPayload(res, req, authService, 200, store[storeMethod](userId, {
+        ...context,
+        hideContent: body.hideContent !== false,
+        selectedTopicId: body.selectedTopicId ?? null
+      }));
+      return;
+    }
+
 
     if (req.method === "POST" && url.pathname.startsWith("/api/friends/")) {
       const segments = url.pathname.split("/").filter(Boolean);

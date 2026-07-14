@@ -320,6 +320,101 @@ export function createActionHandlers({
     render();
   }
 
+  function requestUserBlock(userId = state.publicProfileUserId) {
+    const targetUser = state.users.find((user) => user.id === userId);
+    if (
+      !targetUser
+      || targetUser.type !== "registered"
+      || state.viewer?.type !== "registered"
+      || targetUser.id === state.viewer.id
+    ) {
+      return;
+    }
+    if (state.publicProfileUserId !== targetUser.id) {
+      dispatch(state, reducers.setPublicProfileUser, targetUser.id);
+    }
+    dispatch(state, reducers.setPublicProfileBlockHideContent, true);
+    dispatch(state, reducers.setPublicProfileBlockConfirming, true);
+    render();
+    setTimeout(() => dom.publicProfileHideContentToggle?.focus?.(), 0);
+  }
+
+  function cancelUserBlock() {
+    dispatch(state, reducers.setPublicProfileBlockConfirming, false);
+    render();
+    dom.publicProfileBlockButton?.focus?.();
+  }
+
+  function setPublicProfileBlockHideContent(hideContent) {
+    dispatch(state, reducers.setPublicProfileBlockHideContent, Boolean(hideContent));
+    render();
+  }
+
+  async function blockUser(userId, hideContent = true) {
+    if (!userId || state.blockedUserActionPending) {
+      return null;
+    }
+    state.blockedUserActionPending = userId;
+    render();
+    try {
+      const payload = await api.blockUser(userId, hideContent, state.selectedTopicId);
+      dispatch(state, reducers.mergeLiveTopics, payload);
+      dispatch(state, reducers.setPublicProfileBlockConfirming, false);
+      showFeedback(hideContent ? "Cuenta bloqueada y contenido oculto." : "Cuenta bloqueada.");
+      return payload;
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo bloquear la cuenta.", { kind: "error" });
+      return null;
+    } finally {
+      state.blockedUserActionPending = null;
+      render();
+    }
+  }
+
+  async function updateBlockedUser(userId, hideContent) {
+    if (!userId || state.blockedUserActionPending) {
+      return null;
+    }
+    state.blockedUserActionPending = userId;
+    render();
+    try {
+      const payload = await api.updateBlockedUser(userId, hideContent, state.selectedTopicId);
+      dispatch(state, reducers.mergeLiveTopics, payload);
+      showFeedback(hideContent ? "Contenido de la cuenta oculto." : "Contenido de la cuenta visible.");
+      return payload;
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo actualizar el bloqueo.", { kind: "error" });
+      return null;
+    } finally {
+      state.blockedUserActionPending = null;
+      render();
+    }
+  }
+
+  async function unblockUser(userId) {
+    if (!userId || state.blockedUserActionPending) {
+      return null;
+    }
+    state.blockedUserActionPending = userId;
+    render();
+    try {
+      const payload = await api.unblockUser(userId, state.selectedTopicId);
+      dispatch(state, reducers.mergeLiveTopics, payload);
+      dispatch(state, reducers.setPublicProfileBlockConfirming, false);
+      showFeedback("Cuenta desbloqueada.");
+      return payload;
+    } catch (error) {
+      console.error(error);
+      showFeedback(error?.message || "No se pudo desbloquear la cuenta.", { kind: "error" });
+      return null;
+    } finally {
+      state.blockedUserActionPending = null;
+      render();
+    }
+  }
+
   async function applyAdminAction(actionType, targetType, targetId) {
     if (DESTRUCTIVE_ADMIN_ACTIONS.has(actionType)) {
       const confirmKey = `${actionType}:${targetType}:${targetId}`;
@@ -368,7 +463,16 @@ export function createActionHandlers({
   function openSettingsModal() {
     dispatch(state, reducers.setSettingsModalOpen, true);
     render();
-    setTimeout(() => dom.settingsModal?.focus?.(), 0);
+    const settingsBody = dom.settingsModal?.querySelector?.(".settings-modal__body");
+    if (settingsBody) {
+      settingsBody.scrollTop = 0;
+    }
+    setTimeout(() => {
+      dom.settingsModal?.focus?.();
+      if (settingsBody) {
+        settingsBody.scrollTop = 0;
+      }
+    }, 0);
   }
 
   function closeSettingsModal() {
@@ -919,6 +1023,12 @@ export function createActionHandlers({
     confirmAccountDeletion,
     skipProfileSetup,
     closePublicProfileModal,
+    requestUserBlock,
+    cancelUserBlock,
+    setPublicProfileBlockHideContent,
+    blockUser,
+    updateBlockedUser,
+    unblockUser,
     openAdminPanel,
     closeAdminPanel,
     setAdminSection,

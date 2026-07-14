@@ -15,6 +15,7 @@ const CUSTOM_PALETTE_VAR_NAMES = [
   "--accent",
   "--accent-strong",
   "--accent-soft",
+  "--mascot-accent",
   "--ranking-badge-border"
 ];
 
@@ -172,6 +173,7 @@ function buildLightPaletteVars(hexValue) {
   const accentBase = hexToRgb(hexValue);
   const accent = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.04);
   const accentStrong = mixRgb(accentBase, hexToRgb("#20110A"), 0.18);
+  const mascotAccent = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.14);
   const bg = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.88);
   const bgSoft = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.8);
   const surface = mixRgb(accentBase, hexToRgb("#FFFFFF"), 0.8);
@@ -194,6 +196,7 @@ function buildLightPaletteVars(hexValue) {
     "--accent": rgbToHex(accent),
     "--accent-strong": rgbToHex(accentStrong),
     "--accent-soft": rgba(accent, 0.12),
+    "--mascot-accent": rgbToHex(mascotAccent),
     "--ranking-badge-border": `color-mix(in srgb, ${badgeBorder} 62%, var(--line))`
   };
 }
@@ -223,6 +226,7 @@ function buildDarkPaletteVars(hexValue) {
     "--accent": rgbToHex(accent),
     "--accent-strong": rgbToHex(accentStrong),
     "--accent-soft": rgba(accent, 0.12),
+    "--mascot-accent": rgbToHex(accent),
     "--ranking-badge-border": `color-mix(in srgb, ${badgeBorder} 62%, var(--line))`
   };
 }

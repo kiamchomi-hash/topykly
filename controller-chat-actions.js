@@ -129,7 +129,7 @@ export function createChatActions({
 
   function getReactionScrollState(trigger) {
     const stream = trigger?.closest?.(".message-stream");
-    if (!(stream instanceof HTMLElement)) {
+    if (typeof HTMLElement === "undefined" || !(stream instanceof HTMLElement)) {
       return null;
     }
 
@@ -293,7 +293,7 @@ export function createChatActions({
   }
 
   async function toggleMessageReaction(messageId, reactionType, { trigger = null } = {}) {
-    if (!messageId) {
+    if (!messageId || state.pendingMessageReactionIds?.includes(messageId)) {
       return;
     }
 
@@ -303,6 +303,7 @@ export function createChatActions({
     const errorFallback = reactionType === "dislike" ? "No se pudo actualizar el dislike." : "No se pudo actualizar el like.";
 
     setReportTriggerState(trigger, true);
+    dispatch(state, reducers.setMessageReactionPending, { messageId, pending: true });
     dispatch(state, reducers.applyMessageReaction, { messageId, reactionType });
     render();
     restoreReactionScroll(reactionScrollState);
@@ -316,6 +317,7 @@ export function createChatActions({
       console.error(error);
       showFeedback?.(getActionErrorMessage(error, errorFallback), { kind: "error" });
     } finally {
+      dispatch(state, reducers.setMessageReactionPending, { messageId, pending: false });
       setReportTriggerState(trigger, false);
       render();
       restoreReactionScroll(reactionScrollState);

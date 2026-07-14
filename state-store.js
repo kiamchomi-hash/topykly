@@ -7,6 +7,9 @@ export const state = {
   isSettingsModalOpen: false,
   settingsDeleteConfirming: false,
   settingsUpdatePending: false,
+  blockedUserActionPending: null,
+  publicProfileBlockConfirming: false,
+  publicProfileBlockHideContent: true,
   isFriendRequestsPanelOpen: false,
   friendRequestsTab: "incoming",
   friendRequestsLimits: {
@@ -24,6 +27,8 @@ export const state = {
   viewer: null,
   reportedTopicIds: [],
   reportedMessageIds: [],
+  pendingMessageReactionIds: [],
+  messageReactionRevision: 0,
   unreadTopicIds: [],
   followedTopicIds: [],
   friendships: {
@@ -31,6 +36,7 @@ export const state = {
     outgoing: [],
     friends: []
   },
+  blockedUsers: [],
   notifications: [],
   notifiedMessageIds: [],
   webNotificationsPermission: "default",

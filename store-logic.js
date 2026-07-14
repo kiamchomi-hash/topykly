@@ -142,6 +142,7 @@ function buildHydratedState(state, payload, topics) {
       outgoing: [],
       friends: []
     },
+    blockedUsers: payload.blockedUsers ?? state.blockedUsers ?? [],
     users: nextUsers,
     topics,
     unreadTopicIds: getUnreadTopicIdsAfterHydration(state, payload),
@@ -204,7 +205,22 @@ export const reducers = {
 
   setPublicProfileUser: (state, userId) => ({
     ...state,
-    publicProfileUserId: userId
+    publicProfileUserId: userId,
+    publicProfileBlockConfirming: false,
+    publicProfileBlockHideContent: true
+  }),
+
+  setPublicProfileBlockConfirming: (state, publicProfileBlockConfirming) => ({
+    ...state,
+    publicProfileBlockConfirming,
+    publicProfileBlockHideContent: publicProfileBlockConfirming
+      ? state.publicProfileBlockHideContent
+      : true
+  }),
+
+  setPublicProfileBlockHideContent: (state, publicProfileBlockHideContent) => ({
+    ...state,
+    publicProfileBlockHideContent
   }),
 
   addMessageToTopic: (state, { topicId, message }) => ({
@@ -237,6 +253,27 @@ export const reducers = {
       };
     })
   }),
+
+  setMessageReactionPending: (state, { messageId, pending }) => {
+    const pendingIds = new Set(state.pendingMessageReactionIds ?? []);
+    const wasPending = pendingIds.has(messageId);
+
+    if (pending) {
+      pendingIds.add(messageId);
+    } else {
+      pendingIds.delete(messageId);
+    }
+
+    if (wasPending === pending) {
+      return state;
+    }
+
+    return {
+      ...state,
+      pendingMessageReactionIds: [...pendingIds],
+      messageReactionRevision: (state.messageReactionRevision ?? 0) + 1
+    };
+  },
 
   restoreTopics: (state, topics) => ({
     ...state,

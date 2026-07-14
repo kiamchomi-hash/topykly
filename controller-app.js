@@ -315,13 +315,20 @@ export function createLiveTopicSync({
   let inFlight = false;
 
   async function refreshNow() {
-    if (inFlight || !state.viewer) {
+    if (inFlight || !state.viewer || state.pendingMessageReactionIds?.length) {
       return false;
     }
 
+    const reactionRevision = state.messageReactionRevision ?? 0;
     inFlight = true;
     try {
       const payload = await apiClient.refreshTopics(state.selectedTopicId);
+      if (
+        reactionRevision !== (state.messageReactionRevision ?? 0) ||
+        state.pendingMessageReactionIds?.length
+      ) {
+        return false;
+      }
       const previousModerationCount = state.pendingModerationCount || 0;
       const collected = collectTopicNotifications(state, payload);
       const viewer = payload.viewer ?? state.viewer;
@@ -456,6 +463,12 @@ export function bootstrap() {
     confirmAccountDeletion: actions.confirmAccountDeletion,
     skipProfileSetup: actions.skipProfileSetup,
     closePublicProfileModal: actions.closePublicProfileModal,
+    requestUserBlock: actions.requestUserBlock,
+    cancelUserBlock: actions.cancelUserBlock,
+    setPublicProfileBlockHideContent: actions.setPublicProfileBlockHideContent,
+    blockUser: actions.blockUser,
+    updateBlockedUser: actions.updateBlockedUser,
+    unblockUser: actions.unblockUser,
     showFeedback: actions.showFeedback,
     openAdminPanel: actions.openAdminPanel,
     closeAdminPanel: actions.closeAdminPanel,

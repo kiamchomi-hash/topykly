@@ -170,6 +170,32 @@ function shouldBlockQuoteEdit(textarea, event) {
   return selectionStart < lockLength;
 }
 export function bindPageEvents(dom, handlers) {
+  const publicProfileBody = dom.publicProfileModal?.querySelector?.(".public-profile-modal__body");
+  if (typeof HTMLElement !== "undefined" && publicProfileBody instanceof HTMLElement) {
+    let publicProfileScrollIdleTimer = 0;
+    publicProfileBody.addEventListener("scroll", () => {
+      const indicator = dom.publicProfileScrollIndicator;
+      const maxScrollTop = publicProfileBody.scrollHeight - publicProfileBody.clientHeight;
+      if (!(indicator instanceof HTMLElement) || maxScrollTop <= 0) {
+        return;
+      }
+      const thumbHeight = Math.max(
+        32,
+        Math.round(publicProfileBody.clientHeight * publicProfileBody.clientHeight / publicProfileBody.scrollHeight)
+      );
+      const maxThumbTop = Math.max(0, publicProfileBody.clientHeight - thumbHeight);
+      const thumbTop = publicProfileBody.offsetTop
+        + Math.round(publicProfileBody.scrollTop / maxScrollTop * maxThumbTop);
+      indicator.style.height = `${thumbHeight}px`;
+      indicator.style.transform = `translateY(${thumbTop}px)`;
+      indicator.classList.add("is-visible");
+      clearTimeout(publicProfileScrollIdleTimer);
+      publicProfileScrollIdleTimer = setTimeout(() => {
+        indicator.classList.remove("is-visible");
+      }, 600);
+    }, { passive: true });
+  }
+
   bindTopbarEvents(dom, handlers);
 
   function positionConnectedUserMenu(menu, userItem, clickPoint = null) {
@@ -339,6 +365,36 @@ export function bindPageEvents(dom, handlers) {
       } else {
         handlers.showFeedback?.("No se pudo copiar el enlace.", { kind: "error" });
       }
+    });
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileBlockButton instanceof HTMLElement) {
+    dom.publicProfileBlockButton.addEventListener("click", () => {
+      handlers.requestUserBlock?.();
+    });
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileHideContentToggle instanceof HTMLElement) {
+    dom.publicProfileHideContentToggle.addEventListener("click", () => {
+      handlers.setPublicProfileBlockHideContent?.(
+        dom.publicProfileHideContentToggle.getAttribute("aria-checked") !== "true"
+      );
+    });
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileBlockCancelButton instanceof HTMLElement) {
+    dom.publicProfileBlockCancelButton.addEventListener("click", () => handlers.cancelUserBlock?.());
+  }
+
+  if (typeof HTMLElement !== "undefined" && dom.publicProfileBlockConfirmButton instanceof HTMLElement) {
+    dom.publicProfileBlockConfirmButton.addEventListener("click", () => {
+      const userId = dom.publicProfileBlockConfirmButton.dataset.blockedUserId || "";
+      if (dom.publicProfileBlockConfirmButton.dataset.blockAction === "unblock") {
+        void handlers.unblockUser?.(userId);
+        return;
+      }
+      const hideContent = dom.publicProfileHideContentToggle?.getAttribute?.("aria-checked") !== "false";
+      void handlers.blockUser?.(userId, hideContent);
     });
   }
 
@@ -544,7 +600,7 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
   // Shared by both listeners below: the floating action menu is reparented to
   // document.body for positioning (see positionFloatingMessageActionMenu), so a
   // single listener on messageStream can't catch clicks on it once it's open.
-  // Returns true when a profile/like/dislike/quote/report trigger was found and
+  // Returns true when a profile/like/dislike/quote/block/report trigger was found and
   // dispatched (closing both menus first), false otherwise.
   function dispatchMessageActionClick(target) {
     const profileTrigger = target.closest("[data-message-profile-author-id]");
@@ -576,6 +632,15 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
       closeMessageReactionMenus();
       closeMessageActionMenus();
       handlers.quoteMessage?.(quoteTrigger.dataset.quoteMessageId || "", { trigger: quoteTrigger });
+      return true;
+    }
+
+    const blockTrigger = target.closest("[data-block-user-id]");
+    if (blockTrigger instanceof HTMLElement) {
+      closeMessageReactionMenus();
+      closeMessageActionMenus();
+      const userId = blockTrigger.dataset.blockUserId || "";
+      handlers.requestUserBlock?.(userId);
       return true;
     }
 

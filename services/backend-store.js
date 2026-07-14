@@ -785,6 +785,17 @@ function initSchema(db) {
       FOREIGN KEY (addressee_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS user_blocks (
+      blocker_id TEXT NOT NULL,
+      blocked_id TEXT NOT NULL,
+      hide_content INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (blocker_id, blocked_id),
+      FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS moderation_actions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action_type TEXT NOT NULL,
@@ -986,6 +997,9 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS friend_requests_addressee_idx
     ON friend_requests(addressee_id, status, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS user_blocks_blocked_idx
+    ON user_blocks(blocked_id, blocker_id);
 
     CREATE INDEX IF NOT EXISTS guest_ip_rate_limits_updated_idx
     ON guest_ip_rate_limits(updated_at);
@@ -1963,6 +1977,38 @@ function getFriendshipStatusByUserId(friendships) {
   return statusByUserId;
 }
 
+function getBlockedUsersForFrontend(db, viewerId) {
+  if (!viewerId) {
+    return [];
+  }
+
+  return db.prepare(`
+    SELECT
+      users.id,
+      users.name,
+      users.nickname,
+      users.avatar_url AS avatarUrl,
+      user_blocks.hide_content AS hideContent,
+      user_blocks.created_at AS blockedAt
+    FROM user_blocks
+    JOIN users ON users.id = user_blocks.blocked_id
+    WHERE user_blocks.blocker_id = ?
+      AND users.type = 'registered'
+    ORDER BY user_blocks.updated_at DESC, users.name ASC
+  `).all(viewerId).map((user) => ({
+    ...user,
+    hideContent: user.hideContent === 1
+  }));
+}
+
+function getHiddenBlockedUserIds(db, viewerId) {
+  return new Set(db.prepare(`
+    SELECT blocked_id
+    FROM user_blocks
+    WHERE blocker_id = ? AND hide_content = 1
+  `).all(viewerId).map((row) => row.blocked_id));
+}
+
 function getFriendRequestBetween(db, leftUserId, rightUserId) {
   return db.prepare(`
     SELECT *
@@ -1997,12 +2043,60 @@ function assertRegisteredFriendContext(db, context) {
     throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para agregar amigos.");
   }
 }
+
+function assertRegisteredBlockContext(db, context) {
+  assertContextCanParticipate(db, context);
+  if (context.viewer.type !== "registered") {
+    throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para bloquear usuarios.");
+  }
+}
+
+function assertBlockTarget(db, viewerId, targetUserId) {
+  const normalizedTargetUserId = String(targetUserId || "").trim();
+  if (!normalizedTargetUserId) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Selecciona un usuario para bloquear.");
+  }
+  if (normalizedTargetUserId === viewerId) {
+    throw new ApiError(400, "INVALID_BLOCK_TARGET", "No puedes bloquearte a ti mismo.");
+  }
+
+  const target = db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedTargetUserId);
+  if (!target || target.type !== "registered" || target.status !== USER_STATUS_ACTIVE) {
+    throw new ApiError(404, "NOT_FOUND", "Usuario no disponible para bloquear.");
+  }
+  return target;
+}
+
+function usersBlockEachOther(db, leftUserId, rightUserId) {
+  return Boolean(db.prepare(`
+    SELECT 1
+    FROM user_blocks
+    WHERE (blocker_id = ? AND blocked_id = ?)
+       OR (blocker_id = ? AND blocked_id = ?)
+    LIMIT 1
+  `).get(leftUserId, rightUserId, rightUserId, leftUserId));
+}
 function buildFrontendPayload(db, context, selectedTopicId = null, profileNickname = null) {
   rebuildActiveTopicRanks(db);
 
-  const activeTopicRows = getActiveTopicsForFrontend(db);
+  const blockedUsers = getBlockedUsersForFrontend(db, context.viewer.id);
+  const hiddenBlockedUserIds = getHiddenBlockedUserIds(db, context.viewer.id);
+  const activeTopicRows = getActiveTopicsForFrontend(db)
+    .filter((row) => !hiddenBlockedUserIds.has(row.author_id));
   const topicIds = new Set(activeTopicRows.map((row) => row.id));
-  const topics = activeTopicRows.map((row) => hydrateTopic(db, row, { viewerId: context.viewer.id }));
+  const hideBlockedMessages = (topic) => {
+    const messages = topic.messages.filter((message) => !hiddenBlockedUserIds.has(message.authorId));
+    const lastVisibleMessage = [...messages].reverse().find((message) => message.kind === "user") || null;
+    return {
+      ...topic,
+      subtitle: lastVisibleMessage?.text || "",
+      messageCount: messages.length,
+      messages
+    };
+  };
+  const topics = activeTopicRows
+    .map((row) => hydrateTopic(db, row, { viewerId: context.viewer.id }))
+    .map(hideBlockedMessages);
   const reportSnapshot = getReportSnapshot(db, context.sessionId);
   const friendships = getFriendshipsForFrontend(db, context.viewer.id);
   const friendshipStatusByUserId = getFriendshipStatusByUserId(friendships);
@@ -2010,8 +2104,8 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
 
   if (selectedTopicId && !topicIds.has(selectedTopicId)) {
     const selectedRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(selectedTopicId);
-    if (selectedRow) {
-      topics.push(hydrateTopic(db, selectedRow, { forceVisible: false, viewerId: context.viewer.id }));
+    if (selectedRow && !hiddenBlockedUserIds.has(selectedRow.author_id)) {
+      topics.push(hideBlockedMessages(hydrateTopic(db, selectedRow, { forceVisible: false, viewerId: context.viewer.id })));
       resolvedSelectedTopicId = selectedTopicId;
     }
   }
@@ -2020,6 +2114,7 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     topic.authorId,
     ...topic.messages.map((message) => message.authorId)
   ]);
+  profileUserIds.push(...blockedUsers.map((user) => user.id));
 
   if (profileNickname) {
     const sharedProfileRow = db.prepare(
@@ -2055,6 +2150,7 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
       friendshipStatus: user.id === context.viewer.id ? "self" : friendshipStatusByUserId.get(user.id) || "none"
     })),
     friendships,
+    blockedUsers,
     topics,
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,
@@ -3872,6 +3968,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
 
         db.prepare("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?").run(userId, userId);
+        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?").run(userId, userId);
         db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
 
         // Los mensajes y temas quedan (tienen FK al usuario); la fila se anonimiza y desactiva.
@@ -4031,11 +4128,66 @@ export function createBackendStore({ dbPath = null, seedDemoData = true } = {}) 
         return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
       });
     },
+    blockUser(targetUserId, { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredBlockContext(db, context);
+        const target = assertBlockTarget(db, context.viewer.id, targetUserId);
+        const nowIso = new Date().toISOString();
+
+        db.prepare(`
+          INSERT INTO user_blocks (blocker_id, blocked_id, hide_content, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(blocker_id, blocked_id) DO UPDATE SET
+            hide_content = excluded.hide_content,
+            updated_at = excluded.updated_at
+        `).run(context.viewer.id, target.id, hideContent === false ? 0 : 1, nowIso, nowIso);
+        db.prepare(`
+          DELETE FROM friend_requests
+          WHERE (requester_id = ? AND addressee_id = ?)
+             OR (requester_id = ? AND addressee_id = ?)
+        `).run(context.viewer.id, target.id, target.id, context.viewer.id);
+
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },
+    updateBlockedUser(targetUserId, { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredBlockContext(db, context);
+        const target = assertBlockTarget(db, context.viewer.id, targetUserId);
+        const result = db.prepare(`
+          UPDATE user_blocks
+          SET hide_content = ?, updated_at = ?
+          WHERE blocker_id = ? AND blocked_id = ?
+        `).run(hideContent === false ? 0 : 1, new Date().toISOString(), context.viewer.id, target.id);
+        if (!result.changes) {
+          throw new ApiError(404, "NOT_FOUND", "El usuario no esta bloqueado.");
+        }
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },
+    unblockUser(targetUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertRegisteredBlockContext(db, context);
+        const normalizedTargetUserId = String(targetUserId || "").trim();
+        if (!normalizedTargetUserId) {
+          throw new ApiError(400, "VALIDATION_ERROR", "Selecciona un usuario para desbloquear.");
+        }
+        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?")
+          .run(context.viewer.id, normalizedTargetUserId);
+        return buildFrontendPayload(db, context, selectedTopicId);
+      });
+    },
     sendFriendRequest(targetUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredFriendContext(db, context);
         const target = assertFriendTarget(db, context.viewer.id, targetUserId);
+        if (usersBlockEachOther(db, context.viewer.id, target.id)) {
+          throw new ApiError(409, "USER_BLOCKED", "No se puede enviar una solicitud de amistad a este usuario.");
+        }
         const nowIso = new Date().toISOString();
         const existing = getFriendRequestBetween(db, context.viewer.id, target.id);
 

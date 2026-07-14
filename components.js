@@ -51,7 +51,14 @@ function parseLeadingQuote(text) {
   };
 }
 
-function createMessageContent(text) {
+function normalizeQuoteAuthor(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^@/, "")
+    .toLocaleLowerCase("es");
+}
+
+function createMessageContent(text, hiddenBlockedQuoteAuthors = []) {
   const parsedQuote = parseLeadingQuote(text);
   if (!parsedQuote) {
     return el("p", "message__text", filterDisplayText(text));
@@ -59,9 +66,17 @@ function createMessageContent(text) {
 
   const content = el("div", "message__content");
   const quote = el("blockquote", "message__quote");
+  const normalizedAuthor = normalizeQuoteAuthor(parsedQuote.author);
+  const isBlockedQuote = hiddenBlockedQuoteAuthors.some(
+    (author) => normalizeQuoteAuthor(author) === normalizedAuthor
+  );
   quote.append(
     el("p", "message__quote-author", parsedQuote.author),
-    el("p", "message__quote-text", filterDisplayText(parsedQuote.text))
+    el(
+      "p",
+      `message__quote-text${isBlockedQuote ? " message__quote-text--blocked" : ""}`,
+      isBlockedQuote ? "-" : filterDisplayText(parsedQuote.text)
+    )
   );
   content.append(quote);
 
@@ -209,7 +224,11 @@ export function createMessageSkeleton(index) {
   return node;
 }
 
-export function createMessageItem(message, users, { reported = false, currentUserId = null } = {}) {
+export function createMessageItem(
+  message,
+  users,
+  { reported = false, currentUserId = null, blocked = false, hiddenBlockedQuoteAuthors = [] } = {}
+) {
   const node = el("article", `message${message.kind === "system" ? " message--system" : ""}`);
   node.dataset.id = message.id;
   const author = message.kind === "system" ? "Sistema" : getUserName(users, message.authorId);
@@ -282,17 +301,34 @@ export function createMessageItem(message, users, { reported = false, currentUse
     reportAction.disabled = reported;
     reportAction.setAttribute("aria-label", reported ? `Mensaje de ${author} ya reportado` : `Reportar mensaje de ${author}`);
 
+    const authorUser = users.find((user) => user.id === message.authorId);
+    const currentUser = users.find((user) => user.id === currentUserId);
+    const canBlockAuthor = Boolean(
+      authorUser?.type === "registered"
+      && currentUser?.type === "registered"
+      && authorUser.id !== currentUser.id
+    );
+    const blockAction = el("button", "message__action-menu-button", blocked ? "DESBLOQUEAR" : "BLOQUEAR");
+    blockAction.type = "button";
+    blockAction.dataset.blockUserId = message.authorId;
+    blockAction.dataset.blockAction = blocked ? "unblock" : "request";
+    blockAction.setAttribute("aria-label", blocked ? `Desbloquear a ${author}` : `Bloquear a ${author}`);
+
     const actionMenu = el("div", "message__action-menu");
     actionMenu.hidden = true;
     actionMenu.dataset.messageMenu = message.id;
-    actionMenu.append(profileAction, likeAction, dislikeAction, quoteAction, reportAction);
+    actionMenu.append(profileAction, likeAction, dislikeAction, quoteAction);
+    if (canBlockAuthor) {
+      actionMenu.append(blockAction);
+    }
+    actionMenu.append(reportAction);
     body.append(actionMenu);
   } else {
     avatarButton.disabled = true;
     avatarButton.setAttribute("aria-hidden", "true");
   }
 
-  body.append(meta, createMessageContent(message.text));
+  body.append(meta, createMessageContent(message.text, hiddenBlockedQuoteAuthors));
   node.append(avatarButton, body);
   return node;
 }
