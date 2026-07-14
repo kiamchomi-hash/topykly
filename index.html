@@ -34,21 +34,7 @@
         }
       }
     </script>
-    <script>
-      (function () {
-        const theme = localStorage.getItem("topykly-theme") || localStorage.getItem("chetrend-theme") || "dark";
-        const palette = localStorage.getItem("topykly-palette") || localStorage.getItem("chetrend-palette") || "default";
-        const authState = "logged-out";
-        const mobile = typeof window.matchMedia === "function"
-          ? window.matchMedia("(max-width: 960px)").matches
-          : window.innerWidth <= 960;
-        document.documentElement.dataset.theme = theme;
-        document.documentElement.dataset.palette = palette;
-        document.documentElement.dataset.authState = authState;
-        document.documentElement.classList.toggle("is-mobile-viewport", mobile);
-        document.documentElement.classList.toggle("is-desktop-viewport", !mobile);
-      })();
-    </script>
+    <script src="./theme-bootstrap.js"></script>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link
       rel="stylesheet"
@@ -179,24 +165,7 @@
             </span>
           </button>
         </template>
-        <script>
-          (function () {
-            const template = document.getElementById("themeToggleTemplate");
-            const preferredSlot = document.documentElement.classList.contains("is-mobile-viewport")
-              ? document.getElementById("themeToggleMobileSlot")
-              : document.getElementById("themeToggleDesktopSlot");
-            const targetSlot = preferredSlot || document.getElementById("themeToggleDesktopSlot");
-            if (template instanceof HTMLTemplateElement && targetSlot && !targetSlot.firstElementChild) {
-              targetSlot.appendChild(template.content.cloneNode(true));
-            }
-            const themeToggle = targetSlot?.querySelector?.("#themeToggle");
-            if (themeToggle instanceof HTMLButtonElement) {
-              const isDark = document.documentElement.dataset.theme !== "light";
-              themeToggle.setAttribute("aria-checked", String(isDark));
-              themeToggle.setAttribute("title", isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro");
-            }
-          })();
-        </script>
+        <script src="./theme-toggle-bootstrap.js"></script>
       </header>
 
       <main id="main-content" class="workspace" aria-label="Chat social">

@@ -27,6 +27,7 @@ const DEFAULT_REACTION_RESET_CHECK_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
+const MAX_HTTP_RATE_LIMIT_BUCKETS = 10_000;
 const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
 const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
 const mime = {
@@ -137,7 +138,7 @@ function getSecurityHeaders({ includeCsp = true, req = null } = {}) {
       "img-src 'self' data: https:",
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-      "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
+      "script-src 'self' https://cdn.jsdelivr.net https://challenges.cloudflare.com",
       "frame-src https://challenges.cloudflare.com",
       "connect-src 'self' https://challenges.cloudflare.com https://accounts.google.com",
       "upgrade-insecure-requests"
@@ -286,7 +287,10 @@ function getForwardedRequestIp(req) {
 }
 
 export function getRequestIp(req, env = process.env) {
-  if (shouldTrustProxy(env)) {
+  const configuredProxyIps = String(env.TOPYKLY_TRUSTED_PROXY_IPS || env.CHETREND_TRUSTED_PROXY_IPS || "")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const proxyIsAllowed = !configuredProxyIps.length || configuredProxyIps.includes(String(req.socket?.remoteAddress || "").trim());
+  if (shouldTrustProxy(env) && proxyIsAllowed) {
     return getForwardedRequestIp(req)
       || req.socket.remoteAddress
       || "";
@@ -343,13 +347,8 @@ function normalizeSelectedTopicId(url) {
 }
 
 export function isLocalDevLoginAllowed(env = process.env) {
-  const nodeEnv = String(env.NODE_ENV || "").trim().toLowerCase();
   const explicitFlag = String(env.TOPYKLY_ALLOW_LOCAL_LOGIN || env.CHETREND_ALLOW_LOCAL_LOGIN || "").trim().toLowerCase();
-  if (["0", "false", "no"].includes(explicitFlag)) {
-    return false;
-  }
-
-  return nodeEnv !== "production";
+  return ["1", "true", "yes"].includes(explicitFlag);
 }
 
 function safeFilePathFromUrl(urlPathname) {
@@ -365,13 +364,15 @@ function safeFilePathFromUrl(urlPathname) {
   if (segments.some((segment) => segment.startsWith("."))) {
     return null;
   }
-  if (segments[0] === "services" && !PUBLIC_SERVICE_MODULES.has(segments[1] || "")) {
+  const firstSegment = String(segments[0] || "").toLowerCase();
+  const secondSegment = String(segments[1] || "").toLowerCase();
+  if (firstSegment === "services" && !PUBLIC_SERVICE_MODULES.has(secondSegment)) {
     return null;
   }
-  if (PROTECTED_STATIC_DIRECTORIES.has(segments[0] || "")) {
+  if (PROTECTED_STATIC_DIRECTORIES.has(firstSegment)) {
     return null;
   }
-  if (segments.length === 1 && PROTECTED_STATIC_ROOT_FILES.has(segments[0] || "")) {
+  if (segments.length === 1 && PROTECTED_STATIC_ROOT_FILES.has(firstSegment)) {
     return null;
   }
   const lastSegment = segments[segments.length - 1] || "";
@@ -654,6 +655,7 @@ async function handleApiRequest(store, authService, req, res, url) {
       const body = await readJsonBody(req);
       sendBackendPayload(res, req, authService, 200, store.deleteAccount({
         ...context,
+        currentPassword: body.currentPassword,
         selectedTopicId: body.selectedTopicId ?? null
       }));
       return;
@@ -879,7 +881,9 @@ function handleAvatarRequest(res, url, avatarStorageDir) {
     res.writeHead(200, {
       ...getSecurityHeaders({ includeCsp: false, req: res.req }),
       "Content-Type": mime[path.extname(resolvedFilePath)] || "application/octet-stream",
-      "Cache-Control": "public, max-age=31536000, immutable"
+      // Avatars can be rejected, replaced, or deleted; never let an old
+      // response remain pinned in a browser/CDN cache for a year.
+      "Cache-Control": "private, no-store, max-age=0"
     });
     res.end(data);
   });
@@ -922,6 +926,14 @@ function checkHttpRateLimit(buckets, req, url, config, nowMs = Date.now()) {
 
   const ipAddress = getRequestIp(req) || "unknown";
   const key = `${scope}:${ipAddress}`;
+  for (const [bucketKey, bucket] of buckets) {
+    if (bucket.resetAt <= nowMs) {
+      buckets.delete(bucketKey);
+    }
+  }
+  if (!buckets.has(key) && buckets.size >= MAX_HTTP_RATE_LIMIT_BUCKETS) {
+    return { allowed: false, retryAfterSeconds: 1 };
+  }
   const existing = buckets.get(key);
   const resetAt = existing?.resetAt && existing.resetAt > nowMs
     ? existing.resetAt
@@ -931,12 +943,6 @@ function checkHttpRateLimit(buckets, req, url, config, nowMs = Date.now()) {
     : 1;
 
   buckets.set(key, { count, resetAt });
-
-  for (const [bucketKey, bucket] of buckets) {
-    if (bucket.resetAt <= nowMs) {
-      buckets.delete(bucketKey);
-    }
-  }
 
   if (count <= limit) {
     return { allowed: true, retryAfterSeconds: 0 };
@@ -1298,6 +1304,9 @@ export function startPreviewServer({
   const sessionSecret = String(process.env.TOPYKLY_SESSION_SECRET || process.env.CHETREND_SESSION_SECRET || "").trim();
   if (nodeEnv === "production" && !sessionSecret) {
     throw new Error("TOPYKLY_SESSION_SECRET es obligatorio cuando NODE_ENV=production.");
+  }
+  if (isLocalDevLoginAllowed() && !["127.0.0.1", "::1", "localhost"].includes(String(host).trim().toLowerCase())) {
+    throw new Error("El login local sin contrasena solo puede habilitarse en una interfaz loopback.");
   }
   if (isLocalDevLoginAllowed()) {
     log("ADVERTENCIA: login local sin contraseña habilitado porque NODE_ENV no es \"production\". No usar esta configuración en producción.");

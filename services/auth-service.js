@@ -29,7 +29,10 @@ function shouldTrustProxy(env = process.env) {
 }
 
 function getRequestIp(req, env = process.env) {
-  if (shouldTrustProxy(env)) {
+  const configuredProxyIps = String(env.TOPYKLY_TRUSTED_PROXY_IPS || env.CHETREND_TRUSTED_PROXY_IPS || "")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const proxyIsAllowed = !configuredProxyIps.length || configuredProxyIps.includes(String(req?.socket?.remoteAddress || "").trim());
+  if (shouldTrustProxy(env) && proxyIsAllowed) {
     return String(req?.headers?.["cf-connecting-ip"] || "").trim()
       || String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim()
       || req?.socket?.remoteAddress

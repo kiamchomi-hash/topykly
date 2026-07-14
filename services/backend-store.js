@@ -35,6 +35,9 @@ const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 const PASSWORD_RESET_EMAIL_HOURLY_MAX = 5;
 const PASSWORD_RESET_IP_HOURLY_MAX = 20;
 const PASSWORD_RESET_RATE_WINDOW_MS = 60 * 60_000;
+const ACCOUNT_REAUTH_WINDOW_MS = 15 * 60_000;
+// Used to keep unknown-email password attempts comparable to real accounts.
+const DUMMY_PASSWORD_HASH = hashPassword("topykly-password-timing-dummy");
 const LOCAL_AUTH_CHALLENGE_SECRET = crypto.randomBytes(32).toString("base64url");
 const AVATAR_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 const AVATAR_UPLOAD_MAX_BASE64_BYTES = Math.ceil(AVATAR_UPLOAD_MAX_BYTES / 3) * 4;
@@ -426,6 +429,22 @@ function estimateBase64DecodedBytes(value) {
   return Math.floor((value.length * 3) / 4) - padding;
 }
 
+function hasImageSignature(buffer, mimeType) {
+  if (mimeType === "image/png") {
+    return buffer.length < 8 || buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  }
+  if (mimeType === "image/jpeg") {
+    return buffer.length < 8 || buffer.subarray(0, 3).equals(Buffer.from([255, 216, 255]));
+  }
+  if (mimeType === "image/gif") {
+    return buffer.length < 6 || buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a";
+  }
+  if (mimeType === "image/webp") {
+    return buffer.length < 12 || buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+  return false;
+}
+
 function storeAvatarDataUrl(value, avatarStorageDir) {
   const normalized = String(value || "").trim();
   if (!normalized) {
@@ -450,6 +469,9 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
   const avatarBuffer = Buffer.from(payload, "base64");
   if (avatarBuffer.byteLength > AVATAR_UPLOAD_MAX_BYTES) {
     throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 2 MB.");
+  }
+  if (!hasImageSignature(avatarBuffer, mimeType)) {
+    throw new ApiError(400, "VALIDATION_ERROR", "El contenido de la foto no coincide con su formato.");
   }
 
   const extension = AVATAR_UPLOAD_EXTENSIONS.get(mimeType);
@@ -1817,12 +1839,31 @@ function getFrontendUsers(db, viewerId, profileUserIds = []) {
 
   return rows.map((user) => {
     const { lastSeenAt, ...rest } = user;
+    const isViewer = user.id === viewerId;
+    const showDescription = user.profileShowDescription !== 0;
+    const showJoinedAt = user.profileShowJoinedAt !== 0;
+    const showSocial = user.profileShowSocial !== 0;
+    const exposeDescription = isViewer || showDescription;
+    const exposeJoinedAt = isViewer || showJoinedAt;
+    const exposeSocial = isViewer || showSocial;
     return {
       ...rest,
+      description: exposeDescription ? user.description : "",
+      createdAt: exposeJoinedAt ? user.createdAt : null,
+      socialWhatsapp: exposeSocial ? user.socialWhatsapp : "",
+      socialInstagram: exposeSocial ? user.socialInstagram : "",
+      socialTiktok: exposeSocial ? user.socialTiktok : "",
+      socialFacebook: exposeSocial ? user.socialFacebook : "",
+      socialTwitter: exposeSocial ? user.socialTwitter : "",
+      socialDiscord: exposeSocial ? user.socialDiscord : "",
+      // Pending moderation data is private viewer/admin state, never public user data.
+      avatarPendingUrl: isViewer ? (user.avatarPendingUrl ?? null) : null,
+      avatarReviewStatus: isViewer ? (user.avatarReviewStatus ?? null) : null,
+      profilePending: isViewer ? Boolean(user.profilePending) : false,
       online: Boolean(lastSeenAt) && nowMs - new Date(lastSeenAt).getTime() <= PRESENCE_ONLINE_WINDOW_MS,
-      profileShowDescription: user.profileShowDescription !== 0,
-      profileShowJoinedAt: user.profileShowJoinedAt !== 0,
-      profileShowSocial: user.profileShowSocial !== 0,
+      profileShowDescription: showDescription,
+      profileShowJoinedAt: showJoinedAt,
+      profileShowSocial: showSocial,
       friendshipStatus: user.id === viewerId ? "self" : friendshipStatusByUserId.get(user.id) || "none"
     };
   });
@@ -2833,7 +2874,8 @@ function createPasswordUser(db, { email, password, nickname, nowIso }) {
 function getAuthenticatedPasswordUser(db, { email, password }) {
   const normalizedEmail = normalizeRequiredEmail(email);
   const userRow = getPasswordUserByEmail(db, normalizedEmail);
-  if (!userRow || !verifyPassword(password, userRow.password_hash)) {
+  const passwordMatches = verifyPassword(password, userRow?.password_hash || DUMMY_PASSWORD_HASH);
+  if (!userRow || !passwordMatches) {
     throw new ApiError(401, "INVALID_CREDENTIALS", "Email o contrasena incorrectos.");
   }
 
@@ -4147,11 +4189,21 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    deleteAccount({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    deleteAccount({ sessionId, authMode, currentPassword = "", selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         if (context.viewer.type !== "registered") {
           throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para eliminar la cuenta.");
+        }
+        if (context.viewerRow.password_hash) {
+          if (!verifyPassword(currentPassword, context.viewerRow.password_hash)) {
+            throw new ApiError(401, "REAUTH_REQUIRED", "Confirma tu contrasena antes de eliminar la cuenta.");
+          }
+        } else {
+          const sessionCreatedAt = Date.parse(context.sessionRow?.created_at || "");
+          if (!Number.isFinite(sessionCreatedAt) || Date.now() - sessionCreatedAt > ACCOUNT_REAUTH_WINDOW_MS) {
+            throw new ApiError(401, "REAUTH_REQUIRED", "Vuelve a iniciar sesion antes de eliminar la cuenta.");
+          }
         }
 
         const userId = context.viewer.id;

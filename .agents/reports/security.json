@@ -1,39 +1,179 @@
 {
   "agentName": "Agente Auditor de Seguridad",
-  "status": "local_fixes_verified_production_deploy_pending",
-  "lastChecked": "2026-07-11T23:21:14.310Z",
+  "status": "completed_with_open_findings",
+  "lastChecked": "2026-07-14T19:13:59.000Z",
+  "overallRisk": "high",
+  "summary": {
+    "critical": 0,
+    "high": 2,
+    "medium": 4,
+    "low": 4,
+    "confirmedInProduction": 2
+  },
   "findings": [
     {
-      "level": "critical",
-      "status": "fixed_locally",
-      "id": "public-user-email-exposure",
-      "message": "Removed email from public users payloads; email remains only on the authenticated viewer."
-    },
-    {
+      "id": "public-private-profile-and-pending-avatar-exposure",
       "level": "high",
-      "status": "fixed_locally",
-      "id": "unverified-oidc-email",
-      "message": "Unverified OIDC email claims can no longer create accounts, link identities or grant email-based admin privileges."
+      "status": "confirmed_production",
+      "title": "La API publica entrega datos ocultos y URLs de avatares pendientes",
+      "evidence": [
+        "services/preview-server.js:413-418 expone GET /api/bootstrap sin autenticacion.",
+        "services/backend-store.js:1771-1787 selecciona descripcion, redes, fecha de alta, avatar pendiente y estado de revision para todos los usuarios.",
+        "services/backend-store.js:1818-1827 propaga esos campos sin aplicar los flags de privacidad ni comprobar si el usuario es el viewer o un moderador.",
+        "La comprobacion anonima de produccion encontro 13 usuarios y 1 avatarPendingUrl presente; no se leyo ni se registro el contenido o la URL de la imagen.",
+        "privacy.html:35 y privacy.html:63 prometen opciones de visibilidad y que solo el avatar aprobado puede ser publico."
+      ],
+      "impact": "Un visitante anonimo puede recuperar una imagen aun no moderada. Cuando un perfil desactive descripcion, fecha o redes, esos valores siguen disponibles en el JSON aunque la interfaz los oculte; esto puede incluir WhatsApp y otros identificadores personales.",
+      "recommendation": "Crear DTOs publicos en el backend: redactar descripcion, fecha y redes segun sus flags; nunca incluir avatarPendingUrl, avatarReviewStatus ni profilePending en users[]. Mantener los datos privados solo en viewer y en endpoints administrativos autenticados. Servir avatares pendientes mediante una ruta privada/no-store."
     },
     {
+      "id": "local-login-fail-open",
       "level": "high",
-      "status": "fixed_locally",
-      "id": "duplicate-google-password-account",
-      "message": "Verified password and Google sign-ins reuse the same stable users.id; legacy unverified emails require explicit verification."
+      "status": "conditional_not_active_in_production",
+      "title": "El login local sin credenciales se habilita por omision fuera de NODE_ENV=production",
+      "evidence": [
+        "services/preview-server.js:345-353 habilita el fallback salvo que NODE_ENV sea exactamente production o exista un flag explicito de desactivacion.",
+        "services/preview-server.js:453-461 y services/backend-store.js:3935-3948 permiten iniciar sesion como el usuario demo u1 sin credenciales.",
+        "local-server.cjs:4-5 escucha en 0.0.0.0 cuando existe PORT.",
+        "Produccion hoy tiene OIDC y Turnstile configurados y no publica los usuarios legacy u1/u2, por lo que el bypass no esta activo."
+      ],
+      "impact": "Un despliegue migrado o mal configurado que conserve u1 y olvide NODE_ENV=production puede permitir autenticacion sin credenciales.",
+      "recommendation": "Hacer fail-closed: permitir login local solo con TOPYKLY_ALLOW_LOCAL_LOGIN=true y una interfaz loopback; abortar el arranque si el fallback esta activo en una interfaz publica."
     },
     {
-      "level": "warning",
-      "status": "production_pending",
-      "id": "missing-hsts",
-      "message": "The live site still omits Strict-Transport-Security until the local server fix is deployed."
+      "id": "avatar-cdn-retention-after-delete",
+      "level": "medium",
+      "status": "confirmed_production",
+      "title": "Los avatares pueden seguir accesibles desde CDN despues de borrarlos",
+      "evidence": [
+        "services/preview-server.js:865-883 sirve todo avatar con Cache-Control public, max-age=31536000, immutable.",
+        "services/backend-store.js:473-503 elimina solo el archivo de origen y no purga caches externas.",
+        "En produccion un avatar aprobado devolvio CF-Cache-Status HIT y Age superior a 84000 segundos; un avatar pendiente devolvio 200 con TTL de un ano."
+      ],
+      "impact": "Quien conserve la URL puede seguir obteniendo una foto retirada, rechazada o perteneciente a una cuenta eliminada mientras Cloudflare mantenga la copia.",
+      "recommendation": "Usar TTL corto con revalidacion o purga explicita de Cloudflare al retirar una imagen. Los avatares pendientes deben ser privados y no almacenables en cache compartida."
+    },
+    {
+      "id": "password-account-enumeration",
+      "level": "medium",
+      "status": "confirmed_local_mitigated_by_turnstile",
+      "title": "Los flujos de contrasena permiten inferir si un email tiene cuenta",
+      "evidence": [
+        "services/backend-store.js:2833-2838 solo ejecuta scrypt cuando el email existe.",
+        "Una medicion local de ocho intentos promedio 46.41 ms para email existente con contrasena incorrecta y 0.17 ms para email inexistente.",
+        "services/backend-store.js:3453-3455 devuelve EMAIL_TAKEN de forma explicita durante el registro.",
+        "services/preview-server.js:490-505 espera el envio de Resend solo para cuentas existentes, creando otra diferencia temporal.",
+        "Turnstile esta configurado en produccion y reduce la explotabilidad, pero no elimina el canal."
+      ],
+      "impact": "Un atacante puede construir una lista de emails registrados para phishing o credential stuffing.",
+      "recommendation": "Verificar siempre una hash scrypt ficticia para emails ausentes, uniformar respuestas y tiempos de registro/recuperacion y aplicar limites persistentes por IP y por identificador."
+    },
+    {
+      "id": "account-delete-without-step-up-auth",
+      "level": "medium",
+      "status": "confirmed_code",
+      "title": "La eliminacion de cuenta no exige reautenticacion",
+      "evidence": [
+        "services/preview-server.js:653-658 acepta la operacion usando solo la cookie de sesion.",
+        "services/backend-store.js:4150-4183 anonimiza la cuenta sin pedir contrasena ni una prueba OIDC reciente."
+      ],
+      "impact": "Una sesion robada o una ejecucion same-origin comprometida puede realizar una accion irreversible sin step-up authentication.",
+      "recommendation": "Exigir la contrasena actual o reautenticacion OIDC reciente y emitir un token de autorizacion de corta duracion para confirmar el borrado."
+    },
+    {
+      "id": "proxy-header-trust-rate-limit-bypass",
+      "level": "medium",
+      "status": "conditional_infrastructure",
+      "title": "TRUST_PROXY depende de que el origen no sea accesible directamente",
+      "evidence": [
+        "services/preview-server.js:278-295 y services/auth-service.js:26-39 aceptan CF-Connecting-IP o el primer X-Forwarded-For cuando TRUST_PROXY esta activo.",
+        "services/preview-server.js:912-939 usa esa IP para rate limiting y recorre el mapa completo al limpiar buckets."
+      ],
+      "impact": "Si el origen de Render acepta trafico directo o un proxy no sobrescribe las cabeceras, se pueden evadir limites y aumentar el consumo de memoria/CPU del limiter.",
+      "recommendation": "Restringir el origen a Cloudflare/proxies conocidos, sobrescribir cabeceras en el borde y agregar limites globales y de tamano al almacenamiento del rate limiter."
+    },
+    {
+      "id": "production-debug-fake-social",
+      "level": "low",
+      "status": "confirmed_code",
+      "title": "El parametro fakeSocial activa una identidad visual ficticia en produccion",
+      "evidence": [
+        "controller-app.js:22-42 acepta ?fakeSocial=1.",
+        "controller-app.js:91-203 sustituye localmente viewer por el primer usuario registrado y fabrica relaciones/notificaciones.",
+        "controller-app.js:394-402 mantiene las demas llamadas reales del API, por lo que no es un bypass de autorizacion del backend."
+      ],
+      "impact": "Puede confundir a una persona sobre la identidad activa y el estado real de su cuenta, aunque el backend siga autorizando con la cookie verdadera.",
+      "recommendation": "Excluir este modo del bundle de produccion o activarlo solo mediante una capacidad de servidor autenticada para entornos de prueba."
+    },
+    {
+      "id": "csp-unsafe-inline",
+      "level": "low",
+      "status": "hardening",
+      "title": "La CSP permite scripts y estilos inline",
+      "evidence": [
+        "services/preview-server.js:131-144 y vercel.json:16 incluyen unsafe-inline.",
+        "index.html:37-51 e index.html:182-199 contienen scripts inline.",
+        "La politica no declara form-action self."
+      ],
+      "impact": "La CSP ofrece menos contencion si en el futuro aparece una inyeccion HTML. No se encontro actualmente un sink XSS alcanzable por datos no confiables.",
+      "recommendation": "Externalizar o aplicar hashes/nonces a los scripts, retirar unsafe-inline de script-src y agregar form-action 'self'."
+    },
+    {
+      "id": "windows-static-denylist-case-bypass",
+      "level": "low",
+      "status": "conditional_windows",
+      "title": "El denylist estatico distingue mayusculas en un filesystem que no lo hace",
+      "evidence": [
+        "services/preview-server.js:355-379 compara services, archivos raiz protegidos y directorios con el casing recibido.",
+        "En Windows, PACKAGE.JSON y Services/backend-store.js resuelven a archivos existentes aunque no coinciden con el denylist.",
+        "Produccion Linux devuelve 404 para estas variantes."
+      ],
+      "impact": "Un preview de Windows expuesto a LAN puede entregar archivos que el filtro pretendia bloquear. El repositorio actual es publico, por lo que el impacto inmediato del codigo fuente es bajo.",
+      "recommendation": "Normalizar segmentos a lowercase y preferir una allowlist de recursos publicos con verificacion realpath."
+    },
+    {
+      "id": "playwright-artifacts-source-control",
+      "level": "low",
+      "status": "repository_hygiene",
+      "title": "Los artefactos de Playwright CLI no estan ignorados",
+      "evidence": [
+        "El repositorio de GitHub es publico y contiene 171 artefactos trackeados bajo .playwright-cli.",
+        ".gitignore excluye .playwright-mcp pero no .playwright-cli.",
+        "Artefactos no trackeados actuales contienen URLs efimeras del flujo OAuth; no se encontraron secretos persistentes ni emails personales."
+      ],
+      "impact": "Una futura captura puede publicar datos de formularios, URLs de autenticacion u otra informacion de prueba por accidente.",
+      "recommendation": "Ignorar .playwright-cli, revisar las capturas antes de versionarlas y retirar del historial cualquier artefacto que contenga datos reales."
     }
   ],
   "liveAudit": {
+    "url": "https://www.topykly.com/",
     "health": "OK",
-    "latencyMs": 842,
+    "latencyMs": 321,
     "sensitiveFilesExposed": false,
     "sslValid": true,
-    "sslDaysRemaining": 80,
-    "hstsPresent": false
+    "sslDaysRemaining": 77,
+    "headers": {
+      "strictTransportSecurity": "max-age=31536000; includeSubDomains",
+      "xFrameOptions": "DENY",
+      "xContentTypeOptions": "nosniff",
+      "contentSecurityPolicyPresent": true,
+      "crossOriginOpenerPolicy": "same-origin",
+      "crossOriginResourcePolicy": "same-origin",
+      "referrerPolicy": "strict-origin-when-cross-origin"
+    },
+    "anonymousAdminRequest": "403 MODERATOR_REQUIRED",
+    "auth": {
+      "oidcConfigured": true,
+      "turnstileConfigured": true,
+      "cookieSecure": true
+    }
+  },
+  "verification": {
+    "npmAudit": "0 vulnerabilities",
+    "qa": "npm run qa passed",
+    "secretScan": "No persistent credentials found in tracked files or searched git history",
+    "xss": "No reachable stored or reflected XSS sink found in reviewed data flows",
+    "sqlInjection": "Queries receiving user data are parameterized; no exploitable SQL injection found",
+    "authorization": "Anonymous access to the admin dashboard returned 403"
   }
 }

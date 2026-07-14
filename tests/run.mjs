@@ -5820,8 +5820,9 @@ await (async () => {
   });
 
   await test("preview server disables local dev login in production", () => {
-    assert.equal(isLocalDevLoginAllowed({}), true);
-    assert.equal(isLocalDevLoginAllowed({ NODE_ENV: "development" }), true);
+    assert.equal(isLocalDevLoginAllowed({}), false);
+    assert.equal(isLocalDevLoginAllowed({ NODE_ENV: "development" }), false);
+    assert.equal(isLocalDevLoginAllowed({ TOPYKLY_ALLOW_LOCAL_LOGIN: "true" }), true);
     assert.equal(isLocalDevLoginAllowed({ NODE_ENV: "production" }), false);
     assert.equal(isLocalDevLoginAllowed({ TOPYKLY_ALLOW_LOCAL_LOGIN: "false" }), false);
   });
@@ -6193,6 +6194,8 @@ await (async () => {
 
   await test("topic sharing builds stable public URLs and branded PNG cards", async () => {
     const html = await read("index.html");
+    const themeBootstrap = `${await read("theme-bootstrap.js")}\n${html}`;
+    const themeToggleBootstrap = await read("theme-toggle-bootstrap.js");
     const topic = {
       id: "topic con espacios",
       title: "¿Qué música recomiendan para trabajar?",
@@ -9299,6 +9302,8 @@ await (async () => {
 
   await test("index and app structure stay trimmed", async () => {
     const html = await read("index.html");
+    const themeBootstrap = `${await read("theme-bootstrap.js")}\n${html}`;
+    const themeToggleBootstrap = await read("theme-toggle-bootstrap.js");
     const app = await read("app.js");
     const components = await read("components.js");
     const controller = await read("controller.js");
@@ -9362,8 +9367,8 @@ await (async () => {
     );
     assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES/);
     assert.match(previewServer, /PROTECTED_STATIC_ROOT_FILES/);
-    assert.match(previewServer, /segments\[0\] === "services"/);
-    assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES\.has\(segments\[0\] \|\| ""\)/);
+    assert.match(previewServer, /firstSegment === "services"/);
+    assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES\.has\(firstSegment\)/);
     assert.match(previewServer, /path\.relative\(root, absolutePath\)/);
     assert.match(
       previewServer,
@@ -9487,7 +9492,7 @@ await (async () => {
     assert.match(html, /<option value="" disabled hidden selected>Mes<\/option>/);
     assert.match(html, /<option value="" disabled hidden selected>Año<\/option>/);
     assert.match(
-      html,
+      themeBootstrap,
       /Código de acceso[\s\S]*id="authCodeBoxes"[\s\S]*(?:class="auth-code-box"[\s\S]*autocomplete="one-time-code"[\s\S]*){6}id="authCodeInput"[\s\S]*type="hidden"/
     );
     assert.match(html, /id="authTermsInput"[\s\S]*Términos y Condiciones/);
@@ -9576,22 +9581,22 @@ await (async () => {
     );
     assert.match(html, /crossorigin="anonymous"/);
     assert.match(
-      html,
+      themeBootstrap,
       /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/
     );
     assert.match(
-      html,
+      themeBootstrap,
       /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/
     );
-    assert.match(html, /const authState = "logged-out";/);
-    assert.match(html, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
-    assert.match(html, /document\.documentElement\.dataset\.authState = authState/);
+    assert.match(themeBootstrap, /const authState = "logged-out";/);
+    assert.match(themeBootstrap, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
+    assert.match(themeBootstrap, /document\.documentElement\.dataset\.authState = authState/);
     assert.match(
-      html,
+      themeBootstrap,
       /document\.documentElement\.classList\.toggle\("is-mobile-viewport", mobile\)/
     );
     assert.match(
-      html,
+      themeBootstrap,
       /document\.documentElement\.classList\.toggle\("is-desktop-viewport", !mobile\)/
     );
     assert.match(
@@ -11557,7 +11562,7 @@ await (async () => {
       const topic = created.topics.find((entry) => entry.title === "Tema que sobrevive");
       const deletedUserId = created.viewer.id;
 
-      const payload = store.deleteAccount({ sessionId: "session-delete-me" });
+      const payload = store.deleteAccount({ sessionId: "session-delete-me", currentPassword: "password-segura" });
       assert.equal(payload.viewer.type, "guest");
       assert.equal(payload.users.some((user) => user.id === deletedUserId), false);
       assert.equal(payload.topics.some((entry) => entry.id === topic.id), true);

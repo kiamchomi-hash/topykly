@@ -21,6 +21,11 @@ import {
 const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;
 const FAKE_SOCIAL_PARAM_VALUES = new Set(["1", "true", "yes", "demo"]);
 
+function isLocalDevelopmentHost(hostname) {
+  const normalized = String(hostname || "").trim().toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "[::1]";
+}
+
 function readBootstrapLocationParams() {
   if (typeof window === "undefined") {
     return {
@@ -38,7 +43,8 @@ function readBootstrapLocationParams() {
     publicProfileNickname: url.searchParams.get("perfil") || null,
     authError: url.searchParams.get("authError") || null,
     authAction: url.searchParams.get("authAction") || null,
-    fakeSocial: FAKE_SOCIAL_PARAM_VALUES.has(String(url.searchParams.get("fakeSocial") || "").trim().toLowerCase())
+    fakeSocial: isLocalDevelopmentHost(url.hostname)
+      && FAKE_SOCIAL_PARAM_VALUES.has(String(url.searchParams.get("fakeSocial") || "").trim().toLowerCase())
   };
 }
 

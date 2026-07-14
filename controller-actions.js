@@ -558,7 +558,8 @@ export function createActionHandlers({
     }
 
     try {
-      const payload = await api.deleteAccount(state.selectedTopicId);
+      const currentPassword = window.prompt("Confirma tu contrasena para eliminar la cuenta. Si usas Google, vuelve a iniciar sesion recientemente.") || "";
+      const payload = await api.deleteAccount(state.selectedTopicId, currentPassword);
       dispatch(state, reducers.mergeLiveTopics, payload);
       dispatch(state, reducers.setSettingsModalOpen, false);
       showFeedback("Tu cuenta fue eliminada.");

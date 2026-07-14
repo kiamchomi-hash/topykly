@@ -312,10 +312,10 @@ export const api = {
     });
   },
 
-  async deleteAccount(selectedTopicId = null) {
+  async deleteAccount(selectedTopicId = null, currentPassword = "") {
     return request("/api/account/delete", {
       method: "POST",
-      body: { selectedTopicId }
+      body: { selectedTopicId, currentPassword }
     });
   },
 
