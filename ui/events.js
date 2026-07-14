@@ -1,5 +1,6 @@
 import { bindTopbarEvents } from "./topbar.js?v=20260709-topicrace1";
 import { syncComposerTextareaHeight } from "./chat.js";
+import { bindTopicShareEvents } from "./topic-share.js";
 
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled]):not([tabindex='-1'])",
@@ -51,6 +52,15 @@ function getFocusableElements(container) {
 }
 
 function getActiveFocusTrapContainer(dom) {
+  if (
+    dom.shareTopicModal instanceof HTMLElement &&
+    dom.shareTopicModalBackdrop &&
+    !dom.shareTopicModalBackdrop.hidden &&
+    dom.shareTopicModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.shareTopicModal;
+  }
+
   if (
     dom.authModal instanceof HTMLElement &&
     dom.authModalBackdrop &&
@@ -197,6 +207,11 @@ export function bindPageEvents(dom, handlers) {
   }
 
   bindTopbarEvents(dom, handlers);
+  const topicShareEvents = bindTopicShareEvents(dom, {
+    state: handlers.state,
+    showFeedback: handlers.showFeedback,
+    copyText: copyTextToClipboard
+  });
 
   function positionConnectedUserMenu(menu, userItem, clickPoint = null) {
     const anchorRect = userItem.getBoundingClientRect();
@@ -789,6 +804,7 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
     }
 
     if (event.key === "Escape") {
+      topicShareEvents.close();
       handlers.closePaletteModal();
       handlers.closePublicProfileModal?.();
       handlers.closeDrawers();

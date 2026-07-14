@@ -4961,7 +4961,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         throw new ApiError(404, "TOPIC_NOT_FOUND", "Tema no encontrado.");
       }
 
-      const authorRow = db.prepare("SELECT name, nickname, type FROM users WHERE id = ?")
+      const authorRow = db.prepare("SELECT name, nickname, type, avatar_url FROM users WHERE id = ?")
         .get(topicRow.author_id);
       const messages = db.prepare(`
         SELECT
@@ -5006,7 +5006,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         author: {
           name: authorRow?.name || "Usuario de TOPYKLY",
           nickname: authorRow?.nickname ?? null,
-          type: authorRow?.type || "guest"
+          type: authorRow?.type || "guest",
+          avatarUrl: authorRow?.avatar_url ?? null
         },
         messages,
         relatedTopics,

@@ -107,6 +107,9 @@ export function renderPageShell({
   jsonLd = null,
   ogType = "website",
   ogImage = "",
+  ogImageAlt = "",
+  ogImageWidth = 1200,
+  ogImageHeight = 630,
   bodyHtml = "",
   redirectUrl = ""
 }) {
@@ -125,9 +128,15 @@ export function renderPageShell({
     canonicalUrl ? `<meta property="og:url" content="${escapeHtml(canonicalUrl)}">` : "",
     `<meta property="og:locale" content="es_ES">`,
     ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}">` : "",
-    `<meta name="twitter:card" content="summary">`,
+    ogImage ? `<meta property="og:image:type" content="image/png">` : "",
+    ogImage ? `<meta property="og:image:width" content="${escapeHtml(ogImageWidth)}">` : "",
+    ogImage ? `<meta property="og:image:height" content="${escapeHtml(ogImageHeight)}">` : "",
+    ogImage && ogImageAlt ? `<meta property="og:image:alt" content="${escapeHtml(ogImageAlt)}">` : "",
+    `<meta name="twitter:card" content="${ogImage ? "summary_large_image" : "summary"}">`,
     `<meta name="twitter:title" content="${escapeHtml(title)}">`,
     description ? `<meta name="twitter:description" content="${escapeHtml(description)}">` : "",
+    ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}">` : "",
+    ogImage && ogImageAlt ? `<meta name="twitter:image:alt" content="${escapeHtml(ogImageAlt)}">` : "",
     `<link rel="icon" href="/favicon.svg" type="image/svg+xml">`,
     `<style>${PAGE_STYLE}</style>`,
     jsonLd ? `<script type="application/ld+json">${serializeJsonLd(jsonLd)}</script>` : ""
@@ -228,7 +237,8 @@ export function renderTopicPage(topic, { origin }) {
     robotsMeta: isIndexable ? "index,follow" : "noindex,follow",
     jsonLd,
     ogType: "article",
-    ogImage: `${origin}/og-image.png`,
+    ogImage: `${origin}/og/tema/${encodeURIComponent(topic.id)}.png`,
+    ogImageAlt: `Tarjeta del tema ${topic.title} en TOPYKLY`,
     bodyHtml,
     redirectUrl: `/?selectedTopicId=${encodeURIComponent(topic.id)}`
   });

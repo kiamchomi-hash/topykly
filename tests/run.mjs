@@ -26,6 +26,7 @@ import {
   resolvePublicOrigin,
   slugify
 } from "../services/seo-pages.js";
+import { renderTopicSocialCard, TOPIC_SOCIAL_CARD_SIZE } from "../services/social-card.js";
 import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
 import { composeReportReason, REPORT_REASONS } from "../report-reasons.js";
@@ -81,6 +82,7 @@ import { selectOnlineUsers } from "../ui/users.js";
 import { createMessageItem, createTopicItem, createUserItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
+import { buildTopicShareModel, buildTopicSharePath, TOPIC_SHARE_EXPORT_SIZE } from "../ui/topic-share.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
 import { collectTopicNotifications, createNotificationStateUpdate, filterNotificationsForFriends, groupNotificationsForDisplay, createNotificationEmptyState } from "../ui/notifications.js";
 import { censorProfanity, hasProfanity, setProfanityFilterEnabled, filterDisplayText } from "../profanity-filter.js";
@@ -6173,6 +6175,11 @@ await (async () => {
     assert.equal(html.includes(`<link rel="canonical" href="https://topykly.com/tema/topic-xss/script-alert-1-script">`), true);
     assert.equal(html.includes(`"@type":"DiscussionForumPosting"`), true);
     assert.equal(html.includes("\\u003cscript"), true);
+    assert.equal(html.includes(`<meta property="og:image" content="https://topykly.com/og/tema/topic-xss.png">`), true);
+    assert.equal(html.includes(`<meta property="og:image:width" content="1200">`), true);
+    assert.equal(html.includes(`<meta property="og:image:height" content="630">`), true);
+    assert.equal(html.includes(`<meta name="twitter:card" content="summary_large_image">`), true);
+    assert.equal(html.includes(`<meta name="twitter:image" content="https://topykly.com/og/tema/topic-xss.png">`), true);
 
     const archivedHtml = renderTopicPage({
       ...xssTopic,
@@ -6182,6 +6189,48 @@ await (async () => {
     assert.equal(archivedHtml.includes(`<meta name="robots" content="index,follow">`), true);
     assert.equal(archivedHtml.includes("Tema archivado:"), true);
     assert.equal(archivedHtml.includes("ya no admite comentarios ni reacciones"), true);
+  });
+
+  await test("topic sharing builds stable public URLs and branded PNG cards", async () => {
+    const html = await read("index.html");
+    const topic = {
+      id: "topic con espacios",
+      title: "¿Qué música recomiendan para trabajar?",
+      authorId: "author-1",
+      messages: [
+        { id: "root", authorId: "author-1", kind: "user", isRoot: true, text: "Busco discos tranquilos para concentrarme." },
+        { id: "reply", authorId: "author-2", kind: "user", isRoot: false, text: "Prueba con jazz." }
+      ]
+    };
+    const model = buildTopicShareModel(
+      topic,
+      [{ id: "author-1", name: "Ana Música", nickname: "ana_musica", avatarUrl: "/avatars/ana.jpg" }],
+      "https://topykly.com/"
+    );
+
+    assert.equal(buildTopicSharePath(topic), "/tema/topic%20con%20espacios/que-musica-recomiendan-para-trabajar");
+    assert.equal(model.url, "https://topykly.com/tema/topic%20con%20espacios/que-musica-recomiendan-para-trabajar");
+    assert.equal(model.authorName, "Ana Música");
+    assert.equal(model.avatarUrl, "/avatars/ana.jpg");
+    assert.equal(model.commentLabel, "1 comentario");
+    assert.deepEqual(TOPIC_SHARE_EXPORT_SIZE, { width: 1080, height: 1350 });
+    assert.match(html, /<span>Enlace:<\/span>/);
+    assert.equal(html.includes("Formato vertical"), false);
+    assert.equal(html.includes("Lleva la conversación a tus redes"), false);
+    assert.equal(html.includes("La imagen usa el título"), false);
+
+    const image = await renderTopicSocialCard({
+      ...topic,
+      author: { name: model.authorName, nickname: model.authorNickname, avatarUrl: model.avatarUrl },
+      commentCount: 1
+    }, {
+      avatarBuffer: Buffer.from('<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="#ff8b5c"/></svg>')
+    });
+    assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(image.readUInt32BE(16), TOPIC_SOCIAL_CARD_SIZE.width);
+    assert.equal(image.readUInt32BE(20), TOPIC_SOCIAL_CARD_SIZE.height);
+    assert.equal(image.length > 1_000, true);
+    assert.equal(image.subarray(-12).toString("hex"), "0000000049454e44ae426082");
   });
 
   await test("preview server renders crawlable topic pages with canonical redirects", async () => {
@@ -6235,6 +6284,16 @@ await (async () => {
       assert.equal(pageHtml.includes("&lt;script&gt;etiquetas&lt;/script&gt;"), true);
       assert.equal(pageHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
       assert.equal(pageHtml.includes("Abrir en TOPYKLY"), true);
+      assert.equal(
+        pageHtml.includes(`<meta property="og:image" content="https://topykly.com/og/tema/${encodeURIComponent(topicId)}.png">`),
+        true
+      );
+
+      const cardResponse = await fetch(`${origin}/og/tema/${encodeURIComponent(topicId)}.png`);
+      assert.equal(cardResponse.status, 200);
+      assert.equal(cardResponse.headers.get("content-type"), "image/png");
+      const cardBytes = Buffer.from(await cardResponse.arrayBuffer());
+      assert.deepEqual([...cardBytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 
       for (let index = 0; index < 3; index += 1) {
         const commenterSession = `session-seo-commenter-${index}`;

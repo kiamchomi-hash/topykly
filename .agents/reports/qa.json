@@ -1,13 +1,13 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-14T15:44:52.009Z",
+  "lastChecked": "2026-07-14T15:56:31.6498259-03:00",
   "tests": [
     {
       "name": "unit and integration suite",
       "command": "npm test",
       "status": "passed",
-      "summary": "All repository assertions passed, including stable friend-tab reconciliation and the root-relative mascot asset path."
+      "summary": "All repository assertions passed, including approved-avatar propagation, avatar compositing, topic share URL modeling, dynamic Open Graph metadata, PNG structure and the social-card HTTP endpoint."
     },
     {
       "name": "HTTP smoke suite",
@@ -19,7 +19,13 @@
       "name": "syntax validation",
       "command": "node --check on changed JavaScript modules",
       "status": "passed",
-      "summary": "All changed JavaScript modules parsed successfully."
+      "summary": "ui/topic-share.js, services/social-card.js and services/preview-server.js parsed successfully."
+    },
+    {
+      "name": "browser visual validation",
+      "command": "Playwright at 1280x720, 390x844 and 320x568",
+      "status": "passed",
+      "summary": "The share modal renders the real circular avatar, compact Enlace label and responsive controls with no browser console errors."
     },
     {
       "name": "diff validation",

@@ -242,6 +242,17 @@
               </h2>
             </div>
             <div class="chat-actions">
+              <button class="icon-button icon-button--compact chat-actions__share" id="shareTopicButton" type="button" aria-label="Compartir tema" hidden>
+                <span class="share-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="18" cy="5" r="2.5"></circle>
+                    <circle cx="6" cy="12" r="2.5"></circle>
+                    <circle cx="18" cy="19" r="2.5"></circle>
+                    <path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"></path>
+                  </svg>
+                </span>
+                <span class="button-label">Compartir</span>
+              </button>
               <button class="icon-button icon-button--compact chat-actions__report" id="reportTopicButton" type="button" aria-label="Reportar tema" hidden>
                 <span class="report-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -356,6 +367,73 @@
         <a href="/privacy.html">Política de privacidad</a>
         <a href="mailto:soporte@topykly.com">Contacto y reclamos</a>
       </footer>
+    </div>
+    <div class="topic-share-modal-backdrop" id="shareTopicModalBackdrop" hidden>
+      <section class="topic-share-modal" id="shareTopicModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="shareTopicModalTitle" tabindex="-1">
+        <header class="topic-share-modal__header">
+          <div>
+            <h2 id="shareTopicModalTitle">Compartir tema</h2>
+          </div>
+          <button class="icon-button icon-button--compact topic-share-modal__close" id="closeShareTopicModalButton" type="button" aria-label="Cerrar compartir tema">
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
+          </button>
+        </header>
+        <div class="topic-share-modal__body">
+          <div class="topic-share-preview" aria-label="Vista previa de la imagen para redes">
+            <div class="topic-share-preview__brand">
+              <span class="topic-share-preview__mark" aria-hidden="true">
+                <svg viewBox="0 0 64 64" fill="none">
+                  <rect width="64" height="64" rx="16"></rect>
+                  <path d="M17 19h30v18c0 5.5-4.5 10-10 10H27c-5.5 0-10-4.5-10-10V19Z"></path>
+                  <path d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44M22 48h20M26 14v7M32 11v10M38 14v7"></path>
+                </svg>
+              </span>
+              <span class="topic-share-preview__wordmark"><span>TOPY</span><span>KLY</span></span>
+            </div>
+            <div class="topic-share-preview__author">
+              <span class="topic-share-preview__avatar-shell">
+                <img id="sharePreviewAvatar" alt="" hidden />
+                <span id="sharePreviewAvatarFallback" aria-hidden="true">T</span>
+              </span>
+              <span class="topic-share-preview__author-copy">
+                <strong id="sharePreviewAuthor">Comunidad TOPYKLY</strong>
+                <span id="sharePreviewNickname">Autor del tema</span>
+              </span>
+              <span id="sharePreviewComments">0 comentarios</span>
+            </div>
+            <h3 id="sharePreviewTitle">Tema de TOPYKLY</h3>
+            <span class="topic-share-preview__rule" aria-hidden="true"></span>
+            <p class="topic-share-preview__excerpt" id="sharePreviewExcerpt"></p>
+            <p class="topic-share-preview__footer">topykly.com</p>
+          </div>
+          <div class="topic-share-modal__controls">
+            <label class="topic-share-url" for="shareTopicUrl">
+              <span>Enlace:</span>
+              <input id="shareTopicUrl" type="text" readonly />
+            </label>
+            <button class="primary-button topic-share-modal__primary" id="nativeShareTopicButton" type="button">
+              <span class="share-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="18" cy="5" r="2.5"></circle>
+                  <circle cx="6" cy="12" r="2.5"></circle>
+                  <circle cx="18" cy="19" r="2.5"></circle>
+                  <path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5"></path>
+                </svg>
+              </span>
+              Compartir tema
+            </button>
+            <div class="topic-share-modal__secondary-actions">
+              <button class="text-button" id="copyTopicLinkButton" type="button">Copiar enlace</button>
+              <button class="text-button" id="downloadTopicCardButton" type="button">Descargar imagen</button>
+            </div>
+          </div>
+        </div>
+        <canvas id="topicShareCanvas" width="1080" height="1350" hidden></canvas>
+      </section>
     </div>
 
     <div class="palette-modal-backdrop" id="paletteModalBackdrop" hidden>

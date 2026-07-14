@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente de Pruebas Responsive",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-14T15:54:01.644Z",
+    "lastChecked":  "2026-07-14T15:56:31.6498259-03:00",
     "suggestions":  [
                         {
                             "level":  "suggestion",
@@ -55,6 +55,18 @@
                             "level":  "fixed",
                             "message":  "Verificado a 390 por 844 px: el encabezado del perfil permanece fijo y opaco al desplazar el contenido, sin alterar el resto del modal.",
                             "id":  "mobile-profile-header-opaque",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "El modal para compartir temas fue verificado a 1280x720, 390x844 y 320x568. En el viewport compacto usa filas de contenido no comprimibles y scroll propio, sin superponer acciones sobre la tarjeta ni desplazar el encabezado.",
+                            "id":  "topic-share-modal-responsive-flow",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "La nueva tarjeta de tema prioriza el avatar real del autor y mantiene legibles la autoria, el titulo, el extracto y el enlace a 1280x720, 390x844 y 320x568.",
+                            "id":  "topic-share-avatar-visual-v2",
                             "agent":  "responsive"
                         }
                     ]

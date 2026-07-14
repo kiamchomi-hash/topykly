@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { createAuthService } from "./auth-service.js";
 import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-store.js";
+import { renderTopicSocialCard } from "./social-card.js";
 import {
   renderNotFoundPage,
   renderProfilePage,
@@ -1021,6 +1022,68 @@ function sendTextResource(res, req, body, contentType, cacheControl) {
   res.end(req.method === "HEAD" ? "" : body);
 }
 
+function readTopicAvatarBuffer(store, topic) {
+  const avatarUrl = String(topic.author?.avatarUrl || "");
+  if (!avatarUrl.startsWith("/avatars/") || !store.avatarStorageDir) {
+    return null;
+  }
+
+  const fileName = path.basename(avatarUrl);
+  const avatarRoot = path.resolve(store.avatarStorageDir);
+  const avatarPath = path.resolve(avatarRoot, fileName);
+  if (path.dirname(avatarPath) !== avatarRoot) {
+    return null;
+  }
+
+  try {
+    return fs.readFileSync(avatarPath);
+  } catch {
+    return null;
+  }
+}
+
+async function handleTopicSocialCardRequest(store, req, res, url) {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    writePlainText(res, 405, "Method not allowed");
+    return;
+  }
+
+  let topicId = "";
+  try {
+    const encodedId = url.pathname.slice("/og/tema/".length, -".png".length);
+    topicId = decodeURIComponent(encodedId);
+  } catch {
+    topicId = "";
+  }
+
+  if (!topicId) {
+    writePlainText(res, 404, "Not found");
+    return;
+  }
+
+  let topic;
+  try {
+    topic = store.getTopicPageData(topicId);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      writePlainText(res, 404, "Not found");
+      return;
+    }
+    throw error;
+  }
+
+  const image = await renderTopicSocialCard(topic, {
+    avatarBuffer: readTopicAvatarBuffer(store, topic)
+  });
+  res.writeHead(200, {
+    ...getSecurityHeaders({ includeCsp: false, req }),
+    "Content-Type": "image/png",
+    "Content-Length": image.length,
+    "Cache-Control": "public, max-age=300"
+  });
+  res.end(req.method === "HEAD" ? "" : image);
+}
+
 function buildSitemapXml(store) {
   const origin = resolvePublicOrigin();
   const entries = [
@@ -1303,6 +1366,14 @@ export function startPreviewServer({
           "text/plain; charset=utf-8",
           "public, max-age=3600"
         );
+        return;
+      }
+
+      if (url.pathname.startsWith("/og/tema/") && url.pathname.endsWith(".png")) {
+        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
+          return;
+        }
+        await handleTopicSocialCardRequest(store, req, res, url);
         return;
       }
 

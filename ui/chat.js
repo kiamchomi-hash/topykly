@@ -85,6 +85,7 @@ export function renderChat(state, dom) {
 
   syncChatComposer(topic, dom, isLoading, state.mobileView);
   syncTopicReportButton(topic, dom, isLoading, isTopicReported);
+  syncTopicShareButton(topic, dom, isLoading);
 
   if (!dom.messageStream) {
     return;
@@ -138,6 +139,16 @@ export function renderChat(state, dom) {
     dom.messageStream.scrollTop = dom.messageStream.scrollHeight;
   }
   writeRenderedChatState(dom.messageStream, nextRenderState);
+}
+
+function syncTopicShareButton(topic, dom, isLoading) {
+  if (typeof HTMLButtonElement === "undefined" || !(dom.shareTopicButton instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  dom.shareTopicButton.hidden = isLoading || !topic;
+  dom.shareTopicButton.disabled = isLoading || !topic;
+  dom.shareTopicButton.dataset.topicId = topic?.id || "";
 }
 
 function syncTopicReportButton(topic, dom, isLoading, isReported) {
