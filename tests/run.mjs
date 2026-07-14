@@ -9624,10 +9624,7 @@ await (async () => {
       /@keyframes chat-title-marquee\s*\{[\s\S]*translateX\(var\(--chat-title-marquee-distance\)\)/
     );
     assert.match(styles, /#chatTitle\.is-overflowing[\s\S]*animation:[^;]*infinite alternate;/);
-    assert.match(
-      styles,
-      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*#chatTitle\.is-overflowing[\s\S]*animation:\s*none;/
-    );
+    assert.doesNotMatch(styles, /prefers-reduced-motion:[\s\S]{0,400}#chatTitle\.is-overflowing/);
     assert.match(styles, /\.topic-item\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
     assert.match(
       styles,
