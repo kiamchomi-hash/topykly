@@ -25,7 +25,7 @@ function getMascotMarkup(filterId) {
       </defs>
       <image
         class="topykly-mascot__approved-art"
-        href="./assets/mascot/topy-concept-v8.png"
+        href="/assets/mascot/topy-concept-v8.png"
         width="1200"
         height="1200"
         preserveAspectRatio="xMidYMid meet"

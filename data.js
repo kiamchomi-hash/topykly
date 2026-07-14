@@ -1,3 +1,58 @@
+// Contenido editorial de actualidad verificado el 14 de julio de 2026.
+// Revisar fechas y contexto antes de volver a sembrarlo en otra base.
+export const editorialTopicSeedData = [
+  [
+    "Argentina-Inglaterra: ¿qué planteo usarías en la semifinal?",
+    "La Selección juega el miércoles 15 a las 16, hora argentina. ¿Conviene presionar arriba, cuidar la pelota o atacar rápido?",
+    [
+      "Inglaterra tiene mucha potencia en ataque. Intentaría que Argentina controle el ritmo y no convierta el partido en un intercambio constante.",
+      "La pelota parada puede ser decisiva. Además del once inicial, importa cómo defender los centros y quiénes llegan frescos al tramo final.",
+      "Me interesa ver si Scaloni mantiene su estructura o prepara una variante específica para limitar a Bellingham y Kane."
+    ],
+    "u10"
+  ],
+  [
+    "Colapinto volvió a sumar: ¿qué necesita Alpine para mejorar?",
+    "Franco terminó noveno en Silverstone después de largar 19.º. ¿Fue su mejor carrera del año y qué debería corregir el equipo?",
+    [
+      "Remontar diez lugares muestra que pudo aprovechar las oportunidades. El desafío sigue siendo clasificar más adelante para no depender de una carrera caótica.",
+      "La estrategia y las paradas deben acompañar mejor. Cuando el auto está cerca de los puntos, cualquier demora cambia por completo el resultado.",
+      "Más que comparar una sola carrera, miraría la regularidad durante varios Grandes Premios y la evolución real del Alpine."
+    ],
+    "u10"
+  ],
+  [
+    "Vacaciones de invierno: ¿qué destino argentino recomendarías?",
+    "Nieve, termas, montaña, selva o una escapada urbana: comparte un lugar, un presupuesto aproximado y un consejo útil.",
+    [
+      "La Patagonia es la opción clásica para ver nieve, pero conviene reservar y comparar alojamiento porque julio concentra mucha demanda.",
+      "El NOA también funciona muy bien en invierno: suele tener días soleados, paisajes increíbles y propuestas distintas al esquí.",
+      "También sirven recomendaciones cercanas. Una salida de un día puede ser más accesible que viajar lejos durante el receso escolar."
+    ],
+    "u10"
+  ],
+  [
+    "IPC de junio: ¿qué gasto cambió más en tu presupuesto?",
+    "Con la publicación del nuevo dato del INDEC, comparemos experiencias sin perder de vista que los precios varían según la región.",
+    [
+      "Para comparar mejor, sirve anotar durante un mes alimentos, transporte, servicios y alquiler por separado en lugar de mirar solo el total.",
+      "La experiencia personal puede ser distinta del promedio nacional porque cada hogar consume productos y servicios diferentes.",
+      "Además del precio, noté que cambiar marcas, tamaños o frecuencia de compra también modifica mucho el gasto mensual."
+    ],
+    "u10"
+  ],
+  [
+    "¿Qué plan gratuito o económico recomiendas para este invierno?",
+    "Museos, ferias, plazas, centros culturales y paseos: armemos una lista con propuestas de todas las provincias.",
+    [
+      "Sumaría ciudad, días y horarios cuando sea posible. Muchas actividades gratuitas requieren reserva previa aunque no cobren entrada.",
+      "Las bibliotecas, universidades y centros culturales municipales suelen tener talleres o espectáculos durante las vacaciones.",
+      "También valen los paseos al aire libre, pero en invierno conviene revisar el clima, el transporte de regreso y la hora en que oscurece."
+    ],
+    "u10"
+  ]
+];
+
 export const topicSeedData = [
   [
     "¿Cómo mejorar la señal WiFi en un departamento?",

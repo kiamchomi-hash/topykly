@@ -306,7 +306,9 @@ export function renderFriendRequests(state, dom) {
     activeSection = createFriendsSection(friendships.friends || [], state);
   }
 
-  activeSection.dataset.id = `section-${activeTab}`;
+  // Keep the active section mounted while tabs change so the mascot SVG and
+  // its raster asset are not destroyed and requested again on every click.
+  activeSection.dataset.id = "active-section";
 
   reconcile(panel, [header, tabsContainer, activeSection]);
 }

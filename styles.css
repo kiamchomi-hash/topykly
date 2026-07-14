@@ -7006,6 +7006,8 @@ html.is-mobile-viewport .ranking-mode-list__label {
 
 #profileModal .profile-modal__header {
   padding: 10px 18px 8px;
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--surface-strong), var(--surface-strong));
 }
 
 .profile-modal__header {

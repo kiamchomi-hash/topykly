@@ -1,13 +1,13 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-14T15:05:30.221Z",
+  "lastChecked": "2026-07-14T15:44:52.009Z",
   "tests": [
     {
       "name": "unit and integration suite",
       "command": "npm test",
       "status": "passed",
-      "summary": "All repository assertions passed, including removal of the requested friend empty-state copy and non-selectable hidden birthdate placeholders that remain visible before selection."
+      "summary": "All repository assertions passed, including stable friend-tab reconciliation and the root-relative mascot asset path."
     },
     {
       "name": "HTTP smoke suite",

@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente de Flujos de Usabilidad",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-14T13:32:00.000Z",
+    "lastChecked":  "2026-07-14T15:37:57.195Z",
     "suggestions":  [
                         {
                             "level":  "suggestion",
@@ -67,6 +67,12 @@
                             "level":  "fix",
                             "message":  "La lista personalizada oculta autores bloqueados y rellena hasta 20 lugares recorriendo solo los 40 temas activos globales; nunca revive ni muestra temas archivados para completar huecos.",
                             "id":  "blocked-topic-window-boundary",
+                            "agent":  "flows"
+                        },
+                        {
+                            "level":  "fix",
+                            "message":  "Recibidas, Enviadas y Amigos reutilizan la misma seccion activa al alternar, conservando el nodo de la mascota y evitando desmontajes o recargas visuales entre pestanas.",
+                            "id":  "friend-tabs-stable-empty-state",
                             "agent":  "flows"
                         }
                     ]

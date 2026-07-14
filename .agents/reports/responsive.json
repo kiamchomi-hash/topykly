@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente de Pruebas Responsive",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-14T13:32:00.000Z",
+    "lastChecked":  "2026-07-14T15:54:01.644Z",
     "suggestions":  [
                         {
                             "level":  "suggestion",
@@ -49,6 +49,12 @@
                             "level":  "fixed",
                             "message":  "Los modales basados en perfil usan el viewport visual dinamico y areas seguras en mobile, evitando que las barras reales del navegador recorten el encabezado.",
                             "id":  "mobile-modal-dynamic-viewport",
+                            "agent":  "responsive"
+                        },
+                        {
+                            "level":  "fixed",
+                            "message":  "Verificado a 390 por 844 px: el encabezado del perfil permanece fijo y opaco al desplazar el contenido, sin alterar el resto del modal.",
+                            "id":  "mobile-profile-header-opaque",
                             "agent":  "responsive"
                         }
                     ]

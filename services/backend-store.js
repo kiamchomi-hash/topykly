@@ -4,7 +4,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
-import { initialUsers, topicSeedData } from "../data.js";
+import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
 import { SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
 
 export const ACTIVE_TOPIC_LIMIT = 40;
@@ -1251,8 +1251,8 @@ function seedDatabase(db, { includeFakeFriendRequests = true } = {}) {
 }
 
 function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
-  const limit = normalizePositiveInteger(requestedLimit, 5, { min: 1, max: topicSeedData.length });
-  const entries = topicSeedData.slice(0, limit)
+  const limit = normalizePositiveInteger(requestedLimit, 5, { min: 1, max: editorialTopicSeedData.length });
+  const entries = editorialTopicSeedData.slice(0, limit)
     .map((entry, index) => ({ entry, index }))
     .filter(({ entry }) => !db.prepare("SELECT 1 FROM topics WHERE title = ? LIMIT 1").get(entry[0]));
 
@@ -1319,17 +1319,19 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     WHERE id = ?
   `);
 
-  entries.forEach(({ entry: [title, subtitle, replies = []], index }, insertionIndex) => {
-    const topicId = `editorial-topic-${index + 1}`;
+  entries.forEach(({ entry: [title, subtitle, replies = [], requestedAuthorId = null], index }, insertionIndex) => {
+    const normalizedTitle = normalizeTopicTitle(title);
+    const titleHash = crypto.createHash("sha256").update(normalizedTitle).digest("hex").slice(0, 16);
+    const topicId = `editorial-topic-${titleHash}`;
     const existingId = db.prepare("SELECT title FROM topics WHERE id = ? LIMIT 1").get(topicId);
     if (existingId) {
       throw new ApiError(409, "EDITORIAL_TOPIC_ID_CONFLICT", `El id editorial ${topicId} ya está ocupado.`);
     }
 
-    const authorSeed = initialUsers[index % initialUsers.length];
+    const authorSeed = initialUsers.find((user) => user.id === requestedAuthorId)
+      || initialUsers[index % initialUsers.length];
     const authorId = editorialUserIds.get(authorSeed.id);
     const createdAt = createIsoTimestamp(insertionIndex * 4, Date.now() - entries.length * 10 * 60_000);
-    const normalizedTitle = normalizeTopicTitle(title);
     const rootText = `${normalizedTitle}. ${normalizeMessageText(subtitle)}`;
     insertTopic.run(
       topicId,

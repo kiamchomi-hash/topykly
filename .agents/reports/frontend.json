@@ -1,7 +1,7 @@
 {
     "agentName":  "Agente Revisor de Frontend",
     "status":  "Corregido",
-    "lastChecked":  "2026-07-14T15:05:30.221Z",
+    "lastChecked":  "2026-07-14T15:54:01.644Z",
     "findings":  [
                      {
                          "level":  "suggestion",
@@ -25,6 +25,18 @@
                          "level":  "fixed",
                          "message":  "El estado sin amigos elimina la explicacion solicitada y los selectores de nacimiento conservan Dia, Mes y Ano como indicaciones iniciales deshabilitadas y ocultas del listado de opciones.",
                          "id":  "auth-birthdate-hidden-placeholders",
+                         "agent":  "frontend"
+                     },
+                     {
+                         "level":  "fixed",
+                         "message":  "La mascota del panel de amigos mantiene su nodo entre pestanas y carga el arte desde una ruta absoluta, evitando el icono de imagen rota al alternar estados vacios.",
+                         "id":  "friend-mascot-tab-image-stability",
+                         "agent":  "frontend"
+                     },
+                     {
+                         "level":  "fixed",
+                         "message":  "El encabezado fijo del perfil propio combina una base opaca con la superficie de la paleta, impidiendo que el formulario se transparente durante el scroll.",
+                         "id":  "mobile-profile-header-opaque",
                          "agent":  "frontend"
                      }
                  ]

@@ -29,7 +29,7 @@ import {
 import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sqlite.mjs";
 import { createChatActions } from "../controller-chat-actions.js";
 import { composeReportReason, REPORT_REASONS } from "../report-reasons.js";
-import { initialUsers, topicSeedData } from "../data.js";
+import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
 import {
   appendMessageToTopic,
   buildTopics,
@@ -1215,7 +1215,7 @@ await (async () => {
     assert.match(notificationSource, /createTopyklyMascot\("notification-panel__empty-mascot"\)/);
     assert.match(friendRequestSource, /createTopyklyMascot\("friend-request-panel__empty-mascot"\)/);
     assert.doesNotMatch(chatSource, /createTopyklyMascot/);
-    assert.match(mascotSource, /assets\/mascot\/topy-concept-v8\.png/);
+    assert.match(mascotSource, /href="\/assets\/mascot\/topy-concept-v8\.png"/);
     assert.match(mascotSource, /flood-color="var\(--mascot-accent\)"/);
     assert.match(mascotSource, /in2="SourceAlpha"/);
     assert.match(mascotSource, /class="topykly-mascot__neutral-face" fill="#000"/);
@@ -1804,11 +1804,15 @@ await (async () => {
         const payload = store.bootstrap({ sessionId: "session-editorial-seed" });
         assert.equal(payload.topics.length, 3);
         assert.equal(payload.topics.every((topic) => topic.messages.length >= 4), true);
+        assert.equal(payload.topics.some((topic) => topic.title === editorialTopicSeedData[0][0]), true);
+        assert.equal(payload.topics.some((topic) => topic.title === topicSeedData[0][0]), false);
+        assert.equal(payload.topics.every((topic) => topic.authorId === "editorial-u10"), true);
+        assert.equal(payload.topics.every((topic) => /^editorial-topic-[a-f0-9]{16}$/.test(topic.id)), true);
         assert.equal(
           payload.users.every((user) => user.role === "Cuenta editorial" && user.description.includes("Perfil editorial ficticio")),
           true
         );
-        const editorialProfile = store.getPublicProfileByNickname("guias_topykly");
+        const editorialProfile = store.getPublicProfileByNickname("comunidad_topykly");
         assert.equal(editorialProfile.isEditorial, true);
         assert.equal(editorialProfile.indexable, true);
 
@@ -5266,6 +5270,8 @@ await (async () => {
 
     assert.match(friendRequests, /import \{ reconcile \} from "\.\/render-utils\.js";/);
     assert.match(friendRequests, /reconcile\(panel, \[header, tabsContainer, activeSection\]\);/);
+    assert.match(friendRequests, /activeSection\.dataset\.id = "active-section";/);
+    assert.doesNotMatch(friendRequests, /activeSection\.dataset\.id = `section-\$\{activeTab\}`/);
     assert.doesNotMatch(friendRequests, /replaceChildren/);
     assert.match(friendRequests, /row\.dataset\.id = String\(user\.id\);/);
 
@@ -11154,6 +11160,10 @@ await (async () => {
     assert.match(
       stylesSource,
       /\.profile-modal__header\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?top:\s*0;/
+    );
+    assert.match(
+      stylesSource,
+      /#profileModal \.profile-modal__header\s*\{[\s\S]*?background-color:\s*var\(--bg\);[\s\S]*?background-image:\s*linear-gradient\(var\(--surface-strong\), var\(--surface-strong\)\);/
     );
     assert.match(
       stylesSource,
