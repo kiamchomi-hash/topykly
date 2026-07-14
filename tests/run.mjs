@@ -9615,6 +9615,11 @@ await (async () => {
     assert.match(titles, /title\.classList\.add\("is-overflowing"\)/);
     assert.match(titles, /new ResizeObserver/);
     assert.match(
+      titles,
+      /title\.classList\.contains\("is-overflowing"\)[\s\S]*--chat-title-marquee-duration[\s\S]*nextDuration[\s\S]*--chat-title-marquee-distance[\s\S]*nextDistance[\s\S]*return;/
+    );
+    assert.match(titles, /if \(text\.textContent !== value\) \{[\s\S]*resetChatTitleMarquee/);
+    assert.match(
       styles,
       /@keyframes chat-title-marquee\s*\{[\s\S]*translateX\(var\(--chat-title-marquee-distance\)\)/
     );

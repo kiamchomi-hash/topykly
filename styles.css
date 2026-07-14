@@ -1824,11 +1824,11 @@ html.is-desktop-viewport .panel--chat .message-stream {
 
 @keyframes chat-title-marquee {
   0%,
-  15% {
+  8% {
     transform: translateX(0);
   }
 
-  85%,
+  82%,
   100% {
     transform: translateX(var(--chat-title-marquee-distance));
   }

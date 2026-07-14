@@ -9,6 +9,12 @@ const BASE_TITLE = "TOPYKLY — Comunidad de temas y rankings en español";
 const observedChatTitles = new WeakSet();
 let chatTitleResizeObserver = null;
 
+function resetChatTitleMarquee(title, track) {
+  title.classList.remove("is-overflowing");
+  track.style.removeProperty("--chat-title-marquee-duration");
+  track.style.removeProperty("--chat-title-marquee-distance");
+}
+
 function syncChatTitleMarquee(title) {
   const track = title.querySelector?.(".chat-title__track");
   const text = title.querySelector?.(".chat-title__text");
@@ -16,20 +22,27 @@ function syncChatTitleMarquee(title) {
     return;
   }
 
-  title.classList.remove("is-overflowing");
-  track.style.removeProperty("--chat-title-marquee-duration");
-  track.style.removeProperty("--chat-title-marquee-distance");
-
   const titleWidth = title.getBoundingClientRect?.().width || title.clientWidth || 0;
   const textWidth = text.getBoundingClientRect?.().width || text.scrollWidth || 0;
   if (titleWidth <= 0 || textWidth <= titleWidth + 1) {
+    resetChatTitleMarquee(title, track);
     return;
   }
 
   const overflowDistance = Math.ceil(textWidth - titleWidth);
   const durationSeconds = Math.max(6, overflowDistance / 30 + 3);
-  track.style.setProperty("--chat-title-marquee-duration", `${durationSeconds.toFixed(2)}s`);
-  track.style.setProperty("--chat-title-marquee-distance", `${-overflowDistance}px`);
+  const nextDuration = `${durationSeconds.toFixed(2)}s`;
+  const nextDistance = `${-overflowDistance}px`;
+  if (
+    title.classList.contains("is-overflowing")
+    && track.style.getPropertyValue("--chat-title-marquee-duration") === nextDuration
+    && track.style.getPropertyValue("--chat-title-marquee-distance") === nextDistance
+  ) {
+    return;
+  }
+
+  track.style.setProperty("--chat-title-marquee-duration", nextDuration);
+  track.style.setProperty("--chat-title-marquee-distance", nextDistance);
   title.classList.add("is-overflowing");
 }
 
@@ -51,15 +64,19 @@ function scheduleChatTitleMarquee(title) {
 }
 
 function setChatTitle(title, value) {
+  const track = title?.querySelector?.(".chat-title__track");
   const text = title?.querySelector?.(".chat-title__text");
-  if (!text) {
+  if (!track || !text) {
     if (title) {
       title.textContent = value;
     }
     return;
   }
 
-  text.textContent = value;
+  if (text.textContent !== value) {
+    resetChatTitleMarquee(title, track);
+    text.textContent = value;
+  }
   title.title = value;
   scheduleChatTitleMarquee(title);
 }
