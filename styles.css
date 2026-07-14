@@ -1804,10 +1804,44 @@ html.is-desktop-viewport .panel--chat .message-stream {
 }
 
 .panel__header-title h2 {
+  flex: 1 1 auto;
   overflow: hidden;
   min-width: 0;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
+}
+
+.chat-title__track {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+
+#chatTitle.is-overflowing .chat-title__track {
+  animation: chat-title-marquee var(--chat-title-marquee-duration, 8s) ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes chat-title-marquee {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+
+  85%,
+  100% {
+    transform: translateX(var(--chat-title-marquee-distance));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #chatTitle.is-overflowing .chat-title__track {
+    overflow: hidden;
+    width: 100%;
+    min-width: 0;
+    animation: none;
+    text-overflow: ellipsis;
+  }
 }
 
 .chat-header__back {

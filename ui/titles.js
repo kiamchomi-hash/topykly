@@ -6,6 +6,64 @@ import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 const SITE_NAME = "TOPYKLY";
 const BASE_TITLE = "TOPYKLY — Comunidad de temas y rankings en español";
 
+const observedChatTitles = new WeakSet();
+let chatTitleResizeObserver = null;
+
+function syncChatTitleMarquee(title) {
+  const track = title.querySelector?.(".chat-title__track");
+  const text = title.querySelector?.(".chat-title__text");
+  if (!track || !text) {
+    return;
+  }
+
+  title.classList.remove("is-overflowing");
+  track.style.removeProperty("--chat-title-marquee-duration");
+  track.style.removeProperty("--chat-title-marquee-distance");
+
+  const titleWidth = title.getBoundingClientRect?.().width || title.clientWidth || 0;
+  const textWidth = text.getBoundingClientRect?.().width || text.scrollWidth || 0;
+  if (titleWidth <= 0 || textWidth <= titleWidth + 1) {
+    return;
+  }
+
+  const overflowDistance = Math.ceil(textWidth - titleWidth);
+  const durationSeconds = Math.max(6, overflowDistance / 30 + 3);
+  track.style.setProperty("--chat-title-marquee-duration", `${durationSeconds.toFixed(2)}s`);
+  track.style.setProperty("--chat-title-marquee-distance", `${-overflowDistance}px`);
+  title.classList.add("is-overflowing");
+}
+
+function scheduleChatTitleMarquee(title) {
+  const sync = () => syncChatTitleMarquee(title);
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(sync);
+  } else {
+    sync();
+  }
+
+  if (!observedChatTitles.has(title) && typeof ResizeObserver === "function") {
+    chatTitleResizeObserver ??= new ResizeObserver((entries) => {
+      entries.forEach((entry) => syncChatTitleMarquee(entry.target));
+    });
+    chatTitleResizeObserver.observe(title);
+    observedChatTitles.add(title);
+  }
+}
+
+function setChatTitle(title, value) {
+  const text = title?.querySelector?.(".chat-title__text");
+  if (!text) {
+    if (title) {
+      title.textContent = value;
+    }
+    return;
+  }
+
+  text.textContent = value;
+  title.title = value;
+  scheduleChatTitleMarquee(title);
+}
+
 export function renderTitles(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
   const topicTitle = topic ? filterDisplayText(topic.title) : null;
@@ -16,7 +74,7 @@ export function renderTitles(state, dom) {
   }
 
   if (dom.chatTitle) {
-    dom.chatTitle.textContent = topic ? topicTitle : "Nuevo tema";
+    setChatTitle(dom.chatTitle, topic ? topicTitle : "Nuevo tema");
   }
   if (chatTitleWrapper) {
     chatTitleWrapper.hidden = !topic && state.mobileView !== "chat";

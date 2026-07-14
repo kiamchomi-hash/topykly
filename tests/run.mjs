@@ -9609,6 +9609,20 @@ await (async () => {
       styles,
       /\.topic-item__title,\s*\.topic-item__meta\s*\{[\s\S]*text-overflow:\s*ellipsis;/
     );
+    assert.match(html, /class="chat-title__track"[\s\S]*class="chat-title__text"/);
+    assert.match(titles, /overflowDistance = Math\.ceil\(textWidth - titleWidth\)/);
+    assert.match(titles, /--chat-title-marquee-distance/);
+    assert.match(titles, /title\.classList\.add\("is-overflowing"\)/);
+    assert.match(titles, /new ResizeObserver/);
+    assert.match(
+      styles,
+      /@keyframes chat-title-marquee\s*\{[\s\S]*translateX\(var\(--chat-title-marquee-distance\)\)/
+    );
+    assert.match(styles, /#chatTitle\.is-overflowing[\s\S]*animation:[^;]*infinite alternate;/);
+    assert.match(
+      styles,
+      /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*#chatTitle\.is-overflowing[\s\S]*animation:\s*none;/
+    );
     assert.match(styles, /\.topic-item\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
     assert.match(
       styles,
