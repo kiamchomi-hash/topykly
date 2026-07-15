@@ -1,0 +1,90 @@
+{
+  "generatedAt": "2026-07-15T15:07:00-03:00",
+  "decision": "released",
+  "environment": "production",
+  "provider": {
+    "application": "Render",
+    "edge": "Cloudflare",
+    "serviceId": "srv-d92ilsa8qa3s73dg0msg",
+    "serviceUrl": "https://topykly.onrender.com",
+    "publicUrl": "https://www.topykly.com/"
+  },
+  "source": {
+    "repository": "kiamchomi-hash/topykly",
+    "branch": "main",
+    "releaseCommit": "b5a83e28edf5e1690fcacf9dff7ca603ce356761",
+    "productionCommit": "61141ee91707ef437b7b87a81abb8c29e4c6dce5",
+    "productionCommitMessage": "Corregir smoke sin autenticación configurada"
+  },
+  "releaseContents": [
+    "Settings navigation, logout confirmation, persisted slow mode, live topic ordering, and removal of manual refresh controls.",
+    "ARIA-compatible drawer dialog containers and regression coverage.",
+    "Additive SQLite slow_mode migration.",
+    "Selectable test suites and five GitHub Actions jobs including HTTP smoke.",
+    "Architecture, security, QA, web-quality, and Cloudflare migration documentation.",
+    "Removal of 171 tracked Playwright artifacts."
+  ],
+  "backup": {
+    "type": "SQLite VACUUM INTO logical backup",
+    "createdBeforeDeploy": true,
+    "path": "/var/data/topykly/backups/topykly-2026-07-15T17-56-13-442Z.sqlite",
+    "renderDiskId": "dsk-d9376o6h2hms73cd7j80",
+    "latestAutomaticSnapshotObserved": "2026-07-14T23:52:59.776Z"
+  },
+  "deployment": {
+    "deployId": "dep-d9bsmnmrnols73ceklcg",
+    "status": "live",
+    "finishedAt": "2026-07-15T18:03:58.162708Z",
+    "githubActionsRunId": 29438988172,
+    "githubActionsConclusion": "success",
+    "jobs": [
+      "core: success",
+      "ui: success",
+      "backend: success",
+      "server: success",
+      "smoke: success"
+    ]
+  },
+  "preDeployChecks": {
+    "qa": "passed: 172 deterministic tests and 12 smoke tests",
+    "npmAudit": "0 vulnerabilities",
+    "secretScan": "no credential patterns found in files committed",
+    "diffCheck": "passed",
+    "formatCheck": "not clean: 113 files in pre-existing repository-wide Prettier debt; no bulk formatting was applied"
+  },
+  "postDeployVerification": {
+    "shell": "200 from Render through Cloudflare",
+    "authentication": "configured with Google; all safe preflight checks true",
+    "bootstrap": "200 guest payload, secure HttpOnly cookie, no session ID in response body, slowMode exposed",
+    "securityHeaders": "HSTS and CSP present",
+    "seo": "robots.txt and sitemap.xml returned 200",
+    "privateFiles": ".env, .git/config, and services/backend-store.js remained inaccessible",
+    "authorization": "anonymous admin dashboard request returned 403",
+    "browser": "mobile drawer dialog, focus return, topic navigation, dynamic title, and zero console errors passed",
+    "errorLogs": 0
+  },
+  "metrics": {
+    "preDeployOneHour": {
+      "cpuMax": 0.019066466,
+      "httpRequests": 511,
+      "errorLogs": 0
+    },
+    "postDeployWindow": {
+      "cpuMax": 0.028890334,
+      "httpRequests": 133,
+      "errorLogs": 0
+    },
+    "assessment": "No stop condition observed. CPU remained low and no error logs appeared."
+  },
+  "rollback": {
+    "codeTargetCommit": "ec4d0c4ebf9a432f2bc19d0ef291319b0ec27d3c",
+    "codeTargetDeployId": "dep-d9b9jof41pts73elv9tg",
+    "databaseCompatibility": "The migration only adds slow_mode with a default; the previous code ignores the extra column.",
+    "dataRecovery": "Use the logical SQLite backup before considering a Render disk snapshot restore."
+  },
+  "unresolvedRisks": [
+    "The security report still records a production privacy finding for hidden profile fields and pending avatar URLs.",
+    "Avatar CDN retention and account-deletion step-up authentication remain open follow-up items.",
+    "Repository-wide Prettier debt remains intentionally separate from this release."
+  ]
+}
