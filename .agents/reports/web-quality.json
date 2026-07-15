@@ -1,0 +1,55 @@
+{
+  "generatedAt": "2026-07-15T14:50:00-03:00",
+  "scope": "ARIA role compatibility for mobile drawer dialogs",
+  "route": "http://127.0.0.1:4173/",
+  "environment": {
+    "server": "node local-server.cjs",
+    "browser": "Chromium via Playwright CLI",
+    "dataState": "local application data"
+  },
+  "viewports": [
+    {
+      "width": 390,
+      "height": 844,
+      "mode": "mobile"
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "mode": "desktop"
+    }
+  ],
+  "findings": [
+    {
+      "id": "aria-role-dialog-on-aside",
+      "dimension": "accessibility",
+      "severity": "moderate",
+      "confidence": "high",
+      "status": "fixed",
+      "before": "The left and right drawers used aside elements with role=dialog, although aside does not support that role.",
+      "fix": "Changed both drawer containers to neutral div elements while preserving role=dialog, aria-modal, accessible names, IDs, classes, and visibility state.",
+      "evidence": [
+        "The mobile accessibility tree exposes dialog Menú móvil.",
+        "When open, the right drawer is a DIV with role=dialog, hidden=false, aria-hidden=false, and focus on Cerrar menú.",
+        "Escape closes the drawer, sets hidden=true, aria-hidden=true and aria-expanded=false, and returns focus to Abrir menú.",
+        "At desktop size both DIV dialogs remain hidden.",
+        "The UI test suite includes a regression that rejects role=dialog on aside."
+      ]
+    }
+  ],
+  "performance": {
+    "status": "not_evaluated",
+    "reason": "The semantic element substitution does not alter styles, scripts, network behavior, or rendering logic."
+  },
+  "seo": {
+    "status": "not_evaluated",
+    "reason": "The requested defect is limited to accessibility semantics and does not change indexable content or metadata."
+  },
+  "verification": {
+    "uiSuite": "passed: 73 executed, 99 skipped",
+    "fullQa": "passed: 172 deterministic tests and 12 smoke tests"
+  },
+  "residualRisks": [
+    "The left drawer has no current user-facing opener in the event wiring, so its element and semantics were verified statically rather than through an interactive open flow."
+  ]
+}

@@ -1,37 +1,49 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-14T15:56:31.6498259-03:00",
+  "lastChecked": "2026-07-15T13:58:47-03:00",
   "tests": [
     {
-      "name": "unit and integration suite",
+      "name": "UI suite",
+      "command": "npm run test:ui",
+      "status": "passed",
+      "summary": "72 executed, 99 skipped; live ordering, default one-second polling, five-second slow mode, and removal of manual refresh controls passed."
+    },
+    {
+      "name": "backend suite",
+      "command": "npm run test:backend",
+      "status": "passed",
+      "summary": "49 executed, 122 skipped; SQLite migration and slow-mode persistence passed."
+    },
+    {
+      "name": "complete deterministic suite",
       "command": "npm test",
       "status": "passed",
-      "summary": "All repository assertions passed, including approved-avatar propagation, avatar compositing, topic share URL modeling, dynamic Open Graph metadata, PNG structure and the social-card HTTP endpoint."
+      "summary": "All 171 assertions passed with no skips."
     },
     {
       "name": "HTTP smoke suite",
       "command": "node tests/smoke.mjs",
       "status": "passed",
-      "summary": "12 smoke checks passed."
-    },
-    {
-      "name": "syntax validation",
-      "command": "node --check on changed JavaScript modules",
-      "status": "passed",
-      "summary": "ui/topic-share.js, services/social-card.js and services/preview-server.js parsed successfully."
-    },
-    {
-      "name": "browser visual validation",
-      "command": "Playwright at 1280x720, 390x844 and 320x568",
-      "status": "passed",
-      "summary": "The share modal renders the real circular avatar, compact Enlace label and responsive controls with no browser console errors."
+      "summary": "All 12 smoke checks passed."
     },
     {
       "name": "diff validation",
       "command": "git diff --check",
       "status": "passed",
-      "summary": "No whitespace errors."
+      "summary": "No whitespace errors; only existing line-ending conversion warnings were reported."
     }
+  ],
+  "suiteCoverage": {
+    "total": 171,
+    "core": 28,
+    "ui": 72,
+    "backend": 49,
+    "server": 22,
+    "unclassified": 0
+  },
+  "notes": [
+    "The repository was already dirty; unrelated local changes were preserved.",
+    "The live mode now polls every second by default and every five seconds when the persisted slow-mode preference is enabled."
   ]
 }

@@ -713,6 +713,7 @@ function initSchema(db) {
       likes_anonymous INTEGER NOT NULL DEFAULT 0,
       filter_profanity INTEGER NOT NULL DEFAULT 1,
       notifications_friends_only INTEGER NOT NULL DEFAULT 0,
+      slow_mode INTEGER NOT NULL DEFAULT 0,
       avatar_url TEXT,
       avatar_pending_url TEXT,
       avatar_review_status TEXT,
@@ -907,6 +908,7 @@ function initSchema(db) {
   ensureColumn(db, "users", "likes_anonymous", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "notifications_friends_only", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "slow_mode", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "profile_indexable", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "nickname", "TEXT");
   ensureColumn(db, "users", "nickname_norm", "TEXT");
@@ -1491,6 +1493,7 @@ function mapViewerRow(row, sessionRow) {
     likesAnonymous: row.likes_anonymous === 1,
     filterProfanity: row.filter_profanity === 1,
     notificationsFriendsOnly: row.notifications_friends_only === 1,
+    slowMode: row.slow_mode === 1,
     createdAt: row.created_at ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarPendingUrl: row.avatar_pending_url ?? null,
@@ -4150,7 +4153,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, profileIndexable = null, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, slowMode = null, profileIndexable = null, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -4164,18 +4167,20 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         const nextNotificationsFriendsOnly = notificationsFriendsOnly === null
           ? context.viewer.notificationsFriendsOnly
           : notificationsFriendsOnly === true;
+        const nextSlowMode = slowMode === null ? context.viewer.slowMode : slowMode === true;
         const nextProfileIndexable = profileIndexable === null
           ? context.viewerRow.profile_indexable !== 0
           : profileIndexable === true;
 
         db.prepare(`
           UPDATE users
-          SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, profile_indexable = ?, updated_at = ?
+          SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, slow_mode = ?, profile_indexable = ?, updated_at = ?
           WHERE id = ?
         `).run(
           nextLikesAnonymous ? 1 : 0,
           nextFilterProfanity ? 1 : 0,
           nextNotificationsFriendsOnly ? 1 : 0,
+          nextSlowMode ? 1 : 0,
           nextProfileIndexable ? 1 : 0,
           new Date().toISOString(),
           context.viewer.id

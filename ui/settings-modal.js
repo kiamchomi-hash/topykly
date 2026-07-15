@@ -2,8 +2,24 @@ const SETTING_TOGGLE_KEYS = {
   likesAnonymous: "settingsLikesAnonymousToggle",
   profileIndexable: "settingsProfileIndexableToggle",
   filterProfanity: "settingsFilterProfanityToggle",
-  notificationsFriendsOnly: "settingsFriendsOnlyToggle"
+  notificationsFriendsOnly: "settingsFriendsOnlyToggle",
+  slowMode: "settingsSlowModeToggle"
 };
+
+const SETTINGS_SECTIONS = new Set(["privacy", "experience", "blocks", "account"]);
+
+function syncSettingsSection(state, dom) {
+  const activeSection = SETTINGS_SECTIONS.has(state.settingsSection) ? state.settingsSection : "privacy";
+  dom.settingsModal?.querySelectorAll?.("[data-settings-section]").forEach((button) => {
+    const isActive = button.dataset.settingsSection === activeSection;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+  });
+  dom.settingsModal?.querySelectorAll?.("[data-settings-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.settingsPanel !== activeSection;
+  });
+}
 
 function syncSettingToggle(button, enabled, pending) {
   if (!button) {
@@ -123,10 +139,12 @@ export function renderSettingsModal(state, dom) {
     return;
   }
 
+  syncSettingsSection(state, dom);
   const pending = Boolean(state.settingsUpdatePending);
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.likesAnonymous], viewer.likesAnonymous, pending);
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.profileIndexable], viewer.profileIndexable !== false, pending);
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.filterProfanity], viewer.filterProfanity, pending);
+  syncSettingToggle(dom[SETTING_TOGGLE_KEYS.slowMode], viewer.slowMode, pending);
   syncSettingToggle(
     dom[SETTING_TOGGLE_KEYS.notificationsFriendsOnly],
     viewer.notificationsFriendsOnly,

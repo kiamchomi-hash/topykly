@@ -323,6 +323,12 @@ export const reducers = {
     settingsDeleteConfirming: false
   }),
 
+  setSettingsSection: (state, settingsSection) => ({
+    ...state,
+    settingsSection,
+    settingsDeleteConfirming: false
+  }),
+
   setSettingsDeleteConfirming: (state, settingsDeleteConfirming) => ({
     ...state,
     settingsDeleteConfirming

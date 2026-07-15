@@ -31,12 +31,10 @@ function readCookieHeader(response) {
     .join("; ");
 }
 
-async function request(pathname, {
-  method = "GET",
-  sessionId = "session-smoke-guest",
-  body = undefined,
-  expectedStatus = 200
-} = {}) {
+async function request(
+  pathname,
+  { method = "GET", sessionId = "session-smoke-guest", body = undefined, expectedStatus = 200 } = {}
+) {
   const headers = {
     "Content-Type": "application/json"
   };
@@ -130,8 +128,16 @@ try {
     assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
     assert.match(response.headers.get("content-security-policy") || "", /base-uri 'self'/);
     assert.match(response.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
-    assert.match(response.headers.get("content-security-policy") || "", /upgrade-insecure-requests/);
-    assert.match(response.headers.get("content-security-policy") || "", /script-src 'self' 'unsafe-inline' https:\/\/cdn\.jsdelivr\.net https:\/\/challenges\.cloudflare\.com/);
+    assert.match(
+      response.headers.get("content-security-policy") || "",
+      /upgrade-insecure-requests/
+    );
+    const contentSecurityPolicy = response.headers.get("content-security-policy") || "";
+    assert.match(
+      contentSecurityPolicy,
+      /script-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/challenges\.cloudflare\.com/
+    );
+    assert.doesNotMatch(contentSecurityPolicy, /script-src[^;]*'unsafe-inline'/);
     assert.match(html, /<title>TOPYKLY — Comunidad de temas y rankings en español<\/title>/);
     assert.match(html, /id="messageForm"/);
   });
@@ -255,7 +261,10 @@ try {
     assert.equal(payload.topics.length, 40);
     assert.equal(payload.topics.filter((topic) => topic.visible).length, 20);
     assert.equal(payload.viewer.type, "guest");
-    assert.equal(payload.users.every((user) => !Object.hasOwn(user, "email")), true);
+    assert.equal(
+      payload.users.every((user) => !Object.hasOwn(user, "email")),
+      true
+    );
   });
 
   await test("opens a topic and posts a comment through the HTTP route", async () => {

@@ -43,7 +43,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   let pendingAuthTopicId = null;
   let turnstileRequired = false;
   let pendingTurnstileToken = null;
-  let logoutConfirmUntil = 0;
+  let logoutConfirmTrigger = null;
   let authButtonErrorTimer = 0;
   let authValidationMessage = "";
   let authResendCooldownTimer = 0;
@@ -1558,16 +1558,43 @@ export function bindTopbarActionEvents(dom, handlers) {
     dom.authNicknameInput?.focus?.();
   }
 
-  function requestLogoutConfirmation() {
-    const now = Date.now();
-    if (now <= logoutConfirmUntil) {
-      logoutConfirmUntil = 0;
-      void setLoggedIn(false);
+  function setLogoutConfirmationOpen(isOpen, { restoreFocus = true } = {}) {
+    if (dom.logoutConfirmBackdrop) {
+      dom.logoutConfirmBackdrop.hidden = !isOpen;
+    }
+
+    if (dom.logoutConfirmModal) {
+      dom.logoutConfirmModal.setAttribute("aria-hidden", String(!isOpen));
+    }
+
+    if (isOpen) {
+      dom.logoutConfirmCancelButton?.focus?.();
       return;
     }
 
-    logoutConfirmUntil = now + 4500;
-    handlers.flashTitle?.("Toca de nuevo para cerrar sesión");
+    if (restoreFocus) {
+      const fallbackTrigger = isMobileViewport() ? dom.openRightDrawer : dom.authButton;
+      (logoutConfirmTrigger || fallbackTrigger)?.focus?.();
+    }
+    logoutConfirmTrigger = null;
+  }
+
+  function requestLogoutConfirmation(trigger = null) {
+    if (authPending || !isLoggedIn()) {
+      return;
+    }
+
+    logoutConfirmTrigger = trigger;
+    setLogoutConfirmationOpen(true);
+  }
+
+  function closeLogoutConfirmation() {
+    setLogoutConfirmationOpen(false);
+  }
+
+  function confirmLogout() {
+    setLogoutConfirmationOpen(false, { restoreFocus: false });
+    void setLoggedIn(false);
   }
   async function setLoggedIn(nextLoggedIn, { announce = true, silentTurnstile = false } = {}) {
     const currentLoggedIn = isLoggedIn();
@@ -1686,8 +1713,6 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   addListener(dom.themeToggle, "click", handlers.toggleTheme);
-  addListener(dom.refreshButton, "click", handlers.refreshCurrentTopic);
-  addListener(dom.topicsRefreshButton, "click", handlers.refreshTopicsList);
   addListener(dom.messageForm, "submit", handlers.submitMessage);
   addListener(dom.profileButton, "click", handlers.openProfileModal);
   addListener(dom.adminPanelButton, "click", handlers.openAdminPanel);
@@ -1715,7 +1740,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     if (isLoggedIn()) {
-      requestLogoutConfirmation();
+      requestLogoutConfirmation(event?.currentTarget || dom.authButton);
       return;
     }
 
@@ -1727,6 +1752,13 @@ export function bindTopbarActionEvents(dom, handlers) {
     const eventElement = resolveEventElement(event);
     if (eventElement?.closest?.("#authButton")) {
       handleAuthButtonClick(event);
+    }
+  });
+  addListener(dom.logoutConfirmCancelButton, "click", closeLogoutConfirmation);
+  addListener(dom.logoutConfirmSubmitButton, "click", confirmLogout);
+  addListener(dom.logoutConfirmBackdrop, "click", (event) => {
+    if (event.target === dom.logoutConfirmBackdrop) {
+      closeLogoutConfirmation();
     }
   });
   addListener(dom.authGoogleButton, "click", async () => {
@@ -2039,6 +2071,10 @@ export function bindTopbarActionEvents(dom, handlers) {
       closeAuthModal();
     }
 
+    if (event.key === "Escape" && dom.logoutConfirmBackdrop && !dom.logoutConfirmBackdrop.hidden) {
+      closeLogoutConfirmation();
+    }
+
     if (event.key === "Escape" && dom.reportModalBackdrop && !dom.reportModalBackdrop.hidden) {
       handlers.closeReportModal?.();
     }
@@ -2134,7 +2170,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     if (target.dataset.mobileTopbarAction === "auth") {
       setMobileDrawerPanel(null, { restoreFocus: false });
-      requestLogoutConfirmation();
+      requestLogoutConfirmation(target);
       return;
     }
 
@@ -2173,6 +2209,12 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
   addListener(dom.settingsModal, "click", (event) => {
     const eventElement = resolveEventElement(event);
+    const sectionTarget = eventElement?.closest?.("[data-settings-section]") ?? null;
+    if (sectionTarget instanceof HTMLElement) {
+      handlers.setSettingsSection?.(sectionTarget.dataset.settingsSection);
+      return;
+    }
+
     const blockedUserTarget = eventElement?.closest?.("[data-blocked-user-action][data-blocked-user-id]") ?? null;
     if (blockedUserTarget instanceof HTMLElement) {
       const userId = blockedUserTarget.dataset.blockedUserId || "";
@@ -2191,6 +2233,30 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (toggleTarget instanceof HTMLElement) {
       void handlers.toggleSetting?.(toggleTarget.dataset.settingToggle);
     }
+  });
+  addListener(dom.settingsModal, "keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      return;
+    }
+    const eventElement = resolveEventElement(event);
+    const currentTab = eventElement?.closest?.("[data-settings-section]") ?? null;
+    if (!(currentTab instanceof HTMLElement)) {
+      return;
+    }
+    const tabs = [...dom.settingsModal.querySelectorAll("[data-settings-section]")];
+    const currentIndex = tabs.indexOf(currentTab);
+    if (currentIndex < 0 || tabs.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    const nextTab = tabs[nextIndex];
+    handlers.setSettingsSection?.(nextTab.dataset.settingsSection);
+    nextTab.focus();
   });
   addListener(dom.settingsDeleteAccountButton, "click", handlers.requestAccountDeletion);
   addListener(dom.settingsDeleteCancelButton, "click", handlers.cancelAccountDeletion);

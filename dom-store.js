@@ -3,8 +3,6 @@ export const dom = {
   workspace: null,
   topbar: null,
   themeToggle: null,
-  refreshButton: null,
-  topicsRefreshButton: null,
   chatTitle: null,
   messageForm: null,
   rankingPrev: null,

@@ -53,6 +53,15 @@ function getFocusableElements(container) {
 
 function getActiveFocusTrapContainer(dom) {
   if (
+    dom.logoutConfirmModal instanceof HTMLElement &&
+    dom.logoutConfirmBackdrop &&
+    !dom.logoutConfirmBackdrop.hidden &&
+    dom.logoutConfirmModal.getAttribute("aria-hidden") === "false"
+  ) {
+    return dom.logoutConfirmModal;
+  }
+
+  if (
     dom.shareTopicModal instanceof HTMLElement &&
     dom.shareTopicModalBackdrop &&
     !dom.shareTopicModalBackdrop.hidden &&

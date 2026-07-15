@@ -297,6 +297,7 @@ export const api = {
     likesAnonymous = null,
     filterProfanity = null,
     notificationsFriendsOnly = null,
+    slowMode = null,
     profileIndexable = null,
     selectedTopicId = null
   } = {}) {
@@ -306,6 +307,7 @@ export const api = {
         likesAnonymous,
         filterProfanity,
         notificationsFriendsOnly,
+        slowMode,
         profileIndexable,
         selectedTopicId
       }

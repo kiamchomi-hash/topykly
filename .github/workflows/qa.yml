@@ -7,7 +7,33 @@ on:
   pull_request:
 
 jobs:
-  qa:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - core
+          - ui
+          - backend
+          - server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ${{ matrix.suite }} suite
+        run: npm run test:${{ matrix.suite }}
+
+  smoke:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,7 +46,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Run QA suite
-        run: npm run qa
+      - name: Run HTTP smoke suite
+        run: npm run test:smoke

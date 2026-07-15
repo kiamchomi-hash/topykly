@@ -83,10 +83,25 @@ import { selectOnlineUsers } from "../ui/users.js";
 import { createMessageItem, createTopicItem, createUserItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
-import { buildTopicShareModel, buildTopicSharePath, TOPIC_SHARE_EXPORT_SIZE } from "../ui/topic-share.js";
+import {
+  buildTopicShareModel,
+  buildTopicSharePath,
+  TOPIC_SHARE_EXPORT_SIZE
+} from "../ui/topic-share.js";
 import { shouldScrollChatToBottom, shouldSyncChatLayout } from "../ui/chat.js";
-import { collectTopicNotifications, createNotificationStateUpdate, filterNotificationsForFriends, groupNotificationsForDisplay, createNotificationEmptyState } from "../ui/notifications.js";
-import { censorProfanity, hasProfanity, setProfanityFilterEnabled, filterDisplayText } from "../profanity-filter.js";
+import {
+  collectTopicNotifications,
+  createNotificationStateUpdate,
+  filterNotificationsForFriends,
+  groupNotificationsForDisplay,
+  createNotificationEmptyState
+} from "../ui/notifications.js";
+import {
+  censorProfanity,
+  hasProfanity,
+  setProfanityFilterEnabled,
+  filterDisplayText
+} from "../profanity-filter.js";
 import { isFriendOnline, splitFriendsByPresence } from "../ui/friend-requests.js";
 import {
   formatJoinedDateParts,
@@ -109,6 +124,42 @@ const MOJIBAKE_PATTERNS = [
   "An\u00c3\u00b3nimo",
   "preparaci\u00c3\u00b3n"
 ];
+const TEST_SUITES = new Set(["all", "core", "ui", "backend", "server"]);
+const requestedSuite =
+  process.argv.find((argument) => argument.startsWith("--suite="))?.slice("--suite=".length) ||
+  "all";
+const testStats = {
+  passed: 0,
+  skipped: 0
+};
+
+if (!TEST_SUITES.has(requestedSuite)) {
+  throw new Error(`Unknown test suite: ${requestedSuite}`);
+}
+
+function classifyTest(name) {
+  if (/^(backend|sqlite backup)/i.test(name)) {
+    return "backend";
+  }
+
+  if (
+    /^(auth status|oidc callback|auth service|preview |production headers|origin check|seo page|topic sharing|client auth|fallback google|auth callback|api )/i.test(
+      name
+    )
+  ) {
+    return "server";
+  }
+
+  if (
+    /(modal|panel|drawer|render|theme|palette|notification|friend|responsive|resize|scroll|topbar|quote|favicon|mobile|connected user|guest cards|guest public profiles|date utils|ranking builders|ranking state helpers|topic item|message reaction|selecting a topic|hydrate|live topic sync|user-facing copy|legal surfaces|index and app structure|settings button)/i.test(
+      name
+    )
+  ) {
+    return "ui";
+  }
+
+  return "core";
+}
 
 async function read(name) {
   return readFile(path.join(rootDir, name), "utf8");
@@ -192,8 +243,15 @@ async function collectSourceFiles(dir) {
 }
 
 async function test(name, fn) {
+  const suite = classifyTest(name);
+  if (requestedSuite !== "all" && requestedSuite !== suite) {
+    testStats.skipped += 1;
+    return;
+  }
+
   try {
     await fn();
+    testStats.passed += 1;
     console.log(`ok - ${name}`);
   } catch (error) {
     console.error(`fail - ${name}`);
@@ -314,7 +372,10 @@ await (async () => {
       ordered.map((user) => user.id),
       state.users.filter((user) => user.online).map((user) => user.id)
     );
-    assert.equal(ordered.some((user) => user.id === "u-offline"), false);
+    assert.equal(
+      ordered.some((user) => user.id === "u-offline"),
+      false
+    );
   });
 
   await test("buildTopics creates a topic per seed with rotating authors", () => {
@@ -499,10 +560,9 @@ await (async () => {
     assert.equal(getVisibleTopics(nextState.topics).length, TOPIC_VISIBLE_LIMIT);
   });
 
-  await test("live topic sync hydrates remote activity in other topics without reordering the list", async () => {
+  await test("live topic sync hydrates remote activity and adopts the live topic order", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
-    const originalTopicOrder = topics.map((topic) => topic.id);
     const remoteMessage = createMessage(
       "u2",
       "Comentario remoto que debe aparecer sin refrescar la pagina.",
@@ -541,25 +601,61 @@ await (async () => {
 
     assert.equal(refreshed, true);
     assert.equal(renderCalls, 1);
-    // The topics list keeps its on-screen order; only the topic's content
-    // (message count, unread flag) updates from the background poll.
-    assert.deepEqual(state.topics.map((topic) => topic.id), originalTopicOrder);
+    assert.deepEqual(
+      state.topics.map((topic) => topic.id),
+      remoteTopics.map((topic) => topic.id)
+    );
     const updatedTopic = state.topics.find((topic) => topic.id === topics[1].id);
     assert.equal(updatedTopic.messages.at(-1).id, remoteMessage.id);
     assert.equal(state.selectedTopicId, topics[0].id);
     assert.deepEqual(state.unreadTopicIds, [topics[1].id]);
   });
 
+  await test("live topic sync uses one second by default and five seconds in slow mode", () => {
+    const previousSetTimeout = globalThis.setTimeout;
+    const previousClearTimeout = globalThis.clearTimeout;
+    const scheduledDelays = [];
+    let clearedTimers = 0;
+
+    try {
+      globalThis.setTimeout = (_callback, delay) => {
+        scheduledDelays.push(delay);
+        return { unref() {} };
+      };
+      globalThis.clearTimeout = () => {
+        clearedTimers += 1;
+      };
+
+      const state = { viewer: { slowMode: false } };
+      const sync = createLiveTopicSync({ state, render() {} });
+      sync.start();
+      assert.deepEqual(scheduledDelays, [1000]);
+
+      state.viewer.slowMode = true;
+      sync.reschedule();
+      assert.deepEqual(scheduledDelays, [1000, 5000]);
+      assert.equal(clearedTimers, 1);
+
+      sync.stop();
+      assert.equal(clearedTimers, 2);
+    } finally {
+      globalThis.setTimeout = previousSetTimeout;
+      globalThis.clearTimeout = previousClearTimeout;
+    }
+  });
+
   await test("live topic sync ignores a stale payload while a message reaction is pending", async () => {
     const users = buildUsers(initialUsers);
     const message = createMessage("u2", "Mensaje votable", 0);
-    const topics = [{
-      id: "topic-like-race",
-      title: "Tema con like concurrente",
-      authorId: "u2",
-      visible: true,
-      messages: [message]
-    }];
+    const topics = [
+      {
+        id: "topic-like-race",
+        title: "Tema con like concurrente",
+        authorId: "u2",
+        visible: true,
+        messages: [message]
+      }
+    ];
     const state = {
       viewer: { id: "u1", type: "registered" },
       reportedTopicIds: [],
@@ -582,12 +678,13 @@ await (async () => {
       apiClient: {
         async refreshTopics(selectedTopicId) {
           return new Promise((resolve) => {
-            releaseRefresh = () => resolve({
-              viewer: state.viewer,
-              users,
-              topics,
-              selectedTopicId
-            });
+            releaseRefresh = () =>
+              resolve({
+                viewer: state.viewer,
+                users,
+                topics,
+                selectedTopicId
+              });
           });
         }
       }
@@ -660,7 +757,11 @@ await (async () => {
     const originalOrder = topics.map((topic) => topic.id);
     const remoteMessage = createMessage("u2", "Nuevo comentario remoto.", 0);
     const reorderedTopics = reviveTopicWithMessage(topics, topics[1].id, remoteMessage);
-    assert.equal(reorderedTopics[0].id, topics[1].id, "sanity check: backend order bumps the active topic to the top");
+    assert.equal(
+      reorderedTopics[0].id,
+      topics[1].id,
+      "sanity check: backend order bumps the active topic to the top"
+    );
 
     const baseState = {
       viewer: { id: "u1", type: "registered" },
@@ -671,13 +772,24 @@ await (async () => {
       currentUserId: "u1",
       selectedTopicId: topics[0].id
     };
-    const payload = { viewer: baseState.viewer, users, topics: reorderedTopics, selectedTopicId: topics[0].id };
+    const payload = {
+      viewer: baseState.viewer,
+      users,
+      topics: reorderedTopics,
+      selectedTopicId: topics[0].id
+    };
 
     const mergedState = reducers.mergeLiveTopics(baseState, payload);
-    assert.deepEqual(mergedState.topics.map((topic) => topic.id), originalOrder);
+    assert.deepEqual(
+      mergedState.topics.map((topic) => topic.id),
+      originalOrder
+    );
 
     const hydratedState = reducers.hydrateFromBackend(baseState, payload);
-    assert.deepEqual(hydratedState.topics.map((topic) => topic.id), reorderedTopics.map((topic) => topic.id));
+    assert.deepEqual(
+      hydratedState.topics.map((topic) => topic.id),
+      reorderedTopics.map((topic) => topic.id)
+    );
   });
 
   await test("topic item marks only the unread count with palette accent", () => {
@@ -833,7 +945,10 @@ await (async () => {
 
     function collectUserActions(node) {
       const actions = node.dataset.userAction ? [node.dataset.userAction] : [];
-      return node.children.reduce((result, child) => result.concat(collectUserActions(child)), actions);
+      return node.children.reduce(
+        (result, child) => result.concat(collectUserActions(child)),
+        actions
+      );
     }
 
     try {
@@ -849,7 +964,12 @@ await (async () => {
       );
 
       assert.deepEqual(collectUserActions(guestItem), ["profile", "profile"]);
-      assert.deepEqual(collectUserActions(registeredItem), ["profile", "profile", "friend", "report"]);
+      assert.deepEqual(collectUserActions(registeredItem), [
+        "profile",
+        "profile",
+        "friend",
+        "report"
+      ]);
     } finally {
       globalThis.document = previousDocument;
     }
@@ -882,7 +1002,8 @@ await (async () => {
     const joinedAtContainer = createNode();
     const publicProfileJoinedAt = {
       ...createNode(),
-      closest: (selector) => selector === ".public-profile-modal__joined-wrap" ? joinedAtContainer : null
+      closest: (selector) =>
+        selector === ".public-profile-modal__joined-wrap" ? joinedAtContainer : null
     };
     const dom = {
       publicProfileModalBackdrop: createNode(),
@@ -999,16 +1120,20 @@ await (async () => {
       {
         viewer: { id: "u1", name: "Cami" },
         users,
-        topics: [{
-          ...previousTopic,
-          messages: [{
-            ...rootMessage,
-            likes: 1,
-            likedByViewer: true,
-            lastLikeById: "u1",
-            lastLikeByName: "Cami"
-          }]
-        }]
+        topics: [
+          {
+            ...previousTopic,
+            messages: [
+              {
+                ...rootMessage,
+                likes: 1,
+                likedByViewer: true,
+                lastLikeById: "u1",
+                lastLikeByName: "Cami"
+              }
+            ]
+          }
+        ]
       },
       1_700_000_001_000
     );
@@ -1034,10 +1159,12 @@ await (async () => {
       {
         viewer: { id: "u1", name: "Cami" },
         users,
-        topics: [{
-          ...previousTopic,
-          messages: [{ ...rootMessage, likes: 1, likedByViewer: true }]
-        }]
+        topics: [
+          {
+            ...previousTopic,
+            messages: [{ ...rootMessage, likes: 1, likedByViewer: true }]
+          }
+        ]
       },
       1_700_000_003_000
     );
@@ -1072,19 +1199,28 @@ await (async () => {
         currentUserId: "u1",
         followedTopicIds: [],
         notifiedMessageIds: [],
-        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }],
+        users: [
+          { id: "u1", name: "Cami" },
+          { id: "u2", name: "Mora" }
+        ],
         topics: [previousTopic]
       },
       {
         viewer: { id: "u1", name: "Cami" },
-        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }],
+        users: [
+          { id: "u1", name: "Cami" },
+          { id: "u2", name: "Mora" }
+        ],
         topics: [nextTopic],
         selectedTopicId: "topic-1"
       },
       1_700_000_002_000
     );
 
-    assert.deepEqual(notifications.map((notification) => notification.kind), ["post-like"]);
+    assert.deepEqual(
+      notifications.map((notification) => notification.kind),
+      ["post-like"]
+    );
   });
 
   await test("later post comment suppresses duplicate root post-like notification", () => {
@@ -1119,19 +1255,30 @@ await (async () => {
         currentUserId: "u1",
         followedTopicIds: [],
         notifiedMessageIds: [],
-        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }, { id: "u3", name: "Leo" }],
+        users: [
+          { id: "u1", name: "Cami" },
+          { id: "u2", name: "Mora" },
+          { id: "u3", name: "Leo" }
+        ],
         topics: [previousTopic]
       },
       {
         viewer: { id: "u1", name: "Cami" },
-        users: [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }, { id: "u3", name: "Leo" }],
+        users: [
+          { id: "u1", name: "Cami" },
+          { id: "u2", name: "Mora" },
+          { id: "u3", name: "Leo" }
+        ],
         topics: [nextTopic],
         selectedTopicId: "topic-1"
       },
       1_700_000_003_000
     );
 
-    assert.deepEqual(notifications.map((notification) => notification.kind), ["post-comment"]);
+    assert.deepEqual(
+      notifications.map((notification) => notification.kind),
+      ["post-comment"]
+    );
   });
 
   await test("groups repeated like notifications for the same target", () => {
@@ -1216,7 +1363,10 @@ await (async () => {
     const styles = await read("styles.css");
 
     assert.match(notificationSource, /createTopyklyMascot\("notification-panel__empty-mascot"\)/);
-    assert.match(friendRequestSource, /createTopyklyMascot\("friend-request-panel__empty-mascot"\)/);
+    assert.match(
+      friendRequestSource,
+      /createTopyklyMascot\("friend-request-panel__empty-mascot"\)/
+    );
     assert.doesNotMatch(chatSource, /createTopyklyMascot/);
     assert.match(mascotSource, /href="\/assets\/mascot\/topy-concept-v8\.png"/);
     assert.match(mascotSource, /flood-color="var\(--mascot-accent\)"/);
@@ -1486,11 +1636,20 @@ await (async () => {
 
     const nextState = reducers.hydrateFromBackend(baseState, payload);
     assert.equal(nextState.publicProfileUserId, "shared-user");
-    assert.equal(nextState.users.some((user) => user.id === "shared-user"), true);
+    assert.equal(
+      nextState.users.some((user) => user.id === "shared-user"),
+      true
+    );
 
-    const closedState = reducers.hydrateFromBackend({ ...baseState, publicProfileUserId: null }, payload);
+    const closedState = reducers.hydrateFromBackend(
+      { ...baseState, publicProfileUserId: null },
+      payload
+    );
     assert.equal(closedState.publicProfileUserId, null);
-    assert.equal(closedState.users.some((user) => user.id === "shared-user"), false);
+    assert.equal(
+      closedState.users.some((user) => user.id === "shared-user"),
+      false
+    );
   });
   await test("markTopicRead clears the selected topic after manual refresh", () => {
     const nextState = reducers.markTopicRead(
@@ -1571,6 +1730,18 @@ await (async () => {
     assert.equal(baseState.friendRequestsTab, "incoming");
   });
 
+  await test("setSettingsSection changes the visible settings area and clears delete confirmation", () => {
+    const baseState = {
+      settingsSection: "privacy",
+      settingsDeleteConfirming: true
+    };
+    const nextState = reducers.setSettingsSection(baseState, "account");
+    assert.equal(nextState.settingsSection, "account");
+    assert.equal(nextState.settingsDeleteConfirming, false);
+    assert.equal(baseState.settingsSection, "privacy");
+    assert.equal(baseState.settingsDeleteConfirming, true);
+  });
+
   await test("increaseFriendRequestsLimit and resetFriendRequestsLimits reducers manage active limits", () => {
     const baseState = {
       friendRequestsLimits: {
@@ -1607,8 +1778,14 @@ await (async () => {
     assert.equal(isFriendOnline(friends[4], state), false);
 
     const { online, offline } = splitFriendsByPresence(friends, state);
-    assert.deepEqual(online.map((user) => user.id), ["u1", "u3"]);
-    assert.deepEqual(offline.map((user) => user.id), ["u2", "u4", "u5"]);
+    assert.deepEqual(
+      online.map((user) => user.id),
+      ["u1", "u3"]
+    );
+    assert.deepEqual(
+      offline.map((user) => user.id),
+      ["u2", "u4", "u5"]
+    );
   });
 
   await test("createTopic builds a new topic from title and first message", () => {
@@ -1700,9 +1877,16 @@ await (async () => {
       assert.match(payload.viewer.displayName, /^\*topy\d{2}$/);
       assert.equal(payload.topics.length, TOPIC_ACTIVE_LIMIT);
       assert.equal(payload.topics.filter((topic) => topic.visible).length, TOPIC_VISIBLE_LIMIT);
-      assert.equal(payload.topics.some((topic) => topic.title.startsWith("¿Cómo")), true);
       assert.equal(
-        payload.users.some((user) => user.role === "Cuenta editorial" && user.description.includes("Perfil editorial ficticio")),
+        payload.topics.some((topic) => topic.title.startsWith("¿Cómo")),
+        true
+      );
+      assert.equal(
+        payload.users.some(
+          (user) =>
+            user.role === "Cuenta editorial" &&
+            user.description.includes("Perfil editorial ficticio")
+        ),
         true
       );
       assert.equal(
@@ -1806,13 +1990,32 @@ await (async () => {
 
         const payload = store.bootstrap({ sessionId: "session-editorial-seed" });
         assert.equal(payload.topics.length, 3);
-        assert.equal(payload.topics.every((topic) => topic.messages.length >= 4), true);
-        assert.equal(payload.topics.some((topic) => topic.title === editorialTopicSeedData[0][0]), true);
-        assert.equal(payload.topics.some((topic) => topic.title === topicSeedData[0][0]), false);
-        assert.equal(payload.topics.every((topic) => topic.authorId === "editorial-u10"), true);
-        assert.equal(payload.topics.every((topic) => /^editorial-topic-[a-f0-9]{16}$/.test(topic.id)), true);
         assert.equal(
-          payload.users.every((user) => user.role === "Cuenta editorial" && user.description.includes("Perfil editorial ficticio")),
+          payload.topics.every((topic) => topic.messages.length >= 4),
+          true
+        );
+        assert.equal(
+          payload.topics.some((topic) => topic.title === editorialTopicSeedData[0][0]),
+          true
+        );
+        assert.equal(
+          payload.topics.some((topic) => topic.title === topicSeedData[0][0]),
+          false
+        );
+        assert.equal(
+          payload.topics.every((topic) => topic.authorId === "editorial-u10"),
+          true
+        );
+        assert.equal(
+          payload.topics.every((topic) => /^editorial-topic-[a-f0-9]{16}$/.test(topic.id)),
+          true
+        );
+        assert.equal(
+          payload.users.every(
+            (user) =>
+              user.role === "Cuenta editorial" &&
+              user.description.includes("Perfil editorial ficticio")
+          ),
           true
         );
         const editorialProfile = store.getPublicProfileByNickname("comunidad_topykly");
@@ -2067,36 +2270,39 @@ await (async () => {
     await withTempStore(
       (store) => {
         assert.throws(
-          () => store.createEmailAuthChallenge({
-            email: "code@example.com",
-            nickname: "Code_user",
-            age: MINIMUM_REGISTRATION_AGE - 1,
-            acceptedTerms: true,
-            termsVersion: TERMS_VERSION,
-            password: "password-segura"
-          }),
+          () =>
+            store.createEmailAuthChallenge({
+              email: "code@example.com",
+              nickname: "Code_user",
+              age: MINIMUM_REGISTRATION_AGE - 1,
+              acceptedTerms: true,
+              termsVersion: TERMS_VERSION,
+              password: "password-segura"
+            }),
           (error) => error.code === "INVALID_AGE"
         );
         assert.throws(
-          () => store.createEmailAuthChallenge({
-            email: "code@example.com",
-            nickname: "Code_user",
-            age: MINIMUM_REGISTRATION_AGE,
-            acceptedTerms: false,
-            termsVersion: TERMS_VERSION,
-            password: "password-segura"
-          }),
+          () =>
+            store.createEmailAuthChallenge({
+              email: "code@example.com",
+              nickname: "Code_user",
+              age: MINIMUM_REGISTRATION_AGE,
+              acceptedTerms: false,
+              termsVersion: TERMS_VERSION,
+              password: "password-segura"
+            }),
           (error) => error.code === "TERMS_REQUIRED"
         );
         assert.throws(
-          () => store.createEmailAuthChallenge({
-            email: "code@example.com",
-            nickname: "Code_user",
-            age: MINIMUM_REGISTRATION_AGE,
-            acceptedTerms: true,
-            termsVersion: TERMS_VERSION,
-            password: "short"
-          }),
+          () =>
+            store.createEmailAuthChallenge({
+              email: "code@example.com",
+              nickname: "Code_user",
+              age: MINIMUM_REGISTRATION_AGE,
+              acceptedTerms: true,
+              termsVersion: TERMS_VERSION,
+              password: "short"
+            }),
           (error) => error.code === "VALIDATION_ERROR"
         );
 
@@ -2111,12 +2317,13 @@ await (async () => {
         });
         assert.match(registration.code, /^\d{6}$/);
         assert.throws(
-          () => store.verifyEmailAuthChallenge({
-            challengeId: registration.challengeId,
-            code: registration.code === "000000" ? "111111" : "000000",
-            sessionId: "session-email-code-wrong",
-            nowMs: Date.UTC(2026, 6, 10, 12, 1)
-          }),
+          () =>
+            store.verifyEmailAuthChallenge({
+              challengeId: registration.challengeId,
+              code: registration.code === "000000" ? "111111" : "000000",
+              sessionId: "session-email-code-wrong",
+              nowMs: Date.UTC(2026, 6, 10, 12, 1)
+            }),
           (error) => error.code === "INVALID_EMAIL_CODE"
         );
 
@@ -2133,12 +2340,13 @@ await (async () => {
         assert.equal(registered.viewer.profileIndexable, false);
         assert.equal(registered.viewer.notificationsFriendsOnly, true);
         assert.throws(
-          () => store.verifyEmailAuthChallenge({
-            challengeId: registration.challengeId,
-            code: registration.code,
-            sessionId: "session-email-code-reuse",
-            nowMs: Date.UTC(2026, 6, 10, 12, 3)
-          }),
+          () =>
+            store.verifyEmailAuthChallenge({
+              challengeId: registration.challengeId,
+              code: registration.code,
+              sessionId: "session-email-code-reuse",
+              nowMs: Date.UTC(2026, 6, 10, 12, 3)
+            }),
           (error) => error.code === "INVALID_EMAIL_CODE"
         );
 
@@ -2202,7 +2410,6 @@ await (async () => {
     });
   });
 
-
   await test("backend persists friend requests and accepted friendships", async () => {
     await withTempStore((store) => {
       const firstUser = store.login({ sessionId: "session-friend-u1", userId: "u1" });
@@ -2235,10 +2442,7 @@ await (async () => {
       assert.equal(accepted.friendships.incoming.length, 0);
       assert.equal(accepted.friendships.friends[0].id, "u1");
       assert.equal(accepted.friendships.friends[0].online, true);
-      assert.equal(
-        accepted.users.find((user) => user.id === "u1")?.friendshipStatus,
-        "friend"
-      );
+      assert.equal(accepted.users.find((user) => user.id === "u1")?.friendshipStatus, "friend");
 
       const refreshedFirstUser = store.refresh({ sessionId: firstUser.sessionId });
       assert.equal(refreshedFirstUser.friendships.friends[0].id, "u2");
@@ -2270,7 +2474,10 @@ await (async () => {
       );
       assert.equal(blocked.friendships.friends.length, 0);
       assert.equal(blocked.selectedTopicId, null);
-      assert.equal(blocked.topics.some((topic) => topic.authorId === "u2"), false);
+      assert.equal(
+        blocked.topics.some((topic) => topic.authorId === "u2"),
+        false
+      );
       assert.equal(
         blocked.topics.some((topic) => topic.messages.some((message) => message.authorId === "u2")),
         false
@@ -2285,7 +2492,10 @@ await (async () => {
         hideContent: false
       });
       assert.equal(visibleAgain.blockedUsers[0].hideContent, false);
-      assert.equal(visibleAgain.topics.some((topic) => topic.authorId === "u2"), true);
+      assert.equal(
+        visibleAgain.topics.some((topic) => topic.authorId === "u2"),
+        true
+      );
 
       const refreshed = store.refresh({ sessionId: firstUser.sessionId });
       assert.equal(refreshed.blockedUsers[0].id, "u2");
@@ -2293,7 +2503,10 @@ await (async () => {
 
       const unblocked = store.unblockUser("u2", { sessionId: firstUser.sessionId });
       assert.deepEqual(unblocked.blockedUsers, []);
-      assert.equal(unblocked.topics.some((topic) => topic.authorId === "u2"), true);
+      assert.equal(
+        unblocked.topics.some((topic) => topic.authorId === "u2"),
+        true
+      );
     });
   });
   await test("backend fills a blocked viewer's 20 visible slots only from the global active 40", async () => {
@@ -2310,9 +2523,18 @@ await (async () => {
 
       assert.equal(personalized.topics.length, 20);
       assert.equal(personalized.topics.filter((topic) => topic.visible).length, 20);
-      assert.equal(personalized.topics.some((topic) => topic.visible && topic.activeRank >= 20), true);
-      assert.equal(personalized.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT), true);
-      assert.equal(personalized.topics.every((topic) => topic.status !== "expelled"), true);
+      assert.equal(
+        personalized.topics.some((topic) => topic.visible && topic.activeRank >= 20),
+        true
+      );
+      assert.equal(
+        personalized.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT),
+        true
+      );
+      assert.equal(
+        personalized.topics.every((topic) => topic.status !== "expelled"),
+        true
+      );
 
       const fewerThanTwenty = store.blockUser("u7", {
         sessionId: viewer.sessionId,
@@ -2320,8 +2542,14 @@ await (async () => {
       });
       assert.equal(fewerThanTwenty.topics.length, 16);
       assert.equal(fewerThanTwenty.topics.filter((topic) => topic.visible).length, 16);
-      assert.equal(fewerThanTwenty.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT), true);
-      assert.equal(fewerThanTwenty.topics.every((topic) => topic.status !== "expelled"), true);
+      assert.equal(
+        fewerThanTwenty.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT),
+        true
+      );
+      assert.equal(
+        fewerThanTwenty.topics.every((topic) => topic.status !== "expelled"),
+        true
+      );
     });
   });
   await test("backend loginWithIdentity creates and reuses a registered user from the provider identity", async () => {
@@ -2448,335 +2676,371 @@ await (async () => {
   });
 
   await test("backend rejects unverified OIDC email claims without creating accounts", async () => {
-    await withTempStore((store) => {
-      assert.throws(
-        () =>
-          store.loginWithIdentity({
-            sessionId: "session-oidc-unverified",
-            sourceSessionId: "session-oidc-unverified-source",
-            authProvider: "https://accounts.example.com",
-            authSubject: "subject-unverified",
-            email: "admin@example.com",
-            emailVerified: false,
-            displayName: "Unverified Admin"
-          }),
-        (error) => error.code === "OIDC_EMAIL_NOT_VERIFIED"
-      );
-      assert.equal(store.getDiagnostics().users, 0);
-      assert.equal(store.getDiagnostics().sessions, 0);
-    }, { seedDemoData: false });
+    await withTempStore(
+      (store) => {
+        assert.throws(
+          () =>
+            store.loginWithIdentity({
+              sessionId: "session-oidc-unverified",
+              sourceSessionId: "session-oidc-unverified-source",
+              authProvider: "https://accounts.example.com",
+              authSubject: "subject-unverified",
+              email: "admin@example.com",
+              emailVerified: false,
+              displayName: "Unverified Admin"
+            }),
+          (error) => error.code === "OIDC_EMAIL_NOT_VERIFIED"
+        );
+        assert.equal(store.getDiagnostics().users, 0);
+        assert.equal(store.getDiagnostics().sessions, 0);
+      },
+      { seedDemoData: false }
+    );
   });
 
   await test("backend links verified password and Google identities to the same stable user id", async () => {
-    await withTempStore((store) => {
-      const nowMs = Date.UTC(2026, 6, 11, 12);
-      const challenge = store.createEmailAuthChallenge({
-        email: "linked@example.com",
-        nickname: "linked_user",
-        age: MINIMUM_REGISTRATION_AGE,
-        acceptedTerms: true,
-        termsVersion: TERMS_VERSION,
-        password: "password-segura",
-        nowMs
-      });
-      const registered = store.verifyEmailAuthChallenge({
-        challengeId: challenge.challengeId,
-        code: challenge.code,
-        sessionId: "session-linked-password",
-        nowMs: nowMs + 1_000
-      });
-      const originalId = registered.viewer.id;
+    await withTempStore(
+      (store) => {
+        const nowMs = Date.UTC(2026, 6, 11, 12);
+        const challenge = store.createEmailAuthChallenge({
+          email: "linked@example.com",
+          nickname: "linked_user",
+          age: MINIMUM_REGISTRATION_AGE,
+          acceptedTerms: true,
+          termsVersion: TERMS_VERSION,
+          password: "password-segura",
+          nowMs
+        });
+        const registered = store.verifyEmailAuthChallenge({
+          challengeId: challenge.challengeId,
+          code: challenge.code,
+          sessionId: "session-linked-password",
+          nowMs: nowMs + 1_000
+        });
+        const originalId = registered.viewer.id;
 
-      assert.equal(registered.viewer.emailVerified, true);
-      assert.equal(registered.viewer.nickname, "Linked_user");
-      assert.equal(Object.hasOwn(registered.viewer, "email"), true);
-      assert.equal(registered.users.every((user) => !Object.hasOwn(user, "email")), true);
+        assert.equal(registered.viewer.emailVerified, true);
+        assert.equal(registered.viewer.nickname, "Linked_user");
+        assert.equal(Object.hasOwn(registered.viewer, "email"), true);
+        assert.equal(
+          registered.users.every((user) => !Object.hasOwn(user, "email")),
+          true
+        );
 
-      const linked = store.loginWithIdentity({
-        sessionId: "session-linked-google",
-        sourceSessionId: "session-linked-google-source",
-        authProvider: "https://accounts.google.com",
-        authSubject: "google-linked-subject",
-        email: "linked@example.com",
-        emailVerified: true,
-        displayName: "Abril"
-      });
-      const passwordLogin = store.loginWithPassword({
-        sessionId: "session-linked-password-login",
-        email: "linked@example.com",
-        password: "password-segura"
-      });
+        const linked = store.loginWithIdentity({
+          sessionId: "session-linked-google",
+          sourceSessionId: "session-linked-google-source",
+          authProvider: "https://accounts.google.com",
+          authSubject: "google-linked-subject",
+          email: "linked@example.com",
+          emailVerified: true,
+          displayName: "Abril"
+        });
+        const passwordLogin = store.loginWithPassword({
+          sessionId: "session-linked-password-login",
+          email: "linked@example.com",
+          password: "password-segura"
+        });
 
-      assert.equal(linked.viewer.id, originalId);
-      assert.equal(passwordLogin.viewer.id, originalId);
-      assert.equal(linked.viewer.nickname, "Linked_user");
-      assert.equal(linked.viewer.displayName, "Linked_user");
-      assert.equal(linked.viewer.authProvider, "https://accounts.google.com");
-      assert.equal(linked.users.every((user) => !Object.hasOwn(user, "email")), true);
-      assert.equal(store.getDiagnostics().users, 1);
-    }, { seedDemoData: false });
+        assert.equal(linked.viewer.id, originalId);
+        assert.equal(passwordLogin.viewer.id, originalId);
+        assert.equal(linked.viewer.nickname, "Linked_user");
+        assert.equal(linked.viewer.displayName, "Linked_user");
+        assert.equal(linked.viewer.authProvider, "https://accounts.google.com");
+        assert.equal(
+          linked.users.every((user) => !Object.hasOwn(user, "email")),
+          true
+        );
+        assert.equal(store.getDiagnostics().users, 1);
+      },
+      { seedDemoData: false }
+    );
   });
 
   await test("backend refuses to auto-link a legacy password email that was never verified", async () => {
-    await withTempStore((store) => {
-      const legacy = store.registerWithPassword({
-        sessionId: "session-legacy-password",
-        email: "legacy@example.com",
-        password: "password-segura",
-        nickname: "legacy_user"
-      });
+    await withTempStore(
+      (store) => {
+        const legacy = store.registerWithPassword({
+          sessionId: "session-legacy-password",
+          email: "legacy@example.com",
+          password: "password-segura",
+          nickname: "legacy_user"
+        });
 
-      assert.equal(legacy.viewer.emailVerified, false);
-      assert.throws(
-        () =>
-          store.loginWithIdentity({
-            sessionId: "session-legacy-google",
-            sourceSessionId: "session-legacy-google-source",
-            authProvider: "https://accounts.google.com",
-            authSubject: "legacy-google-subject",
-            email: "legacy@example.com",
-            emailVerified: true,
-            displayName: "Legacy User"
-          }),
-        (error) => error.code === "ACCOUNT_LINK_REQUIRED"
-      );
-      assert.equal(store.getDiagnostics().users, 1);
-    }, { seedDemoData: false });
+        assert.equal(legacy.viewer.emailVerified, false);
+        assert.throws(
+          () =>
+            store.loginWithIdentity({
+              sessionId: "session-legacy-google",
+              sourceSessionId: "session-legacy-google-source",
+              authProvider: "https://accounts.google.com",
+              authSubject: "legacy-google-subject",
+              email: "legacy@example.com",
+              emailVerified: true,
+              displayName: "Legacy User"
+            }),
+          (error) => error.code === "ACCOUNT_LINK_REQUIRED"
+        );
+        assert.equal(store.getDiagnostics().users, 1);
+      },
+      { seedDemoData: false }
+    );
   });
 
   await test("backend password reset is indistinguishable, rate limited and rotates credentials safely", async () => {
-    await withTempStore((store) => {
-      const nowMs = Date.UTC(2026, 6, 11, 12);
-      const registration = store.createEmailAuthChallenge({
-        email: "reset@example.com",
-        nickname: "reset_user",
-        age: MINIMUM_REGISTRATION_AGE,
-        acceptedTerms: true,
-        termsVersion: TERMS_VERSION,
-        password: "password-vieja",
-        nowMs
-      });
-      const registered = store.verifyEmailAuthChallenge({
-        challengeId: registration.challengeId,
-        code: registration.code,
-        sessionId: "session-reset-origin",
-        rotateSession: true,
-        nowMs: nowMs + 1_000
-      });
-      const originalId = registered.viewer.id;
-      const activeSessionId = registered.sessionId;
-      assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "registered");
+    await withTempStore(
+      (store) => {
+        const nowMs = Date.UTC(2026, 6, 11, 12);
+        const registration = store.createEmailAuthChallenge({
+          email: "reset@example.com",
+          nickname: "reset_user",
+          age: MINIMUM_REGISTRATION_AGE,
+          acceptedTerms: true,
+          termsVersion: TERMS_VERSION,
+          password: "password-vieja",
+          nowMs
+        });
+        const registered = store.verifyEmailAuthChallenge({
+          challengeId: registration.challengeId,
+          code: registration.code,
+          sessionId: "session-reset-origin",
+          rotateSession: true,
+          nowMs: nowMs + 1_000
+        });
+        const originalId = registered.viewer.id;
+        const activeSessionId = registered.sessionId;
+        assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "registered");
 
-      const knownChallenge = store.createPasswordResetChallenge({
-        email: "reset@example.com",
-        ipAddress: "203.0.113.10",
-        nowMs: nowMs + 10_000
-      });
-      const unknownChallenge = store.createPasswordResetChallenge({
-        email: "nadie@example.com",
-        ipAddress: "203.0.113.11",
-        nowMs: nowMs + 10_000
-      });
+        const knownChallenge = store.createPasswordResetChallenge({
+          email: "reset@example.com",
+          ipAddress: "203.0.113.10",
+          nowMs: nowMs + 10_000
+        });
+        const unknownChallenge = store.createPasswordResetChallenge({
+          email: "nadie@example.com",
+          ipAddress: "203.0.113.11",
+          nowMs: nowMs + 10_000
+        });
 
-      assert.deepEqual(Object.keys(knownChallenge).sort(), Object.keys(unknownChallenge).sort());
-      assert.match(knownChallenge.challengeId, /^password-reset-/);
-      assert.match(unknownChallenge.challengeId, /^password-reset-/);
-      assert.equal(knownChallenge.expiresInSeconds, unknownChallenge.expiresInSeconds);
-      assert.equal(knownChallenge.deliveryRequired, true);
-      assert.match(knownChallenge.code, /^\d{6}$/);
-      assert.equal(unknownChallenge.deliveryRequired, false);
-      assert.equal(unknownChallenge.code, null);
-      assert.equal(unknownChallenge.email, null);
+        assert.deepEqual(Object.keys(knownChallenge).sort(), Object.keys(unknownChallenge).sort());
+        assert.match(knownChallenge.challengeId, /^password-reset-/);
+        assert.match(unknownChallenge.challengeId, /^password-reset-/);
+        assert.equal(knownChallenge.expiresInSeconds, unknownChallenge.expiresInSeconds);
+        assert.equal(knownChallenge.deliveryRequired, true);
+        assert.match(knownChallenge.code, /^\d{6}$/);
+        assert.equal(unknownChallenge.deliveryRequired, false);
+        assert.equal(unknownChallenge.code, null);
+        assert.equal(unknownChallenge.email, null);
 
-      const cooldownChallenge = store.createPasswordResetChallenge({
-        email: "reset@example.com",
-        ipAddress: "203.0.113.10",
-        nowMs: nowMs + 20_000
-      });
-      assert.equal(cooldownChallenge.deliveryRequired, false);
-      assert.equal(cooldownChallenge.code, null);
+        const cooldownChallenge = store.createPasswordResetChallenge({
+          email: "reset@example.com",
+          ipAddress: "203.0.113.10",
+          nowMs: nowMs + 20_000
+        });
+        assert.equal(cooldownChallenge.deliveryRequired, false);
+        assert.equal(cooldownChallenge.code, null);
 
-      const secondChallenge = store.createPasswordResetChallenge({
-        email: "reset@example.com",
-        ipAddress: "203.0.113.10",
-        nowMs: nowMs + 71_000
-      });
-      assert.equal(secondChallenge.deliveryRequired, true);
-      assert.throws(
-        () => store.verifyPasswordResetChallenge({
-          challengeId: knownChallenge.challengeId,
-          code: knownChallenge.code,
-          newPassword: "password-nueva",
-          sessionId: "session-reset-old-challenge",
-          nowMs: nowMs + 72_000
-        }),
-        (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
-      );
-
-      const wrongCode = secondChallenge.code === "000000" ? "111111" : "000000";
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const secondChallenge = store.createPasswordResetChallenge({
+          email: "reset@example.com",
+          ipAddress: "203.0.113.10",
+          nowMs: nowMs + 71_000
+        });
+        assert.equal(secondChallenge.deliveryRequired, true);
         assert.throws(
-          () => store.verifyPasswordResetChallenge({
-            challengeId: secondChallenge.challengeId,
-            code: wrongCode,
-            newPassword: "password-nueva",
-            sessionId: "session-reset-wrong",
-            nowMs: nowMs + 73_000
-          }),
+          () =>
+            store.verifyPasswordResetChallenge({
+              challengeId: knownChallenge.challengeId,
+              code: knownChallenge.code,
+              newPassword: "password-nueva",
+              sessionId: "session-reset-old-challenge",
+              nowMs: nowMs + 72_000
+            }),
           (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
         );
-      }
-      assert.throws(
-        () => store.verifyPasswordResetChallenge({
-          challengeId: secondChallenge.challengeId,
-          code: secondChallenge.code,
-          newPassword: "password-nueva",
-          sessionId: "session-reset-locked",
-          nowMs: nowMs + 74_000
-        }),
-        (error) => error.code === "PASSWORD_RESET_ATTEMPTS_EXCEEDED"
-      );
 
-      const expiredChallenge = store.createPasswordResetChallenge({
-        email: "reset@example.com",
-        ipAddress: "203.0.113.10",
-        nowMs: nowMs + 140_000
-      });
-      assert.throws(
-        () => store.verifyPasswordResetChallenge({
-          challengeId: expiredChallenge.challengeId,
-          code: expiredChallenge.code,
-          newPassword: "password-nueva",
-          sessionId: "session-reset-expired",
-          nowMs: nowMs + 140_000 + 10 * 60_000 + 1
-        }),
-        (error) => error.code === "PASSWORD_RESET_CODE_EXPIRED"
-      );
+        const wrongCode = secondChallenge.code === "000000" ? "111111" : "000000";
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          assert.throws(
+            () =>
+              store.verifyPasswordResetChallenge({
+                challengeId: secondChallenge.challengeId,
+                code: wrongCode,
+                newPassword: "password-nueva",
+                sessionId: "session-reset-wrong",
+                nowMs: nowMs + 73_000
+              }),
+            (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
+          );
+        }
+        assert.throws(
+          () =>
+            store.verifyPasswordResetChallenge({
+              challengeId: secondChallenge.challengeId,
+              code: secondChallenge.code,
+              newPassword: "password-nueva",
+              sessionId: "session-reset-locked",
+              nowMs: nowMs + 74_000
+            }),
+          (error) => error.code === "PASSWORD_RESET_ATTEMPTS_EXCEEDED"
+        );
 
-      const finalChallenge = store.createPasswordResetChallenge({
-        email: "reset@example.com",
-        ipAddress: "203.0.113.10",
-        nowMs: nowMs + 210_000
-      });
-      const resetPayload = store.verifyPasswordResetChallenge({
-        challengeId: finalChallenge.challengeId,
-        code: finalChallenge.code,
-        newPassword: "password-nueva",
-        sessionId: "session-reset-confirm",
-        rotateSession: true,
-        nowMs: nowMs + 220_000
-      });
+        const expiredChallenge = store.createPasswordResetChallenge({
+          email: "reset@example.com",
+          ipAddress: "203.0.113.10",
+          nowMs: nowMs + 140_000
+        });
+        assert.throws(
+          () =>
+            store.verifyPasswordResetChallenge({
+              challengeId: expiredChallenge.challengeId,
+              code: expiredChallenge.code,
+              newPassword: "password-nueva",
+              sessionId: "session-reset-expired",
+              nowMs: nowMs + 140_000 + 10 * 60_000 + 1
+            }),
+          (error) => error.code === "PASSWORD_RESET_CODE_EXPIRED"
+        );
 
-      assert.equal(resetPayload.viewer.id, originalId);
-      assert.equal(resetPayload.viewer.type, "registered");
-      assert.equal(resetPayload.viewer.emailVerified, true);
-      assert.notEqual(resetPayload.sessionId, "session-reset-confirm");
-
-      assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "guest");
-      assert.throws(
-        () => store.verifyPasswordResetChallenge({
+        const finalChallenge = store.createPasswordResetChallenge({
+          email: "reset@example.com",
+          ipAddress: "203.0.113.10",
+          nowMs: nowMs + 210_000
+        });
+        const resetPayload = store.verifyPasswordResetChallenge({
           challengeId: finalChallenge.challengeId,
           code: finalChallenge.code,
-          newPassword: "password-replay",
-          sessionId: "session-reset-replay",
-          nowMs: nowMs + 230_000
-        }),
-        (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
-      );
+          newPassword: "password-nueva",
+          sessionId: "session-reset-confirm",
+          rotateSession: true,
+          nowMs: nowMs + 220_000
+        });
 
-      assert.throws(
-        () => store.loginWithPassword({
-          sessionId: "session-reset-old-password",
+        assert.equal(resetPayload.viewer.id, originalId);
+        assert.equal(resetPayload.viewer.type, "registered");
+        assert.equal(resetPayload.viewer.emailVerified, true);
+        assert.notEqual(resetPayload.sessionId, "session-reset-confirm");
+
+        assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "guest");
+        assert.throws(
+          () =>
+            store.verifyPasswordResetChallenge({
+              challengeId: finalChallenge.challengeId,
+              code: finalChallenge.code,
+              newPassword: "password-replay",
+              sessionId: "session-reset-replay",
+              nowMs: nowMs + 230_000
+            }),
+          (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
+        );
+
+        assert.throws(
+          () =>
+            store.loginWithPassword({
+              sessionId: "session-reset-old-password",
+              email: "reset@example.com",
+              password: "password-vieja"
+            }),
+          (error) => error.code === "INVALID_CREDENTIALS"
+        );
+        const newLogin = store.loginWithPassword({
+          sessionId: "session-reset-new-password",
           email: "reset@example.com",
-          password: "password-vieja"
-        }),
-        (error) => error.code === "INVALID_CREDENTIALS"
-      );
-      const newLogin = store.loginWithPassword({
-        sessionId: "session-reset-new-password",
-        email: "reset@example.com",
-        password: "password-nueva",
-        rotateSession: true
-      });
-      assert.equal(newLogin.viewer.id, originalId);
-    }, { seedDemoData: false });
+          password: "password-nueva",
+          rotateSession: true
+        });
+        assert.equal(newLogin.viewer.id, originalId);
+      },
+      { seedDemoData: false }
+    );
   });
 
   await test("backend account linking demands fresh password proof and a matching Google identity", async () => {
-    await withTempStore((store) => {
-      const registered = store.registerWithPassword({
-        sessionId: "session-link-owner",
-        email: "owner@example.com",
-        password: "password-segura",
-        nickname: "owner_user",
-        rotateSession: true
-      });
-      const ownerSessionId = registered.sessionId;
-      const ownerId = registered.viewer.id;
-      assert.equal(registered.viewer.hasPassword, true);
-      assert.equal(registered.viewer.canLinkGoogle, true);
+    await withTempStore(
+      (store) => {
+        const registered = store.registerWithPassword({
+          sessionId: "session-link-owner",
+          email: "owner@example.com",
+          password: "password-segura",
+          nickname: "owner_user",
+          rotateSession: true
+        });
+        const ownerSessionId = registered.sessionId;
+        const ownerId = registered.viewer.id;
+        assert.equal(registered.viewer.hasPassword, true);
+        assert.equal(registered.viewer.canLinkGoogle, true);
 
-      assert.throws(
-        () => store.prepareIdentityLink({ sessionId: "session-link-guest", password: "password-segura" }),
-        (error) => error.code === "ACCOUNT_LINK_NOT_AVAILABLE"
-      );
-      assert.throws(
-        () => store.prepareIdentityLink({ sessionId: ownerSessionId, password: "password-mala" }),
-        (error) => error.code === "INVALID_CREDENTIALS"
-      );
+        assert.throws(
+          () =>
+            store.prepareIdentityLink({
+              sessionId: "session-link-guest",
+              password: "password-segura"
+            }),
+          (error) => error.code === "ACCOUNT_LINK_NOT_AVAILABLE"
+        );
+        assert.throws(
+          () => store.prepareIdentityLink({ sessionId: ownerSessionId, password: "password-mala" }),
+          (error) => error.code === "INVALID_CREDENTIALS"
+        );
 
-      const target = store.prepareIdentityLink({ sessionId: ownerSessionId, password: "password-segura" });
-      assert.equal(target.userId, ownerId);
-      assert.equal(target.email, "owner@example.com");
+        const target = store.prepareIdentityLink({
+          sessionId: ownerSessionId,
+          password: "password-segura"
+        });
+        assert.equal(target.userId, ownerId);
+        assert.equal(target.email, "owner@example.com");
 
-      const baseLink = {
-        sessionId: "session-link-next",
-        sourceSessionId: target.sessionId,
-        targetUserId: target.userId,
-        expectedEmail: target.email,
-        authProvider: "https://accounts.google.com",
-        authSubject: "google-owner-subject",
-        email: "owner@example.com",
-        emailVerified: true
-      };
+        const baseLink = {
+          sessionId: "session-link-next",
+          sourceSessionId: target.sessionId,
+          targetUserId: target.userId,
+          expectedEmail: target.email,
+          authProvider: "https://accounts.google.com",
+          authSubject: "google-owner-subject",
+          email: "owner@example.com",
+          emailVerified: true
+        };
 
-      assert.throws(
-        () => store.completeIdentityLink({ ...baseLink, emailVerified: false }),
-        (error) => error.code === "INVALID_ACCOUNT_LINK_IDENTITY"
-      );
-      assert.throws(
-        () => store.completeIdentityLink({ ...baseLink, email: "otra@example.com" }),
-        (error) => error.code === "ACCOUNT_LINK_EMAIL_MISMATCH"
-      );
-      assert.throws(
-        () => store.completeIdentityLink({ ...baseLink, sourceSessionId: "session-link-stranger" }),
-        (error) => error.code === "ACCOUNT_LINK_SESSION_EXPIRED"
-      );
+        assert.throws(
+          () => store.completeIdentityLink({ ...baseLink, emailVerified: false }),
+          (error) => error.code === "INVALID_ACCOUNT_LINK_IDENTITY"
+        );
+        assert.throws(
+          () => store.completeIdentityLink({ ...baseLink, email: "otra@example.com" }),
+          (error) => error.code === "ACCOUNT_LINK_EMAIL_MISMATCH"
+        );
+        assert.throws(
+          () =>
+            store.completeIdentityLink({ ...baseLink, sourceSessionId: "session-link-stranger" }),
+          (error) => error.code === "ACCOUNT_LINK_SESSION_EXPIRED"
+        );
 
-      store.loginWithIdentity({
-        sessionId: "session-link-other",
-        sourceSessionId: "session-link-other-source",
-        authProvider: "https://accounts.google.com",
-        authSubject: "google-taken-subject",
-        email: "otra-cuenta@example.com",
-        emailVerified: true,
-        displayName: "Otra"
-      });
-      assert.throws(
-        () => store.completeIdentityLink({ ...baseLink, authSubject: "google-taken-subject" }),
-        (error) => error.code === "AUTH_IDENTITY_TAKEN"
-      );
+        store.loginWithIdentity({
+          sessionId: "session-link-other",
+          sourceSessionId: "session-link-other-source",
+          authProvider: "https://accounts.google.com",
+          authSubject: "google-taken-subject",
+          email: "otra-cuenta@example.com",
+          emailVerified: true,
+          displayName: "Otra"
+        });
+        assert.throws(
+          () => store.completeIdentityLink({ ...baseLink, authSubject: "google-taken-subject" }),
+          (error) => error.code === "AUTH_IDENTITY_TAKEN"
+        );
 
-      const linked = store.completeIdentityLink(baseLink);
-      assert.equal(linked.viewer.id, ownerId);
-      assert.equal(linked.viewer.authProvider, "https://accounts.google.com");
-      assert.equal(linked.viewer.canLinkGoogle, false);
+        const linked = store.completeIdentityLink(baseLink);
+        assert.equal(linked.viewer.id, ownerId);
+        assert.equal(linked.viewer.authProvider, "https://accounts.google.com");
+        assert.equal(linked.viewer.canLinkGoogle, false);
 
-      assert.throws(
-        () => store.prepareIdentityLink({ sessionId: linked.sessionId, password: "password-segura" }),
-        (error) => error.code === "ACCOUNT_ALREADY_LINKED"
-      );
-    }, { seedDemoData: false });
+        assert.throws(
+          () =>
+            store.prepareIdentityLink({ sessionId: linked.sessionId, password: "password-segura" }),
+          (error) => error.code === "ACCOUNT_ALREADY_LINKED"
+        );
+      },
+      { seedDemoData: false }
+    );
   });
 
   await test("backend loginWithIdentity preserves existing account data when provider data is incomplete", async () => {
@@ -3421,7 +3685,9 @@ await (async () => {
       });
 
       const reportedTopic = bootstrapPayload.topics[0];
-      const reportedMessage = reportedTopic.messages.find((message) => message.id === reportableMessageId);
+      const reportedMessage = reportedTopic.messages.find(
+        (message) => message.id === reportableMessageId
+      );
       const topicReport = openReports.reports.find((report) => report.entityType === "topic");
       const messageReport = openReports.reports.find((report) => report.entityType === "message");
 
@@ -3673,7 +3939,9 @@ await (async () => {
             text: "No entra"
           });
         },
-        (error) => error.code === "USER_EXPELLED" && error.message.includes("suspendido temporalmente por 2 horas")
+        (error) =>
+          error.code === "USER_EXPELLED" &&
+          error.message.includes("suspendido temporalmente por 2 horas")
       );
     });
   });
@@ -3826,12 +4094,17 @@ await (async () => {
       });
       assert.equal(activeAfterRotation.topics.length, TOPIC_ACTIVE_LIMIT);
       assert.equal(
-        expelledCandidateIds.every((topicId) => !activeAfterRotation.topics.some((topic) => topic.id === topicId)),
+        expelledCandidateIds.every(
+          (topicId) => !activeAfterRotation.topics.some((topic) => topic.id === topicId)
+        ),
         true
       );
 
       const archivedSeoIds = new Set(store.getSeoArchivedTopicEntries().map((topic) => topic.id));
-      assert.equal(expelledCandidateIds.every((topicId) => archivedSeoIds.has(topicId)), true);
+      assert.equal(
+        expelledCandidateIds.every((topicId) => archivedSeoIds.has(topicId)),
+        true
+      );
 
       for (const expelledCandidateId of expelledCandidateIds) {
         assert.throws(
@@ -3849,7 +4122,9 @@ await (async () => {
           sessionId: `session-archive-open-${expelledCandidateId}`,
           authMode: "registered"
         });
-        const archivedTopic = archivedPayload.topics.find((topic) => topic.id === expelledCandidateId);
+        const archivedTopic = archivedPayload.topics.find(
+          (topic) => topic.id === expelledCandidateId
+        );
         assert.ok(archivedTopic, "cada tema archivado debe seguir abriendo por su id");
         assert.equal(archivedPayload.selectedTopicId, expelledCandidateId);
         assert.equal(archivedTopic.status, "expelled");
@@ -3861,12 +4136,14 @@ await (async () => {
         const archivedMessageId = archivedTopic.messages[0].id;
         for (const toggleReaction of [store.toggleMessageLike, store.toggleMessageDislike]) {
           assert.throws(
-            () => toggleReaction.call(store, archivedMessageId, {
-              sessionId: `session-archive-reaction-${expelledCandidateId}`,
-              authMode: "registered",
-              selectedTopicId: expelledCandidateId
-            }),
-            (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled"
+            () =>
+              toggleReaction.call(store, archivedMessageId, {
+                sessionId: `session-archive-reaction-${expelledCandidateId}`,
+                authMode: "registered",
+                selectedTopicId: expelledCandidateId
+              }),
+            (error) =>
+              error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled"
           );
         }
 
@@ -3929,7 +4206,10 @@ await (async () => {
       dashboard = store.getAdminDashboard({
         sessionId: "session-progressive-moderator"
       });
-      assert.equal(dashboard.activeSanctions.some((item) => item.userId === "u3"), false);
+      assert.equal(
+        dashboard.activeSanctions.some((item) => item.userId === "u3"),
+        false
+      );
 
       store.applyModerationAction("expel_user", {
         sessionId: "session-progressive-moderator",
@@ -3981,7 +4261,10 @@ await (async () => {
       dashboard = store.getAdminDashboard({
         sessionId: "session-progressive-moderator"
       });
-      assert.equal(dashboard.activeSanctions.some((item) => item.userId === "u3"), false);
+      assert.equal(
+        dashboard.activeSanctions.some((item) => item.userId === "u3"),
+        false
+      );
     });
   });
 
@@ -4027,14 +4310,16 @@ await (async () => {
       });
 
       assert.throws(
-        () => store.createTopic({
-          sessionId: firstSessionId,
-          title: "Segundo posteo demasiado pronto",
-          text: "Debe explicar el delay de treinta minutos."
-        }),
-        (error) => error.code === "RATE_LIMITED"
-          && error.rateLimitKind === "create-topic"
-          && /esperar 30 minutos para crear otro posteo/i.test(error.message)
+        () =>
+          store.createTopic({
+            sessionId: firstSessionId,
+            title: "Segundo posteo demasiado pronto",
+            text: "Debe explicar el delay de treinta minutos."
+          }),
+        (error) =>
+          error.code === "RATE_LIMITED" &&
+          error.rateLimitKind === "create-topic" &&
+          /esperar 30 minutos para crear otro posteo/i.test(error.message)
       );
 
       store.addMessage(topicId, {
@@ -4043,14 +4328,16 @@ await (async () => {
       });
 
       assert.throws(
-        () => store.addMessage(topicId, {
-          sessionId: firstSessionId,
-          text: "Comentario consecutivo demasiado pronto."
-        }),
-        (error) => error.code === "RATE_LIMITED"
-          && error.rateLimitKind === "consecutive-comment"
-          && /último comentario.*tuyo/i.test(error.message)
-          && /volver a comentar en 5 minutos/i.test(error.message)
+        () =>
+          store.addMessage(topicId, {
+            sessionId: firstSessionId,
+            text: "Comentario consecutivo demasiado pronto."
+          }),
+        (error) =>
+          error.code === "RATE_LIMITED" &&
+          error.rateLimitKind === "consecutive-comment" &&
+          /último comentario.*tuyo/i.test(error.message) &&
+          /volver a comentar en 5 minutos/i.test(error.message)
       );
 
       store.registerWithPassword({
@@ -4065,13 +4352,15 @@ await (async () => {
       });
 
       assert.throws(
-        () => store.addMessage(topicId, {
-          sessionId: firstSessionId,
-          text: "Comentario dentro de los diez segundos."
-        }),
-        (error) => error.code === "RATE_LIMITED"
-          && error.rateLimitKind === "comment"
-          && /esperar 10 segundos entre comentarios/i.test(error.message)
+        () =>
+          store.addMessage(topicId, {
+            sessionId: firstSessionId,
+            text: "Comentario dentro de los diez segundos."
+          }),
+        (error) =>
+          error.code === "RATE_LIMITED" &&
+          error.rateLimitKind === "comment" &&
+          /esperar 10 segundos entre comentarios/i.test(error.message)
       );
     });
   });
@@ -4295,15 +4584,18 @@ await (async () => {
           assert.equal(messageId, message.id);
           assert.equal(selectedTopicId, topic.id);
           return new Promise((resolve) => {
-            releaseLike = () => resolve({
-              viewer: state.viewer,
-              users,
-              topics: [{
-                ...topic,
-                messages: [{ ...message, likes: 1, likedByViewer: true }]
-              }],
-              selectedTopicId
-            });
+            releaseLike = () =>
+              resolve({
+                viewer: state.viewer,
+                users,
+                topics: [
+                  {
+                    ...topic,
+                    messages: [{ ...message, likes: 1, likedByViewer: true }]
+                  }
+                ],
+                selectedTopicId
+              });
           });
         }
       }
@@ -4391,7 +4683,11 @@ await (async () => {
     // Mirrors the backend, which returns the commented topic bumped to the front
     // (ordered by updated_at DESC) whenever a message is submitted.
     const reorderedTopics = reviveTopicWithMessage(topics, topicId, submittedMessage);
-    assert.equal(reorderedTopics[0].id, topicId, "sanity check: the backend payload reorders topics");
+    assert.equal(
+      reorderedTopics[0].id,
+      topicId,
+      "sanity check: the backend payload reorders topics"
+    );
 
     const state = {
       viewer: { id: "u1", type: "registered" },
@@ -4423,7 +4719,10 @@ await (async () => {
 
     await actions.submitMessage({ preventDefault() {} });
 
-    assert.deepEqual(state.topics.map((topic) => topic.id), originalOrder);
+    assert.deepEqual(
+      state.topics.map((topic) => topic.id),
+      originalOrder
+    );
     const updatedTopic = state.topics.find((topic) => topic.id === topicId);
     assert.equal(updatedTopic.messages.at(-1).id, submittedMessage.id);
   });
@@ -4519,7 +4818,10 @@ await (async () => {
     assert.equal(composeReportReason("other", "  Explicacion libre  "), "Explicacion libre");
     assert.equal(composeReportReason("other", ""), "");
     assert.equal(composeReportReason("not-a-real-reason", "texto"), "");
-    assert.equal(REPORT_REASONS.some((reason) => reason.value === "other"), true);
+    assert.equal(
+      REPORT_REASONS.some((reason) => reason.value === "other"),
+      true
+    );
   });
 
   await test("openReportModal then submitReportModal composes the reason and reports the entity", async () => {
@@ -4559,7 +4861,11 @@ await (async () => {
     });
 
     actions.openReportModal("message", messageId, { trigger: null });
-    assert.deepEqual(state.reportModal, { isOpen: true, entityType: "message", entityId: messageId });
+    assert.deepEqual(state.reportModal, {
+      isOpen: true,
+      entityType: "message",
+      entityId: messageId
+    });
 
     await actions.submitReportModal("spam", "Ademas es reincidente");
     assert.equal(capturedReason, "Spam o publicidad: Ademas es reincidente");
@@ -4590,7 +4896,12 @@ await (async () => {
       apiClient: {
         async reportEntity() {
           reportCalled = true;
-          return { viewer: { id: "u1", type: "registered" }, users, topics, reportedMessageIds: [] };
+          return {
+            viewer: { id: "u1", type: "registered" },
+            users,
+            topics,
+            reportedMessageIds: []
+          };
         }
       }
     });
@@ -5053,8 +5364,14 @@ await (async () => {
       assert.match(document.querySelector("link[rel*='icon']").href, /^data:image\/svg\+xml/);
       assert.equal(appliedStyle.size, 0);
       assert.equal(customStylesheet.tagName, "style");
-      assert.match(customStylesheet.textContent, /html\[data-theme="dark"\]\[data-palette="custom"\]/);
-      assert.match(customStylesheet.dataset.paletteCssSignature, /html\[data-theme="dark"\]\[data-palette="custom"\]/);
+      assert.match(
+        customStylesheet.textContent,
+        /html\[data-theme="dark"\]\[data-palette="custom"\]/
+      );
+      assert.match(
+        customStylesheet.dataset.paletteCssSignature,
+        /html\[data-theme="dark"\]\[data-palette="custom"\]/
+      );
       assert.match(customStylesheet.dataset.paletteCssSignature, /--accent:/);
     } finally {
       globalThis.localStorage = previousLocalStorage;
@@ -5141,7 +5458,10 @@ await (async () => {
       assert.equal(hexInput.dataset.lastValid, "#4A90E2");
       assert.equal(pickerInput.value, "#4A90E2");
       assert.equal(appliedStyle.size, 0);
-      assert.match(document.querySelector("#customPaletteStylesheet").textContent, /--palette-custom-preview: #4A90E2;/);
+      assert.match(
+        document.querySelector("#customPaletteStylesheet").textContent,
+        /--palette-custom-preview: #4A90E2;/
+      );
       assert.match(
         document.querySelector("#customPaletteStylesheet").dataset.paletteCssSignature,
         /--palette-custom-preview: #4A90E2;/
@@ -5165,15 +5485,24 @@ await (async () => {
       palettePickerEvents,
       /handlers\.updateCustomPaletteHex\(nextValue, \{ render: false, focus: false \}\)/
     );
-    assert.match(actions, /const activeElement = typeof document !== "undefined" \? document\.activeElement : null;/);
+    assert.match(
+      actions,
+      /const activeElement = typeof document !== "undefined" \? document\.activeElement : null;/
+    );
     assert.match(actions, /input === activeElement/);
     assert.match(topbarActionEvents, /hexInputTarget\.focus\(\);/);
     assert.match(palettePickerEvents, /hexInputTarget\.focus\(\);/);
     assert.match(topbarActionEvents, /function isCustomPickerEventTarget/);
     assert.match(palettePickerEvents, /function isCustomPickerEventTarget/);
     assert.match(topbarActionEvents, /document\.addEventListener\("pointerdown",/);
-    assert.match(topbarActionEvents, /pickerPointerStartedInside = isCustomPickerEventTarget\(event\.target\);/);
-    assert.match(topbarActionEvents, /pickerIsOpen && !pickerPointerStartedInside && !isCustomPickerEventTarget\(event\.target\)/);
+    assert.match(
+      topbarActionEvents,
+      /pickerPointerStartedInside = isCustomPickerEventTarget\(event\.target\);/
+    );
+    assert.match(
+      topbarActionEvents,
+      /pickerIsOpen && !pickerPointerStartedInside && !isCustomPickerEventTarget\(event\.target\)/
+    );
     assert.match(palettePickerEvents, /handleDocumentPointerDown/);
   });
   await test("connected user activation stores selected card", () => {
@@ -5279,7 +5608,10 @@ await (async () => {
     assert.match(friendRequests, /row\.dataset\.id = String\(user\.id\);/);
 
     assert.match(notifications, /import \{ reconcile \} from "\.\/render-utils\.js";/);
-    assert.match(notifications, /reconcile\(node, \[createNotificationPanelHeader\(notifications\), body\]\);/);
+    assert.match(
+      notifications,
+      /reconcile\(node, \[createNotificationPanelHeader\(notifications\), body\]\);/
+    );
     assert.doesNotMatch(notifications, /replaceChildren/);
   });
 
@@ -5300,14 +5632,26 @@ await (async () => {
       styles,
       /html\.is-mobile-viewport #notificationsButton\s*\{[\s\S]*position:\s*fixed;[\s\S]*right:\s*calc\(16px \+ env\(safe-area-inset-right\)\);[\s\S]*bottom:\s*calc\(16px \+ env\(safe-area-inset-bottom\)\);[\s\S]*left:\s*auto;[\s\S]*width:\s*52px;[\s\S]*height:\s*52px;/
     );
-    assert.match(styles, /#notificationsButton\[data-drag-position="true"\]\s*\{[\s\S]*--notifications-fab-top/);
+    assert.match(
+      styles,
+      /#notificationsButton\[data-drag-position="true"\]\s*\{[\s\S]*--notifications-fab-top/
+    );
     assert.match(styles, /bottom:\s*var\(--notification-panel-bottom,/);
     assert.match(styles, /left:\s*var\(--notification-panel-left,/);
-    assert.match(notifications, /panel\.style\.setProperty\("--notification-panel-bottom", `\$\{bottom\}px`\);/);
+    assert.match(
+      notifications,
+      /panel\.style\.setProperty\("--notification-panel-bottom", `\$\{bottom\}px`\);/
+    );
     assert.match(topbarActionEvents, /MOBILE_NOTIFICATIONS_POSITION_KEY/);
-    assert.match(topbarActionEvents, /addListener\(dom\.notificationsButton, "pointerdown", beginNotificationsButtonDrag\);/);
+    assert.match(
+      topbarActionEvents,
+      /addListener\(dom\.notificationsButton, "pointerdown", beginNotificationsButtonDrag\);/
+    );
     assert.match(topbarActionEvents, /Math\.hypot\(deltaX, deltaY\) < 6/);
-    assert.match(topbarActionEvents, /saveNotificationsButtonPosition\(notificationsDragState\.position\);/);
+    assert.match(
+      topbarActionEvents,
+      /saveNotificationsButtonPosition\(notificationsDragState\.position\);/
+    );
   });
 
   await test("applyAdminAction requires a second confirming click for destructive actions", async () => {
@@ -5339,7 +5683,10 @@ await (async () => {
         applyCalls += 1;
         return {};
       };
-      versionedApiForControllerActions.getAdminDashboard = async () => ({ reports: [], pendingAvatars: [] });
+      versionedApiForControllerActions.getAdminDashboard = async () => ({
+        reports: [],
+        pendingAvatars: []
+      });
 
       const handlers = createActionHandlers({
         state,
@@ -5914,10 +6261,7 @@ await (async () => {
       });
       const googleWithoutTurnstilePayload = await googleWithoutTurnstile.json();
       assert.equal(googleWithoutTurnstile.status, 403);
-      assert.equal(
-        googleWithoutTurnstilePayload.error?.code,
-        "TURNSTILE_REQUIRED"
-      );
+      assert.equal(googleWithoutTurnstilePayload.error?.code, "TURNSTILE_REQUIRED");
 
       const blockedResponse = await fetch(`${origin}/api/auth/password/register`, {
         method: "POST",
@@ -5925,10 +6269,7 @@ await (async () => {
       });
       const blockedPayload = await blockedResponse.json();
       assert.equal(blockedResponse.status, 410);
-      assert.equal(
-        blockedPayload.error?.code,
-        "REGISTRATION_REQUIRES_EMAIL_VERIFICATION"
-      );
+      assert.equal(blockedPayload.error?.code, "REGISTRATION_REQUIRES_EMAIL_VERIFICATION");
     } finally {
       if (preview) {
         const closed = new Promise((resolve) => preview.server.once("close", resolve));
@@ -6011,12 +6352,13 @@ await (async () => {
       process.env.CHETREND_SESSION_SECRET = "";
 
       assert.throws(
-        () => startPreviewServer({
-          port: 0,
-          host: "127.0.0.1",
-          log() {},
-          dbPath: path.join(tempDir, "preview.sqlite")
-        }),
+        () =>
+          startPreviewServer({
+            port: 0,
+            host: "127.0.0.1",
+            log() {},
+            dbPath: path.join(tempDir, "preview.sqlite")
+          }),
         /TOPYKLY_SESSION_SECRET/
       );
     } finally {
@@ -6060,7 +6402,12 @@ await (async () => {
       const address = preview.server.address();
       const origin = `http://127.0.0.1:${address.port}`;
 
-      for (const agentPath of ["/api/agents/run", "/api/agents/pause", "/api/agents/status", "/api/agents/decision"]) {
+      for (const agentPath of [
+        "/api/agents/run",
+        "/api/agents/pause",
+        "/api/agents/status",
+        "/api/agents/decision"
+      ]) {
         const response = await fetch(`${origin}${agentPath}`);
         assert.equal(response.status, 404, `${agentPath} should not exist`);
         const payload = await response.json();
@@ -6089,7 +6436,11 @@ await (async () => {
       await allowedResponse.arrayBuffer();
 
       const seoModuleResponse = await fetch(`${origin}/services/seo-pages.js`);
-      assert.equal(seoModuleResponse.status, 200, "seo-pages.js debe ser servible (lo importa controller-render.js)");
+      assert.equal(
+        seoModuleResponse.status,
+        200,
+        "seo-pages.js debe ser servible (lo importa controller-render.js)"
+      );
       await seoModuleResponse.arrayBuffer();
 
       const backendModuleResponse = await fetch(`${origin}/services/backend-store.js`);
@@ -6141,7 +6492,10 @@ await (async () => {
     assert.equal(slugify("   ---   "), "");
     assert.equal(slugify("a".repeat(120)).length <= 60, true);
     assert.equal(resolvePublicOrigin({}), "https://topykly.com");
-    assert.equal(resolvePublicOrigin({ TOPYKLY_PUBLIC_ORIGIN: "https://example.com/base/" }), "https://example.com");
+    assert.equal(
+      resolvePublicOrigin({ TOPYKLY_PUBLIC_ORIGIN: "https://example.com/base/" }),
+      "https://example.com"
+    );
 
     const xssTopic = {
       id: "topic-xss",
@@ -6174,20 +6528,38 @@ await (async () => {
     assert.equal(html.includes("<img src=x"), false);
     assert.equal(html.includes("<b>otro</b>"), false);
     assert.equal(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true);
-    assert.equal(html.includes(`<link rel="canonical" href="https://topykly.com/tema/topic-xss/script-alert-1-script">`), true);
+    assert.equal(
+      html.includes(
+        `<link rel="canonical" href="https://topykly.com/tema/topic-xss/script-alert-1-script">`
+      ),
+      true
+    );
     assert.equal(html.includes(`"@type":"DiscussionForumPosting"`), true);
     assert.equal(html.includes("\\u003cscript"), true);
-    assert.equal(html.includes(`<meta property="og:image" content="https://topykly.com/og/tema/topic-xss.png">`), true);
+    assert.equal(
+      html.includes(
+        `<meta property="og:image" content="https://topykly.com/og/tema/topic-xss.png">`
+      ),
+      true
+    );
     assert.equal(html.includes(`<meta property="og:image:width" content="1200">`), true);
     assert.equal(html.includes(`<meta property="og:image:height" content="630">`), true);
     assert.equal(html.includes(`<meta name="twitter:card" content="summary_large_image">`), true);
-    assert.equal(html.includes(`<meta name="twitter:image" content="https://topykly.com/og/tema/topic-xss.png">`), true);
+    assert.equal(
+      html.includes(
+        `<meta name="twitter:image" content="https://topykly.com/og/tema/topic-xss.png">`
+      ),
+      true
+    );
 
-    const archivedHtml = renderTopicPage({
-      ...xssTopic,
-      isExpelled: true,
-      isArchived: true
-    }, { origin: "https://topykly.com" });
+    const archivedHtml = renderTopicPage(
+      {
+        ...xssTopic,
+        isExpelled: true,
+        isArchived: true
+      },
+      { origin: "https://topykly.com" }
+    );
     assert.equal(archivedHtml.includes(`<meta name="robots" content="index,follow">`), true);
     assert.equal(archivedHtml.includes("Tema archivado:"), true);
     assert.equal(archivedHtml.includes("ya no admite comentarios ni reacciones"), true);
@@ -6202,18 +6574,37 @@ await (async () => {
       title: "¿Qué música recomiendan para trabajar?",
       authorId: "author-1",
       messages: [
-        { id: "root", authorId: "author-1", kind: "user", isRoot: true, text: "Busco discos tranquilos para concentrarme." },
+        {
+          id: "root",
+          authorId: "author-1",
+          kind: "user",
+          isRoot: true,
+          text: "Busco discos tranquilos para concentrarme."
+        },
         { id: "reply", authorId: "author-2", kind: "user", isRoot: false, text: "Prueba con jazz." }
       ]
     };
     const model = buildTopicShareModel(
       topic,
-      [{ id: "author-1", name: "Ana Música", nickname: "ana_musica", avatarUrl: "/avatars/ana.jpg" }],
+      [
+        {
+          id: "author-1",
+          name: "Ana Música",
+          nickname: "ana_musica",
+          avatarUrl: "/avatars/ana.jpg"
+        }
+      ],
       "https://topykly.com/"
     );
 
-    assert.equal(buildTopicSharePath(topic), "/tema/topic%20con%20espacios/que-musica-recomiendan-para-trabajar");
-    assert.equal(model.url, "https://topykly.com/tema/topic%20con%20espacios/que-musica-recomiendan-para-trabajar");
+    assert.equal(
+      buildTopicSharePath(topic),
+      "/tema/topic%20con%20espacios/que-musica-recomiendan-para-trabajar"
+    );
+    assert.equal(
+      model.url,
+      "https://topykly.com/tema/topic%20con%20espacios/que-musica-recomiendan-para-trabajar"
+    );
     assert.equal(model.authorName, "Ana Música");
     assert.equal(model.avatarUrl, "/avatars/ana.jpg");
     assert.equal(model.commentLabel, "1 comentario");
@@ -6223,13 +6614,22 @@ await (async () => {
     assert.equal(html.includes("Lleva la conversación a tus redes"), false);
     assert.equal(html.includes("La imagen usa el título"), false);
 
-    const image = await renderTopicSocialCard({
-      ...topic,
-      author: { name: model.authorName, nickname: model.authorNickname, avatarUrl: model.avatarUrl },
-      commentCount: 1
-    }, {
-      avatarBuffer: Buffer.from('<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="#ff8b5c"/></svg>')
-    });
+    const image = await renderTopicSocialCard(
+      {
+        ...topic,
+        author: {
+          name: model.authorName,
+          nickname: model.authorNickname,
+          avatarUrl: model.avatarUrl
+        },
+        commentCount: 1
+      },
+      {
+        avatarBuffer: Buffer.from(
+          '<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" fill="#ff8b5c"/></svg>'
+        )
+      }
+    );
     assert.deepEqual([...image.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
     assert.equal(image.readUInt32BE(16), TOPIC_SOCIAL_CARD_SIZE.width);
     assert.equal(image.readUInt32BE(20), TOPIC_SOCIAL_CARD_SIZE.height);
@@ -6291,7 +6691,9 @@ await (async () => {
       });
       const topicId = created.selectedTopicId || created.topics[0].id;
 
-      const redirectResponse = await fetch(`${origin}/tema/${encodeURIComponent(topicId)}`, { redirect: "manual" });
+      const redirectResponse = await fetch(`${origin}/tema/${encodeURIComponent(topicId)}`, {
+        redirect: "manual"
+      });
       assert.equal(redirectResponse.status, 301);
       const location = redirectResponse.headers.get("location");
       assert.equal(location, `/tema/${encodeURIComponent(topicId)}/el-mejor-tema-de-futbol`);
@@ -6307,7 +6709,9 @@ await (async () => {
       assert.equal(pageHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
       assert.equal(pageHtml.includes("Abrir en TOPYKLY"), true);
       assert.equal(
-        pageHtml.includes(`<meta property="og:image" content="https://topykly.com/og/tema/${encodeURIComponent(topicId)}.png">`),
+        pageHtml.includes(
+          `<meta property="og:image" content="https://topykly.com/og/tema/${encodeURIComponent(topicId)}.png">`
+        ),
         true
       );
 
@@ -6341,13 +6745,19 @@ await (async () => {
       assert.equal(hubResponse.status, 200);
       const hubHtml = await hubResponse.text();
       assert.equal(hubHtml.includes("El mejor tema de fútbol"), true);
-      assert.equal(hubHtml.includes(`<link rel="canonical" href="https://topykly.com/temas">`), true);
+      assert.equal(
+        hubHtml.includes(`<link rel="canonical" href="https://topykly.com/temas">`),
+        true
+      );
 
       const archiveResponse = await fetch(`${origin}/archivo`);
       assert.equal(archiveResponse.status, 200);
       const archiveHtml = await archiveResponse.text();
       assert.equal(archiveHtml.includes("Temas archivados de TOPYKLY"), true);
-      assert.equal(archiveHtml.includes(`<link rel="canonical" href="https://topykly.com/archivo">`), true);
+      assert.equal(
+        archiveHtml.includes(`<link rel="canonical" href="https://topykly.com/archivo">`),
+        true
+      );
 
       const missingResponse = await fetch(`${origin}/tema/topic-inexistente`);
       assert.equal(missingResponse.status, 404);
@@ -6848,6 +7258,10 @@ await (async () => {
       notificationsButton: new FakeElement(),
       authButton,
       authTools,
+      logoutConfirmBackdrop: new FakeElement(),
+      logoutConfirmModal: new FakeElement(),
+      logoutConfirmCancelButton: new FakeElement(),
+      logoutConfirmSubmitButton: new FakeElement(),
       authModalBackdrop: new FakeElement(),
       authModal: new FakeElement(),
       authGoogleButton: new FakeElement(),
@@ -6944,11 +7358,20 @@ await (async () => {
 
       assert.equal(logoutCalls, 0);
       assert.equal(state.viewer.type, "registered");
-      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesión");
+      assert.equal(dom.logoutConfirmBackdrop.hidden, false);
+      assert.equal(dom.logoutConfirmModal["aria-hidden"], "false");
+      assert.equal(globalThis.document.activeElement, dom.logoutConfirmCancelButton);
+
+      dom.logoutConfirmCancelButton.dispatch("click");
+      assert.equal(dom.logoutConfirmBackdrop.hidden, true);
+      assert.equal(dom.logoutConfirmModal["aria-hidden"], "true");
+      assert.equal(globalThis.document.activeElement, authButton);
 
       authButton.dispatch("click");
+      dom.logoutConfirmSubmitButton.dispatch("click");
       await flushAsyncEvents();
 
+      assert.equal(dom.logoutConfirmBackdrop.hidden, true);
       assert.equal(authTools.hidden, true);
       assert.equal(dom.profileButton.hidden, true);
       assert.equal(dom.storeButton.hidden, true);
@@ -7143,10 +7566,7 @@ await (async () => {
       assert.equal(requestedChallengePayload, null);
       assert.equal(dom.authEmailInput["aria-invalid"], "true");
       assert.equal(dom.authPasswordInput["aria-invalid"], "true");
-      assert.equal(
-        dom.authPasswordButton.textContent,
-        "Completa tu email y contraseña."
-      );
+      assert.equal(dom.authPasswordButton.textContent, "Completa tu email y contraseña.");
 
       dom.authEmailInput.value = "new@example.com";
       dom.authPasswordForm.dispatch("submit");
@@ -7154,7 +7574,10 @@ await (async () => {
 
       assert.equal(dom.authEmailInput["aria-invalid"], "false");
       assert.equal(dom.authPasswordInput["aria-invalid"], "true");
-      assert.equal(dom.authPasswordButton.textContent, "La contraseña debe tener al menos 8 caracteres.");
+      assert.equal(
+        dom.authPasswordButton.textContent,
+        "La contraseña debe tener al menos 8 caracteres."
+      );
 
       dom.authPasswordInput.value = "password123";
       dom.authPasswordForm.dispatch("submit");
@@ -7206,7 +7629,10 @@ await (async () => {
 
       assert.equal(dom.authAgeInput["aria-invalid"], "false");
       assert.equal(dom.authTermsInput["aria-invalid"], "true");
-      assert.equal(dom.authPasswordButton.textContent, "Acepta los Términos y Condiciones para continuar.");
+      assert.equal(
+        dom.authPasswordButton.textContent,
+        "Acepta los Términos y Condiciones para continuar."
+      );
 
       dom.authTermsInput.checked = true;
       dom.authBackButton.dispatch("click");
@@ -7320,7 +7746,12 @@ await (async () => {
     }
 
     const state = {
-      viewer: { id: "u-oidc-pending", type: "registered", profilePending: true, profileSuggestedName: "Abril" },
+      viewer: {
+        id: "u-oidc-pending",
+        type: "registered",
+        profilePending: true,
+        profileSuggestedName: "Abril"
+      },
       selectedTopicId: "topic-original"
     };
     const authButton = new FakeElement();
@@ -7978,10 +8409,7 @@ await (async () => {
       await flushAsyncEvents();
 
       assert.equal(dom.authPasswordButton.classList.contains("is-error"), true);
-      assert.equal(
-        dom.authPasswordButton.textContent,
-        "Completa tu email y contraseña."
-      );
+      assert.equal(dom.authPasswordButton.textContent, "Completa tu email y contraseña.");
 
       dom.authRegisterModeButton.dispatch("click");
 
@@ -8594,6 +9022,12 @@ await (async () => {
         return null;
       }
 
+      focus() {
+        if (globalThis.document) {
+          globalThis.document.activeElement = this;
+        }
+      }
+
       setAttribute(name, value) {
         this[name] = value;
       }
@@ -8697,6 +9131,10 @@ await (async () => {
       notificationsButton: new FakeElement(),
       authButton,
       authTools,
+      logoutConfirmBackdrop: new FakeElement(),
+      logoutConfirmModal: new FakeElement(),
+      logoutConfirmCancelButton: new FakeElement(),
+      logoutConfirmSubmitButton: new FakeElement(),
       authModalBackdrop: new FakeElement(),
       authModal: new FakeElement(),
       authGoogleButton: new FakeElement(),
@@ -8857,9 +9295,15 @@ await (async () => {
 
       assert.equal(logoutCalls, 0);
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-in");
-      assert.equal(flashCalls.at(-1), "Toca de nuevo para cerrar sesión");
+      assert.equal(dom.logoutConfirmBackdrop.hidden, false);
+      assert.equal(globalThis.document.activeElement, dom.logoutConfirmCancelButton);
+
+      dom.logoutConfirmCancelButton.dispatch("click");
+      assert.equal(dom.logoutConfirmBackdrop.hidden, true);
+      assert.equal(globalThis.document.activeElement, menuAuthButton);
 
       mobileTopbarMenu.dispatch("click", { target: menuAuthButton });
+      dom.logoutConfirmSubmitButton.dispatch("click");
       await flushAsyncEvents();
 
       assert.equal(closeDrawersCalls, 4);
@@ -9116,7 +9560,13 @@ await (async () => {
   });
 
   await test("quote action writes author and message lines with cursor after the quote", () => {
-    const quotedMessage = createMessage("u2", "Mensaje citado con    espacios", 0, "user", 1_700_000_070_000);
+    const quotedMessage = createMessage(
+      "u2",
+      "Mensaje citado con    espacios",
+      0,
+      "user",
+      1_700_000_070_000
+    );
     quotedMessage.id = "message-quoted";
     const topics = [{ id: "topic-quote", title: "Tema", messages: [quotedMessage] }];
     const users = [{ id: "u2", name: "Sergio13134" }];
@@ -9224,7 +9674,13 @@ await (async () => {
         createElementNS: (namespace, tagName) => new MockNode(tagName)
       };
 
-      const message = createMessage("u2", "> @Sergio13134\n> Mensaje citado\n\nRespuesta propia", 0, "user", 1_700_000_070_000);
+      const message = createMessage(
+        "u2",
+        "> @Sergio13134\n> Mensaje citado\n\nRespuesta propia",
+        0,
+        "user",
+        1_700_000_070_000
+      );
       const node = createMessageItem(message, [{ id: "u2", name: "Sergio13134" }]);
 
       assert.equal(findByClass(node, "message__quote-author").textContent, "@Sergio13134");
@@ -9240,11 +9696,9 @@ await (async () => {
       assert.equal(findByClass(hiddenQuoteNode, "message__quote-text--blocked").textContent, "-");
       assert.equal(findByClass(hiddenQuoteNode, "message__text").textContent, "Respuesta propia");
 
-      const archivedNode = createMessageItem(
-        message,
-        [{ id: "u2", name: "Sergio13134" }],
-        { readOnly: true }
-      );
+      const archivedNode = createMessageItem(message, [{ id: "u2", name: "Sergio13134" }], {
+        readOnly: true
+      });
       const archivedLikeButton = findByClass(archivedNode, "message__like-button");
       assert.equal(archivedLikeButton.disabled, true);
       assert.equal(archivedLikeButton.dataset.messageReactionTrigger, undefined);
@@ -9276,7 +9730,8 @@ await (async () => {
       "terms.html",
       "privacy.html"
     ];
-    const voseoPattern = /\b(?:aceptás|autorizás|buscás|conservás|debés|detectás|destapá|escribí|pensá|podés|publicás|respetá|sos|tenés|tomá|volvé)\b/giu;
+    const voseoPattern =
+      /\b(?:aceptás|autorizás|buscás|conservás|debés|detectás|destapá|escribí|pensá|podés|publicás|respetá|sos|tenés|tomá|volvé)\b/giu;
     const offenders = [];
 
     for (const file of userFacingFiles) {
@@ -9317,6 +9772,20 @@ await (async () => {
     assert.match(reportReasons, /Derechos de autor o marca/);
     assert.match(reportReasons, /Datos personales o suplantación/);
     assert.match(reportReasons, /Otra actividad o contenido ilegal/);
+  });
+
+  await test("drawer dialogs use elements that support the ARIA dialog role", async () => {
+    const html = await read("index.html");
+
+    assert.match(
+      html,
+      /<div class="drawer drawer--left" id="leftDrawer" role="dialog" aria-modal="true" aria-label="Temas"/
+    );
+    assert.match(
+      html,
+      /<div class="drawer drawer--right" id="rightDrawer" role="dialog" aria-modal="true" aria-label="Menú móvil"/
+    );
+    assert.doesNotMatch(html, /<aside[^>]*\brole="dialog"/);
   });
 
   await test("index and app structure stay trimmed", async () => {
@@ -9402,8 +9871,14 @@ await (async () => {
     assert.match(previewServer, /"Content-Security-Policy"/);
     assert.match(previewServer, /base-uri 'self'/);
     assert.match(previewServer, /frame-ancestors 'none'/);
-    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: false, req: (?:res\.req|req) \}\)/);
-    assert.match(previewServer, /getSecurityHeaders\(\{ includeCsp: extension === "\.html", req: res\.req \}\)/);
+    assert.match(
+      previewServer,
+      /getSecurityHeaders\(\{ includeCsp: false, req: (?:res\.req|req) \}\)/
+    );
+    assert.match(
+      previewServer,
+      /getSecurityHeaders\(\{ includeCsp: extension === "\.html", req: res\.req \}\)/
+    );
     assert.match(previewServer, /"Strict-Transport-Security"/);
     assert.match(previewServer, /DEFAULT_GUEST_CLEANUP_INTERVAL_MS/);
     assert.match(previewServer, /DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS/);
@@ -9465,9 +9940,10 @@ await (async () => {
       /class="panel__header-title"[\s\S]*id="backToTopics"[\s\S]*aria-label="Volver a temas"[\s\S]*id="chatTitle"/
     );
     assert.match(html, /id="reportTopicButton"/);
-    assert.match(html, /icon-button--refresh/);
+    assert.doesNotMatch(html, /id="refreshButton"|id="topicsRefreshButton"/);
+    assert.doesNotMatch(html, /icon-button--refresh/);
     assert.match(html, /id="leftDrawerTopics"/);
-    assert.match(html, /refresh-button__wheel/);
+    assert.doesNotMatch(html, /refresh-button__wheel/);
     assert.match(html, /id="backToTopics"/);
     assert.match(html, /placeholder="Escribe aqui\.\.\."/);
     assert.match(html, /id="messageInput"[\s\S]*aria-label="Mensaje del chat"/);
@@ -9553,10 +10029,7 @@ await (async () => {
       html,
       /id="profileDescriptionVisibilityButton"[\s\S]*data-profile-visibility="description"/
     );
-    assert.match(
-      html,
-      /id="profileSocialVisibilityButton"[\s\S]*data-profile-visibility="social"/
-    );
+    assert.match(html, /id="profileSocialVisibilityButton"[\s\S]*data-profile-visibility="social"/);
     assert.match(html, /id="socialWhatsappInput"/);
     assert.match(html, /id="socialInstagramInput"/);
     assert.match(html, /id="socialTiktokInput"/);
@@ -9569,7 +10042,10 @@ await (async () => {
       /id="socialWhatsappInput"[^>]*readonly[^>]*aria-readonly="true"[\s\S]*profile-modal__social-edit[\s\S]*type="button"[\s\S]*data-profile-social-edit/
     );
     assert.doesNotMatch(html, /profile-modal__social-edit" type="submit"/);
-    assert.match(styles, /\.profile-modal__social-field\.is-editing \.profile-modal__social-check-icon\s*\{[\s\S]*display:\s*block;/);
+    assert.match(
+      styles,
+      /\.profile-modal__social-field\.is-editing \.profile-modal__social-check-icon\s*\{[\s\S]*display:\s*block;/
+    );
     assert.match(html, /id="profileAvatarPickButton"[\s\S]*Elegir avatar/);
     assert.doesNotMatch(
       html,
@@ -9886,15 +10362,15 @@ await (async () => {
     );
     assert.match(styles, /\.profile-modal__header\s*\{[\s\S]*padding:\s*16px 24px 14px;/);
     assert.match(styles, /\.profile-modal__title\s*\{[\s\S]*font-size:\s*1\.45rem;/);
-    assert.match(styles, /\.profile-modal__bottom-row\s*\{[\s\S]*grid-row:\s*4;[\s\S]*justify-content:\s*space-between;/);
+    assert.match(
+      styles,
+      /\.profile-modal__bottom-row\s*\{[\s\S]*grid-row:\s*4;[\s\S]*justify-content:\s*space-between;/
+    );
     assert.match(
       styles,
       /\.profile-modal__actions \.primary-button,[\s\S]*\.profile-modal__actions \.text-button\s*\{[\s\S]*min-height:\s*38px;/
     );
-    assert.match(
-      styles,
-      /\.profile-modal__body\s*\{[\s\S]*padding:\s*12px 18px 16px;/
-    );
+    assert.match(styles, /\.profile-modal__body\s*\{[\s\S]*padding:\s*12px 18px 16px;/);
     assert.match(
       styles,
       /\.profile-modal__preview\s*\{[\s\S]*grid-row:\s*2;[\s\S]*width:\s*min\(176px, 100%\);[\s\S]*justify-self:\s*center;/
@@ -9904,10 +10380,7 @@ await (async () => {
       styles,
       /\.profile-modal__avatar-meta\s*\{[\s\S]*grid-row:\s*3;[\s\S]*justify-self:\s*center;[\s\S]*width:\s*min\(232px, 100%\);[\s\S]*border-bottom:\s*1px solid/
     );
-    assert.match(
-      styles,
-      /\.profile-modal__joined\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/
-    );
+    assert.match(styles, /\.profile-modal__joined\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
     assert.match(
       styles,
       /\.profile-modal__visibility-button\s*\{[\s\S]*width:\s*30px;[\s\S]*height:\s*30px;/
@@ -10114,10 +10587,7 @@ await (async () => {
       styles,
       /\.auth-email-form\s*\{[\s\S]*display:\s*flex;[\s\S]*flex:\s*1 0 auto;[\s\S]*flex-direction:\s*column;/
     );
-    assert.match(
-      styles,
-      /\.auth-email-submit\s*\{[\s\S]*order:\s*4;[\s\S]*min-height:\s*44px;/
-    );
+    assert.match(styles, /\.auth-email-submit\s*\{[\s\S]*order:\s*4;[\s\S]*min-height:\s*44px;/);
     assert.match(styles, /\.auth-form-actions\s*\{[\s\S]*?margin-top:\s*auto;[\s\S]*?\}/);
     assert.match(
       styles,
@@ -10681,10 +11151,7 @@ await (async () => {
       styles,
       /html\[data-theme="light"\]\.is-desktop-viewport \.panel--chat\.panel--topic-create\s*\{[\s\S]*border-top:\s*0;/
     );
-    assert.match(
-      styles,
-      /html\.is-mobile-viewport \.panel--chat\.panel--topic-create #refreshButton\s*\{[\s\S]*display:\s*none;/
-    );
+    assert.doesNotMatch(styles, /#refreshButton|#topicsRefreshButton|icon-button--refresh/);
     assert.match(
       styles,
       /html\.is-mobile-viewport \.panel--chat\.panel--topic-create #chatTitle\s*\{[\s\S]*position:\s*absolute;[\s\S]*left:\s*50%;[\s\S]*transform:\s*translateX\(-50%\);/
@@ -10718,11 +11185,26 @@ await (async () => {
       /textarea::-webkit-scrollbar-thumb\s*\{[\s\S]*background:\s*var\(--scrollbar-thumb\);[\s\S]*border-radius:\s*999px;[\s\S]*background-clip:\s*content-box;/
     );
     assert.match(html, /<label class="composer__field composer__field--message">/);
-    assert.match(styles, /\.composer__field--message\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*16px;/);
-    assert.match(styles, /#messageInput\s*\{[\s\S]*height:\s*74px;[\s\S]*min-height:\s*74px;[\s\S]*max-height:\s*74px;/);
-    assert.match(styles, /#messageInput\.is-scrollable\s*\{[\s\S]*clip-path:\s*inset\(0 round 16px\);/);
-    assert.match(styles, /\.composer--topic-create #messageInput\s*\{[\s\S]*height:\s*130px;[\s\S]*min-height:\s*130px;[\s\S]*max-height:\s*130px;/);
-    assert.match(styles, /textarea\.is-scrollable\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*background-clip:\s*padding-box;/);
+    assert.match(
+      styles,
+      /\.composer__field--message\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*border-radius:\s*16px;/
+    );
+    assert.match(
+      styles,
+      /#messageInput\s*\{[\s\S]*height:\s*74px;[\s\S]*min-height:\s*74px;[\s\S]*max-height:\s*74px;/
+    );
+    assert.match(
+      styles,
+      /#messageInput\.is-scrollable\s*\{[\s\S]*clip-path:\s*inset\(0 round 16px\);/
+    );
+    assert.match(
+      styles,
+      /\.composer--topic-create #messageInput\s*\{[\s\S]*height:\s*130px;[\s\S]*min-height:\s*130px;[\s\S]*max-height:\s*130px;/
+    );
+    assert.match(
+      styles,
+      /textarea\.is-scrollable\s*\{[\s\S]*overflow-y:\s*auto;[\s\S]*background-clip:\s*padding-box;/
+    );
     assert.match(
       styles,
       /#messageInput:not\(\.is-scrollable\)::-webkit-scrollbar\s*\{[\s\S]*width:\s*0;[\s\S]*height:\s*0;/
@@ -10812,6 +11294,7 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260709-topicrace1"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
     assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;/);
+    assert.match(controllerApp, /const SLOW_TOPIC_REFRESH_INTERVAL_MS = 5000;/);
     assert.match(
       controllerApp,
       /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/
@@ -10936,8 +11419,14 @@ await (async () => {
     assert.match(profileModal, /input\.readOnly = !isEditing/);
     assert.match(profileModal, /if \(justOpened \|\| input\.dataset\.renderedValue !== value\)/);
     assert.match(topbarActionEvents, /setSocialFieldEditing\(field, !isEditing\)/);
-    assert.match(topbarActionEvents, /resetSocialEditing\(dom\);[\s\S]*handlers\.saveProfile\(event\)/);
-    assert.match(actions, /dispatch\(state, reducers\.mergeLiveTopics, payload\);[\s\S]*dispatch\(state, reducers\.setProfileModalOpen, false\);/);
+    assert.match(
+      topbarActionEvents,
+      /resetSocialEditing\(dom\);[\s\S]*handlers\.saveProfile\(event\)/
+    );
+    assert.match(
+      actions,
+      /dispatch\(state, reducers\.mergeLiveTopics, payload\);[\s\S]*dispatch\(state, reducers\.setProfileModalOpen, false\);/
+    );
     assert.doesNotMatch(html, /profile-modal__social-prefix" aria-hidden="true">\+<\/span>/);
     assert.match(
       sharedBaseComponents,
@@ -10972,7 +11461,10 @@ await (async () => {
     assert.match(publicProfileModal, /document\.createElement\("span"\)/);
     assert.match(publicProfileModal, /profileShowDescription/);
     assert.match(publicProfileModal, /profileShowJoinedAt/);
-    assert.match(publicProfileModal, /const publicAvatarUrl = isCurrentUser \? user\.avatarPendingUrl \|\| user\.avatarUrl \|\| "" : user\.avatarUrl \|\| "";/);
+    assert.match(
+      publicProfileModal,
+      /const publicAvatarUrl = isCurrentUser \? user\.avatarPendingUrl \|\| user\.avatarUrl \|\| "" : user\.avatarUrl \|\| "";/
+    );
     assert.match(publicProfileModal, /getRecentUserCafes/);
     assert.match(publicProfileModal, /isTopicAvailable/);
     assert.match(publicProfileModal, /dataset.publicProfileTopicId/);
@@ -10983,16 +11475,25 @@ await (async () => {
     assert.match(publicProfileModal, /publicProfileJoinedAt/);
     assert.match(publicProfileModal, /joinedAtContainer.hidden = !joinedDate.length/);
     assert.match(publicProfileModal, /publicProfileCopyLinkButton\.hidden = !canShareProfile/);
-    assert.match(publicProfileModal, /publicProfileReportButton\.hidden = isGuest \|\| isCurrentUser/);
+    assert.match(
+      publicProfileModal,
+      /publicProfileReportButton\.hidden = isGuest \|\| isCurrentUser/
+    );
     assert.match(publicProfileModal, /publicProfileBlockButton\.hidden = !canBlock/);
-    assert.match(publicProfileModal, /const confirming = canBlock && Boolean\(state\.publicProfileBlockConfirming\)/);
+    assert.match(
+      publicProfileModal,
+      /const confirming = canBlock && Boolean\(state\.publicProfileBlockConfirming\)/
+    );
     assert.match(publicProfileModal, /isUnblocking \? "Desbloquear cuenta" : "Bloquear cuenta"/);
     assert.match(publicProfileModal, /dataset\.blockAction = isUnblocking \? "unblock" : "block"/);
     assert.match(html, /id="publicProfileBlockButton"[\s\S]*id="publicProfileReportButton"/);
     assert.match(html, /id="publicProfileBlockPrompt"[\s\S]*id="publicProfileBlockChoice"/);
     assert.match(html, /id="publicProfileReportButton"[\s\S]*id="publicProfileCopyLinkButton"/);
     assert.match(renderController, /export function getAppLocationPath/);
-    assert.match(renderController, /return `\/u\/\$\{encodeURIComponent\(profileUser\.nickname\)\}`;/);
+    assert.match(
+      renderController,
+      /return `\/u\/\$\{encodeURIComponent\(profileUser\.nickname\)\}`;/
+    );
     assert.match(renderController, /return topicPath\(topic\);/);
     assert.match(renderController, /window\.history\.replaceState/);
     assert.match(renderController, /syncLocationWithState\(state\);/);
@@ -11049,7 +11550,10 @@ await (async () => {
     assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260709-topicrace1"/);
     assert.match(eventsModule, /syncComposerTextareaHeight/);
     assert.match(eventsModule, /function shouldBlockTextareaInput\(textarea, event\)/);
-    assert.match(eventsModule, /messageInput\.addEventListener\("beforeinput", \(event\) => \{[\s\S]*event\.preventDefault\(\);/);
+    assert.match(
+      eventsModule,
+      /messageInput\.addEventListener\("beforeinput", \(event\) => \{[\s\S]*event\.preventDefault\(\);/
+    );
     assert.match(eventsModule, /function positionFloatingMessageActionMenu\(menu\)/);
     assert.match(eventsModule, /menu\.style\.position = "fixed"/);
     assert.match(eventsModule, /document\.querySelector\(\`\[data-message-menu=/);
@@ -11057,7 +11561,10 @@ await (async () => {
     assert.match(eventsModule, /document\.body\.append\(menu\)/);
     assert.match(eventsModule, /function restoreMessageActionMenu\(menu\)/);
     assert.match(eventsModule, /body\.insertBefore\(menu, body\.firstChild\)/);
-    assert.match(eventsModule, /if \(insideMessageActionMenu instanceof HTMLElement && dispatchMessageActionClick\(event\.target\)\) \{/);
+    assert.match(
+      eventsModule,
+      /if \(insideMessageActionMenu instanceof HTMLElement && dispatchMessageActionClick\(event\.target\)\) \{/
+    );
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
     assert.match(
@@ -11074,13 +11581,22 @@ await (async () => {
     assert.match(chat, /classList\.toggle\(\s*"is-scrollable"/);
     assert.match(previewServer, /const topicId = segments\[2\] \|\| "";/);
     assert.match(chat, /syncMessageCardHeights\(dom\.messageStream\);/);
-    assert.match(styles, /\.message-stream\s*\{[\s\S]*padding:\s*0 16px 0 0;[\s\S]*scroll-padding-bottom:\s*0;/);
+    assert.match(
+      styles,
+      /\.message-stream\s*\{[\s\S]*padding:\s*0 16px 0 0;[\s\S]*scroll-padding-bottom:\s*0;/
+    );
     assert.match(chat, /function getMessageBodyMeasuredScrollHeight\(body\)/);
     assert.match(chat, /const MESSAGE_CARD_MIN_HEIGHT_PX = 112;/);
-    assert.match(chat, /Math\.max\(MESSAGE_CARD_MIN_HEIGHT_PX, getMessageBodyMeasuredScrollHeight\(body\)\)/);
+    assert.match(
+      chat,
+      /Math\.max\(MESSAGE_CARD_MIN_HEIGHT_PX, getMessageBodyMeasuredScrollHeight\(body\)\)/
+    );
     assert.doesNotMatch(chat, /MESSAGE_LAST_CARD_MIN_HEIGHT_PX|lastElementChild/);
     assert.match(chat, /if \(card\.style\.minHeight !== nextMinHeight\)/);
-    assert.match(chat, /\.message__action-menu:not\(\[hidden\]\), \.message__reaction-menu:not\(\[hidden\]\)/);
+    assert.match(
+      chat,
+      /\.message__action-menu:not\(\[hidden\]\), \.message__reaction-menu:not\(\[hidden\]\)/
+    );
     assert.match(styles, /\.message__action-menu\s*\{[\s\S]*top:\s*auto;[\s\S]*bottom:\s*8px;/);
     assert.match(
       styles,
@@ -11174,9 +11690,14 @@ await (async () => {
       /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/
     );
     assert.match(topbarActionEvents, /target\.dataset\.mobileTopbarAction === "auth"/);
-    assert.match(topbarActionEvents, /Toca de nuevo para cerrar sesión/);
+    assert.match(topbarActionEvents, /function setLogoutConfirmationOpen/);
+    assert.match(topbarActionEvents, /addListener\(dom\.logoutConfirmSubmitButton, "click", confirmLogout\)/);
+    assert.doesNotMatch(topbarActionEvents, /Toca de nuevo para cerrar sesión/);
     assert.match(topbarActionEvents, /function validateAuthEmailFields/);
-    assert.match(topbarActionEvents, /dom\.authPasswordForm\.dataset\.authMode = isAccountLink \? "link" : isRecovery \? "recovery" : authPasswordMode/);
+    assert.match(
+      topbarActionEvents,
+      /dom\.authPasswordForm\.dataset\.authMode = isAccountLink \? "link" : isRecovery \? "recovery" : authPasswordMode/
+    );
     assert.match(topbarActionEvents, /dom\.authPasswordForm\.dataset\.authStep =/);
     assert.match(topbarActionEvents, /handlers\.requestEmailAuthCode/);
     assert.match(topbarActionEvents, /handlers\.verifyEmailAuthCode/);
@@ -11186,16 +11707,25 @@ await (async () => {
     assert.match(topbarActionEvents, /addListener\(dom\.authRecoveryButton,\s*"click"/);
     assert.match(topbarActionEvents, /addListener\(dom\.profileLinkGoogleButton,\s*"click"/);
     assert.match(topbarActionEvents, /setAuthFieldInvalid\(dom\.authNicknameInput, true\)/);
-    assert.match(topbarActionEvents, /const message = authValidationMessage \|\| "Revisa los campos marcados\."/);
+    assert.match(
+      topbarActionEvents,
+      /const message = authValidationMessage \|\| "Revisa los campos marcados\."/
+    );
     assert.match(topbarActionEvents, /flashAuthButtonError\(dom\.authPasswordButton, message\)/);
     assert.match(topbarActionEvents, /Ingresa un email válido/);
     assert.match(topbarActionEvents, /La contraseña debe tener al menos 8 caracteres/);
     assert.match(topbarActionEvents, /Completa tu fecha de nacimiento/);
-    assert.match(topbarActionEvents, /Debes tener al menos \$\{AUTH_MINIMUM_AGE\} años para registrarte/);
+    assert.match(
+      topbarActionEvents,
+      /Debes tener al menos \$\{AUTH_MINIMUM_AGE\} años para registrarte/
+    );
     assert.match(topbarActionEvents, /Acepta los Términos y Condiciones para continuar/);
     assert.match(topbarActionEvents, /Ingresa el código de 6 dígitos que te enviamos por email/);
-    assert.match(topbarActionEvents, /const authModalTitle = authOidcCompletion[\s\S]*?"Completa tu registro"[\s\S]*?"Recuperar contraseña"[\s\S]*?"Vincular con Google"[\s\S]*?"Regístrate" : "Iniciar Sesión"/);
-    assert.match(topbarActionEvents, /requestLogoutConfirmation\(\)/);
+    assert.match(
+      topbarActionEvents,
+      /const authModalTitle = authOidcCompletion[\s\S]*?"Completa tu registro"[\s\S]*?"Recuperar contraseña"[\s\S]*?"Vincular con Google"[\s\S]*?"Regístrate" : "Iniciar Sesión"/
+    );
+    assert.match(topbarActionEvents, /requestLogoutConfirmation\(target\)/);
     assert.match(topbarActionEvents, /data-mobile-topbar-action/);
     assert.match(topbarActionEvents, /setMobileDrawerPanel/);
     assert.match(topbarActionEvents, /data-mobile-drawer-panel/);
@@ -11230,6 +11760,7 @@ await (async () => {
       "settingsProfileIndexableToggle",
       "settingsFilterProfanityToggle",
       "settingsFriendsOnlyToggle",
+      "settingsSlowModeToggle",
       "settingsBlockedUsers",
       "settingsDeleteAccountButton",
       "settingsDeleteConfirmRow",
@@ -11248,7 +11779,7 @@ await (async () => {
     assert.equal(profileIndex < settingsIndex && settingsIndex < paletteIndex, true);
   });
 
-  await test("profile and settings modals stay closable in the real mobile visual viewport", async () => {
+  await test("profile and sectioned settings modals stay closable in the real mobile visual viewport", async () => {
     const stylesSource = await read("styles.css");
     const controllerActionsSource = await read("controller-actions.js");
 
@@ -11268,9 +11799,56 @@ await (async () => {
       stylesSource,
       /\.settings-modal\s*\{[\s\S]*?max-height:\s*calc\([\s\S]*?100dvh[\s\S]*?safe-area-inset-top[\s\S]*?safe-area-inset-bottom/
     );
+    assert.match(stylesSource, /\.settings-modal\s*\{[^}]*?max-width:\s*920px;/);
+    assert.match(
+      stylesSource,
+      /\.settings-modal__body\s*\{[^}]*?grid-template-rows:\s*auto\s+minmax\(0,\s*1fr\);/
+    );
+    assert.match(
+      stylesSource,
+      /\.settings-panel__nav\s*\{[^}]*?display:\s*flex;[^}]*?border-bottom:\s*1px\s+solid\s+var\(--line\);/
+    );
+    assert.match(stylesSource, /\.settings-panel__workspace\s*\{[^}]*?overflow-y:\s*auto;/);
     assert.match(
       controllerActionsSource,
       /function openProfileModal\(\)[\s\S]*?dom\.profileModal\.scrollTop = 0;[\s\S]*?focus\?\.\(\{ preventScroll: true \}\)/
+    );
+  });
+
+  await test("settings modal shows one top-nav section at a time without a left accent border", async () => {
+    const indexSource = await read("index.html");
+    const stylesSource = await read("styles.css");
+    const renderSource = await read("ui/settings-modal.js");
+    const eventsSource = await read("ui/topbar-action-events.js");
+    const stateSource = await read("state-store.js");
+
+    for (const section of ["privacy", "experience", "blocks", "account"]) {
+      assert.match(indexSource, new RegExp(`data-settings-section="${section}"`));
+      assert.match(indexSource, new RegExp(`data-settings-panel="${section}"`));
+    }
+    assert.match(stateSource, /settingsSection:\s*"privacy"/);
+    assert.match(
+      renderSource,
+      /querySelectorAll\?\.\("\[data-settings-section\]"\)[\s\S]*?aria-selected[\s\S]*?querySelectorAll\?\.\("\[data-settings-panel\]"\)[\s\S]*?panel\.hidden/
+    );
+    const activeRule = stylesSource.match(/\.settings-panel__nav-button\.is-active\s*\{([^}]*)\}/)?.[1] || "";
+    assert.notEqual(activeRule, "");
+    assert.doesNotMatch(activeRule, /border-left|inset\s+\d+px\s+0\s+0/);
+    assert.match(
+      stylesSource,
+      /\.settings-modal\s*\{[^}]*?background:\s*var\(--bg\);[^}]*?scrollbar-gutter:\s*auto;/
+    );
+    assert.match(
+      stylesSource,
+      /\.settings-modal\s*>\s*\.profile-modal__header\s*\{[^}]*?grid-template-columns:\s*38px\s+minmax\(0,\s*1fr\)\s+38px;/
+    );
+    assert.match(
+      stylesSource,
+      /\.settings-panel__workspace\s*\{[^}]*?background:\s*var\(--bg\);[^}]*?scrollbar-gutter:\s*auto;/
+    );
+    assert.match(
+      eventsSource,
+      /\["ArrowLeft",\s*"ArrowRight",\s*"Home",\s*"End"\][\s\S]*?data-settings-section[\s\S]*?setSettingsSection/
     );
   });
 
@@ -11281,6 +11859,7 @@ await (async () => {
     for (const handlerName of [
       "openSettingsModal",
       "closeSettingsModal",
+      "setSettingsSection",
       "toggleSetting",
       "requestAccountDeletion",
       "cancelAccountDeletion",
@@ -11387,18 +11966,33 @@ await (async () => {
 
   await test("profanity filter censors spanish and english words with leet variants", () => {
     const p3neCensored = censorProfanity("sos un p3ne");
-    assert.ok(/^sos un [*$%#&!]{4}$/.test(p3neCensored), `Expected p3ne to be censored, got ${p3neCensored}`);
+    assert.ok(
+      /^sos un [*$%#&!]{4}$/.test(p3neCensored),
+      `Expected p3ne to be censored, got ${p3neCensored}`
+    );
     assert.equal(censorProfanity("sos un p3ne"), p3neCensored);
-    assert.ok(new Set(p3neCensored.slice(-4)).size > 1, "Expected the censor mask to use varied characters");
+    assert.ok(
+      new Set(p3neCensored.slice(-4)).size > 1,
+      "Expected the censor mask to use varied characters"
+    );
 
     const put4Censored = censorProfanity("PUT4 madre");
-    assert.ok(/^[*$%#&!]{4} madre$/.test(put4Censored), `Expected PUT4 to be censored, got ${put4Censored}`);
+    assert.ok(
+      /^[*$%#&!]{4} madre$/.test(put4Censored),
+      `Expected PUT4 to be censored, got ${put4Censored}`
+    );
 
     const fvckCensored = censorProfanity("what the fvck");
-    assert.ok(/^what the [*$%#&!]{4}$/.test(fvckCensored), `Expected fvck to be censored, got ${fvckCensored}`);
+    assert.ok(
+      /^what the [*$%#&!]{4}$/.test(fvckCensored),
+      `Expected fvck to be censored, got ${fvckCensored}`
+    );
 
     const boluCensored = censorProfanity("boluuuudo total");
-    assert.ok(/^[*$%#&!]{9} total$/.test(boluCensored), `Expected boluuuudo to be censored, got ${boluCensored}`);
+    assert.ok(
+      /^[*$%#&!]{9} total$/.test(boluCensored),
+      `Expected boluuuudo to be censored, got ${boluCensored}`
+    );
 
     assert.equal(censorProfanity("texto normal sin nada"), "texto normal sin nada");
     // Palabras inocentes que casi colisionan no se censuran.
@@ -11410,7 +12004,10 @@ await (async () => {
     assert.equal(filterDisplayText("una mierda"), "una mierda");
     setProfanityFilterEnabled(true);
     const mierdaCensored = filterDisplayText("una mierda");
-    assert.ok(/^una [*$%#&!]{6}$/.test(mierdaCensored), `Expected mierda to be censored, got ${mierdaCensored}`);
+    assert.ok(
+      /^una [*$%#&!]{6}$/.test(mierdaCensored),
+      `Expected mierda to be censored, got ${mierdaCensored}`
+    );
     setProfanityFilterEnabled(false);
   });
 
@@ -11420,7 +12017,12 @@ await (async () => {
       id: "root-1",
       likes: 4
     };
-    const nextRootMessage = { ...rootMessage, likes: 5, lastLikeById: "u2", lastLikeByName: "Mora" };
+    const nextRootMessage = {
+      ...rootMessage,
+      likes: 5,
+      lastLikeById: "u2",
+      lastLikeByName: "Mora"
+    };
     const previousTopic = {
       id: "topic-1",
       title: "Tema",
@@ -11428,7 +12030,10 @@ await (async () => {
       messages: [rootMessage]
     };
     const nextTopic = { ...previousTopic, messages: [nextRootMessage] };
-    const users = [{ id: "u1", name: "Cami" }, { id: "u2", name: "Mora" }];
+    const users = [
+      { id: "u1", name: "Cami" },
+      { id: "u2", name: "Mora" }
+    ];
 
     const notifications = collectTopicNotifications(
       {
@@ -11476,7 +12081,8 @@ await (async () => {
     const friendships = { incoming: [], outgoing: [], friends: [{ id: "u2", name: "Mora" }] };
     assert.equal(filterNotificationsForFriends(notifications, friendships).length, 1);
     assert.equal(
-      filterNotificationsForFriends(notifications, { incoming: [], outgoing: [], friends: [] }).length,
+      filterNotificationsForFriends(notifications, { incoming: [], outgoing: [], friends: [] })
+        .length,
       0
     );
     assert.equal(filterNotificationsForFriends(anonymousNotifications, friendships).length, 0);
@@ -11500,14 +12106,18 @@ await (async () => {
 
       // El filtro de insultos arranca activado por defecto.
       assert.equal(voterPayload.viewer.filterProfanity, true);
+      // Las cuentas nuevas usan el modo en vivo de un segundo por defecto.
+      assert.equal(voterPayload.viewer.slowMode, false);
 
       const updated = store.updateSettings({
         sessionId: "session-settings-voter",
         filterProfanity: false,
-        notificationsFriendsOnly: true
+        notificationsFriendsOnly: true,
+        slowMode: true
       });
       assert.equal(updated.viewer.filterProfanity, false);
       assert.equal(updated.viewer.notificationsFriendsOnly, true);
+      assert.equal(updated.viewer.slowMode, true);
       assert.equal(updated.viewer.likesAnonymous, false);
 
       // La visibilidad en buscadores se guarda desde configuracion.
@@ -11521,6 +12131,7 @@ await (async () => {
         likesAnonymous: false
       });
       assert.equal(keptOptOut.viewer.profileIndexable, false);
+      assert.equal(keptOptOut.viewer.slowMode, true);
       const optedIn = store.updateSettings({
         sessionId: "session-settings-voter",
         profileIndexable: true
@@ -11581,10 +12192,19 @@ await (async () => {
       const topic = created.topics.find((entry) => entry.title === "Tema que sobrevive");
       const deletedUserId = created.viewer.id;
 
-      const payload = store.deleteAccount({ sessionId: "session-delete-me", currentPassword: "password-segura" });
+      const payload = store.deleteAccount({
+        sessionId: "session-delete-me",
+        currentPassword: "password-segura"
+      });
       assert.equal(payload.viewer.type, "guest");
-      assert.equal(payload.users.some((user) => user.id === deletedUserId), false);
-      assert.equal(payload.topics.some((entry) => entry.id === topic.id), true);
+      assert.equal(
+        payload.users.some((user) => user.id === deletedUserId),
+        false
+      );
+      assert.equal(
+        payload.topics.some((entry) => entry.id === topic.id),
+        true
+      );
 
       assert.throws(
         () =>
@@ -11604,7 +12224,9 @@ await (async () => {
     });
   });
 
-  console.log("all tests passed");
+  console.log(
+    `all tests passed (${testStats.passed} executed, ${testStats.skipped} skipped, suite: ${requestedSuite})`
+  );
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;

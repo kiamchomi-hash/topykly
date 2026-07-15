@@ -120,7 +120,8 @@ export function createActionHandlers({
   renderRef,
   syncResponsiveView,
   isMobileViewport,
-  closeDrawers
+  closeDrawers,
+  onLiveSyncPreferenceChange = null
 }) {
   let syncAuthUiRef = () => {};
   let openOidcProfileCompletionRef = () => {};
@@ -475,14 +476,14 @@ export function createActionHandlers({
   function openSettingsModal() {
     dispatch(state, reducers.setSettingsModalOpen, true);
     render();
-    const settingsBody = dom.settingsModal?.querySelector?.(".settings-modal__body");
-    if (settingsBody) {
-      settingsBody.scrollTop = 0;
+    const settingsWorkspace = dom.settingsModal?.querySelector?.(".settings-panel__workspace");
+    if (settingsWorkspace) {
+      settingsWorkspace.scrollTop = 0;
     }
     setTimeout(() => {
       dom.settingsModal?.focus?.();
-      if (settingsBody) {
-        settingsBody.scrollTop = 0;
+      if (settingsWorkspace) {
+        settingsWorkspace.scrollTop = 0;
       }
     }, 0);
   }
@@ -491,6 +492,18 @@ export function createActionHandlers({
     dispatch(state, reducers.setSettingsModalOpen, false);
     render();
     dom.settingsButton?.focus?.();
+  }
+
+  function setSettingsSection(settingsSection) {
+    if (!["privacy", "experience", "blocks", "account"].includes(settingsSection)) {
+      return;
+    }
+    dispatch(state, reducers.setSettingsSection, settingsSection);
+    render();
+    const workspace = dom.settingsModal?.querySelector?.(".settings-panel__workspace");
+    if (workspace) {
+      workspace.scrollTop = 0;
+    }
   }
 
   const SETTING_FEEDBACK = {
@@ -505,6 +518,10 @@ export function createActionHandlers({
     notificationsFriendsOnly: {
       on: "Solo verás notificaciones de tus amigos.",
       off: "Verás notificaciones de toda la actividad."
+    },
+    slowMode: {
+      on: "Modo lento activado: el contenido se actualiza cada 5 segundos.",
+      off: "Modo en vivo activado: el contenido se actualiza cada segundo."
     },
     profileIndexable: {
       on: "Tu perfil puede aparecer en buscadores.",
@@ -527,6 +544,9 @@ export function createActionHandlers({
         selectedTopicId: state.selectedTopicId
       });
       dispatch(state, reducers.mergeLiveTopics, payload);
+      if (settingKey === "slowMode") {
+        onLiveSyncPreferenceChange?.();
+      }
       showFeedback(SETTING_FEEDBACK[settingKey][nextValue ? "on" : "off"]);
       return payload;
     } catch (error) {
@@ -1030,6 +1050,7 @@ export function createActionHandlers({
     closeProfileModal,
     openSettingsModal,
     closeSettingsModal,
+    setSettingsSection,
     toggleSetting,
     requestAccountDeletion,
     cancelAccountDeletion,

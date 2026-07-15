@@ -1,16 +1,29 @@
 {
   "agentName": "Agente Auditor de Seguridad",
   "status": "completed_with_open_findings",
-  "lastChecked": "2026-07-14T19:13:59.000Z",
+  "lastChecked": "2026-07-15T12:50:48.666Z",
   "overallRisk": "high",
   "summary": {
     "critical": 0,
-    "high": 2,
+    "high": 3,
     "medium": 4,
     "low": 4,
     "confirmedInProduction": 2
   },
   "findings": [
+    {
+      "id": "codex-postgres-credential-exposure",
+      "level": "high",
+      "status": "resolved",
+      "title": "Una credencial PostgreSQL estaba embebida en los argumentos de un MCP global",
+      "evidence": [
+        "El MCP postgres incluia un DSN con contraseña directamente en su comando.",
+        "El conector postgres fue retirado de Codex y la configuracion actual ya no contiene postgresql://.",
+        "No se encontraron referencias al proyecto Supabase en TOPYKLY ni en archivos de entorno o configuracion de los otros proyectos locales revisados."
+      ],
+      "impact": "La contraseña pudo quedar visible para procesos locales, listados de configuracion o registros de herramientas y debe considerarse expuesta.",
+      "recommendation": "La contraseña fue rotada por el usuario y el DSN fue retirado. No volver a incluir secretos en argumentos de MCP."
+    },
     {
       "id": "public-private-profile-and-pending-avatar-exposure",
       "level": "high",
@@ -108,15 +121,15 @@
     {
       "id": "csp-unsafe-inline",
       "level": "low",
-      "status": "hardening",
-      "title": "La CSP permite scripts y estilos inline",
+      "status": "partially_resolved",
+      "title": "La CSP todavia permite estilos inline",
       "evidence": [
-        "services/preview-server.js:131-144 y vercel.json:16 incluyen unsafe-inline.",
-        "index.html:37-51 e index.html:182-199 contienen scripts inline.",
-        "La politica no declara form-action self."
+        "La auditoria de produccion confirma que script-src ya no contiene unsafe-inline.",
+        "services/preview-server.js conserva unsafe-inline solamente en style-src.",
+        "La politica todavia no declara form-action self."
       ],
-      "impact": "La CSP ofrece menos contencion si en el futuro aparece una inyeccion HTML. No se encontro actualmente un sink XSS alcanzable por datos no confiables.",
-      "recommendation": "Externalizar o aplicar hashes/nonces a los scripts, retirar unsafe-inline de script-src y agregar form-action 'self'."
+      "impact": "La CSP ofrece menos contencion ante una futura inyeccion de estilos. No se encontro actualmente un sink XSS alcanzable por datos no confiables.",
+      "recommendation": "Reducir gradualmente los estilos inline y agregar form-action 'self'. Mantener script-src sin unsafe-inline."
     },
     {
       "id": "windows-static-denylist-case-bypass",
@@ -134,21 +147,21 @@
     {
       "id": "playwright-artifacts-source-control",
       "level": "low",
-      "status": "repository_hygiene",
-      "title": "Los artefactos de Playwright CLI no estan ignorados",
+      "status": "remediated_pending_commit",
+      "title": "Los artefactos de Playwright CLI fueron retirados del indice",
       "evidence": [
-        "El repositorio de GitHub es publico y contiene 171 artefactos trackeados bajo .playwright-cli.",
-        ".gitignore excluye .playwright-mcp pero no .playwright-cli.",
-        "Artefactos no trackeados actuales contienen URLs efimeras del flujo OAuth; no se encontraron secretos persistentes ni emails personales."
+        ".gitignore excluye .playwright-cli y .playwright-mcp.",
+        "Los 171 artefactos trackeados fueron retirados del indice con git rm --cached.",
+        "Las copias locales permanecen disponibles e ignoradas."
       ],
-      "impact": "Una futura captura puede publicar datos de formularios, URLs de autenticacion u otra informacion de prueba por accidente.",
-      "recommendation": "Ignorar .playwright-cli, revisar las capturas antes de versionarlas y retirar del historial cualquier artefacto que contenga datos reales."
+      "impact": "El riesgo de publicar capturas futuras queda mitigado cuando las eliminaciones preparadas se confirmen en un commit.",
+      "recommendation": "Revisar y confirmar las eliminaciones preparadas; mantener cualquier evidencia sensible fuera del historial."
     }
   ],
   "liveAudit": {
     "url": "https://www.topykly.com/",
     "health": "OK",
-    "latencyMs": 321,
+    "latencyMs": 394,
     "sensitiveFilesExposed": false,
     "sslValid": true,
     "sslDaysRemaining": 77,
@@ -171,7 +184,7 @@
   "verification": {
     "npmAudit": "0 vulnerabilities",
     "qa": "npm run qa passed",
-    "secretScan": "No persistent credentials found in tracked files or searched git history",
+    "secretScan": "No embedded PostgreSQL, Supabase service-role or Render credentials remain in the repository or Codex config; the exposed Supabase database password was rotated by the user",
     "xss": "No reachable stored or reflected XSS sink found in reviewed data flows",
     "sqlInjection": "Queries receiving user data are parameterized; no exploitable SQL injection found",
     "authorization": "Anonymous access to the admin dashboard returned 403"

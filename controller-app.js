@@ -19,6 +19,7 @@ import {
 } from "./ui/notifications.js";
 
 const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;
+const SLOW_TOPIC_REFRESH_INTERVAL_MS = 5000;
 const FAKE_SOCIAL_PARAM_VALUES = new Set(["1", "true", "yes", "demo"]);
 
 function isLocalDevelopmentHost(hostname) {
@@ -315,9 +316,11 @@ export function createLiveTopicSync({
   render,
   apiClient = api,
   intervalMs = LIVE_TOPIC_REFRESH_INTERVAL_MS,
+  slowIntervalMs = SLOW_TOPIC_REFRESH_INTERVAL_MS,
   onError = console.error
 }) {
   let timer = 0;
+  let running = false;
   let inFlight = false;
 
   async function refreshNow() {
@@ -341,7 +344,7 @@ export function createLiveTopicSync({
       const notifications = viewer?.notificationsFriendsOnly
         ? filterNotificationsForFriends(collected, payload.friendships ?? state.friendships)
         : collected;
-      dispatch(state, reducers.mergeLiveTopics, payload);
+      dispatch(state, reducers.hydrateFromBackend, payload);
       const notificationStateUpdate = createNotificationStateUpdate(state, notifications);
       if (notificationStateUpdate) {
         dispatch(state, reducers.addNotifications, notificationStateUpdate);
@@ -366,28 +369,52 @@ export function createLiveTopicSync({
     }
   }
 
-  function start() {
-    if (timer || intervalMs <= 0 || typeof setInterval !== "function") {
+  function schedule() {
+    if (!running || timer || intervalMs <= 0 || typeof setTimeout !== "function") {
       return;
     }
 
-    timer = setInterval(refreshNow, intervalMs);
+    const nextIntervalMs = state.viewer?.slowMode ? slowIntervalMs : intervalMs;
+    timer = setTimeout(async () => {
+      timer = 0;
+      await refreshNow();
+      schedule();
+    }, nextIntervalMs);
     timer.unref?.();
   }
 
-  function stop() {
-    if (!timer) {
+  function start() {
+    if (running) {
       return;
     }
+    running = true;
+    schedule();
+  }
 
-    clearInterval(timer);
-    timer = 0;
+  function stop() {
+    running = false;
+    if (timer) {
+      clearTimeout(timer);
+      timer = 0;
+    }
+  }
+
+  function reschedule() {
+    if (!running) {
+      return;
+    }
+    if (timer) {
+      clearTimeout(timer);
+      timer = 0;
+    }
+    schedule();
   }
 
   return {
     refreshNow,
     start,
-    stop
+    stop,
+    reschedule
   };
 }
 export function bootstrap() {
@@ -397,6 +424,7 @@ export function bootstrap() {
 
   const responsive = createResponsiveHelpers({ state, dom });
   const renderRef = { current: () => {} };
+  const liveTopicSyncRef = { current: null };
   const actions = createActionHandlers({
     state,
     dom,
@@ -404,7 +432,8 @@ export function bootstrap() {
     syncResponsiveView: responsive.syncResponsiveView,
     isMobileViewport: responsive.isMobileViewport,
     closeDrawers: () => closeDrawers(dom, responsive.isMobileViewport, getTransitionDurationMs, closeTimerRef),
-    apiClient: bootstrapLocationParams.fakeSocial ? createFakeSocialApiClient(api, state) : api
+    apiClient: bootstrapLocationParams.fakeSocial ? createFakeSocialApiClient(api, state) : api,
+    onLiveSyncPreferenceChange: () => liveTopicSyncRef.current?.reschedule()
   });
   const renderers = createRenderers({
     state,
@@ -463,6 +492,7 @@ export function bootstrap() {
     closeProfileModal: actions.closeProfileModal,
     openSettingsModal: actions.openSettingsModal,
     closeSettingsModal: actions.closeSettingsModal,
+    setSettingsSection: actions.setSettingsSection,
     toggleSetting: actions.toggleSetting,
     requestAccountDeletion: actions.requestAccountDeletion,
     cancelAccountDeletion: actions.cancelAccountDeletion,
@@ -525,9 +555,10 @@ export function bootstrap() {
     publicProfileNickname: bootstrapLocationParams.publicProfileNickname
   });
   if (!bootstrapLocationParams.fakeSocial) {
-    createLiveTopicSync({
+    liveTopicSyncRef.current = createLiveTopicSync({
       state,
       render: renderers.render
-    }).start();
+    });
+    liveTopicSyncRef.current.start();
   }
 }

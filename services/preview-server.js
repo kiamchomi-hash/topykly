@@ -645,6 +645,7 @@ async function handleApiRequest(store, authService, req, res, url) {
         likesAnonymous: typeof body.likesAnonymous === "boolean" ? body.likesAnonymous : null,
         filterProfanity: typeof body.filterProfanity === "boolean" ? body.filterProfanity : null,
         notificationsFriendsOnly: typeof body.notificationsFriendsOnly === "boolean" ? body.notificationsFriendsOnly : null,
+        slowMode: typeof body.slowMode === "boolean" ? body.slowMode : null,
         profileIndexable: typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
         selectedTopicId: body.selectedTopicId ?? null
       }));

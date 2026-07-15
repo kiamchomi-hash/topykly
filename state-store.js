@@ -5,6 +5,7 @@ export const state = {
   isPaletteModalOpen: false,
   isProfileModalOpen: false,
   isSettingsModalOpen: false,
+  settingsSection: "privacy",
   settingsDeleteConfirming: false,
   settingsUpdatePending: false,
   blockedUserActionPending: null,
