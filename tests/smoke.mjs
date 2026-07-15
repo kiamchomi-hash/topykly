@@ -403,13 +403,20 @@ try {
     assert.equal(Object.prototype.hasOwnProperty.call(status, "clientId"), false);
   });
 
-  await test("supports auth login response for local fallback or external redirect", async () => {
+  await test("supports external auth redirects and fails closed when auth is not configured", async () => {
     const sessionId = "session-smoke-auth";
+    const authStatus = await request("/api/auth/status", { sessionId });
     const login = await request("/api/auth/login", {
       method: "POST",
       sessionId,
-      body: { selectedTopicId: null }
+      body: { selectedTopicId: null },
+      expectedStatus: authStatus.configured ? 200 : 503
     });
+
+    if (!authStatus.configured) {
+      assert.equal(login.error.code, "AUTH_NOT_CONFIGURED");
+      return;
+    }
 
     if (login.mode === "redirect") {
       assert.match(login.redirectUrl, /^https:\/\/accounts\.google\.com\//);
