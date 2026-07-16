@@ -11777,6 +11777,63 @@ await (async () => {
     assert.doesNotMatch(app, /createTopicForm|mobileCreateTopicForm/);
   });
 
+  await test("theme ranking scope tabs maintain WCAG AA contrast in dark palettes", async () => {
+    const styles = await read("styles.css");
+    const buttonBlock = styles.match(/\.ranking-scope-tabs__button\s*\{([\s\S]*?)\n\}/)?.[1] || "";
+
+    assert.match(buttonBlock, /color:\s*#fff7ef;/);
+    assert.match(buttonBlock, /opacity:\s*1;/);
+    assert.match(
+      styles,
+      /\.ranking-scope-tabs__button:hover,\s*\.ranking-scope-tabs__button:focus-visible,\s*\.ranking-scope-tabs__button:active,\s*\.ranking-scope-tabs__button\.is-active,[\s\S]*?\{\s*color:\s*#fff7ef;/
+    );
+
+    const parseHex = (value) =>
+      [1, 3, 5].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16));
+    const mixSrgb = (foreground, background, foregroundRatio) =>
+      foreground.map(
+        (channel, index) =>
+          channel * foregroundRatio + background[index] * (1 - foregroundRatio)
+      );
+    const linearize = (channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.04045
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (rgb) =>
+      0.2126 * linearize(rgb[0]) +
+      0.7152 * linearize(rgb[1]) +
+      0.0722 * linearize(rgb[2]);
+    const contrastRatio = (foreground, background) => {
+      const lighter = Math.max(luminance(foreground), luminance(background));
+      const darker = Math.min(luminance(foreground), luminance(background));
+      return (lighter + 0.05) / (darker + 0.05);
+    };
+    const extractDarkPalette = (selector, name) => {
+      const block = styles.match(new RegExp(`${selector}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1] || "";
+      const bg = block.match(/--bg:\s*(#[0-9a-f]{6});/i)?.[1];
+      const accent = block.match(/--accent:\s*(#[0-9a-f]{6});/i)?.[1];
+      assert.ok(bg && accent, `Missing dark palette colors for ${name}`);
+      return { name, bg, accent };
+    };
+    const palettes = [
+      extractDarkPalette('html\\[data-theme="dark"\\]', "default"),
+      ...["coast", "forest", "ember", "cobalt"].map((name) =>
+        extractDarkPalette(`html\\[data-theme="dark"\\]\\[data-palette="${name}"\\]`, name)
+      )
+    ];
+    const foreground = parseHex("#fff7ef");
+
+    palettes.forEach(({ name, bg, accent }) => {
+      const tabBackground = mixSrgb(parseHex(accent), parseHex(bg), 0.58);
+      assert.ok(
+        contrastRatio(foreground, tabBackground) >= 4.5,
+        `${name} ranking tab contrast must be at least 4.5:1`
+      );
+    });
+  });
+
   await test("settings modal ids are registered in DOM_IDS so bootstrap can wire them", async () => {
     // Object.assign(dom, cacheDom()) copia un snapshot plano del Proxy, asi que
     // cualquier id que no este en DOM_IDS queda undefined tras el bootstrap.

@@ -5732,9 +5732,9 @@ html.is-mobile-viewport .drawer--right .user-item__action {
   letter-spacing: 0.14em;
   text-align: center;
   text-transform: uppercase;
-  color: color-mix(in srgb, #fff7ef 82%, var(--text-soft) 18%);
+  color: #fff7ef;
   background: transparent;
-  opacity: 0.82;
+  opacity: 1;
   cursor: pointer;
   appearance: none;
   transition:
@@ -5745,13 +5745,13 @@ html.is-mobile-viewport .drawer--right .user-item__action {
 
 .ranking-scope-tabs__button:hover,
 .ranking-scope-tabs__button:focus-visible {
-  color: #fffaf2;
+  color: #fff7ef;
   background: color-mix(in srgb, var(--accent-soft) 38%, transparent);
   opacity: 1;
 }
 
 .ranking-scope-tabs__button.is-active {
-  color: #fffaf2;
+  color: #fff7ef;
   background: color-mix(in srgb, var(--surface-strong) 80%, var(--accent-soft) 20%);
   opacity: 1;
 }
@@ -9301,7 +9301,7 @@ html.is-mobile-viewport .ranking-mode-list__label {
 .ranking-scope-tabs__button.is-active,
 .ranking-scope-tabs__button.is-active:hover,
 .ranking-scope-tabs__button.is-active:focus-visible {
-  color: color-mix(in srgb, #fff7ef 82%, var(--text-soft) 18%);
+  color: #fff7ef;
 }
 
 .ranking-mode-list__option:hover,
