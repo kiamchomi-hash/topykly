@@ -14,6 +14,17 @@ const REPORT_GROUPS = [
   { type: "topic", title: "Temas", empty: "No hay temas reportados." },
   { type: "user", title: "Usuarios", empty: "No hay usuarios reportados." }
 ];
+const ANALYTICS_EVENT_LABELS = {
+  page_view: "Visitas",
+  return_visit: "Regresos",
+  topic_open: "Conversaciones abiertas",
+  auth_open: "Accesos iniciados",
+  registration_complete: "Registros",
+  login_complete: "Sesiones iniciadas",
+  publish_attempt: "Intentos de publicación",
+  topic_created: "Temas creados",
+  comment_created: "Comentarios creados"
+};
 let lastRenderedDashboard = null;
 let lastRenderedSection = "";
 let lastRenderedConfirmKey = "";
@@ -221,10 +232,132 @@ function renderSection(title, count, children, description = "") {
   return section;
 }
 
+function getAnalyticsEvent(analytics, eventName) {
+  return (analytics?.events || []).find((event) => event.eventName === eventName) || {
+    eventName,
+    total: 0,
+    uniqueSubjects: 0
+  };
+}
+
+function formatConversion(numerator, denominator) {
+  if (!denominator) {
+    return "Sin base suficiente";
+  }
+  return `${Math.round((numerator / denominator) * 100)}% de conversión`;
+}
+
+function renderAnalyticsMetric(label, value, detail) {
+  const card = el("article", "admin-panel__metric");
+  card.append(
+    el("span", "admin-panel__metric-label", label),
+    el("strong", "admin-panel__metric-value", String(value)),
+    el("span", "admin-panel__metric-detail", detail)
+  );
+  return card;
+}
+
+function renderAnalyticsDashboard(analytics) {
+  const section = el("section", "admin-panel__analytics");
+  const pageViews = getAnalyticsEvent(analytics, "page_view");
+  const topicOpens = getAnalyticsEvent(analytics, "topic_open");
+  const authOpens = getAnalyticsEvent(analytics, "auth_open");
+  const registrations = getAnalyticsEvent(analytics, "registration_complete");
+  const publishAttempts = getAnalyticsEvent(analytics, "publish_attempt");
+  const topicsCreated = getAnalyticsEvent(analytics, "topic_created");
+  const commentsCreated = getAnalyticsEvent(analytics, "comment_created");
+  const returnVisits = getAnalyticsEvent(analytics, "return_visit");
+
+  const header = el("div", "admin-panel__analytics-header");
+  const headerCopy = el("div");
+  headerCopy.append(
+    el("h3", "", "Embudo del producto"),
+    el("p", "", "Datos seudónimos y agregados, sin contenido de mensajes ni direcciones IP.")
+  );
+  header.append(
+    headerCopy,
+    el("span", "admin-panel__analytics-period", `Últimos ${analytics?.days || 30} días`)
+  );
+
+  const metrics = el("div", "admin-panel__metrics");
+  metrics.append(
+    renderAnalyticsMetric(
+      "Personas visitantes",
+      pageViews.uniqueSubjects,
+      `${pageViews.total} vistas registradas`
+    ),
+    renderAnalyticsMetric(
+      "Conversaciones abiertas",
+      topicOpens.uniqueSubjects,
+      formatConversion(topicOpens.uniqueSubjects, pageViews.uniqueSubjects)
+    ),
+    renderAnalyticsMetric(
+      "Registros completados",
+      registrations.uniqueSubjects,
+      formatConversion(registrations.uniqueSubjects, authOpens.uniqueSubjects)
+    ),
+    renderAnalyticsMetric(
+      "Publicaciones",
+      topicsCreated.total + commentsCreated.total,
+      formatConversion(topicsCreated.total + commentsCreated.total, publishAttempts.total)
+    ),
+    renderAnalyticsMetric(
+      "Regresos",
+      returnVisits.uniqueSubjects,
+      formatConversion(returnVisits.uniqueSubjects, pageViews.uniqueSubjects)
+    )
+  );
+
+  const eventList = el("div", "admin-panel__analytics-events");
+  (analytics?.events || []).forEach((event) => {
+    const row = el("div", "admin-panel__analytics-event");
+    row.append(
+      el("span", "", ANALYTICS_EVENT_LABELS[event.eventName] || event.eventName),
+      el("strong", "", String(event.total)),
+      el("small", "", `${event.uniqueSubjects} personas`)
+    );
+    eventList.append(row);
+  });
+
+  const dailyTotals = new Map();
+  (analytics?.daily || []).forEach((entry) => {
+    dailyTotals.set(entry.day, (dailyTotals.get(entry.day) || 0) + entry.total);
+  });
+  const recentDays = [...dailyTotals.entries()].slice(-7);
+  const maximumDailyTotal = Math.max(1, ...recentDays.map(([, total]) => total));
+  const dailyChart = el("div", "admin-panel__analytics-chart");
+  dailyChart.setAttribute("aria-label", "Actividad diaria de los últimos siete días");
+  recentDays.forEach(([day, total]) => {
+    const row = el("div", "admin-panel__analytics-day");
+    const bar = el("span", "admin-panel__analytics-bar");
+    bar.style.setProperty("--analytics-width", `${Math.max(4, Math.round((total / maximumDailyTotal) * 100))}%`);
+    row.append(
+      el("time", "", new Intl.DateTimeFormat("es", { day: "2-digit", month: "short" }).format(new Date(`${day}T12:00:00Z`))),
+      bar,
+      el("strong", "", String(total))
+    );
+    dailyChart.append(row);
+  });
+  if (!recentDays.length) {
+    dailyChart.append(renderEmpty("Aún no hay actividad suficiente para mostrar la evolución diaria."));
+  }
+
+  section.append(
+    header,
+    metrics,
+    el("h4", "admin-panel__analytics-subtitle", "Eventos registrados"),
+    eventList,
+    el("h4", "admin-panel__analytics-subtitle", "Actividad reciente"),
+    dailyChart
+  );
+  return section;
+}
+
 function createAdminNavigation(activeSection, counts) {
   const nav = el("nav", "admin-panel__nav");
   nav.setAttribute("aria-label", "Tipos de moderacion");
   [
+    { id: "analytics", label: "Métricas", count: counts.analytics },
     { id: "reports", label: "Reportes", count: counts.reports },
     { id: "avatars", label: "Fotos", count: counts.avatars },
     { id: "sanctions", label: "Sanciones", count: counts.sanctions }
@@ -266,13 +399,14 @@ export function renderAdminPanel(state, dom) {
   const pendingAvatars = Array.isArray(dashboard.pendingAvatars) ? dashboard.pendingAvatars : [];
   const reports = Array.isArray(dashboard.reports) ? dashboard.reports : [];
   const activeSanctions = Array.isArray(dashboard.activeSanctions) ? dashboard.activeSanctions : [];
+  const productAnalytics = dashboard.productAnalytics || null;
   const avatarCount = Number.isFinite(dashboard.avatarPagination?.total)
     ? dashboard.avatarPagination.total
     : pendingAvatars.length;
   const reportCount = Number.isFinite(dashboard.reportPagination?.total)
     ? dashboard.reportPagination.total
     : reports.length;
-  const activeSection = ["reports", "avatars", "sanctions"].includes(state.adminSection)
+  const activeSection = ["analytics", "reports", "avatars", "sanctions"].includes(state.adminSection)
     ? state.adminSection
     : "reports";
 
@@ -302,6 +436,7 @@ export function renderAdminPanel(state, dom) {
 
   dom.adminPanelBody.textContent = "";
   dom.adminPanelBody.append(createAdminNavigation(activeSection, {
+    analytics: getAnalyticsEvent(productAnalytics, "page_view").total,
     reports: reportCount,
     avatars: avatarCount,
     sanctions: activeSanctions.length
@@ -314,7 +449,9 @@ export function renderAdminPanel(state, dom) {
     return;
   }
 
-  if (activeSection === "avatars") {
+  if (activeSection === "analytics") {
+    workspace.append(renderAnalyticsDashboard(productAnalytics));
+  } else if (activeSection === "avatars") {
     workspace.append(renderSection(
       "Fotos de perfil",
       avatarCount,

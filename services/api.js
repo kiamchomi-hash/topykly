@@ -147,6 +147,13 @@ export const api = {
     });
   },
 
+  openLiveEvents() {
+    if (typeof EventSource === "undefined") {
+      return null;
+    }
+    return new EventSource("/api/live");
+  },
+
   async openTopic(topicId) {
     return request(`/api/topics/${encodeURIComponent(topicId)}`);
   },

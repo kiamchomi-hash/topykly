@@ -638,20 +638,114 @@ await (async () => {
       const state = { viewer: { slowMode: false } };
       const sync = createLiveTopicSync({ state, render() {}, documentRef, windowRef });
       sync.start();
-      assert.deepEqual(scheduledDelays, [5000]);
+      assert.deepEqual(scheduledDelays, [30000]);
 
       state.viewer.slowMode = true;
       sync.reschedule();
-      assert.deepEqual(scheduledDelays, [5000, 15000]);
+      assert.deepEqual(scheduledDelays, [30000, 60000]);
       assert.equal(clearedTimers, 1);
 
       documentRef.visibilityState = "hidden";
       sync.reschedule();
-      assert.deepEqual(scheduledDelays, [5000, 15000, 30000]);
+      assert.deepEqual(scheduledDelays, [30000, 60000, 120000]);
       assert.equal(clearedTimers, 2);
 
       sync.stop();
       assert.equal(clearedTimers, 3);
+    } finally {
+      globalThis.setTimeout = previousSetTimeout;
+      globalThis.clearTimeout = previousClearTimeout;
+    }
+  });
+
+  await test("live topic sync prefers server events and defers hidden updates", async () => {
+    const previousSetTimeout = globalThis.setTimeout;
+    const previousClearTimeout = globalThis.clearTimeout;
+    const scheduledDelays = [];
+    const documentListeners = new Map();
+    const streamListeners = new Map();
+    let refreshCalls = 0;
+    let closeCalls = 0;
+
+    try {
+      globalThis.setTimeout = (_callback, delay) => {
+        scheduledDelays.push(delay);
+        return { unref() {} };
+      };
+      globalThis.clearTimeout = () => {};
+
+      const users = buildUsers(initialUsers);
+      const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
+      const state = {
+        viewer: { id: "u1", type: "registered" },
+        reportedTopicIds: [],
+        reportedMessageIds: [],
+        topics,
+        users,
+        currentUserId: "u1",
+        selectedTopicId: topics[0].id
+      };
+      const documentRef = {
+        visibilityState: "visible",
+        addEventListener(name, listener) {
+          documentListeners.set(name, listener);
+        },
+        removeEventListener() {}
+      };
+      const source = {
+        addEventListener(name, listener) {
+          streamListeners.set(name, listener);
+        },
+        close() {
+          closeCalls += 1;
+        }
+      };
+      const sync = createLiveTopicSync({
+        state,
+        render() {},
+        documentRef,
+        windowRef: {
+          addEventListener() {},
+          removeEventListener() {}
+        },
+        apiClient: {
+          openLiveEvents() {
+            return source;
+          },
+          async refreshTopics(selectedTopicId) {
+            refreshCalls += 1;
+            return {
+              viewer: state.viewer,
+              users,
+              topics,
+              selectedTopicId
+            };
+          }
+        }
+      });
+
+      sync.start();
+      assert.deepEqual(scheduledDelays, [30000]);
+
+      streamListeners.get("open")();
+      assert.deepEqual(scheduledDelays, [30000, 120000]);
+
+      streamListeners.get("update")();
+      await flushAsyncEvents();
+      assert.equal(refreshCalls, 1);
+
+      documentRef.visibilityState = "hidden";
+      streamListeners.get("update")();
+      await flushAsyncEvents();
+      assert.equal(refreshCalls, 1);
+
+      documentRef.visibilityState = "visible";
+      documentListeners.get("visibilitychange")();
+      await flushAsyncEvents();
+      assert.equal(refreshCalls, 2);
+
+      sync.stop();
+      assert.equal(closeCalls, 1);
     } finally {
       globalThis.setTimeout = previousSetTimeout;
       globalThis.clearTimeout = previousClearTimeout;
@@ -1412,11 +1506,15 @@ await (async () => {
     const mascotSource = await read("ui/mascot.js");
     const styles = await read("styles.css");
 
-    assert.match(notificationSource, /createTopyklyMascot\("notification-panel__empty-mascot"\)/);
+    assert.match(notificationSource, /createLazyMascot\("notification-panel__empty-mascot"\)/);
     assert.match(
       friendRequestSource,
-      /createTopyklyMascot\("friend-request-panel__empty-mascot"\)/
+      /createLazyMascot\("friend-request-panel__empty-mascot"\)/
     );
+    assert.doesNotMatch(notificationSource, /^import .*mascot\.js/m);
+    assert.doesNotMatch(friendRequestSource, /^import .*mascot\.js/m);
+    assert.match(notificationSource, /import\("\.\/mascot\.js"\)/);
+    assert.match(friendRequestSource, /import\("\.\/mascot\.js"\)/);
     assert.doesNotMatch(chatSource, /createTopyklyMascot/);
     assert.match(mascotSource, /href="\/assets\/mascot\/topy-concept-v8\.png"/);
     assert.match(mascotSource, /flood-color="var\(--mascot-accent\)"/);
@@ -1450,7 +1548,7 @@ await (async () => {
     assert.match(styles, /\.notification-toasts\s*\{[^}]*height:\s*auto;[^}]*max-height:/);
   });
 
-  await test("notification empty state always uses the single approved mascot", () => {
+  await test("notification empty state defers the approved mascot artwork", () => {
     const previousDocument = globalThis.document;
 
     class MockNode {
@@ -1515,11 +1613,10 @@ await (async () => {
       assert.equal(secondElement.children.length, 2);
       assert.match(firstMascot.className, /topykly-mascot/);
       assert.match(secondMascot.className, /topykly-mascot/);
-      assert.ok(firstMascot.innerHTML.includes("topy-concept-v8.png"));
-      assert.ok(secondMascot.innerHTML.includes("topy-concept-v8.png"));
-      assert.ok(firstMascot.innerHTML.includes("var(--mascot-accent)"));
-      assert.ok(!firstMascot.innerHTML.includes("#F40009"));
-      assert.ok(!secondMascot.innerHTML.includes("#003087"));
+      assert.equal(firstMascot.innerHTML, "");
+      assert.equal(secondMascot.innerHTML, "");
+      assert.equal(firstMascot.attributes.get("aria-hidden"), "true");
+      assert.equal(secondMascot.attributes.get("aria-hidden"), "true");
     } finally {
       globalThis.document = previousDocument;
     }
@@ -6302,6 +6399,84 @@ await (async () => {
     });
   });
 
+  await test("preview server pushes successful content changes through live events", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-live-"));
+    const abortController = new AbortController();
+    let preview = null;
+    let reader = null;
+
+    try {
+      preview = startPreviewServer({
+        port: 0,
+        host: "127.0.0.1",
+        log() {},
+        dbPath: path.join(tempDir, "preview.sqlite")
+      });
+      if (!preview.server.listening) {
+        await new Promise((resolve, reject) => {
+          preview.server.once("listening", resolve);
+          preview.server.once("error", reject);
+        });
+      }
+
+      const address = preview.server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      preview.store.registerWithPassword({
+        sessionId: "session-live-author",
+        email: "live-author@example.com",
+        password: "password-segura",
+        nickname: "live_author"
+      });
+
+      const streamResponse = await fetch(`${origin}/api/live`, {
+        signal: abortController.signal
+      });
+      assert.equal(streamResponse.status, 200);
+      assert.match(streamResponse.headers.get("content-type") || "", /text\/event-stream/);
+      reader = streamResponse.body.getReader();
+      const decoder = new TextDecoder();
+      const firstChunk = await reader.read();
+      assert.equal(decoder.decode(firstChunk.value).includes("event: ready"), true);
+
+      const createdResponse = await fetch(`${origin}/api/topics`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: "topykly_sid=session-live-author"
+        },
+        body: JSON.stringify({
+          title: "Tema actualizado en vivo",
+          text: "Mensaje inicial para comprobar SSE."
+        })
+      });
+      assert.equal(createdResponse.status, 201);
+      await createdResponse.arrayBuffer();
+
+      let livePayload = "";
+      while (!livePayload.includes("event: update")) {
+        let timeoutId = null;
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error("No se recibió el evento SSE.")), 2000);
+          })
+        ]).finally(() => clearTimeout(timeoutId));
+        assert.equal(chunk.done, false);
+        livePayload += decoder.decode(chunk.value);
+      }
+      assert.match(livePayload, /"reason":"\/api\/topics"/);
+    } finally {
+      abortController.abort();
+      await reader?.cancel?.().catch(() => {});
+      if (preview) {
+        const closed = new Promise((resolve) => preview.server.once("close", resolve));
+        preview.close();
+        await closed;
+      }
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   await test("preview auth requires Turnstile, blocks unverified registration and scopes HSTS to production HTTPS", async () => {
     const previousNodeEnv = process.env.NODE_ENV;
     const previousVercelEnv = process.env.VERCEL_ENV;
@@ -6861,6 +7036,28 @@ await (async () => {
         archiveHtml.includes(`<link rel="canonical" href="https://www.topykly.com/archivo">`),
         true
       );
+
+      store.registerWithPassword({
+        sessionId: "session-seo-offensive-commenter",
+        email: "seo-offensive@example.com",
+        password: "password-segura",
+        nickname: "seo_ofensivo"
+      });
+      store.addMessage(topicId, {
+        sessionId: "session-seo-offensive-commenter",
+        authMode: "registered",
+        text: "Este comentario contiene una mierda ofensiva."
+      });
+
+      const offensiveResponse = await fetch(`${origin}${location}`);
+      const offensiveHtml = await offensiveResponse.text();
+      assert.equal(offensiveResponse.headers.get("x-robots-tag"), "noindex");
+      assert.equal(offensiveHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
+
+      const filteredHubHtml = await (await fetch(`${origin}/temas`)).text();
+      assert.equal(filteredHubHtml.includes("El mejor tema de fútbol"), false);
+      const sitemapXml = await (await fetch(`${origin}/sitemap.xml`)).text();
+      assert.equal(sitemapXml.includes(encodeURIComponent(topicId)), false);
 
       const missingResponse = await fetch(`${origin}/tema/topic-inexistente`);
       assert.equal(missingResponse.status, 404);
@@ -10189,6 +10386,8 @@ await (async () => {
     assert.match(colorisLoader, /COLORIS_STYLE_INTEGRITY/);
     assert.match(colorisLoader, /COLORIS_SCRIPT_INTEGRITY/);
     assert.match(colorisLoader, /crossOrigin = "anonymous"/);
+    assert.doesNotMatch(actions, /^import .*coloris-loader\.js/m);
+    assert.match(actions, /await import\("\.\/services\/coloris-loader\.js"\)/);
     assert.match(
       themeBootstrap,
       /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/
@@ -11407,9 +11606,9 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
     assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260709-topicrace1"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
-    assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 5000;/);
-    assert.match(controllerApp, /const SLOW_TOPIC_REFRESH_INTERVAL_MS = 15000;/);
-    assert.match(controllerApp, /const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 30000;/);
+    assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 30000;/);
+    assert.match(controllerApp, /const SLOW_TOPIC_REFRESH_INTERVAL_MS = 60000;/);
+    assert.match(controllerApp, /const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 120000;/);
     assert.match(
       controllerApp,
       /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/
@@ -11567,6 +11766,13 @@ await (async () => {
       adminPanel,
       /image\.width = 64;[\s\S]*image\.height = 64;[\s\S]*image\.loading = "lazy";/
     );
+    assert.match(adminPanel, /\{ id: "analytics", label: "Métricas"/);
+    assert.match(adminPanel, /button\.dataset\.adminSection = item\.id/);
+    assert.match(adminPanel, /Métricas/);
+    assert.match(adminPanel, /dashboard\.productAnalytics/);
+    assert.match(adminPanel, /admin-panel__analytics-bar/);
+    assert.match(styles, /\.admin-panel__metrics\s*\{/);
+    assert.match(styles, /\.admin-panel__analytics-bar\s*\{/);
     assert.match(publicProfileModal, /export function renderPublicProfileModal/);
     assert.match(publicProfileModal, /createdAt/);
     assert.match(publicProfileModal, /formatJoinedDateParts/);
@@ -12458,6 +12664,14 @@ await (async () => {
       assert.equal(counts.page_view.uniqueSubjects, 1);
       assert.equal(counts.topic_open.total, 1);
       assert.equal(counts.auth_open.total, 1);
+      const dashboard = store.getAdminDashboard({
+        sessionId: "session-product-moderator"
+      });
+      assert.equal(dashboard.productAnalytics.days, 30);
+      assert.equal(
+        dashboard.productAnalytics.events.find((event) => event.eventName === "page_view")?.total,
+        1
+      );
       assert.equal(store.getDiagnostics().productEvents, 3);
       assert.throws(
         () => store.getProductAnalyticsForViewer({ sessionId: pageView.sessionId }),

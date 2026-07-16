@@ -46,8 +46,8 @@ function getMascotMarkup(filterId) {
   `;
 }
 
-export function createTopyklyMascot(extraClass = "") {
-  const mascot = document.createElement("span");
+export function createTopyklyMascot(extraClass = "", documentRef = document) {
+  const mascot = documentRef.createElement("span");
   const placementId = extraClass.replace(/[^a-z0-9]+/gi, "-") || "default";
   const filterId = `topykly-mascot-palette-${placementId}`;
   mascot.className = ["topykly-mascot", extraClass].filter(Boolean).join(" ");

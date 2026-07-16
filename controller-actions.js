@@ -13,7 +13,6 @@ import {
   updateDocumentFavicon
 } from "./palettes.js";
 import { getWebNotificationPermission, requestWebNotificationPermission } from "./ui/notifications.js";
-import { ensureColorisLoaded } from "./services/coloris-loader.js";
 
 const ADMIN_ACTION_FEEDBACK = {
   approve_avatar: "Foto aprobada",
@@ -304,7 +303,13 @@ export function createActionHandlers({
   async function openAdminPanel() {
     dispatch(state, reducers.setProfileModalOpen, false);
     dispatch(state, reducers.setAdminPanelOpen, true);
-    dispatch(state, reducers.setAdminDashboard, { loaded: false, reports: [], pendingAvatars: [], activeSanctions: [] });
+    dispatch(state, reducers.setAdminDashboard, {
+      loaded: false,
+      reports: [],
+      pendingAvatars: [],
+      activeSanctions: [],
+      productAnalytics: null
+    });
     render();
 
     try {
@@ -313,7 +318,13 @@ export function createActionHandlers({
     } catch (error) {
       console.error(error);
       showFeedback(error?.message || "No se pudo cargar administración.", { kind: "error" });
-      dispatch(state, reducers.setAdminDashboard, { loaded: true, reports: [], pendingAvatars: [], activeSanctions: [] });
+      dispatch(state, reducers.setAdminDashboard, {
+        loaded: true,
+        reports: [],
+        pendingAvatars: [],
+        activeSanctions: [],
+        productAnalytics: null
+      });
     }
     render();
   }
@@ -330,7 +341,7 @@ export function createActionHandlers({
   }
 
   function setAdminSection(adminSection) {
-    if (!["reports", "avatars", "sanctions"].includes(adminSection)) {
+    if (!["analytics", "reports", "avatars", "sanctions"].includes(adminSection)) {
       return;
     }
     dispatch(state, reducers.setAdminSection, adminSection);
@@ -810,6 +821,7 @@ export function createActionHandlers({
     render();
     focusPaletteModalStart(dom);
     try {
+      const { ensureColorisLoaded } = await import("./services/coloris-loader.js");
       await ensureColorisLoaded();
       if (state.isPaletteModalOpen) {
         render();

@@ -28,6 +28,8 @@ const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
 const TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS = 30 * 60_000;
+const LIVE_EVENT_HEARTBEAT_MS = 25_000;
+const MAX_LIVE_EVENT_CLIENTS = 1000;
 const MAX_HTTP_RATE_LIMIT_BUCKETS = 10_000;
 const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
 const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
@@ -196,6 +198,105 @@ function sendRedirect(res, statusCode, location, { cookies = [] } = {}) {
     ...(cookies.length ? { "Set-Cookie": cookies } : {})
   });
   res.end();
+}
+
+function createLiveEventHub({
+  heartbeatMs = LIVE_EVENT_HEARTBEAT_MS,
+  maxClients = MAX_LIVE_EVENT_CLIENTS
+} = {}) {
+  const clients = new Set();
+  let revision = 0;
+
+  function writeEvent(res, eventName, payload) {
+    res.write(`event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`);
+  }
+
+  function subscribe(req, res) {
+    if (clients.size >= maxClients) {
+      sendJson(res, 503, {
+        error: {
+          code: "LIVE_CAPACITY_REACHED",
+          message: "La sincronización en vivo está temporalmente ocupada."
+        }
+      });
+      return;
+    }
+
+    res.writeHead(200, {
+      ...getSecurityHeaders({ includeCsp: false, req }),
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+    res.write("retry: 5000\n\n");
+    writeEvent(res, "ready", { revision });
+
+    const client = { res, heartbeatTimer: null };
+    clients.add(client);
+    client.heartbeatTimer = setInterval(() => {
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(`: heartbeat ${Date.now()}\n\n`);
+      }
+    }, heartbeatMs);
+    client.heartbeatTimer.unref?.();
+
+    const cleanup = () => {
+      if (client.heartbeatTimer) {
+        clearInterval(client.heartbeatTimer);
+      }
+      clients.delete(client);
+    };
+    req.once("close", cleanup);
+    res.once("close", cleanup);
+  }
+
+  function publish(reason = "content") {
+    revision += 1;
+    for (const client of [...clients]) {
+      if (client.res.destroyed || client.res.writableEnded) {
+        if (client.heartbeatTimer) {
+          clearInterval(client.heartbeatTimer);
+        }
+        clients.delete(client);
+        continue;
+      }
+      writeEvent(client.res, "update", { revision, reason });
+    }
+  }
+
+  function close() {
+    for (const client of clients) {
+      if (client.heartbeatTimer) {
+        clearInterval(client.heartbeatTimer);
+      }
+      client.res.end();
+    }
+    clients.clear();
+  }
+
+  return {
+    subscribe,
+    publish,
+    close
+  };
+}
+
+function shouldPublishLiveChange(req, url) {
+  if (!["POST", "PATCH", "DELETE"].includes(req.method)) {
+    return false;
+  }
+  if (
+    url.pathname === "/api/events"
+    || url.pathname === "/api/settings"
+    || url.pathname.endsWith("/follow")
+    || url.pathname.endsWith("/request-code")
+    || url.pathname.endsWith("/reset/request")
+    || url.pathname === "/api/auth/login"
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function readJsonBody(req, { maxBytes = MAX_JSON_BODY_BYTES } = {}) {
@@ -453,10 +554,15 @@ async function deliverTopicActivityEmails(store, authService, {
   })));
 }
 
-async function handleApiRequest(store, authService, req, res, url) {
+async function handleApiRequest(store, authService, liveEventHub, req, res, url) {
   const context = getRequestContext(req);
 
   try {
+    if (req.method === "GET" && url.pathname === "/api/live") {
+      liveEventHub.subscribe(req, res);
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/bootstrap") {
       sendBackendPayload(res, req, authService, 200, store.bootstrap({
         ...context,
@@ -1185,12 +1291,12 @@ function buildSitemapXml(store) {
     { loc: `${origin}/privacy.html` }
   ];
   store.getSeoTopicEntries()
-    .filter((topic) => !topic.isThin)
+    .filter((topic) => !topic.isThin && !topic.isProblematic)
     .forEach((topic) => {
       entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
     });
   store.getSeoArchivedTopicEntries()
-    .filter((topic) => !topic.isThin)
+    .filter((topic) => !topic.isThin && !topic.isProblematic)
     .forEach((topic) => {
       entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
     });
@@ -1259,14 +1365,20 @@ function handleSeoPageRequest(store, req, res, url) {
   }
 
   if (url.pathname === "/temas") {
-    sendHtml(res, req, 200, renderTopicsIndexPage(store.getSeoTopicEntries(), { origin }), {
+    sendHtml(res, req, 200, renderTopicsIndexPage(
+      store.getSeoTopicEntries().filter((topic) => !topic.isProblematic),
+      { origin }
+    ), {
       "Cache-Control": "public, max-age=300"
     });
     return;
   }
 
   if (url.pathname === "/archivo") {
-    sendHtml(res, req, 200, renderTopicsArchivePage(store.getSeoArchivedTopicEntries(), { origin }), {
+    sendHtml(res, req, 200, renderTopicsArchivePage(
+      store.getSeoArchivedTopicEntries().filter((topic) => !topic.isProblematic),
+      { origin }
+    ), {
       "Cache-Control": "public, max-age=300"
     });
     return;
@@ -1340,7 +1452,8 @@ function handleSeoPageRequest(store, req, res, url) {
   }
 
   sendHtml(res, req, 200, renderTopicPage(topic, { origin }), {
-    "Cache-Control": "public, max-age=60"
+    "Cache-Control": "public, max-age=60",
+    ...(topic.isThin || topic.isProblematic ? { "X-Robots-Tag": "noindex" } : {})
   });
 }
 
@@ -1408,6 +1521,7 @@ export function startPreviewServer({
     seedDemoData: shouldSeedDemoData(process.env, false)
   });
   const authService = createAuthService();
+  const liveEventHub = createLiveEventHub();
   const httpRateLimitConfig = resolveHttpRateLimitConfig();
   const httpRateLimitBuckets = new Map();
   const sitemapCache = { xml: null, expiresAt: 0 };
@@ -1455,7 +1569,15 @@ export function startPreviewServer({
           });
           return;
         }
-        await handleApiRequest(store, authService, req, res, url);
+        if (shouldPublishLiveChange(req, url)) {
+          res.once("finish", () => {
+            if (res.statusCode >= 200 && res.statusCode < 400) {
+              liveEventHub.publish(url.pathname);
+              sitemapCache.expiresAt = 0;
+            }
+          });
+        }
+        await handleApiRequest(store, authService, liveEventHub, req, res, url);
         return;
       }
 
@@ -1527,6 +1649,7 @@ export function startPreviewServer({
       if (reactionResetTimer) {
         clearInterval(reactionResetTimer);
       }
+      liveEventHub.close();
       server.close();
       store.close();
     }

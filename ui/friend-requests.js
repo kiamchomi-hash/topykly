@@ -1,5 +1,19 @@
-import { createTopyklyMascot } from "./mascot.js";
 import { reconcile } from "./render-utils.js";
+
+function createLazyMascot(className) {
+  const documentRef = document;
+  const placeholder = documentRef.createElement("span");
+  placeholder.className = `topykly-mascot ${className}`;
+  placeholder.setAttribute("aria-hidden", "true");
+
+  void import("./mascot.js").then(({ createTopyklyMascot }) => {
+    placeholder.replaceWith?.(createTopyklyMascot(className, documentRef));
+  }).catch(() => {
+    placeholder.remove?.();
+  });
+
+  return placeholder;
+}
 
 function createFriendAvatar(user) {
   const avatar = document.createElement("span");
@@ -87,7 +101,7 @@ function createFriendRow(user, actions = [], presence = null) {
 function createEmptyState(title, copy = "") {
   const empty = document.createElement("div");
   empty.className = "friend-request-panel__empty";
-  const mascot = createTopyklyMascot("friend-request-panel__empty-mascot");
+  const mascot = createLazyMascot("friend-request-panel__empty-mascot");
   const heading = document.createElement("strong");
   heading.className = "friend-request-panel__empty-title";
   heading.textContent = title;
@@ -232,6 +246,9 @@ export function renderFriendRequests(state, dom) {
   positionFriendRequestsPanel(panel, dom.friendRequestsButton);
   panel.hidden = !state.isFriendRequestsPanelOpen;
   panel.setAttribute("aria-hidden", String(!state.isFriendRequestsPanelOpen));
+  if (!state.isFriendRequestsPanelOpen) {
+    return;
+  }
 
   const header = document.createElement("header");
   header.className = "friend-request-panel__header";

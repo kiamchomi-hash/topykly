@@ -1,11 +1,25 @@
 import { filterDisplayText } from "../profanity-filter.js";
-import { createTopyklyMascot } from "./mascot.js";
 import { reconcile } from "./render-utils.js";
 
 const NOTIFICATION_LIMIT = 120;
 const MESSAGE_PREVIEW_LIMIT = 86;
 const MENTION_BOUNDARY = String.raw`(?:^|[^a-z0-9_.-])`;
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+function createLazyMascot(className) {
+  const documentRef = document;
+  const placeholder = documentRef.createElement("span");
+  placeholder.className = `topykly-mascot ${className}`;
+  placeholder.setAttribute("aria-hidden", "true");
+
+  void import("./mascot.js").then(({ createTopyklyMascot }) => {
+    placeholder.replaceWith?.(createTopyklyMascot(className, documentRef));
+  }).catch(() => {
+    placeholder.remove?.();
+  });
+
+  return placeholder;
+}
 
 function normalizeToken(value) {
   return String(value || "")
@@ -1023,7 +1037,7 @@ export function createNotificationEmptyState() {
   empty.className = "notification-panel__empty";
   empty.setAttribute("aria-live", "polite");
 
-  const mascot = createTopyklyMascot("notification-panel__empty-mascot");
+  const mascot = createLazyMascot("notification-panel__empty-mascot");
 
   const title = document.createElement("strong");
   title.className = "notification-panel__empty-title";
@@ -1273,6 +1287,9 @@ export function renderNotifications(state, dom) {
   positionNotificationPanel(node, dom.notificationsButton);
   node.hidden = !isOpen;
   node.setAttribute("aria-hidden", String(!isOpen));
+  if (!isOpen) {
+    return;
+  }
 
   const body = document.createElement("div");
   body.className = "notification-panel__body";

@@ -193,7 +193,7 @@ export function topicPath(topic) {
 export function renderTopicPage(topic, { origin }) {
   const canonicalUrl = `${origin}${topicPath(topic)}`;
   const isArchived = topic.isArchived === true || topic.isExpelled === true;
-  const isIndexable = !topic.isThin && !topic.isBlocked;
+  const isIndexable = !topic.isThin && !topic.isBlocked && !topic.isProblematic;
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "DiscussionForumPosting",

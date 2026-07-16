@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
+import { hasProfanity } from "../profanity-filter.js";
 import { SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
 
 export const ACTIVE_TOPIC_LIMIT = 40;
@@ -702,6 +703,9 @@ function initSchema(db) {
     PRAGMA journal_mode = WAL;
     PRAGMA busy_timeout = 5000;
     PRAGMA foreign_keys = ON;
+    PRAGMA synchronous = NORMAL;
+    PRAGMA temp_store = MEMORY;
+    PRAGMA wal_autocheckpoint = 1000;
 
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -2348,6 +2352,43 @@ function usersBlockEachOther(db, leftUserId, rightUserId) {
        OR (blocker_id = ? AND blocked_id = ?)
     LIMIT 1
   `).get(leftUserId, rightUserId, rightUserId, leftUserId));
+}
+
+function isTopicSeoProblematic(db, topicId, title = "", messages = null) {
+  if (hasProfanity(title)) {
+    return true;
+  }
+
+  const topicMessages = Array.isArray(messages)
+    ? messages
+    : db.prepare("SELECT text FROM messages WHERE topic_id = ?").all(String(topicId || ""));
+  if (topicMessages.some((message) => hasProfanity(message.text))) {
+    return true;
+  }
+
+  return Boolean(db.prepare(`
+    SELECT 1
+    FROM reports
+    WHERE status = ?
+      AND (
+        (entity_type = 'topic' AND entity_id = ?)
+        OR (
+          entity_type = 'message'
+          AND entity_id IN (
+            SELECT CAST(id AS TEXT)
+            FROM messages
+            WHERE topic_id = ?
+          )
+        )
+      )
+    LIMIT 1
+  `).get(REPORT_STATUS_OPEN, String(topicId || ""), String(topicId || "")));
+}
+
+function isSeoTopicRowProblematic(row) {
+  return hasProfanity(row.title)
+    || hasProfanity(row.seo_message_text || "")
+    || Boolean(row.has_open_report);
 }
 
 function followTopicForRegisteredViewer(db, context, topicId, nowIso = new Date().toISOString()) {
@@ -4879,7 +4920,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           reportPagination: reportPageResult.pagination,
           pendingAvatars: avatarPageResult.items,
           avatarPagination: avatarPageResult.pagination,
-          activeSanctions: listActiveSanctions(db)
+          activeSanctions: listActiveSanctions(db),
+          productAnalytics: buildProductAnalyticsReport(db, 30)
         };
       });
     },
@@ -5263,17 +5305,39 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
             WHERE messages.topic_id = topics.id
               AND messages.kind = 'user'
               AND messages.is_root = 0
-          ) AS comment_count
+          ) AS comment_count,
+          (
+            SELECT GROUP_CONCAT(messages.text, CHAR(10))
+            FROM messages
+            WHERE messages.topic_id = topics.id
+          ) AS seo_message_text,
+          EXISTS (
+            SELECT 1
+            FROM reports
+            WHERE reports.status = ?
+              AND (
+                (reports.entity_type = 'topic' AND reports.entity_id = topics.id)
+                OR (
+                  reports.entity_type = 'message'
+                  AND reports.entity_id IN (
+                    SELECT CAST(reported_messages.id AS TEXT)
+                    FROM messages reported_messages
+                    WHERE reported_messages.topic_id = topics.id
+                  )
+                )
+              )
+          ) AS has_open_report
         FROM topics
         WHERE topics.status IN (?, ?)
         ORDER BY topics.active_rank ASC
         LIMIT ?
-      `).all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT).map((row) => ({
+      `).all(REPORT_STATUS_OPEN, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT).map((row) => ({
         id: row.id,
         title: row.title,
         lastActivityAt: row.last_activity_at,
         commentCount: Number(row.comment_count ?? 0),
-        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT
+        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
+        isProblematic: isSeoTopicRowProblematic(row)
       }));
     },
     getSeoArchivedTopicEntries() {
@@ -5288,18 +5352,40 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
             WHERE messages.topic_id = topics.id
               AND messages.kind = 'user'
               AND messages.is_root = 0
-          ) AS comment_count
+          ) AS comment_count,
+          (
+            SELECT GROUP_CONCAT(messages.text, CHAR(10))
+            FROM messages
+            WHERE messages.topic_id = topics.id
+          ) AS seo_message_text,
+          EXISTS (
+            SELECT 1
+            FROM reports
+            WHERE reports.status = ?
+              AND (
+                (reports.entity_type = 'topic' AND reports.entity_id = topics.id)
+                OR (
+                  reports.entity_type = 'message'
+                  AND reports.entity_id IN (
+                    SELECT CAST(reported_messages.id AS TEXT)
+                    FROM messages reported_messages
+                    WHERE reported_messages.topic_id = topics.id
+                  )
+                )
+              )
+          ) AS has_open_report
         FROM topics
         WHERE topics.status = ?
         ORDER BY topics.last_activity_at DESC, topics.created_at DESC
         LIMIT 5000
-      `).all(TOPIC_STATUS_EXPELLED).map((row) => ({
+      `).all(REPORT_STATUS_OPEN, TOPIC_STATUS_EXPELLED).map((row) => ({
         id: row.id,
         title: row.title,
         lastActivityAt: row.last_activity_at,
         commentCount: Number(row.comment_count ?? 0),
         isArchived: true,
-        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT
+        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
+        isProblematic: isSeoTopicRowProblematic(row)
       }));
     },
     getTopicPageData(topicId) {
@@ -5339,8 +5425,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
       }));
       const commentCount = messages.filter((message) => message.kind === "user" && !message.isRoot).length;
       const likeCount = messages.reduce((total, message) => total + message.likes, 0);
-      const relatedTopics = getActiveTopicsForFrontend(db)
-        .filter((row) => row.id !== normalizedId)
+      const isProblematic = isTopicSeoProblematic(db, normalizedId, topicRow.title, messages);
+      const relatedTopics = this.getSeoTopicEntries()
+        .filter((row) => row.id !== normalizedId && !row.isProblematic)
         .slice(0, 5)
         .map((row) => ({ id: row.id, title: row.title }));
 
@@ -5353,6 +5440,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         isArchived: topicRow.status === TOPIC_STATUS_EXPELLED,
         isBlocked: false,
         isThin: commentCount < SEO_THIN_TOPIC_COMMENT_COUNT,
+        isProblematic,
         author: {
           name: authorRow?.name || "Usuario de TOPYKLY",
           nickname: authorRow?.nickname ?? null,

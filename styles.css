@@ -8550,6 +8550,123 @@ html.is-mobile-viewport .ranking-mode-list__label {
   animation: admin-workspace-in 150ms ease both;
 }
 
+.admin-panel__analytics {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-panel__analytics-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-panel__analytics-header h3,
+.admin-panel__analytics-header p {
+  margin: 0;
+}
+
+.admin-panel__analytics-header p {
+  margin-top: 4px;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.admin-panel__analytics-period {
+  flex: none;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.admin-panel__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+}
+
+.admin-panel__metric {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-soft) 82%, var(--bg));
+}
+
+.admin-panel__metric-label,
+.admin-panel__metric-detail {
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.admin-panel__metric-value {
+  color: var(--text);
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.admin-panel__analytics-subtitle {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.admin-panel__analytics-events,
+.admin-panel__analytics-chart {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-panel__analytics-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-panel__analytics-event small {
+  color: var(--text-soft);
+}
+
+.admin-panel__analytics-day {
+  display: grid;
+  grid-template-columns: 58px minmax(80px, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.admin-panel__analytics-day strong {
+  color: var(--text);
+  text-align: right;
+}
+
+.admin-panel__analytics-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--line));
+}
+
+.admin-panel__analytics-bar::before {
+  display: block;
+  width: var(--analytics-width);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-strong);
+  content: "";
+}
+
 @keyframes admin-workspace-in {
   from {
     opacity: 0;

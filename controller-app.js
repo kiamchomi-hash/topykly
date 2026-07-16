@@ -18,11 +18,12 @@ import {
   showWebNotification
 } from "./ui/notifications.js";
 
-const LIVE_TOPIC_REFRESH_INTERVAL_MS = 5000;
-const SLOW_TOPIC_REFRESH_INTERVAL_MS = 15000;
-const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 30000;
-const IDLE_TOPIC_REFRESH_INTERVAL_MS = 15000;
+const LIVE_TOPIC_REFRESH_INTERVAL_MS = 30000;
+const SLOW_TOPIC_REFRESH_INTERVAL_MS = 60000;
+const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 120000;
+const IDLE_TOPIC_REFRESH_INTERVAL_MS = 60000;
 const LIVE_TOPIC_IDLE_AFTER_MS = 60000;
+const LIVE_STREAM_SAFETY_INTERVAL_MS = 120000;
 const FAKE_SOCIAL_PARAM_VALUES = new Set(["1", "true", "yes", "demo"]);
 
 function isLocalDevelopmentHost(hostname) {
@@ -326,6 +327,7 @@ export function createLiveTopicSync({
   hiddenIntervalMs = HIDDEN_TOPIC_REFRESH_INTERVAL_MS,
   idleIntervalMs = IDLE_TOPIC_REFRESH_INTERVAL_MS,
   idleAfterMs = LIVE_TOPIC_IDLE_AFTER_MS,
+  streamSafetyIntervalMs = LIVE_STREAM_SAFETY_INTERVAL_MS,
   documentRef = typeof document !== "undefined" ? document : null,
   windowRef = typeof window !== "undefined" ? window : null,
   now = () => Date.now(),
@@ -335,8 +337,14 @@ export function createLiveTopicSync({
   let running = false;
   let inFlight = false;
   let lastInteractionAt = now();
+  let liveEvents = null;
+  let streamConnected = false;
+  let pendingStreamRefresh = false;
 
   function getNextIntervalMs() {
+    if (streamConnected) {
+      return streamSafetyIntervalMs;
+    }
     if (documentRef?.visibilityState === "hidden") {
       return hiddenIntervalMs;
     }
@@ -356,9 +364,39 @@ export function createLiveTopicSync({
   function handleVisibilityChange() {
     if (documentRef?.visibilityState === "visible") {
       markInteraction();
-      void refreshNow();
+      if (pendingStreamRefresh || !streamConnected) {
+        pendingStreamRefresh = false;
+        void refreshNow();
+      }
     }
     reschedule();
+  }
+
+  function handleLiveUpdate() {
+    if (documentRef?.visibilityState === "hidden") {
+      pendingStreamRefresh = true;
+      return;
+    }
+    void refreshNow();
+  }
+
+  function connectLiveEvents() {
+    if (liveEvents || typeof apiClient.openLiveEvents !== "function") {
+      return;
+    }
+    liveEvents = apiClient.openLiveEvents();
+    if (!liveEvents) {
+      return;
+    }
+    liveEvents.addEventListener?.("open", () => {
+      streamConnected = true;
+      reschedule();
+    });
+    liveEvents.addEventListener?.("update", handleLiveUpdate);
+    liveEvents.addEventListener?.("error", () => {
+      streamConnected = false;
+      reschedule();
+    });
   }
 
   async function refreshNow() {
@@ -430,6 +468,7 @@ export function createLiveTopicSync({
     windowRef?.addEventListener?.("pointerdown", markInteraction, { passive: true });
     windowRef?.addEventListener?.("keydown", markInteraction);
     windowRef?.addEventListener?.("focus", handleVisibilityChange);
+    connectLiveEvents();
     schedule();
   }
 
@@ -439,6 +478,10 @@ export function createLiveTopicSync({
     windowRef?.removeEventListener?.("pointerdown", markInteraction);
     windowRef?.removeEventListener?.("keydown", markInteraction);
     windowRef?.removeEventListener?.("focus", handleVisibilityChange);
+    liveEvents?.close?.();
+    liveEvents = null;
+    streamConnected = false;
+    pendingStreamRefresh = false;
     if (timer) {
       clearTimeout(timer);
       timer = 0;
