@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T13:25:52-03:00",
+  "generatedAt": "2026-07-16T14:11:36-03:00",
   "decision": "released",
   "environment": "production",
   "provider": {
@@ -12,37 +12,36 @@
   "source": {
     "repository": "kiamchomi-hash/topykly",
     "branch": "main",
-    "releaseCommit": "4bc08da04bb0f100b1a2a6d4f9aaf805dc2885f0",
-    "releaseCommitMessage": "Corregir señales SEO de Search Console",
-    "previousProductionCommit": "61141ee91707ef437b7b87a81abb8c29e4c6dce5"
+    "releaseCommit": "0ead5f52db24c5527cc4e0413db4c0dd459975a9",
+    "releaseCommitMessage": "Corregir contraste del selector de ranking",
+    "previousProductionCommit": "4bc08da04bb0f100b1a2a6d4f9aaf805dc2885f0"
   },
   "releaseContents": [
-    "Canonical, Open Graph, Twitter and WebSite JSON-LD URLs aligned with the production www host.",
-    "Privacy page added to sitemap.xml and crawler directives simplified to avoid blocking public resources.",
-    "Root-level development artifacts changed from public static responses to 404 responses.",
-    "One semantic level-one heading added to the application shell without visual layout changes.",
-    "Deterministic server and UI regression coverage for all changed SEO signals."
+    "Solid #fff7ef foreground for GLOBAL/TEMA ranking scope buttons in dark themes.",
+    "Removed whole-button opacity that reduced effective text contrast.",
+    "Aligned normal, hover, focus, active and selected foreground states.",
+    "Added deterministic WCAG AA contrast coverage for every named dark palette."
   ],
   "excludedLocalChanges": [
+    ".agents/reports/web-quality.json",
     "components.js",
     "ui/users.js",
     "the connected-user ARIA test hunks in tests/run.mjs"
   ],
   "backup": {
-    "type": "SQLite VACUUM INTO logical backup",
-    "createdBeforeDeploy": true,
-    "path": "/var/data/topykly/backups/topykly-2026-07-16T16-19-51-974Z.sqlite",
-    "renderDiskId": "dsk-d9376o6h2hms73cd7j80",
-    "latestAutomaticSnapshotObserved": "2026-07-16T00:06:23.694Z"
+    "requiredForThisRelease": false,
+    "reason": "The release changes only CSS and deterministic tests; it includes no schema, migration, environment or persistent-data mutation.",
+    "latestKnownLogicalBackup": "/var/data/topykly/backups/topykly-2026-07-16T16-19-51-974Z.sqlite",
+    "renderDiskId": "dsk-d9376o6h2hms73cd7j80"
   },
   "deployment": {
-    "deployId": "dep-d9cgaem7r5hc73a488d0",
+    "deployId": "dep-d9cgvcok1i2s739c1f2g",
     "status": "live",
-    "startedAt": "2026-07-16T16:22:18.191066Z",
-    "finishedAt": "2026-07-16T16:23:10.958188Z",
-    "githubActionsRunId": 29515281552,
+    "startedAt": "2026-07-16T17:06:59.5732Z",
+    "finishedAt": "2026-07-16T17:07:45.577612Z",
+    "githubActionsRunId": 29518433167,
     "githubActionsConclusion": "success",
-    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29515281552",
+    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29518433167",
     "jobs": [
       "core: success",
       "ui: success",
@@ -52,70 +51,53 @@
     ]
   },
   "preDeployChecks": {
-    "isolatedCommitTests": {
-      "core": "passed: 28",
-      "ui": "passed: 73",
-      "backend": "passed: 49",
-      "server": "passed: 22",
-      "smoke": "passed: 12"
-    },
+    "isolatedCommitQa": "passed: 173 deterministic tests and 12 smoke tests",
     "npmAudit": "0 vulnerabilities",
-    "secretScan": "no staged credential patterns found",
+    "secretScan": "no staged credential assignments found",
     "diffCheck": "passed",
-    "formatCheck": "not clean: pre-existing repository-wide Prettier debt remains; no bulk formatting was applied",
-    "databaseMigration": "none"
+    "formatCheck": "not clean: existing Prettier debt remains in styles.css and tests/run.mjs; no bulk formatting was applied",
+    "databaseMigration": "none",
+    "branchSync": "main matched origin/main before the release commit"
   },
   "postDeployVerification": {
     "shell": "200 from the www domain and Render origin",
-    "apexRedirect": "301 to https://www.topykly.com/",
-    "authentication": "Google, Turnstile and email-code preflight checks all configured and safe",
+    "authentication": "GET /api/auth/status returned 200",
     "bootstrap": "200 guest payload, Secure HttpOnly cookie, no session ID in response body",
     "authorization": "anonymous /api/diagnostics request returned 403",
-    "securityHeaders": "HSTS and CSP present",
-    "seo": {
-      "homeCanonical": "https://www.topykly.com/",
-      "homeRobots": "index,follow",
-      "semanticH1": "present in the live browser accessibility tree",
-      "termsCanonical": "https://www.topykly.com/terms.html",
-      "privacyCanonical": "https://www.topykly.com/privacy.html",
-      "robotsTxt": "200, blocks /api/ and references the www sitemap",
-      "sitemapXml": "200 and includes privacy.html",
-      "unpublishedOriginRoutes": "all six return 404 from Render origin"
+    "securityHeaders": "HSTS and CSP present on shell, auth, robots and sitemap responses",
+    "seoEndpoints": "robots.txt and sitemap.xml returned 200",
+    "deployedCss": "solid ranking foreground present and obsolete opacity 0.82 absent",
+    "darkPaletteContrast": {
+      "default": 5.41,
+      "coast": 5.82,
+      "forest": 7.14,
+      "ember": 10.15,
+      "cobalt": 7.86
     },
-    "privateFiles": ".env, .git/config and services/backend-store.js remained inaccessible",
-    "browser": "mobile Chromium check passed with expected title, h1, canonical, robots and footer links",
+    "lightTheme": "rgb(31, 26, 23) text on white with opacity 1",
     "browserConsoleErrors": 0,
     "renderErrorLogs": 0
   },
   "metrics": {
     "preDeployOneHour": {
       "cpuMax": 0.020072684,
-      "httpRequests": 2586
+      "httpRequests": 2306
     },
     "postDeployInitialWindow": {
-      "cpuMax": 0.0027378832,
-      "httpRequests": 113
+      "cpuMax": 0.017696368,
+      "httpRequests": 200
     },
-    "assessment": "No stop condition observed. CPU remained low and Render emitted no error-level logs."
-  },
-  "edgeCache": {
-    "status": "one stale object remains temporarily cached",
-    "url": "https://www.topykly.com/app-broken-check.png",
-    "cachedResponse": "200 HIT with max-age=14400",
-    "originResponse": "404",
-    "cacheBustedResponse": "404 MISS",
-    "assessment": "The deployed origin is correct. The old Cloudflare object will disappear when its existing edge TTL expires; no Cloudflare purge credential was available."
+    "assessment": "No stop condition observed. CPU stayed below the pre-deploy maximum and Render returned no error-level logs."
   },
   "rollback": {
-    "codeTargetCommit": "61141ee91707ef437b7b87a81abb8c29e4c6dce5",
-    "codeTargetDeployId": "dep-d9bsmnmrnols73ceklcg",
+    "codeTargetCommit": "4bc08da04bb0f100b1a2a6d4f9aaf805dc2885f0",
+    "codeTargetDeployId": "dep-d9cgaem7r5hc73a488d0",
     "databaseCompatibility": "No schema or data migration was included.",
-    "dataRecovery": "Use the logical SQLite backup before considering a Render disk snapshot restore."
+    "procedure": "Redeploy the previous Render deploy or revert only commit 0ead5f52db24c5527cc4e0413db4c0dd459975a9 if a visual regression is reported."
   },
   "unresolvedRisks": [
-    "Google Search Console can keep historical canonical and exclusion states until Google recrawls the affected URLs and sitemap.",
-    "Cloudflare temporarily retains one previously cached internal PNG until its four-hour edge TTL expires.",
-    "GitHub Actions reports a non-blocking warning that checkout@v4 and setup-node@v4 target the deprecated Node.js 20 action runtime.",
-    "The unrelated connected-user ARIA changes remain local and were intentionally not included in this production release."
+    "Lighthouse scores can vary between runs even though the measured contrast now exceeds 4.5:1.",
+    "Unrelated connected-user ARIA changes remain local and were intentionally excluded from this production release.",
+    "Repository-wide Prettier debt remains outside the scope of this release."
   ]
 }
