@@ -1,13 +1,47 @@
 {
   "agentName": "Agente de Usabilidad y UX",
-  "status": "Corregido",
-  "lastChecked": "2026-07-13T00:00:00.000Z",
-  "findings": [
+  "status": "reviewed",
+  "lastChecked": "2026-07-16T16:20:00-03:00",
+  "scope": "Propuesta de valor, activación, confianza, descubrimiento y retención",
+  "strengths": [
+    "Se puede explorar el contenido sin crear una cuenta.",
+    "El registro ofrece Google y email, reduciendo dependencia de un único proveedor.",
+    "Los temas tienen acciones de compartir y reportar claramente disponibles.",
+    "Perfiles, amistades, notificaciones y personalización crean una base rica para que la conversación continúe más allá de un solo tema.",
+    "La aplicación permite entrar, leer conversaciones y entender rápidamente dónde escribir."
+  ],
+  "weaknesses": [
     {
-      "level": "fix",
-      "message": "Se unifico el texto visible en español neutro: se retiraron conjugaciones de voseo de los delays de publicacion, terminos, paginas SEO y estados vacios de notificaciones.",
-      "id": "neutral-spanish-copy",
-      "agent": "ux"
+      "priority": 1,
+      "id": "generic-positioning",
+      "message": "La descripción actual enumera varias funciones secundarias, cuando la intención central del producto es mucho más simple: entrar y conversar con otras personas.",
+      "impact": "La comunicación agrega conceptos secundarios y no expresa con suficiente claridad la experiencia social directa que busca ofrecer."
+    },
+    {
+      "priority": 1,
+      "id": "indexable-offensive-or-test-content",
+      "message": "El contenido ofensivo o creado únicamente como prueba puede aparecer en páginas públicas indexables.",
+      "impact": "Puede perjudicar la imagen del sitio y atraer tráfico de baja calidad.",
+      "recommendation": "Marcar ese contenido como noindex o excluirlo de las superficies SEO públicas, sin afectar las conversaciones normales."
+    },
+    {
+      "priority": 1,
+      "id": "no-guided-first-session",
+      "message": "No existe un onboarding ligero que lleve al visitante desde entender el producto hasta leer un buen tema, responder y registrarse.",
+      "impact": "La interfaz exige que el usuario descubra solo qué hacer y por qué hacerlo."
+    },
+    {
+      "priority": 2,
+      "id": "premature-feature-density",
+      "message": "Rankings, paletas, perfiles, amistades, notificaciones y tienda compiten por atención antes de demostrar actividad social suficiente.",
+      "impact": "La app puede sentirse compleja pero vacía, una combinación especialmente negativa en una red nueva."
+    },
+    {
+      "priority": 2,
+      "id": "weak-return-reason",
+      "message": "El seguimiento de temas y las notificaciones dependen de la sesión abierta; no hay digest, correo de actividad ni una agenda visible de conversaciones.",
+      "impact": "Quien se va tiene pocos disparadores para volver."
     }
-  ]
+  ],
+  "recommendedDirection": "Presentar TOPYKLY como un lugar sencillo para entrar, encontrar personas y conversar, y diseñar una primera sesión que lleve a participar en menos de un minuto."
 }

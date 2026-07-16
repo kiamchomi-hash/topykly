@@ -1,106 +1,49 @@
 {
   "agentName": "Agente Arquitecto",
-  "status": "implemented",
-  "lastChecked": "2026-07-15T00:00:00-03:00",
-  "scope": "Recomendacion de skills, MCPs y herramientas para TOPYKLY",
+  "status": "reviewed",
+  "lastChecked": "2026-07-16T17:24:46-03:00",
   "guidelinesReviewed": [
     "AGENTS.md",
     "GEMINI.md",
     "CLAUDE.md",
-    ".agents/AGENTS.md",
     ".agents/resolved_issues.md"
   ],
-  "evidence": {
-    "runtime": "Frontend vanilla ES modules con servidor Node, API HTTP, autenticacion y SQLite",
-    "production": "Render detras de Cloudflare; Vercel no es el destino activo",
-    "migrationDirection": "Evaluacion existente de Workers + D1 + R2",
-    "tests": "168 pruebas clasificadas en core, ui, backend y server; npm test conserva compatibilidad completa",
-    "browserArtifacts": "Los 171 archivos de .playwright-cli se retiraron del indice sin eliminar las copias locales",
-    "architectureDrift": "GEMINI.md ahora documenta la ruta activa y marca features/ como arquitectura paralela"
-  },
-  "securityFindings": [
+  "strengths": [
+    "Arquitectura sin framework coherente con las guías del repositorio.",
+    "API real, SQLite persistente, cookies HttpOnly, límites, moderación y páginas SEO públicas.",
+    "La reconciliación DOM evita reconstruir listas completas.",
+    "La sincronización de temas adapta su frecuencia a actividad, modo lento y visibilidad de la pestaña.",
+    "El seguimiento persistente y la analítica de producto se mantienen en SQLite sin introducir nuevas capas.",
+    "La suite completa pasó 176 pruebas y 12 comprobaciones HTTP sin fallos."
+  ],
+  "risks": [
     {
-      "severity": "critical",
-      "title": "Credencial de PostgreSQL embebida en la configuracion de un MCP local",
-      "status": "resolved",
-      "recommendation": "El conector y su DSN se retiraron de Codex y el usuario confirmo la rotacion de la contraseña en Supabase."
+      "severity": "medium",
+      "id": "large-active-modules",
+      "message": "styles.css, backend-store.js, topbar-action-events.js y tests/run.mjs siguen concentrando demasiadas responsabilidades.",
+      "recommendation": "Dividir gradualmente por responsabilidad usando los módulos y suites existentes, sin introducir un framework ni una capa nueva."
+    },
+    {
+      "severity": "low",
+      "id": "polling-at-scale",
+      "message": "El polling adaptativo reduce mucho la carga, pero continúa creciendo linealmente con cada cliente conectado.",
+      "recommendation": "Evaluar SSE cuando el tráfico sostenido justifique sustituir las consultas periódicas."
     }
   ],
-  "capabilityRecommendations": [
+  "resolvedChanges": [
+    "Polling adaptativo: 5 segundos activo, 15 segundos inactivo o en modo lento y 30 segundos con la pestaña oculta.",
+    "Coloris se carga solo al abrir el selector y los recursos estáticos reutilizables reciben caché corta.",
+    "Conversaciones seguidas persistentes y avisos de actividad por correo opcionales con enfriamiento de 30 minutos.",
+    "Embudo de producto seudónimo con retención de 90 días y consulta agregada exclusiva para moderadores."
+  ],
+  "proposedDiffs": [
     {
-      "priority": 1,
-      "type": "mcp",
-      "name": "Render MCP oficial",
-      "reason": "La produccion actual vive en Render; permite consultar servicios, metricas y logs desde el agente."
+      "title": "Reducir polling en pestañas ocultas",
+      "diff": "diff --git a/controller-app.js b/controller-app.js\n--- a/controller-app.js\n+++ b/controller-app.js\n@@ -364,7 +364,11 @@ export function createLiveTopicSync({\n-    const nextIntervalMs = state.viewer?.slowMode ? slowIntervalMs : intervalMs;\n+    const isHidden = typeof document !== \"undefined\"\n+      && document.visibilityState === \"hidden\";\n+    const nextIntervalMs = isHidden\n+      ? Math.max(slowIntervalMs, 15000)\n+      : state.viewer?.slowMode ? slowIntervalMs : intervalMs;\n"
     },
     {
-      "priority": 1,
-      "type": "skill",
-      "name": "qa_tester + playwright + flow_auditor",
-      "reason": "Combina el harness determinista existente con recorridos reales de autenticacion, topics, moderacion y responsive."
-    },
-    {
-      "priority": 1,
-      "type": "mcp",
-      "name": "GitHub MCP con toolsets repos, pull_requests y actions",
-      "reason": "El repositorio ya tiene GitHub Actions; conviene inspeccionar PRs y fallos de CI con modo de solo lectura por defecto."
-    },
-    {
-      "priority": 2,
-      "type": "mcp",
-      "name": "Cloudflare Docs MCP",
-      "reason": "Reduce errores durante la adaptacion de node:sqlite a Workers, D1 y R2."
-    },
-    {
-      "priority": 2,
-      "type": "mcp",
-      "name": "Chrome DevTools MCP",
-      "reason": "Aporta trazas de rendimiento, red y consola para una UI DOM intensiva; usarlo bajo demanda para no duplicar Playwright."
-    },
-    {
-      "priority": 2,
-      "type": "skill",
-      "name": "cloudflare-migration",
-      "reason": "Skill nueva y especifica para inventariar SQL sincronico, diseñar el adaptador asincrono D1, migrar avatares a R2 y validar paridad."
-    },
-    {
-      "priority": 2,
-      "type": "skill",
-      "name": "test-maintainer",
-      "reason": "Skill nueva para clasificar pruebas rapidas, integracion y smoke, manteniendo Node assert y evitando que tests/run.mjs siga creciendo como monolito."
-    },
-    {
-      "priority": 3,
-      "type": "skill",
-      "name": "accessibility-performance-seo",
-      "reason": "Skill nueva para combinar axe, Lighthouse/Core Web Vitals y validacion de paginas SEO/JSON-LD/sitemap."
+      "title": "Convertir LOGIN_REQUIRED en un paso de registro directo",
+      "diff": "diff --git a/controller-chat-actions.js b/controller-chat-actions.js\n--- a/controller-chat-actions.js\n+++ b/controller-chat-actions.js\n@@ -225,6 +225,12 @@ async function submitMessage(event) {\n       render();\n     } catch (error) {\n+      if (error instanceof ApiError && error.code === \"LOGIN_REQUIRED\") {\n+        showFeedback?.(\"Inicia sesión o crea una cuenta para participar.\", { kind: \"error\" });\n+        dom.authButton?.click?.();\n+        return;\n+      }\n+\n       if (error instanceof ApiError && error.code === \"TOPIC_EXPELLED_OR_BLOCKED\") {\n"
     }
-  ],
-  "configurationRecommendations": [
-    "Mantener Playwright y GitHub MCP.",
-    "Agregar Render MCP antes que autenticar Vercel MCP.",
-    "Deshabilitar next-devtools porque el proyecto no usa Next.js.",
-    "Deshabilitar Vercel MCP mientras Render sea produccion.",
-    "Deshabilitar Supabase y PostgreSQL MCP si no corresponden a este repositorio; nunca exponer una credencial en los argumentos del comando.",
-    "Agregar Cloudflare Docs ahora y Cloudflare Observability cuando exista un Worker desplegado.",
-    "Ejecutar MCPs con permisos de solo lectura y habilitar escrituras solo para tareas explicitas."
-  ],
-  "implemented": [
-    "Retirados los MCPs postgres, supabase, next-devtools y vercel.",
-    "Agregados Render, Cloudflare Docs, Cloudflare Observability y Chrome DevTools; Cloudflare Observability completo OAuth.",
-    "Creadas y validadas las skills cloudflare-migration, test-maintainer, accessibility-performance-seo y release-operator.",
-    "Actualizados AGENTS.md y GEMINI.md para el runtime y la arquitectura activos.",
-    "Divididas las 168 pruebas en cuatro suites seleccionables y cinco trabajos de GitHub Actions, incluido smoke.",
-    "Retirados del indice 171 artefactos de Playwright conservando las copias locales.",
-    "Corregido el cierre HTML desbalanceado del drawer de rankings y la expectativa CSP obsoleta del smoke."
-  ],
-  "externalActionsCompleted": [
-    "RENDER_API_KEY guardada en el entorno de usuario de Windows y validada contra la API de Render.",
-    "La API autenticada lista el servicio topykly como web_service no suspendido.",
-    "Contraseña de base Supabase rotada por el usuario; el DSN antiguo ya no existe en Codex."
-  ],
-  "nonInvasiveFollowUps": [
-    "Reducir gradualmente la deuda Prettier en cambios separados para evitar un diff masivo.",
-    "No agregar un framework frontend ni una capa de estado nueva: el DOM diffing y stores actuales son decisiones aprobadas."
   ]
 }

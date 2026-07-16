@@ -1,25 +1,25 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-15T13:58:47-03:00",
+  "lastChecked": "2026-07-16T17:24:46-03:00",
   "tests": [
     {
       "name": "UI suite",
       "command": "npm run test:ui",
       "status": "passed",
-      "summary": "72 executed, 99 skipped; live ordering, default one-second polling, five-second slow mode, and removal of manual refresh controls passed."
+      "summary": "74 executed, 102 skipped; polling adaptativo, carga diferida de Coloris, configuración de avisos y flujos de interfaz pasaron."
     },
     {
       "name": "backend suite",
       "command": "npm run test:backend",
       "status": "passed",
-      "summary": "49 executed, 122 skipped; SQLite migration and slow-mode persistence passed."
+      "summary": "51 executed, 125 skipped; seguimiento persistente, consentimiento de correo, enfriamiento y analítica seudónima pasaron."
     },
     {
       "name": "complete deterministic suite",
       "command": "npm test",
       "status": "passed",
-      "summary": "All 171 assertions passed with no skips."
+      "summary": "Las 176 comprobaciones deterministas pasaron sin omisiones."
     },
     {
       "name": "HTTP smoke suite",
@@ -35,15 +35,16 @@
     }
   ],
   "suiteCoverage": {
-    "total": 171,
+    "total": 176,
     "core": 28,
-    "ui": 72,
-    "backend": 49,
-    "server": 22,
+    "ui": 74,
+    "backend": 51,
+    "server": 23,
     "unclassified": 0
   },
   "notes": [
     "The repository was already dirty; unrelated local changes were preserved.",
-    "The live mode now polls every second by default and every five seconds when the persisted slow-mode preference is enabled."
+    "La sincronización consulta cada 5 segundos en actividad, 15 en inactividad o modo lento y 30 con la pestaña oculta.",
+    "Los avisos por correo requieren cuenta verificada y consentimiento explícito; la analítica conserva solo eventos seudónimos agregables durante 90 días."
   ]
 }

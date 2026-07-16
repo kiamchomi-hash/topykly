@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T14:11:36-03:00",
+  "generatedAt": "2026-07-16T17:50:58-03:00",
   "decision": "released",
   "environment": "production",
   "provider": {
@@ -12,36 +12,37 @@
   "source": {
     "repository": "kiamchomi-hash/topykly",
     "branch": "main",
-    "releaseCommit": "0ead5f52db24c5527cc4e0413db4c0dd459975a9",
-    "releaseCommitMessage": "Corregir contraste del selector de ranking",
-    "previousProductionCommit": "4bc08da04bb0f100b1a2a6d4f9aaf805dc2885f0"
+    "releaseCommit": "e8bce7ec9abb00be386b8d1c9ae0b27060431ab3",
+    "releaseCommitMessage": "Mejorar retención, analítica y rendimiento",
+    "previousProductionCommit": "0ead5f52db24c5527cc4e0413db4c0dd459975a9"
   },
   "releaseContents": [
-    "Solid #fff7ef foreground for GLOBAL/TEMA ranking scope buttons in dark themes.",
-    "Removed whole-button opacity that reduced effective text contrast.",
-    "Aligned normal, hover, focus, active and selected foreground states.",
-    "Added deterministic WCAG AA contrast coverage for every named dark palette."
+    "Seguimiento persistente de conversaciones para cuentas registradas.",
+    "Avisos de actividad por correo con consentimiento explícito y límite de un envío por tema cada 30 minutos.",
+    "Analítica seudónima del embudo con retención de 90 días y consulta agregada para moderadores.",
+    "Polling adaptativo de 5, 15 y 30 segundos según actividad, preferencia y visibilidad.",
+    "Carga diferida del recurso externo Coloris y caché para recursos estáticos reutilizables.",
+    "Corrección de IDs ARIA duplicados en listas de usuarios conectados."
   ],
   "excludedLocalChanges": [
-    ".agents/reports/web-quality.json",
-    "components.js",
-    "ui/users.js",
-    "the connected-user ARIA test hunks in tests/run.mjs"
+    "Informes internos de .agents/reports, documentados después del despliegue."
   ],
   "backup": {
-    "requiredForThisRelease": false,
-    "reason": "The release changes only CSS and deterministic tests; it includes no schema, migration, environment or persistent-data mutation.",
-    "latestKnownLogicalBackup": "/var/data/topykly/backups/topykly-2026-07-16T16-19-51-974Z.sqlite",
-    "renderDiskId": "dsk-d9376o6h2hms73cd7j80"
+    "requiredForThisRelease": true,
+    "reason": "La versión añade tablas e índices SQLite y una columna de preferencias.",
+    "logicalBackup": "/var/data/topykly/backups/topykly-2026-07-16T20-42-50-525Z.sqlite",
+    "backupBytes": 303104,
+    "renderDiskId": "dsk-d9376o6h2hms73cd7j80",
+    "renderDiskMount": "/var/data/topykly"
   },
   "deployment": {
-    "deployId": "dep-d9cgvcok1i2s739c1f2g",
+    "deployId": "dep-d9ck53svikkc73d21mfg",
     "status": "live",
-    "startedAt": "2026-07-16T17:06:59.5732Z",
-    "finishedAt": "2026-07-16T17:07:45.577612Z",
-    "githubActionsRunId": 29518433167,
+    "startedAt": "2026-07-16T20:43:59.133429Z",
+    "finishedAt": "2026-07-16T20:44:50.072066Z",
+    "githubActionsRunId": 29533270165,
     "githubActionsConclusion": "success",
-    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29518433167",
+    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29533270165",
     "jobs": [
       "core: success",
       "ui: success",
@@ -51,53 +52,57 @@
     ]
   },
   "preDeployChecks": {
-    "isolatedCommitQa": "passed: 173 deterministic tests and 12 smoke tests",
+    "localQa": "passed: 176 deterministic tests and 12 smoke tests",
     "npmAudit": "0 vulnerabilities",
-    "secretScan": "no staged credential assignments found",
+    "secretScan": "no production credentials added; only deterministic test placeholders found",
     "diffCheck": "passed",
-    "formatCheck": "not clean: existing Prettier debt remains in styles.css and tests/run.mjs; no bulk formatting was applied",
-    "databaseMigration": "none",
+    "formatCheck": "not clean: existing repository-wide Prettier debt affects 114 files; no bulk formatting was applied",
+    "databaseMigration": "additive and idempotent through CREATE TABLE IF NOT EXISTS and ensureColumn",
     "branchSync": "main matched origin/main before the release commit"
   },
   "postDeployVerification": {
-    "shell": "200 from the www domain and Render origin",
+    "shell": "200 from https://www.topykly.com/",
     "authentication": "GET /api/auth/status returned 200",
-    "bootstrap": "200 guest payload, Secure HttpOnly cookie, no session ID in response body",
-    "authorization": "anonymous /api/diagnostics request returned 403",
-    "securityHeaders": "HSTS and CSP present on shell, auth, robots and sitemap responses",
-    "seoEndpoints": "robots.txt and sitemap.xml returned 200",
-    "deployedCss": "solid ranking foreground present and obsolete opacity 0.82 absent",
-    "darkPaletteContrast": {
-      "default": 5.41,
-      "coast": 5.82,
-      "forest": 7.14,
-      "ember": 10.15,
-      "cobalt": 7.86
+    "bootstrap": "200 guest payload with 15 topics, Secure HttpOnly cookie and no session ID in the body",
+    "authorization": "anonymous diagnostics and product analytics requests returned 403",
+    "securityHeaders": "HSTS and CSP present where applicable",
+    "seoEndpoints": "robots.txt, sitemap.xml and legal pages returned 200",
+    "deployedCode": "adaptive polling, product events, email preference and lazy Coloris markers are live",
+    "database": {
+      "tables": [
+        "product_events",
+        "topic_email_deliveries",
+        "topic_follows"
+      ],
+      "emailActivityColumn": true,
+      "migrationErrors": 0
     },
-    "lightTheme": "rgb(31, 26, 23) text on white with opacity 1",
-    "browserConsoleErrors": 0,
-    "renderErrorLogs": 0
+    "browser": {
+      "desktop": "topic selection and conversation rendering passed",
+      "mobile": "topic selection, conversation view and back navigation passed at 390x844",
+      "consoleErrors": 0
+    },
+    "renderErrorLogs": 0,
+    "renderHttp5xxLogs": 0
   },
   "metrics": {
-    "preDeployOneHour": {
-      "cpuMax": 0.020072684,
-      "httpRequests": 2306
-    },
-    "postDeployInitialWindow": {
-      "cpuMax": 0.017696368,
-      "httpRequests": 200
-    },
-    "assessment": "No stop condition observed. CPU stayed below the pre-deploy maximum and Render returned no error-level logs."
+    "preDeployCpuMax": 0.023579117,
+    "postDeployStartupCpuMax": 0.0289187,
+    "postDeploySettledCpu": 0.0013641333,
+    "assessment": "The brief startup peak settled quickly and no error or availability stop condition occurred."
   },
   "rollback": {
-    "codeTargetCommit": "4bc08da04bb0f100b1a2a6d4f9aaf805dc2885f0",
-    "codeTargetDeployId": "dep-d9cgaem7r5hc73a488d0",
-    "databaseCompatibility": "No schema or data migration was included.",
-    "procedure": "Redeploy the previous Render deploy or revert only commit 0ead5f52db24c5527cc4e0413db4c0dd459975a9 if a visual regression is reported."
+    "codeTargetCommit": "0ead5f52db24c5527cc4e0413db4c0dd459975a9",
+    "codeTargetDeployId": "dep-d9cgvcok1i2s739c1f2g",
+    "databaseCompatibility": "The migration is additive; the previous code ignores the new tables and column.",
+    "procedure": "Redeploy dep-d9cgvcok1i2s739c1f2g for a code rollback. Restore the logical SQLite backup only if persistent data or schema integrity is affected."
   },
   "unresolvedRisks": [
-    "Lighthouse scores can vary between runs even though the measured contrast now exceeds 4.5:1.",
-    "Unrelated connected-user ARIA changes remain local and were intentionally excluded from this production release.",
-    "Repository-wide Prettier debt remains outside the scope of this release."
+    "The product still foregrounds community and rankings despite the stated goal of prioritizing conversation.",
+    "Ranking by volume continues to reward low-quality activity.",
+    "There is no dedicated noindex rule for offensive content that has enough comments to avoid the thin-content rule.",
+    "The initial browser load still requests the large mascot image and a broad ES-module graph.",
+    "Polling remains linear per connected client, although its frequency is now substantially lower.",
+    "Repository-wide Prettier debt remains outside this release."
   ]
 }

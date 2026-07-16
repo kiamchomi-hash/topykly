@@ -1,86 +1,24 @@
 {
   "agentName": "Agente de Monetización e Ideas de Tienda",
-  "status": "recommended",
-  "lastChecked": "2026-07-14T15:44:52.009Z",
-  "strategy": {
-    "recommendedNextStep": "Estabilizar producción y construir una tienda MVP de cosméticos con compras únicas.",
-    "principles": [
-      "No vender ventajas en rankings, moderación, alcance o límites de participación.",
-      "No retirar ni cobrar paletas o funciones que ya son gratuitas.",
-      "Mantener la tienda fuera del flujo principal de conversación y evitar anuncios invasivos.",
-      "Guardar en TOPYKLY solo identificadores de orden y derechos adquiridos, no datos de tarjeta.",
-      "Probar demanda con un catálogo pequeño antes de crear una suscripción."
-    ]
-  },
-  "mvpCatalog": [
-    {
-      "category": "Paletas premium",
-      "proposal": "Paquetes de 2 o 3 paletas nuevas con vista previa clara.",
-      "billing": "Compra única",
-      "priority": 1
-    },
-    {
-      "category": "Marcos de perfil",
-      "proposal": "Bordes cosméticos discretos para avatar y perfil público.",
-      "billing": "Compra única",
-      "priority": 2
-    },
-    {
-      "category": "Insignia de apoyo",
-      "proposal": "Insignia opcional, visible solo en perfil y sin alterar el ranking.",
-      "billing": "Compra única inicialmente",
-      "priority": 3
-    },
-    {
-      "category": "Estilos de perfil",
-      "proposal": "Fondos o acentos adicionales con contraste y legibilidad validados.",
-      "billing": "Compra única",
-      "priority": 4
-    }
+  "status": "defer",
+  "lastChecked": "2026-07-16T16:20:00-03:00",
+  "recommendation": "No priorizar pagos ni construir la tienda completa hasta demostrar una comunidad recurrente.",
+  "reasoning": [
+    "No existe todavía suficiente densidad social para que los cosméticos tengan valor de estatus o identidad.",
+    "El trabajo de adquisición, activación y retención ofrece un retorno mucho mayor en esta etapa.",
+    "Cobrar demasiado pronto puede hacer que el producto parezca orientado a monetizar una comunidad que aún no entrega valor recurrente."
   ],
-  "mvpScope": {
-    "catalogSize": "6 a 10 productos",
-    "checkout": "Mercado Pago Checkout Pro alojado",
-    "requiredBackend": [
-      "Catálogo de productos controlado por el servidor.",
-      "Órdenes con estados pending, approved, rejected, refunded y cancelled.",
-      "Derechos adquiridos por usuario y producto.",
-      "Creación de preferencias de pago únicamente desde el backend.",
-      "Webhook con firma validada, consulta del pago al proveedor e idempotencia por evento y pago.",
-      "Activación del producto solo después de la confirmación server-to-server.",
-      "Flujo administrativo para reembolso, revocación y conciliación."
-    ],
-    "requiredFrontend": [
-      "Modal o vista de tienda accesible desde el botón existente.",
-      "Catálogo, detalle, vista previa, precio final y estado de propiedad.",
-      "Estados de pago aprobado, pendiente, rechazado y cancelado.",
-      "Sección Mis artículos para aplicar o quitar cosméticos.",
-      "Historial básico y acceso visible a soporte, términos y arrepentimiento."
-    ]
-  },
-  "laterOptions": [
-    {
-      "idea": "Membresía mensual de apoyo",
-      "condition": "Agregar solo después de comprobar compras repetidas y capacidad de gestionar cancelaciones y cobros fallidos.",
-      "benefits": "Insignia mensual, cosmético periódico y apoyo al mantenimiento; nunca ventajas funcionales."
-    },
-    {
-      "idea": "Regalos entre usuarios",
-      "condition": "Posponer hasta tener controles antifraude, reembolsos y bloqueo de abuso."
-    }
+  "keepForLater": [
+    "Paletas premium por compra única.",
+    "Marcos de avatar y estilos de perfil.",
+    "Insignia opcional de apoyo sin ventajas funcionales.",
+    "Mercado Pago Checkout Pro con confirmación server-to-server."
   ],
-  "avoid": [
-    "Pay-to-win en rankings o prioridad de publicaciones.",
-    "Loot boxes, azar, monedas virtuales o saldos internos en el MVP.",
-    "Mercado entre usuarios.",
-    "Publicidad conductual o venta de datos.",
-    "Una suscripción antes de validar que la comunidad quiere pagar."
+  "launchCriteria": [
+    "Retención semanal estable y medida.",
+    "Un núcleo de usuarios que publique y responda sin depender del fundador.",
+    "Demanda explícita de personalización.",
+    "Moderación y soporte capaces de manejar pagos, reembolsos y cuentas eliminadas."
   ],
-  "launchGates": [
-    "Revisión legal y fiscal previa porque el proyecto empezará a cobrar.",
-    "Actualizar términos, privacidad, política de reembolsos y datos del proveedor.",
-    "Pruebas sandbox de aprobación, rechazo, pago pendiente, webhook duplicado, reembolso y cuenta eliminada.",
-    "Secretos solo en variables de entorno y registros sin datos sensibles.",
-    "Métricas mínimas: visita a tienda, inicio de checkout, aprobación, ingreso neto, reembolso y uso del artículo."
-  ]
+  "nearTermAlternative": "Mantener como máximo un enlace discreto de apoyo/donación, sin interrumpir el flujo principal y sin invertir todavía en una economía interna."
 }

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-16T13:06:34-03:00",
-  "scope": "Google Search Console technical SEO signals and prior connected-user ARIA regression",
+  "generatedAt": "2026-07-16T17:50:58-03:00",
+  "scope": "Google Search Console technical SEO signals, connected-user ARIA regression, ranking scope contrast, and mobile production performance",
   "routes": [
     "https://topykly.com/",
     "https://www.topykly.com/",
@@ -35,6 +35,34 @@
     }
   ],
   "findings": [
+    {
+      "id": "product-positioning-still-ranking-led",
+      "dimension": "ux",
+      "severity": "high",
+      "confidence": "high",
+      "status": "open",
+      "before": "The stated product goal is a place where people come to talk.",
+      "cause": "The live H1 still says comunidad de temas y rankings, the secondary area is titled Comunidad, and Ranking remains a permanent prominent panel.",
+      "fix": "Remove or strongly demote rankings and editorial framing so conversation, active people and recent replies define the main experience.",
+      "evidence": [
+        "Production desktop snapshot exposes Comunidad and Ranking as primary level-2/3 sections.",
+        "The global comments ranking places the low-information topic hokla first because it has seven comments."
+      ]
+    },
+    {
+      "id": "offensive-content-indexability",
+      "dimension": "seo",
+      "severity": "moderate",
+      "confidence": "high",
+      "status": "open",
+      "before": "Thin and blocked topics receive noindex, but content quality or offensiveness is not part of the indexability decision.",
+      "cause": "renderTopicPage only checks isThin and isBlocked when choosing index,follow.",
+      "fix": "Mark reported, offensive or low-quality user-generated pages noindex even when their comment count exceeds the thin-content threshold.",
+      "evidence": [
+        "The current thin topic Es normal no saber cocinar siendo mujer? correctly returns noindex,follow and is absent from the sitemap.",
+        "A high-volume offensive topic would currently qualify for indexing because no dedicated content-quality flag is checked."
+      ]
+    },
     {
       "id": "canonical-host-mismatch",
       "dimension": "seo",
@@ -109,30 +137,103 @@
         "The UI regression test verifies distinct IDs and matching aria-controls relationships.",
         "The full UI suite passes with the prior local fix preserved."
       ]
+    },
+    {
+      "id": "ranking-scope-tab-low-contrast",
+      "dimension": "accessibility",
+      "severity": "moderate",
+      "confidence": "high",
+      "status": "fixed_locally",
+      "before": "The inactive GLOBAL/TEMA ranking tab used a mixed light foreground plus opacity 0.82. Its effective contrast was approximately 3.79:1 in the default dark palette and 4.07:1 in the coast dark palette.",
+      "cause": "Opacity was applied to the entire button, blending its already softened text color into the accent-colored tab container. Shared desktop and drawer instances therefore produced repeated Lighthouse findings.",
+      "fix": "Changed ranking scope tab text to the solid #fff7ef foreground with opacity 1 in normal, hover, focus, active and selected states. Existing light-theme overrides continue to use the dark --text token.",
+      "evidence": [
+        "Chromium computed-style check: default dark contrast is 5.41:1.",
+        "Chromium computed-style check: coast 5.82:1, forest 7.14:1, ember 10.15:1 and cobalt 7.86:1.",
+        "Chromium reload with the default light theme computes rgb(31, 26, 23) text on white with opacity 1.",
+        "A deterministic UI regression test enforces at least 4.5:1 across every named dark palette."
+      ]
     }
   ],
   "performance": {
-    "status": "not_evaluated",
-    "reason": "The implemented changes affect metadata, sitemap generation, crawler policy, static route eligibility and one visually hidden heading; they do not materially alter runtime rendering or network weight."
+    "status": "performance_changes_live_with_residual_work",
+    "target": "https://www.topykly.com/",
+    "profile": {
+      "viewport": "390x844",
+      "network": "150 ms latency, approximately 1.6 Mbps download",
+      "cpuSlowdownMultiplier": 4,
+      "cache": "disabled"
+    },
+    "metrics": {
+      "ttfbMs": 470,
+      "fcpMs": 1160,
+      "lcpMs": 4452,
+      "cls": 0.00334,
+      "estimatedTotalBlockingTimeMs": 466,
+      "requestCount": 74,
+      "transferBytes": 1163594,
+      "decodedBytes": 2011448
+    },
+    "observations": [
+      "A 695038-byte mascot PNG is requested even though both mascot-bearing empty-state panels are hidden.",
+      "The measured LCP element is an 84x84 visible avatar whose shared image factory sets loading=lazy.",
+      "Two additional 1024x1024 avatars are transferred at roughly 100 KB each and displayed at about 84x84.",
+      "The application now refreshes /api/topics every 5 seconds while active, 15 seconds while idle or in slow mode, and 30 seconds while hidden.",
+      "styles.css expands to 291227 bytes and the initial page loads a broad ES-module graph, contributing to 74 requests.",
+      "Coloris CSS and JavaScript no longer form part of the initial document and load only when the palette selector opens.",
+      "JavaScript and CSS now use a short revalidation cache; HTML remains no-store.",
+      "The production browser still requests the large mascot PNG during initial navigation even when its empty state is not visible.",
+      "The initial navigation still loads approximately 68 static resources because of the broad ES-module graph."
+    ],
+    "priorities": [
+      {
+        "rank": 1,
+        "change": "Create the mascot empty state only when its panel is opened, and provide a smaller modern-format mascot asset.",
+        "expectedImpact": "Remove up to about 695 KB from the initial mobile transfer."
+      },
+      {
+        "rank": 2,
+        "change": "Do not lazy-load the first above-the-fold avatar; give it high fetch priority while keeping off-screen avatars lazy.",
+        "expectedImpact": "Bring the current LCP image forward and reduce LCP."
+      },
+      {
+        "rank": 3,
+        "change": "Generate 96-128 px avatar thumbnails at upload time and serve them in lists and messages.",
+        "expectedImpact": "Avoid transferring original 586-1024 px images into 84 px slots."
+      },
+      {
+        "rank": 4,
+        "change": "Implemented adaptive live-topic polling for active, idle, slow and hidden states.",
+        "expectedImpact": "Reduce early network and main-thread contention during Lighthouse measurement and real mobile startup."
+      },
+      {
+        "rank": 5,
+        "change": "Coloris now lazy-loads on interaction and reusable static assets receive short caching; other large interaction modules remain candidates for later splitting.",
+        "expectedImpact": "Reduce the initial module graph, decoded CSS/JS work, and repeat-view transfer."
+      }
+    ]
   },
   "seo": {
-    "status": "fixed_locally",
+    "status": "partially_fixed_live",
     "canonicalStaticRoutesChecked": 5,
     "canonicalStaticRoutesMatching": 5,
     "unpublishedRoutesChecked": 6,
     "unpublishedRoutesReturning404": 6
   },
   "verification": {
-    "serverSuite": "passed: 22 executed, 150 skipped",
-    "uiSuite": "passed: 73 executed, 99 skipped",
-    "fullQa": "passed: 172 deterministic tests and 12 smoke tests",
-    "desktopBrowserCheck": "passed at 1440x900",
+    "serverSuite": "passed: 23 executed, 153 skipped",
+    "uiSuite": "passed: 74 executed, 102 skipped",
+    "fullQa": "passed: 176 deterministic tests and 12 smoke tests",
+    "desktopBrowserCheck": "passed at 1440x900, including computed ranking-tab contrast in every named dark palette and the default light palette",
     "mobileBrowserCheck": "passed at 390x844",
-    "productionAudit": "passed after Render deploy dep-d9cgaem7r5hc73a488d0; live canonicals, sitemap, robots, security headers and Chromium checks are correct"
+    "productionAudit": "passed after Render deploy dep-d9ck53svikkc73d21mfg; desktop and mobile flows, migration, security headers, robots, sitemap and legal pages are live"
   },
   "residualRisks": [
     "Search Console may retain old exclusion or canonical statuses until Google recrawls the affected URLs and sitemap.",
     "Cloudflare still serves one previously cached app-broken-check.png response until its existing four-hour edge TTL expires; the Render origin and a cache-busted request return 404.",
-    "The exact Search Console issue export was not available in the workspace, so this audit targeted reproducible technical defects from the live site rather than matching private console row labels one by one."
+    "The exact Search Console issue export was not available in the workspace, so this audit targeted reproducible technical defects from the live site rather than matching private console row labels one by one.",
+    "The performance trace is a controlled Chromium diagnosis rather than the exact PageSpeed Insights scoring run; the public API was rate-limited, so a precise post-change score cannot be guaranteed.",
+    "The ranking-led product framing remains inconsistent with the intended chat-only direction.",
+    "High-volume offensive content still needs a dedicated noindex rule."
   ]
 }
