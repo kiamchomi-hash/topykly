@@ -59,10 +59,17 @@ const PROTECTED_STATIC_DIRECTORIES = new Set([
 const PROTECTED_STATIC_ROOT_FILES = new Set([
   "package.json",
   "package-lock.json",
-  "dashboard.html",
   "local-server.cjs",
   "dev-server.cjs",
   "vercel.json"
+]);
+const UNPUBLISHED_STATIC_ROOT_FILES = new Set([
+  "1000",
+  "app-broken-check.png",
+  "dashboard.html",
+  "header-alignment-after.png",
+  "mascot-review.html",
+  "taskkill"
 ]);
 const PROTECTED_STATIC_EXTENSIONS = new Set([".log", ".md", ".sqlite", ".env"]);
 
@@ -388,6 +395,19 @@ function safeFilePathFromUrl(urlPathname) {
   }
 
   return absolutePath;
+}
+
+function isUnpublishedStaticPath(urlPathname) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(urlPathname);
+  } catch {
+    return false;
+  }
+
+  const segments = decoded.split(/[/\\]/).filter(Boolean);
+  return segments.length === 1
+    && UNPUBLISHED_STATIC_ROOT_FILES.has(String(segments[0] || "").toLowerCase());
 }
 
 function stripPrivateSessionPayload(payload) {
@@ -1097,7 +1117,8 @@ function buildSitemapXml(store) {
     { loc: `${origin}/` },
     { loc: `${origin}/temas` },
     { loc: `${origin}/archivo` },
-    { loc: `${origin}/terms.html` }
+    { loc: `${origin}/terms.html` },
+    { loc: `${origin}/privacy.html` }
   ];
   store.getSeoTopicEntries()
     .filter((topic) => !topic.isThin)
@@ -1262,6 +1283,10 @@ function handleSeoPageRequest(store, req, res, url) {
 function handleStaticRequest(req, res, url, store) {
   if (url.pathname.startsWith("/avatars/")) {
     handleAvatarRequest(res, url, store.avatarStorageDir);
+    return;
+  }
+  if (isUnpublishedStaticPath(url.pathname)) {
+    writePlainText(res, 404, "Not found");
     return;
   }
   const filePath = safeFilePathFromUrl(url.pathname);

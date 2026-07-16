@@ -1,55 +1,138 @@
 {
-  "generatedAt": "2026-07-15T14:50:00-03:00",
-  "scope": "ARIA role compatibility for mobile drawer dialogs",
-  "route": "http://127.0.0.1:4173/",
+  "generatedAt": "2026-07-16T13:06:34-03:00",
+  "scope": "Google Search Console technical SEO signals and prior connected-user ARIA regression",
+  "routes": [
+    "https://topykly.com/",
+    "https://www.topykly.com/",
+    "https://www.topykly.com/robots.txt",
+    "https://www.topykly.com/sitemap.xml",
+    "https://www.topykly.com/temas",
+    "https://www.topykly.com/archivo",
+    "https://www.topykly.com/terms.html",
+    "https://www.topykly.com/privacy.html",
+    "https://www.topykly.com/mascot-review.html",
+    "http://127.0.0.1:4173/"
+  ],
   "environment": {
     "server": "node local-server.cjs",
     "browser": "Chromium via Playwright CLI",
-    "dataState": "local application data"
+    "productionHostBehavior": "https://topykly.com redirects permanently to https://www.topykly.com",
+    "dataState": {
+      "production": "live public sitemap and pages",
+      "local": "existing local application database plus deterministic test fixtures"
+    }
   },
   "viewports": [
-    {
-      "width": 390,
-      "height": 844,
-      "mode": "mobile"
-    },
     {
       "width": 1440,
       "height": 900,
       "mode": "desktop"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "mode": "mobile"
     }
   ],
   "findings": [
     {
-      "id": "aria-role-dialog-on-aside",
+      "id": "canonical-host-mismatch",
+      "dimension": "seo",
+      "severity": "high",
+      "confidence": "high",
+      "status": "fixed_locally",
+      "before": "Production redirected the apex host to www, while the home page, terms page and privacy page declared apex-host canonicals. The live sitemap already used www.",
+      "cause": "Static HTML and the local default public origin still used https://topykly.com even though the production platform selected https://www.topykly.com as the permanent destination.",
+      "fix": "Aligned home, legal, Open Graph, Twitter, WebSite JSON-LD, topic-sharing fallback and default server origin with https://www.topykly.com.",
+      "evidence": [
+        "Production before fix: https://topykly.com/ returned 301 to https://www.topykly.com/.",
+        "Production before fix: https://www.topykly.com/ declared canonical https://topykly.com/.",
+        "Production before fix: the www terms page declared canonical https://topykly.com/terms.html.",
+        "Local after fix: home, /temas, /archivo, /terms.html and /privacy.html exactly match their sitemap URLs."
+      ]
+    },
+    {
+      "id": "robots-and-sitemap-signal-conflicts",
+      "dimension": "seo",
+      "severity": "moderate",
+      "confidence": "high",
+      "status": "fixed_locally",
+      "before": "robots.txt blocked /dashboard.html even though the URL existed as an internal server path, blocked public avatar images referenced by profile metadata, and the sitemap omitted the indexable privacy page.",
+      "cause": "The crawler policy and sitemap evolved separately from the public page and structured-data surface.",
+      "fix": "Kept /api/ blocked, removed the dashboard and avatar crawler blocks, added privacy.html to the sitemap, and covered all expected directives with deterministic tests.",
+      "evidence": [
+        "Local robots.txt now contains only Disallow: /api/ plus the canonical www sitemap URL.",
+        "Local sitemap includes home, topics, archive, terms and privacy URLs on the www host.",
+        "The sitemap test still excludes thin topics and profiles that opted out of indexing."
+      ]
+    },
+    {
+      "id": "internal-artifacts-publicly-served",
+      "dimension": "seo",
+      "severity": "moderate",
+      "confidence": "high",
+      "status": "fixed_locally",
+      "before": "Production served mascot-review.html, the files 1000 and taskkill, and internal verification screenshots with successful 200 responses.",
+      "cause": "The static server protected private directories and extensions but did not distinguish several root-level development artifacts from public assets.",
+      "fix": "Added an explicit unpublished root-file set so development HTML, scratch files and verification screenshots return 404.",
+      "evidence": [
+        "Production before fix: /mascot-review.html returned 200 text/html.",
+        "Production before fix: /1000 and /taskkill returned 200 application/octet-stream.",
+        "Local after fix: dashboard.html, mascot-review.html, 1000, taskkill and both root verification screenshots return 404.",
+        "Server regression tests cover every unpublished path."
+      ]
+    },
+    {
+      "id": "homepage-missing-primary-heading",
+      "dimension": "seo",
+      "severity": "low",
+      "confidence": "high",
+      "status": "fixed_locally",
+      "before": "The application shell had no h1 in its source document.",
+      "cause": "The visual brand was exposed as an image role and application sections started at h2/h3.",
+      "fix": "Added one visually hidden, descriptive h1 without changing the visual layout.",
+      "evidence": [
+        "Chromium desktop and mobile accessibility snapshots expose one level-1 heading: TOPYKLY: comunidad de temas y rankings en español.",
+        "The existing sr-only utility keeps the heading available to crawlers and assistive technology without visual movement."
+      ]
+    },
+    {
+      "id": "duplicate-connected-user-menu-ids",
       "dimension": "accessibility",
       "severity": "moderate",
       "confidence": "high",
-      "status": "fixed",
-      "before": "The left and right drawers used aside elements with role=dialog, although aside does not support that role.",
-      "fix": "Changed both drawer containers to neutral div elements while preserving role=dialog, aria-modal, accessible names, IDs, classes, and visibility state.",
+      "status": "fixed_locally",
+      "before": "The desktop connected-user list and mobile drawer rendered the same user with an identical user-action-menu-{user.id} ID.",
+      "cause": "createUserItem derived the menu ID only from the user ID, while renderUsers intentionally renders each user into both targets.",
+      "fix": "Added the target container ID as a menu namespace and kept each trigger's aria-controls synchronized with its corresponding menu.",
       "evidence": [
-        "The mobile accessibility tree exposes dialog Menú móvil.",
-        "When open, the right drawer is a DIV with role=dialog, hidden=false, aria-hidden=false, and focus on Cerrar menú.",
-        "Escape closes the drawer, sets hidden=true, aria-hidden=true and aria-expanded=false, and returns focus to Abrir menú.",
-        "At desktop size both DIV dialogs remain hidden.",
-        "The UI test suite includes a regression that rejects role=dialog on aside."
+        "The UI regression test verifies distinct IDs and matching aria-controls relationships.",
+        "The full UI suite passes with the prior local fix preserved."
       ]
     }
   ],
   "performance": {
     "status": "not_evaluated",
-    "reason": "The semantic element substitution does not alter styles, scripts, network behavior, or rendering logic."
+    "reason": "The implemented changes affect metadata, sitemap generation, crawler policy, static route eligibility and one visually hidden heading; they do not materially alter runtime rendering or network weight."
   },
   "seo": {
-    "status": "not_evaluated",
-    "reason": "The requested defect is limited to accessibility semantics and does not change indexable content or metadata."
+    "status": "fixed_locally",
+    "canonicalStaticRoutesChecked": 5,
+    "canonicalStaticRoutesMatching": 5,
+    "unpublishedRoutesChecked": 6,
+    "unpublishedRoutesReturning404": 6
   },
   "verification": {
+    "serverSuite": "passed: 22 executed, 150 skipped",
     "uiSuite": "passed: 73 executed, 99 skipped",
-    "fullQa": "passed: 172 deterministic tests and 12 smoke tests"
+    "fullQa": "passed: 172 deterministic tests and 12 smoke tests",
+    "desktopBrowserCheck": "passed at 1440x900",
+    "mobileBrowserCheck": "passed at 390x844",
+    "productionAudit": "completed before deployment; canonical conflict and public artifacts remain live until release"
   },
   "residualRisks": [
-    "The left drawer has no current user-facing opener in the event wiring, so its element and semantics were verified statically rather than through an interactive open flow."
+    "The fixes must be deployed before Search Console can observe them.",
+    "Search Console may retain old exclusion or canonical statuses until Google recrawls the affected URLs and sitemap.",
+    "The exact Search Console issue export was not available in the workspace, so this audit targeted reproducible technical defects from the live site rather than matching private console row labels one by one."
   ]
 }

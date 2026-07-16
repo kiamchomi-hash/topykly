@@ -6414,8 +6414,20 @@ await (async () => {
         assert.equal(payload.error?.code, "NOT_FOUND");
       }
 
-      for (const blockedPath of [
+      for (const unpublishedPath of [
         "/dashboard.html",
+        "/mascot-review.html",
+        "/1000",
+        "/taskkill",
+        "/app-broken-check.png",
+        "/header-alignment-after.png"
+      ]) {
+        const response = await fetch(`${origin}${unpublishedPath}`);
+        assert.equal(response.status, 404, `${unpublishedPath} should not be published`);
+        await response.arrayBuffer();
+      }
+
+      for (const blockedPath of [
         "/server.err.log",
         "/server.out.log",
         "/task.md",
@@ -6491,7 +6503,7 @@ await (async () => {
     assert.equal(slugify("¿Qué opinan del fútbol argentino?"), "que-opinan-del-futbol-argentino");
     assert.equal(slugify("   ---   "), "");
     assert.equal(slugify("a".repeat(120)).length <= 60, true);
-    assert.equal(resolvePublicOrigin({}), "https://topykly.com");
+    assert.equal(resolvePublicOrigin({}), "https://www.topykly.com");
     assert.equal(
       resolvePublicOrigin({ TOPYKLY_PUBLIC_ORIGIN: "https://example.com/base/" }),
       "https://example.com"
@@ -6710,7 +6722,7 @@ await (async () => {
       assert.equal(pageHtml.includes("Abrir en TOPYKLY"), true);
       assert.equal(
         pageHtml.includes(
-          `<meta property="og:image" content="https://topykly.com/og/tema/${encodeURIComponent(topicId)}.png">`
+          `<meta property="og:image" content="https://www.topykly.com/og/tema/${encodeURIComponent(topicId)}.png">`
         ),
         true
       );
@@ -6746,7 +6758,7 @@ await (async () => {
       const hubHtml = await hubResponse.text();
       assert.equal(hubHtml.includes("El mejor tema de fútbol"), true);
       assert.equal(
-        hubHtml.includes(`<link rel="canonical" href="https://topykly.com/temas">`),
+        hubHtml.includes(`<link rel="canonical" href="https://www.topykly.com/temas">`),
         true
       );
 
@@ -6755,7 +6767,7 @@ await (async () => {
       const archiveHtml = await archiveResponse.text();
       assert.equal(archiveHtml.includes("Temas archivados de TOPYKLY"), true);
       assert.equal(
-        archiveHtml.includes(`<link rel="canonical" href="https://topykly.com/archivo">`),
+        archiveHtml.includes(`<link rel="canonical" href="https://www.topykly.com/archivo">`),
         true
       );
 
@@ -6829,7 +6841,7 @@ await (async () => {
       assert.equal(profileHtml.includes(`<meta name="robots" content="index,follow">`), true);
       assert.equal(profileHtml.includes(`"@type":"ProfilePage"`), true);
       assert.equal(
-        profileHtml.includes(`<link rel="canonical" href="https://topykly.com/u/Perfil_publico">`),
+        profileHtml.includes(`<link rel="canonical" href="https://www.topykly.com/u/Perfil_publico">`),
         true
       );
       assert.equal(profileHtml.includes(`href="/?perfil=Perfil_publico"`), true);
@@ -6969,16 +6981,19 @@ await (async () => {
       assert.equal(robotsResponse.status, 200);
       const robotsBody = await robotsResponse.text();
       assert.equal(robotsBody.includes("Disallow: /api/"), true);
-      assert.equal(robotsBody.includes("Disallow: /avatars/"), true);
-      assert.equal(robotsBody.includes("Sitemap: https://topykly.com/sitemap.xml"), true);
+      assert.equal(robotsBody.includes("Disallow: /avatars/"), false);
+      assert.equal(robotsBody.includes("Disallow: /dashboard.html"), false);
+      assert.equal(robotsBody.includes("Sitemap: https://www.topykly.com/sitemap.xml"), true);
 
       const sitemapResponse = await fetch(`${origin}/sitemap.xml`);
       assert.equal(sitemapResponse.status, 200);
       assert.match(sitemapResponse.headers.get("content-type") || "", /application\/xml/);
       const sitemapBody = await sitemapResponse.text();
-      assert.equal(sitemapBody.includes("<loc>https://topykly.com/</loc>"), true);
-      assert.equal(sitemapBody.includes("<loc>https://topykly.com/temas</loc>"), true);
-      assert.equal(sitemapBody.includes("<loc>https://topykly.com/archivo</loc>"), true);
+      assert.equal(sitemapBody.includes("<loc>https://www.topykly.com/</loc>"), true);
+      assert.equal(sitemapBody.includes("<loc>https://www.topykly.com/temas</loc>"), true);
+      assert.equal(sitemapBody.includes("<loc>https://www.topykly.com/archivo</loc>"), true);
+      assert.equal(sitemapBody.includes("<loc>https://www.topykly.com/terms.html</loc>"), true);
+      assert.equal(sitemapBody.includes("<loc>https://www.topykly.com/privacy.html</loc>"), true);
       assert.equal(sitemapBody.includes(`/tema/${richTopicId}/`), true);
       assert.equal(sitemapBody.includes(thinTopicId), false);
       assert.equal(sitemapBody.includes("/u/Sitemap_autor"), true);
@@ -9753,6 +9768,14 @@ await (async () => {
     const authEvents = await read("ui/topbar-action-events.js");
     const reportReasons = await read("report-reasons.js");
 
+    assert.match(
+      terms,
+      /<link rel="canonical" href="https:\/\/www\.topykly\.com\/terms\.html" \/>/
+    );
+    assert.match(
+      privacy,
+      /<link rel="canonical" href="https:\/\/www\.topykly\.com\/privacy\.html" \/>/
+    );
     assert.match(html, /href="\/privacy\.html">Política de privacidad/);
     assert.match(html, /consiento el tratamiento y las transferencias necesarias/);
     assert.match(terms, /Versión 2026-07-14/);
@@ -9855,6 +9878,7 @@ await (async () => {
     );
     assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES/);
     assert.match(previewServer, /PROTECTED_STATIC_ROOT_FILES/);
+    assert.match(previewServer, /UNPUBLISHED_STATIC_ROOT_FILES/);
     assert.match(previewServer, /firstSegment === "services"/);
     assert.match(previewServer, /PROTECTED_STATIC_DIRECTORIES\.has\(firstSegment\)/);
     assert.match(previewServer, /path\.relative\(root, absolutePath\)/);
@@ -9925,7 +9949,14 @@ await (async () => {
     const topbarActionEvents = await read("ui/topbar-action-events.js");
 
     assert.match(html, /<title>TOPYKLY — Comunidad de temas y rankings en español<\/title>/);
+    assert.match(html, /<meta name="robots" content="index,follow" \/>/);
+    assert.match(html, /<link rel="canonical" href="https:\/\/www\.topykly\.com\/" \/>/);
+    assert.match(html, /<meta property="og:url" content="https:\/\/www\.topykly\.com\/" \/>/);
     assert.match(html, /<main id="main-content" class="workspace" aria-label="Chat social">/);
+    assert.match(
+      html,
+      /<h1 class="sr-only">TOPYKLY: comunidad de temas y rankings en español<\/h1>/
+    );
     assert.match(html, /class="topbar__title" role="img" aria-label="TOPYKLY"/);
     assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
     assert.match(html, /class="brand-mark__trend">KLY<\/span>/);

@@ -33,7 +33,7 @@ export function buildTopicSharePath(topic) {
   return slug ? `/tema/${encodedId}/${slug}` : `/tema/${encodedId}`;
 }
 
-export function buildTopicShareModel(topic, users = [], origin = "https://topykly.com") {
+export function buildTopicShareModel(topic, users = [], origin = "https://www.topykly.com") {
   const rootMessage = topic?.messages?.find((message) => message.isRoot) || topic?.messages?.[0];
   const author = getAuthor(topic || {}, users);
   const commentCount = (topic?.messages || []).filter(

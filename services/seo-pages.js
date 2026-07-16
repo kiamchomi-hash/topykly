@@ -6,7 +6,7 @@ const HTML_ESCAPES = new Map([
   ["'", "&#39;"]
 ]);
 
-export const DEFAULT_PUBLIC_ORIGIN = "https://topykly.com";
+export const DEFAULT_PUBLIC_ORIGIN = "https://www.topykly.com";
 export const SEO_THIN_TOPIC_COMMENT_COUNT = 3;
 
 export function resolvePublicOrigin(env = process.env) {
@@ -389,8 +389,6 @@ ${urls}
 export function renderRobots({ origin }) {
   return `User-agent: *
 Disallow: /api/
-Disallow: /avatars/
-Disallow: /dashboard.html
 Allow: /
 
 Sitemap: ${origin}/sitemap.xml
