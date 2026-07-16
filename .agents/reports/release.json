@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-15T15:07:00-03:00",
+  "generatedAt": "2026-07-16T13:25:52-03:00",
   "decision": "released",
   "environment": "production",
   "provider": {
@@ -12,31 +12,37 @@
   "source": {
     "repository": "kiamchomi-hash/topykly",
     "branch": "main",
-    "releaseCommit": "b5a83e28edf5e1690fcacf9dff7ca603ce356761",
-    "productionCommit": "61141ee91707ef437b7b87a81abb8c29e4c6dce5",
-    "productionCommitMessage": "Corregir smoke sin autenticación configurada"
+    "releaseCommit": "4bc08da04bb0f100b1a2a6d4f9aaf805dc2885f0",
+    "releaseCommitMessage": "Corregir señales SEO de Search Console",
+    "previousProductionCommit": "61141ee91707ef437b7b87a81abb8c29e4c6dce5"
   },
   "releaseContents": [
-    "Settings navigation, logout confirmation, persisted slow mode, live topic ordering, and removal of manual refresh controls.",
-    "ARIA-compatible drawer dialog containers and regression coverage.",
-    "Additive SQLite slow_mode migration.",
-    "Selectable test suites and five GitHub Actions jobs including HTTP smoke.",
-    "Architecture, security, QA, web-quality, and Cloudflare migration documentation.",
-    "Removal of 171 tracked Playwright artifacts."
+    "Canonical, Open Graph, Twitter and WebSite JSON-LD URLs aligned with the production www host.",
+    "Privacy page added to sitemap.xml and crawler directives simplified to avoid blocking public resources.",
+    "Root-level development artifacts changed from public static responses to 404 responses.",
+    "One semantic level-one heading added to the application shell without visual layout changes.",
+    "Deterministic server and UI regression coverage for all changed SEO signals."
+  ],
+  "excludedLocalChanges": [
+    "components.js",
+    "ui/users.js",
+    "the connected-user ARIA test hunks in tests/run.mjs"
   ],
   "backup": {
     "type": "SQLite VACUUM INTO logical backup",
     "createdBeforeDeploy": true,
-    "path": "/var/data/topykly/backups/topykly-2026-07-15T17-56-13-442Z.sqlite",
+    "path": "/var/data/topykly/backups/topykly-2026-07-16T16-19-51-974Z.sqlite",
     "renderDiskId": "dsk-d9376o6h2hms73cd7j80",
-    "latestAutomaticSnapshotObserved": "2026-07-14T23:52:59.776Z"
+    "latestAutomaticSnapshotObserved": "2026-07-16T00:06:23.694Z"
   },
   "deployment": {
-    "deployId": "dep-d9bsmnmrnols73ceklcg",
+    "deployId": "dep-d9cgaem7r5hc73a488d0",
     "status": "live",
-    "finishedAt": "2026-07-15T18:03:58.162708Z",
-    "githubActionsRunId": 29438988172,
+    "startedAt": "2026-07-16T16:22:18.191066Z",
+    "finishedAt": "2026-07-16T16:23:10.958188Z",
+    "githubActionsRunId": 29515281552,
     "githubActionsConclusion": "success",
+    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29515281552",
     "jobs": [
       "core: success",
       "ui: success",
@@ -46,45 +52,70 @@
     ]
   },
   "preDeployChecks": {
-    "qa": "passed: 172 deterministic tests and 12 smoke tests",
+    "isolatedCommitTests": {
+      "core": "passed: 28",
+      "ui": "passed: 73",
+      "backend": "passed: 49",
+      "server": "passed: 22",
+      "smoke": "passed: 12"
+    },
     "npmAudit": "0 vulnerabilities",
-    "secretScan": "no credential patterns found in files committed",
+    "secretScan": "no staged credential patterns found",
     "diffCheck": "passed",
-    "formatCheck": "not clean: 113 files in pre-existing repository-wide Prettier debt; no bulk formatting was applied"
+    "formatCheck": "not clean: pre-existing repository-wide Prettier debt remains; no bulk formatting was applied",
+    "databaseMigration": "none"
   },
   "postDeployVerification": {
-    "shell": "200 from Render through Cloudflare",
-    "authentication": "configured with Google; all safe preflight checks true",
-    "bootstrap": "200 guest payload, secure HttpOnly cookie, no session ID in response body, slowMode exposed",
+    "shell": "200 from the www domain and Render origin",
+    "apexRedirect": "301 to https://www.topykly.com/",
+    "authentication": "Google, Turnstile and email-code preflight checks all configured and safe",
+    "bootstrap": "200 guest payload, Secure HttpOnly cookie, no session ID in response body",
+    "authorization": "anonymous /api/diagnostics request returned 403",
     "securityHeaders": "HSTS and CSP present",
-    "seo": "robots.txt and sitemap.xml returned 200",
-    "privateFiles": ".env, .git/config, and services/backend-store.js remained inaccessible",
-    "authorization": "anonymous admin dashboard request returned 403",
-    "browser": "mobile drawer dialog, focus return, topic navigation, dynamic title, and zero console errors passed",
-    "errorLogs": 0
+    "seo": {
+      "homeCanonical": "https://www.topykly.com/",
+      "homeRobots": "index,follow",
+      "semanticH1": "present in the live browser accessibility tree",
+      "termsCanonical": "https://www.topykly.com/terms.html",
+      "privacyCanonical": "https://www.topykly.com/privacy.html",
+      "robotsTxt": "200, blocks /api/ and references the www sitemap",
+      "sitemapXml": "200 and includes privacy.html",
+      "unpublishedOriginRoutes": "all six return 404 from Render origin"
+    },
+    "privateFiles": ".env, .git/config and services/backend-store.js remained inaccessible",
+    "browser": "mobile Chromium check passed with expected title, h1, canonical, robots and footer links",
+    "browserConsoleErrors": 0,
+    "renderErrorLogs": 0
   },
   "metrics": {
     "preDeployOneHour": {
-      "cpuMax": 0.019066466,
-      "httpRequests": 511,
-      "errorLogs": 0
+      "cpuMax": 0.020072684,
+      "httpRequests": 2586
     },
-    "postDeployWindow": {
-      "cpuMax": 0.028890334,
-      "httpRequests": 133,
-      "errorLogs": 0
+    "postDeployInitialWindow": {
+      "cpuMax": 0.0027378832,
+      "httpRequests": 113
     },
-    "assessment": "No stop condition observed. CPU remained low and no error logs appeared."
+    "assessment": "No stop condition observed. CPU remained low and Render emitted no error-level logs."
+  },
+  "edgeCache": {
+    "status": "one stale object remains temporarily cached",
+    "url": "https://www.topykly.com/app-broken-check.png",
+    "cachedResponse": "200 HIT with max-age=14400",
+    "originResponse": "404",
+    "cacheBustedResponse": "404 MISS",
+    "assessment": "The deployed origin is correct. The old Cloudflare object will disappear when its existing edge TTL expires; no Cloudflare purge credential was available."
   },
   "rollback": {
-    "codeTargetCommit": "ec4d0c4ebf9a432f2bc19d0ef291319b0ec27d3c",
-    "codeTargetDeployId": "dep-d9b9jof41pts73elv9tg",
-    "databaseCompatibility": "The migration only adds slow_mode with a default; the previous code ignores the extra column.",
+    "codeTargetCommit": "61141ee91707ef437b7b87a81abb8c29e4c6dce5",
+    "codeTargetDeployId": "dep-d9bsmnmrnols73ceklcg",
+    "databaseCompatibility": "No schema or data migration was included.",
     "dataRecovery": "Use the logical SQLite backup before considering a Render disk snapshot restore."
   },
   "unresolvedRisks": [
-    "The security report still records a production privacy finding for hidden profile fields and pending avatar URLs.",
-    "Avatar CDN retention and account-deletion step-up authentication remain open follow-up items.",
-    "Repository-wide Prettier debt remains intentionally separate from this release."
+    "Google Search Console can keep historical canonical and exclusion states until Google recrawls the affected URLs and sitemap.",
+    "Cloudflare temporarily retains one previously cached internal PNG until its four-hour edge TTL expires.",
+    "GitHub Actions reports a non-blocking warning that checkout@v4 and setup-node@v4 target the deprecated Node.js 20 action runtime.",
+    "The unrelated connected-user ARIA changes remain local and were intentionally not included in this production release."
   ]
 }

@@ -128,11 +128,11 @@
     "fullQa": "passed: 172 deterministic tests and 12 smoke tests",
     "desktopBrowserCheck": "passed at 1440x900",
     "mobileBrowserCheck": "passed at 390x844",
-    "productionAudit": "completed before deployment; canonical conflict and public artifacts remain live until release"
+    "productionAudit": "passed after Render deploy dep-d9cgaem7r5hc73a488d0; live canonicals, sitemap, robots, security headers and Chromium checks are correct"
   },
   "residualRisks": [
-    "The fixes must be deployed before Search Console can observe them.",
     "Search Console may retain old exclusion or canonical statuses until Google recrawls the affected URLs and sitemap.",
+    "Cloudflare still serves one previously cached app-broken-check.png response until its existing four-hour edge TTL expires; the Render origin and a cache-busted request return 404.",
     "The exact Search Console issue export was not available in the workspace, so this audit targeted reproducible technical defects from the live site rather than matching private console row labels one by one."
   ]
 }
