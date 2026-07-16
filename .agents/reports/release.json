@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T17:50:58-03:00",
+  "generatedAt": "2026-07-16T19:22:58-03:00",
   "decision": "released",
   "environment": "production",
   "provider": {
@@ -12,37 +12,32 @@
   "source": {
     "repository": "kiamchomi-hash/topykly",
     "branch": "main",
-    "releaseCommit": "e8bce7ec9abb00be386b8d1c9ae0b27060431ab3",
-    "releaseCommitMessage": "Mejorar retención, analítica y rendimiento",
-    "previousProductionCommit": "0ead5f52db24c5527cc4e0413db4c0dd459975a9"
+    "releaseCommit": "afbed3a2764168e524013d3b5352ce812d272039",
+    "releaseCommitMessage": "Mejorar SEO, métricas y sincronización",
+    "previousProductionCommit": "e8bce7ec9abb00be386b8d1c9ae0b27060431ab3"
   },
   "releaseContents": [
-    "Seguimiento persistente de conversaciones para cuentas registradas.",
-    "Avisos de actividad por correo con consentimiento explícito y límite de un envío por tema cada 30 minutos.",
-    "Analítica seudónima del embudo con retención de 90 días y consulta agregada para moderadores.",
-    "Polling adaptativo de 5, 15 y 30 segundos según actividad, preferencia y visibilidad.",
-    "Carga diferida del recurso externo Coloris y caché para recursos estáticos reutilizables.",
-    "Corrección de IDs ARIA duplicados en listas de usuarios conectados."
-  ],
-  "excludedLocalChanges": [
-    "Informes internos de .agents/reports, documentados después del despliegue."
+    "Noindex y exclusión de sitemap, hubs y relacionados para temas ofensivos o con reportes abiertos.",
+    "Panel visual administrativo con embudo, métricas agregadas y actividad diaria.",
+    "SSE para avisos de cambios con polling de respaldo espaciado.",
+    "Ajustes conservadores de concurrencia y memoria para SQLite.",
+    "Carga diferida de mascota, PNG y cargador de Coloris."
   ],
   "backup": {
-    "requiredForThisRelease": true,
-    "reason": "La versión añade tablas e índices SQLite y una columna de preferencias.",
-    "logicalBackup": "/var/data/topykly/backups/topykly-2026-07-16T20-42-50-525Z.sqlite",
-    "backupBytes": 303104,
+    "requiredForThisRelease": false,
+    "reason": "No hay migraciones de tablas o columnas; los cambios de SQLite son PRAGMA compatibles y reversibles.",
+    "recentLogicalBackup": "/var/data/topykly/backups/topykly-2026-07-16T20-42-50-525Z.sqlite",
     "renderDiskId": "dsk-d9376o6h2hms73cd7j80",
     "renderDiskMount": "/var/data/topykly"
   },
   "deployment": {
-    "deployId": "dep-d9ck53svikkc73d21mfg",
+    "deployId": "dep-d9clhosvikkc73d38mug",
     "status": "live",
-    "startedAt": "2026-07-16T20:43:59.133429Z",
-    "finishedAt": "2026-07-16T20:44:50.072066Z",
-    "githubActionsRunId": 29533270165,
+    "startedAt": "2026-07-16T22:19:15.708220Z",
+    "finishedAt": "2026-07-16T22:20:01.084793Z",
+    "githubActionsRunId": 29539156122,
     "githubActionsConclusion": "success",
-    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29533270165",
+    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29539156122",
     "jobs": [
       "core: success",
       "ui: success",
@@ -52,57 +47,42 @@
     ]
   },
   "preDeployChecks": {
-    "localQa": "passed: 176 deterministic tests and 12 smoke tests",
+    "localQa": "passed: 178 deterministic tests and 12 smoke tests",
     "npmAudit": "0 vulnerabilities",
-    "secretScan": "no production credentials added; only deterministic test placeholders found",
+    "secretScan": "no credential patterns found in the application diff",
     "diffCheck": "passed",
-    "formatCheck": "not clean: existing repository-wide Prettier debt affects 114 files; no bulk formatting was applied",
-    "databaseMigration": "additive and idempotent through CREATE TABLE IF NOT EXISTS and ensureColumn",
+    "formatCheck": "existing Prettier debt remains in 11 touched files; no bulk formatting was applied",
+    "databaseMigration": "none; only runtime PRAGMA additions",
     "branchSync": "main matched origin/main before the release commit"
   },
   "postDeployVerification": {
-    "shell": "200 from https://www.topykly.com/",
-    "authentication": "GET /api/auth/status returned 200",
+    "shell": "200 with HSTS and CSP from https://www.topykly.com/",
+    "authentication": "GET /api/auth/status returned 200 with configured Google, Turnstile and email checks",
     "bootstrap": "200 guest payload with 15 topics, Secure HttpOnly cookie and no session ID in the body",
-    "authorization": "anonymous diagnostics and product analytics requests returned 403",
-    "securityHeaders": "HSTS and CSP present where applicable",
-    "seoEndpoints": "robots.txt, sitemap.xml and legal pages returned 200",
-    "deployedCode": "adaptive polling, product events, email preference and lazy Coloris markers are live",
-    "database": {
-      "tables": [
-        "product_events",
-        "topic_email_deliveries",
-        "topic_follows"
-      ],
-      "emailActivityColumn": true,
-      "migrationErrors": 0
-    },
+    "authorization": "anonymous dashboard, diagnostics and analytics requests returned 403",
+    "liveEvents": "GET /api/live returned 200 text/event-stream and an initial ready event",
+    "seoEndpoints": "robots.txt, sitemap.xml and terms returned 200 on the canonical www host",
+    "offensiveNoindex": "one live offensive topic returned X-Robots-Tag noindex, meta noindex and was absent from sitemap.xml",
+    "deployedCode": "SSE, stream safety interval, analytics panel and deferred mascot markers are live",
     "browser": {
-      "desktop": "topic selection and conversation rendering passed",
-      "mobile": "topic selection, conversation view and back navigation passed at 390x844",
-      "consoleErrors": 0
-    },
-    "renderErrorLogs": 0,
-    "renderHttp5xxLogs": 0
-  },
-  "metrics": {
-    "preDeployCpuMax": 0.023579117,
-    "postDeployStartupCpuMax": 0.0289187,
-    "postDeploySettledCpu": 0.0013641333,
-    "assessment": "The brief startup peak settled quickly and no error or availability stop condition occurred."
+      "viewport": "390x844",
+      "flow": "topic list, topic selection, conversation rendering and return to list passed",
+      "consoleErrors": 0,
+      "initialMascotRequested": false,
+      "initialColorisRequested": false
+    }
   },
   "rollback": {
-    "codeTargetCommit": "0ead5f52db24c5527cc4e0413db4c0dd459975a9",
-    "codeTargetDeployId": "dep-d9cgvcok1i2s739c1f2g",
-    "databaseCompatibility": "The migration is additive; the previous code ignores the new tables and column.",
-    "procedure": "Redeploy dep-d9cgvcok1i2s739c1f2g for a code rollback. Restore the logical SQLite backup only if persistent data or schema integrity is affected."
+    "codeTargetCommit": "e8bce7ec9abb00be386b8d1c9ae0b27060431ab3",
+    "codeTargetDeployId": "dep-d9ck53svikkc73d21mfg",
+    "databaseCompatibility": "No schema migration was applied; the previous deploy can use the same database unchanged.",
+    "procedure": "Redeploy dep-d9ck53svikkc73d21mfg if a code rollback is required. A database restore is not expected for this release."
   },
   "unresolvedRisks": [
-    "The product still foregrounds community and rankings despite the stated goal of prioritizing conversation.",
-    "Ranking by volume continues to reward low-quality activity.",
-    "There is no dedicated noindex rule for offensive content that has enough comments to avoid the thin-content rule.",
-    "The initial browser load still requests the large mascot image and a broad ES-module graph.",
-    "Polling remains linear per connected client, although its frequency is now substantially lower.",
-    "Repository-wide Prettier debt remains outside this release."
+    "The original mascot image remains large when an empty state is opened, although it no longer affects initial loading.",
+    "The in-memory SSE hub and SQLite remain single-instance components; future horizontal scaling needs shared pub/sub and multi-instance persistence.",
+    "The initial ES-module graph remains broad even after removing deferred modules.",
+    "Repository-wide Prettier debt remains outside this release.",
+    "Render metrics and logs were not queried because no workspace was explicitly selected; deploy state, public endpoints, CI and browser checks showed no failure."
   ]
 }

@@ -1,239 +1,84 @@
 {
-  "generatedAt": "2026-07-16T17:50:58-03:00",
-  "scope": "Google Search Console technical SEO signals, connected-user ARIA regression, ranking scope contrast, and mobile production performance",
+  "generatedAt": "2026-07-16T19:22:58-03:00",
+  "scope": "Contenido ofensivo noindex, panel administrativo de analítica, carga inicial y sincronización en vivo",
   "routes": [
-    "https://topykly.com/",
+    "http://127.0.0.1:4173/",
+    "http://127.0.0.1:4174/",
+    "http://127.0.0.1:4173/api/live",
+    "http://127.0.0.1:4173/temas",
+    "http://127.0.0.1:4173/sitemap.xml"
+    ,
     "https://www.topykly.com/",
-    "https://www.topykly.com/robots.txt",
-    "https://www.topykly.com/sitemap.xml",
-    "https://www.topykly.com/temas",
-    "https://www.topykly.com/archivo",
-    "https://www.topykly.com/terms.html",
-    "https://www.topykly.com/privacy.html",
-    "https://www.topykly.com/mascot-review.html",
-    "http://127.0.0.1:4173/"
+    "https://www.topykly.com/api/live",
+    "https://www.topykly.com/sitemap.xml"
   ],
   "environment": {
-    "server": "node local-server.cjs",
-    "browser": "Chromium via Playwright CLI",
-    "productionHostBehavior": "https://topykly.com redirects permanently to https://www.topykly.com",
-    "dataState": {
-      "production": "live public sitemap and pages",
-      "local": "existing local application database plus deterministic test fixtures"
-    }
+    "server": "node local-server.cjs y producción Render/Cloudflare",
+    "browser": "Chromium mediante Playwright CLI",
+    "viewports": [
+      "390x844",
+      "1440x900"
+    ],
+    "dataState": "Base local existente y base temporal determinista para el panel administrador"
   },
-  "viewports": [
-    {
-      "width": 1440,
-      "height": 900,
-      "mode": "desktop"
-    },
-    {
-      "width": 390,
-      "height": 844,
-      "mode": "mobile"
-    }
-  ],
   "findings": [
-    {
-      "id": "product-positioning-still-ranking-led",
-      "dimension": "ux",
-      "severity": "high",
-      "confidence": "high",
-      "status": "open",
-      "before": "The stated product goal is a place where people come to talk.",
-      "cause": "The live H1 still says comunidad de temas y rankings, the secondary area is titled Comunidad, and Ranking remains a permanent prominent panel.",
-      "fix": "Remove or strongly demote rankings and editorial framing so conversation, active people and recent replies define the main experience.",
-      "evidence": [
-        "Production desktop snapshot exposes Comunidad and Ranking as primary level-2/3 sections.",
-        "The global comments ranking places the low-information topic hokla first because it has seven comments."
-      ]
-    },
     {
       "id": "offensive-content-indexability",
       "dimension": "seo",
       "severity": "moderate",
-      "confidence": "high",
-      "status": "open",
-      "before": "Thin and blocked topics receive noindex, but content quality or offensiveness is not part of the indexability decision.",
-      "cause": "renderTopicPage only checks isThin and isBlocked when choosing index,follow.",
-      "fix": "Mark reported, offensive or low-quality user-generated pages noindex even when their comment count exceeds the thin-content threshold.",
+      "status": "fixed_live",
+      "fix": "El título, los mensajes y los reportes abiertos determinan isProblematic; esos temas reciben noindex y se excluyen de sitemap, hubs y relacionados.",
       "evidence": [
-        "The current thin topic Es normal no saber cocinar siendo mujer? correctly returns noindex,follow and is absent from the sitemap.",
-        "A high-volume offensive topic would currently qualify for indexing because no dedicated content-quality flag is checked."
+        "La prueba de servidor mantiene indexable un tema con tres comentarios y lo cambia a noindex al añadir un comentario ofensivo.",
+        "La misma prueba confirma su desaparición de /temas y sitemap.xml.",
+        "Un tema ofensivo real devolvió X-Robots-Tag noindex y quedó fuera del sitemap de producción."
       ]
     },
     {
-      "id": "canonical-host-mismatch",
-      "dimension": "seo",
+      "id": "admin-analytics-panel",
+      "dimension": "ux",
+      "severity": "moderate",
+      "status": "fixed_live",
+      "fix": "Se añadió la sección Métricas al panel de administración con visitantes, aperturas, registros, publicaciones, regresos, eventos y actividad diaria.",
+      "evidence": [
+        "Chromium mostró el diálogo con el embudo completo a 1440x900.",
+        "La consola del navegador registró cero errores y cero advertencias."
+      ]
+    },
+    {
+      "id": "eager-mascot-download",
+      "dimension": "performance",
       "severity": "high",
-      "confidence": "high",
-      "status": "fixed_locally",
-      "before": "Production redirected the apex host to www, while the home page, terms page and privacy page declared apex-host canonicals. The live sitemap already used www.",
-      "cause": "Static HTML and the local default public origin still used https://topykly.com even though the production platform selected https://www.topykly.com as the permanent destination.",
-      "fix": "Aligned home, legal, Open Graph, Twitter, WebSite JSON-LD, topic-sharing fallback and default server origin with https://www.topykly.com.",
+      "status": "fixed_live",
+      "fix": "Los paneles cerrados no crean su estado vacío y mascot.js se importa únicamente al mostrar la mascota.",
       "evidence": [
-        "Production before fix: https://topykly.com/ returned 301 to https://www.topykly.com/.",
-        "Production before fix: https://www.topykly.com/ declared canonical https://topykly.com/.",
-        "Production before fix: the www terms page declared canonical https://topykly.com/terms.html.",
-        "Local after fix: home, /temas, /archivo, /terms.html and /privacy.html exactly match their sitemap URLs."
+        "La navegación móvil inicial realizó 64 solicitudes totales y no solicitó ui/mascot.js ni assets/mascot/topy-concept-v8.png.",
+        "El grafo estático calculado desde app.js contiene 55 módulos y excluye mascot.js y coloris-loader.js."
       ]
     },
     {
-      "id": "robots-and-sitemap-signal-conflicts",
-      "dimension": "seo",
+      "id": "polling-and-sqlite-pressure",
+      "dimension": "performance",
       "severity": "moderate",
-      "confidence": "high",
-      "status": "fixed_locally",
-      "before": "robots.txt blocked /dashboard.html even though the URL existed as an internal server path, blocked public avatar images referenced by profile metadata, and the sitemap omitted the indexable privacy page.",
-      "cause": "The crawler policy and sitemap evolved separately from the public page and structured-data surface.",
-      "fix": "Kept /api/ blocked, removed the dashboard and avatar crawler blocks, added privacy.html to the sitemap, and covered all expected directives with deterministic tests.",
+      "status": "live_for_current_scale",
+      "fix": "El cliente recibe avisos por SSE y consulta datos solo cuando hay cambios; el polling queda como respaldo de 30/60/120 segundos y SQLite incorpora pragmas conservadores.",
       "evidence": [
-        "Local robots.txt now contains only Disallow: /api/ plus the canonical www sitemap URL.",
-        "Local sitemap includes home, topics, archive, terms and privacy URLs on the www host.",
-        "The sitemap test still excludes thin topics and profiles that opted out of indexing."
-      ]
-    },
-    {
-      "id": "internal-artifacts-publicly-served",
-      "dimension": "seo",
-      "severity": "moderate",
-      "confidence": "high",
-      "status": "fixed_locally",
-      "before": "Production served mascot-review.html, the files 1000 and taskkill, and internal verification screenshots with successful 200 responses.",
-      "cause": "The static server protected private directories and extensions but did not distinguish several root-level development artifacts from public assets.",
-      "fix": "Added an explicit unpublished root-file set so development HTML, scratch files and verification screenshots return 404.",
-      "evidence": [
-        "Production before fix: /mascot-review.html returned 200 text/html.",
-        "Production before fix: /1000 and /taskkill returned 200 application/octet-stream.",
-        "Local after fix: dashboard.html, mascot-review.html, 1000, taskkill and both root verification screenshots return 404.",
-        "Server regression tests cover every unpublished path."
-      ]
-    },
-    {
-      "id": "homepage-missing-primary-heading",
-      "dimension": "seo",
-      "severity": "low",
-      "confidence": "high",
-      "status": "fixed_locally",
-      "before": "The application shell had no h1 in its source document.",
-      "cause": "The visual brand was exposed as an image role and application sections started at h2/h3.",
-      "fix": "Added one visually hidden, descriptive h1 without changing the visual layout.",
-      "evidence": [
-        "Chromium desktop and mobile accessibility snapshots expose one level-1 heading: TOPYKLY: comunidad de temas y rankings en español.",
-        "The existing sr-only utility keeps the heading available to crawlers and assistive technology without visual movement."
-      ]
-    },
-    {
-      "id": "duplicate-connected-user-menu-ids",
-      "dimension": "accessibility",
-      "severity": "moderate",
-      "confidence": "high",
-      "status": "fixed_locally",
-      "before": "The desktop connected-user list and mobile drawer rendered the same user with an identical user-action-menu-{user.id} ID.",
-      "cause": "createUserItem derived the menu ID only from the user ID, while renderUsers intentionally renders each user into both targets.",
-      "fix": "Added the target container ID as a menu namespace and kept each trigger's aria-controls synchronized with its corresponding menu.",
-      "evidence": [
-        "The UI regression test verifies distinct IDs and matching aria-controls relationships.",
-        "The full UI suite passes with the prior local fix preserved."
-      ]
-    },
-    {
-      "id": "ranking-scope-tab-low-contrast",
-      "dimension": "accessibility",
-      "severity": "moderate",
-      "confidence": "high",
-      "status": "fixed_locally",
-      "before": "The inactive GLOBAL/TEMA ranking tab used a mixed light foreground plus opacity 0.82. Its effective contrast was approximately 3.79:1 in the default dark palette and 4.07:1 in the coast dark palette.",
-      "cause": "Opacity was applied to the entire button, blending its already softened text color into the accent-colored tab container. Shared desktop and drawer instances therefore produced repeated Lighthouse findings.",
-      "fix": "Changed ranking scope tab text to the solid #fff7ef foreground with opacity 1 in normal, hover, focus, active and selected states. Existing light-theme overrides continue to use the dark --text token.",
-      "evidence": [
-        "Chromium computed-style check: default dark contrast is 5.41:1.",
-        "Chromium computed-style check: coast 5.82:1, forest 7.14:1, ember 10.15:1 and cobalt 7.86:1.",
-        "Chromium reload with the default light theme computes rgb(31, 26, 23) text on white with opacity 1.",
-        "A deterministic UI regression test enforces at least 4.5:1 across every named dark palette."
+        "Chromium mantiene una conexión /api/live en la carga inicial.",
+        "La prueba HTTP confirma que una creación correcta emite un evento update.",
+        "La suite prueba el aplazamiento de eventos mientras la pestaña está oculta."
       ]
     }
   ],
-  "performance": {
-    "status": "performance_changes_live_with_residual_work",
-    "target": "https://www.topykly.com/",
-    "profile": {
-      "viewport": "390x844",
-      "network": "150 ms latency, approximately 1.6 Mbps download",
-      "cpuSlowdownMultiplier": 4,
-      "cache": "disabled"
-    },
-    "metrics": {
-      "ttfbMs": 470,
-      "fcpMs": 1160,
-      "lcpMs": 4452,
-      "cls": 0.00334,
-      "estimatedTotalBlockingTimeMs": 466,
-      "requestCount": 74,
-      "transferBytes": 1163594,
-      "decodedBytes": 2011448
-    },
-    "observations": [
-      "A 695038-byte mascot PNG is requested even though both mascot-bearing empty-state panels are hidden.",
-      "The measured LCP element is an 84x84 visible avatar whose shared image factory sets loading=lazy.",
-      "Two additional 1024x1024 avatars are transferred at roughly 100 KB each and displayed at about 84x84.",
-      "The application now refreshes /api/topics every 5 seconds while active, 15 seconds while idle or in slow mode, and 30 seconds while hidden.",
-      "styles.css expands to 291227 bytes and the initial page loads a broad ES-module graph, contributing to 74 requests.",
-      "Coloris CSS and JavaScript no longer form part of the initial document and load only when the palette selector opens.",
-      "JavaScript and CSS now use a short revalidation cache; HTML remains no-store.",
-      "The production browser still requests the large mascot PNG during initial navigation even when its empty state is not visible.",
-      "The initial navigation still loads approximately 68 static resources because of the broad ES-module graph."
-    ],
-    "priorities": [
-      {
-        "rank": 1,
-        "change": "Create the mascot empty state only when its panel is opened, and provide a smaller modern-format mascot asset.",
-        "expectedImpact": "Remove up to about 695 KB from the initial mobile transfer."
-      },
-      {
-        "rank": 2,
-        "change": "Do not lazy-load the first above-the-fold avatar; give it high fetch priority while keeping off-screen avatars lazy.",
-        "expectedImpact": "Bring the current LCP image forward and reduce LCP."
-      },
-      {
-        "rank": 3,
-        "change": "Generate 96-128 px avatar thumbnails at upload time and serve them in lists and messages.",
-        "expectedImpact": "Avoid transferring original 586-1024 px images into 84 px slots."
-      },
-      {
-        "rank": 4,
-        "change": "Implemented adaptive live-topic polling for active, idle, slow and hidden states.",
-        "expectedImpact": "Reduce early network and main-thread contention during Lighthouse measurement and real mobile startup."
-      },
-      {
-        "rank": 5,
-        "change": "Coloris now lazy-loads on interaction and reusable static assets receive short caching; other large interaction modules remain candidates for later splitting.",
-        "expectedImpact": "Reduce the initial module graph, decoded CSS/JS work, and repeat-view transfer."
-      }
-    ]
-  },
-  "seo": {
-    "status": "partially_fixed_live",
-    "canonicalStaticRoutesChecked": 5,
-    "canonicalStaticRoutesMatching": 5,
-    "unpublishedRoutesChecked": 6,
-    "unpublishedRoutesReturning404": 6
-  },
   "verification": {
-    "serverSuite": "passed: 23 executed, 153 skipped",
-    "uiSuite": "passed: 74 executed, 102 skipped",
-    "fullQa": "passed: 176 deterministic tests and 12 smoke tests",
-    "desktopBrowserCheck": "passed at 1440x900, including computed ranking-tab contrast in every named dark palette and the default light palette",
-    "mobileBrowserCheck": "passed at 390x844",
-    "productionAudit": "passed after Render deploy dep-d9ck53svikkc73d21mfg; desktop and mobile flows, migration, security headers, robots, sitemap and legal pages are live"
+    "fullQa": "passed: 178 deterministic tests and 12 smoke checks",
+    "browserMobile": "passed at 390x844; mascot and Coloris absent from initial requests",
+    "browserDesktop": "passed at 1440x900; admin analytics rendered without console errors",
+    "productionBrowser": "passed at 390x844; topic navigation, SSE and deferred mascot verified without console errors",
+    "diffCheck": "passed; only line-ending conversion warnings"
   },
   "residualRisks": [
-    "Search Console may retain old exclusion or canonical statuses until Google recrawls the affected URLs and sitemap.",
-    "Cloudflare still serves one previously cached app-broken-check.png response until its existing four-hour edge TTL expires; the Render origin and a cache-busted request return 404.",
-    "The exact Search Console issue export was not available in the workspace, so this audit targeted reproducible technical defects from the live site rather than matching private console row labels one by one.",
-    "The performance trace is a controlled Chromium diagnosis rather than the exact PageSpeed Insights scoring run; the public API was rate-limited, so a precise post-change score cannot be guaranteed.",
-    "The ranking-led product framing remains inconsistent with the intended chat-only direction.",
-    "High-volume offensive content still needs a dedicated noindex rule."
+    "La imagen original de la mascota sigue siendo grande cuando el usuario abre un estado vacío; ya no afecta la carga inicial.",
+    "SSE en memoria y SQLite son adecuados para una sola instancia, pero no sustituyen pub/sub y una base multiinstancia cuando el tráfico crezca.",
+    "El grafo inicial todavía es amplio aunque bajó y ya no incluye los módulos diferidos."
   ]
 }

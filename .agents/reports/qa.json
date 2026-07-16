@@ -1,50 +1,55 @@
 {
   "agentName": "Agente QA",
   "status": "passed",
-  "lastChecked": "2026-07-16T17:24:46-03:00",
+  "lastChecked": "2026-07-16T18:24:22-03:00",
   "tests": [
     {
       "name": "UI suite",
       "command": "npm run test:ui",
       "status": "passed",
-      "summary": "74 executed, 102 skipped; polling adaptativo, carga diferida de Coloris, configuración de avisos y flujos de interfaz pasaron."
+      "summary": "75 ejecutadas; SSE, intervalos de respaldo, mascota diferida y estructura del panel pasaron."
     },
     {
       "name": "backend suite",
       "command": "npm run test:backend",
       "status": "passed",
-      "summary": "51 executed, 125 skipped; seguimiento persistente, consentimiento de correo, enfriamiento y analítica seudónima pasaron."
+      "summary": "51 ejecutadas; analítica administrativa, SQLite y persistencia pasaron."
     },
     {
-      "name": "complete deterministic suite",
-      "command": "npm test",
+      "name": "server suite",
+      "command": "npm run test:server",
       "status": "passed",
-      "summary": "Las 176 comprobaciones deterministas pasaron sin omisiones."
+      "summary": "24 ejecutadas; SSE y noindex ofensivo con exclusión del sitemap pasaron."
     },
     {
-      "name": "HTTP smoke suite",
-      "command": "node tests/smoke.mjs",
+      "name": "complete QA",
+      "command": "npm run qa",
       "status": "passed",
-      "summary": "All 12 smoke checks passed."
+      "summary": "178 pruebas deterministas y 12 comprobaciones HTTP pasaron."
+    },
+    {
+      "name": "browser verification",
+      "command": "Playwright CLI",
+      "status": "passed",
+      "summary": "Panel de métricas validado en escritorio; carga inicial validada en móvil sin mascota ni Coloris."
     },
     {
       "name": "diff validation",
       "command": "git diff --check",
       "status": "passed",
-      "summary": "No whitespace errors; only existing line-ending conversion warnings were reported."
+      "summary": "Sin errores de espacios; solo advertencias de conversión de finales de línea."
     }
   ],
   "suiteCoverage": {
-    "total": 176,
+    "total": 178,
     "core": 28,
-    "ui": 74,
+    "ui": 75,
     "backend": 51,
-    "server": 23,
-    "unclassified": 0
+    "server": 24,
+    "smoke": 12
   },
   "notes": [
-    "The repository was already dirty; unrelated local changes were preserved.",
-    "La sincronización consulta cada 5 segundos en actividad, 15 en inactividad o modo lento y 30 con la pestaña oculta.",
-    "Los avisos por correo requieren cuenta verificada y consentimiento explícito; la analítica conserva solo eventos seudónimos agregables durante 90 días."
+    "Se añadió cobertura específica para eventos SSE y contenido ofensivo indexable por volumen.",
+    "La comprobación del navegador no produjo errores ni advertencias de consola en el panel administrativo."
   ]
 }

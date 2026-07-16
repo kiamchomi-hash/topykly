@@ -43,3 +43,20 @@ Este archivo sirve como la memoria de auditoría para el equipo de agentes de TO
 *   **Estado:** Decisión de diseño.
 *   **Detalle:** El estado reside únicamente en `features/shared/store.js` y `app-store.js`. Los reducers son inmutables y devuelven un nuevo estado (`nextState`). Los componentes del UI se suscriben al store y se re-renderizan mediante DOM Diffing (`ui/render-utils.js`).
 *   **Acción del Agente:** No sugerir mutaciones directas de estado ni la introducción de frameworks pesados de gestión de estado.
+
+---
+
+## 🔎 SEO, Rendimiento y Escalabilidad Mitigados
+
+### 1. Indexación de Contenido Ofensivo
+*   **Estado:** Solucionado y Verificado.
+*   **Detalle:** Los temas con lenguaje ofensivo en título o mensajes, o con reportes abiertos, reciben `noindex` y se excluyen de sitemap, listados SEO y temas relacionados aunque superen el mínimo de comentarios.
+
+### 2. Carga Inicial de la Mascota y Coloris
+*   **Estado:** Solucionado y Verificado.
+*   **Detalle:** Los paneles cerrados no crean la mascota. `ui/mascot.js`, su PNG y `services/coloris-loader.js` se cargan únicamente después de la interacción correspondiente.
+
+### 3. Polling y Concurrencia SQLite
+*   **Estado:** Mitigado para la escala actual.
+*   **Detalle:** La sincronización principal usa SSE y conserva polling de respaldo espaciado. SQLite opera con WAL, `busy_timeout`, `synchronous=NORMAL`, `temp_store=MEMORY` y autocheckpoint.
+*   **Acción del Agente:** Para varias instancias, proponer pub/sub compartido y una base multiinstancia; no volver a recomendar reducir el polling como si SSE no existiera.
