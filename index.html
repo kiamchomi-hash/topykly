@@ -40,12 +40,6 @@
     </script>
     <script src="./theme-bootstrap.js"></script>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@v0.25.0/dist/coloris.min.css"
-      integrity="sha384-DY3umZptOgjUNshBFbvu1+3RVFPoD1/CgGcc1yyJ77/aFOJ7jtN4BORnz/D/xF0n"
-      crossorigin="anonymous"
-    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -853,11 +847,23 @@
               </div>
               <div class="settings-modal__option">
                 <span class="settings-modal__option-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false"><path d="M4 6h16v12H4Z"/><path d="m4 7 8 6 8-6"/></svg>
+                </span>
+                <div class="settings-modal__option-text">
+                  <span class="settings-modal__option-title">Avisos de actividad por correo</span>
+                  <span class="settings-modal__option-copy">Recibe un aviso cuando otra persona responda en un tema que sigues. Se limita a un correo por tema cada 30 minutos.</span>
+                </div>
+                <button class="settings-switch" id="settingsEmailActivityToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="emailActivityEnabled" aria-label="Avisos de actividad por correo">
+                  <span class="settings-switch__thumb" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="settings-modal__option">
+                <span class="settings-modal__option-icon" aria-hidden="true">
                   <svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
                 </span>
                 <div class="settings-modal__option-text">
                   <span class="settings-modal__option-title">Modo lento</span>
-                  <span class="settings-modal__option-copy">Reduce las actualizaciones en vivo de cada segundo a cada 5 segundos.</span>
+                  <span class="settings-modal__option-copy">Reduce las actualizaciones en vivo para ahorrar datos y batería.</span>
                 </div>
                 <button class="settings-switch" id="settingsSlowModeToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="slowMode" aria-label="Modo lento">
                   <span class="settings-switch__thumb" aria-hidden="true"></span>
@@ -1301,11 +1307,6 @@
     <div class="notification-toasts" id="notificationToasts" role="status" aria-live="polite" aria-label="Notificaciones" hidden></div>
     <div class="action-feedback" id="actionFeedback" role="status" aria-live="polite" hidden></div>
 
-    <script
-      src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@v0.25.0/dist/coloris.min.js"
-      integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmXNaoRDWmHnRTutomMnUySX9hqDgVQVcvMdc"
-      crossorigin="anonymous"
-    ></script>
     <script type="module" src="./app.js?v=20260702-sessioncookie"></script>
     <script type="module" src="./auth-fallback.js?v=20260702-sessioncookie"></script>
   </body>

@@ -203,6 +203,7 @@ export function createChatActions({
     }
 
     let shouldScrollAfterSubmit = false;
+    void apiClient.trackProductEvent?.("publish_attempt", topic ? "/tema" : "/");
     setComposerBusy(true);
     try {
       if (!topic) {
@@ -210,11 +211,13 @@ export function createChatActions({
         // top of the list immediately, unlike replies/likes/etc. which must
         // not reshuffle the topics list until the user hits "Actualizar".
         await syncBackendPayload(() => apiClient.createTopic(title, text), { reorder: true });
+        void apiClient.trackProductEvent?.("topic_created", "/tema");
         if (titleInput) {
           titleInput.value = "";
         }
       } else {
         await syncBackendPayload(() => apiClient.submitMessage(topic.id, text));
+        void apiClient.trackProductEvent?.("comment_created", "/tema");
       }
 
       dispatch(state, reducers.markTopicRead, state.selectedTopicId);

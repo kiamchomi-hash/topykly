@@ -354,11 +354,11 @@ function getFriendActionLabel(status) {
   }
   return "Agregar amigo";
 }
-export function createUserItem(user, currentUserId, activeConnectedUserId = null) {
+export function createUserItem(user, currentUserId, activeConnectedUserId = null, menuIdScope = "user-list") {
   const isCurrentUser = user.id === currentUserId;
   const isActive = user.id === activeConnectedUserId;
   const isRegistered = user.type === "registered";
-  const menuId = `user-action-menu-${user.id}`;
+  const menuId = `user-action-menu-${menuIdScope}-${user.id}`;
   const node = el("article", `user-item${isCurrentUser ? " is-current" : ""}${isActive ? " is-active" : ""}`);
   node.dataset.id = user.id;
   node.dataset.connectedUserId = user.id;

@@ -129,6 +129,9 @@ function buildHydratedState(state, payload, topics) {
     : null;
   const nextUsers = previousProfileUser ? [...payload.users, previousProfileUser] : payload.users;
   const nextTopicIds = new Set(payload.topics.map((topic) => topic.id));
+  const followedTopicIds = Array.isArray(payload.followedTopicIds)
+    ? payload.followedTopicIds
+    : state.followedTopicIds ?? [];
 
   return {
     ...state,
@@ -146,7 +149,7 @@ function buildHydratedState(state, payload, topics) {
     users: nextUsers,
     topics,
     unreadTopicIds: getUnreadTopicIdsAfterHydration(state, payload),
-    followedTopicIds: (state.followedTopicIds ?? []).filter((topicId) => nextTopicIds.has(topicId)),
+    followedTopicIds: followedTopicIds.filter((topicId) => nextTopicIds.has(topicId)),
     selectedTopicId: nextSelectedTopicId,
     activeConnectedUserId: nextActiveConnectedUserId,
     publicProfileUserId: nextPublicProfileUserId,

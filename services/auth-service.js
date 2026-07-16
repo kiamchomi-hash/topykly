@@ -90,6 +90,15 @@ function normalizeImageUrl(value) {
   return normalized || null;
 }
 
+function escapeEmailHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function normalizeDisplayName(profile) {
   const candidates = [
     profile?.name,
@@ -431,6 +440,9 @@ export function createAuthService({
     sessionCookieName: SESSION_COOKIE,
     createSessionCookie,
     clearFlowCookies,
+    isEmailConfigured() {
+      return resendConfigured;
+    },
 
     getStatus(req) {
       return {
@@ -488,6 +500,60 @@ export function createAuthService({
 
       return {
         id: payload.id || null
+      };
+    },
+
+    async sendTopicActivityEmail({
+      email,
+      recipientName = "Usuario",
+      actorName = "Alguien",
+      topicTitle = "una conversación",
+      topicUrl,
+      deliveryKey = ""
+    } = {}) {
+      if (!resendConfigured) {
+        return { id: null, skipped: true };
+      }
+
+      const normalizedEmail = normalizeEmail(email);
+      const normalizedTopicUrl = String(topicUrl || "").trim();
+      if (!normalizedEmail || !normalizedTopicUrl) {
+        throw new ApiError(400, "INVALID_ACTIVITY_EMAIL", "No se pudo preparar el aviso por correo.");
+      }
+
+      const safeRecipientName = escapeEmailHtml(recipientName);
+      const safeActorName = escapeEmailHtml(actorName);
+      const safeTopicTitle = escapeEmailHtml(topicTitle);
+      const safeTopicUrl = escapeEmailHtml(normalizedTopicUrl);
+      const subjectActorName = String(actorName || "Alguien").trim().replace(/\s+/g, " ").slice(0, 50);
+      const subjectTopicTitle = String(topicTitle || "una conversación").trim().replace(/\s+/g, " ").slice(0, 80);
+      const response = await fetchImpl(RESEND_EMAIL_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": String(deliveryKey || `topic-activity-${crypto.randomUUID()}`)
+        },
+        body: JSON.stringify({
+          from: resendFrom,
+          to: [normalizedEmail],
+          subject: `${subjectActorName} respondió en ${subjectTopicTitle}`,
+          text: `${recipientName}, ${actorName} respondió en "${topicTitle}". Abre la conversación: ${normalizedTopicUrl}. Puedes desactivar estos avisos desde Configuración.`,
+          html: `
+            <main style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.5;color:#241f33">
+              <p>Hola, ${safeRecipientName}.</p>
+              <p><strong>${safeActorName}</strong> respondió en <strong>${safeTopicTitle}</strong>.</p>
+              <p><a href="${safeTopicUrl}" style="display:inline-block;padding:10px 16px;border-radius:999px;background:#9b5f40;color:#fff;text-decoration:none">Abrir conversación</a></p>
+              <p style="font-size:13px;color:#6b6277">Puedes desactivar estos avisos desde Configuración en TOPYKLY.</p>
+            </main>
+          `
+        })
+      });
+      const payload = await readResponsePayload(response);
+
+      return {
+        id: payload.id || null,
+        skipped: false
       };
     },
 

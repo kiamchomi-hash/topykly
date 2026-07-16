@@ -611,7 +611,7 @@ await (async () => {
     assert.deepEqual(state.unreadTopicIds, [topics[1].id]);
   });
 
-  await test("live topic sync uses one second by default and five seconds in slow mode", () => {
+  await test("live topic sync uses adaptive visible, slow and hidden intervals", () => {
     const previousSetTimeout = globalThis.setTimeout;
     const previousClearTimeout = globalThis.clearTimeout;
     const scheduledDelays = [];
@@ -626,18 +626,32 @@ await (async () => {
         clearedTimers += 1;
       };
 
+      const documentRef = {
+        visibilityState: "visible",
+        addEventListener() {},
+        removeEventListener() {}
+      };
+      const windowRef = {
+        addEventListener() {},
+        removeEventListener() {}
+      };
       const state = { viewer: { slowMode: false } };
-      const sync = createLiveTopicSync({ state, render() {} });
+      const sync = createLiveTopicSync({ state, render() {}, documentRef, windowRef });
       sync.start();
-      assert.deepEqual(scheduledDelays, [1000]);
+      assert.deepEqual(scheduledDelays, [5000]);
 
       state.viewer.slowMode = true;
       sync.reschedule();
-      assert.deepEqual(scheduledDelays, [1000, 5000]);
+      assert.deepEqual(scheduledDelays, [5000, 15000]);
       assert.equal(clearedTimers, 1);
 
-      sync.stop();
+      documentRef.visibilityState = "hidden";
+      sync.reschedule();
+      assert.deepEqual(scheduledDelays, [5000, 15000, 30000]);
       assert.equal(clearedTimers, 2);
+
+      sync.stop();
+      assert.equal(clearedTimers, 3);
     } finally {
       globalThis.setTimeout = previousSetTimeout;
       globalThis.clearTimeout = previousClearTimeout;
@@ -916,7 +930,7 @@ await (async () => {
     assert.deepEqual(formatJoinedDateParts(""), []);
   });
 
-  await test("guest cards in connected users expose only the profile notice entry", () => {
+  await test("connected user cards expose correct actions and unique ARIA menu IDs", () => {
     const previousDocument = globalThis.document;
 
     class MockNode {
@@ -951,6 +965,19 @@ await (async () => {
       );
     }
 
+    function findUserNode(node, predicate) {
+      if (predicate(node)) {
+        return node;
+      }
+      for (const child of node.children) {
+        const match = findUserNode(child, predicate);
+        if (match) {
+          return match;
+        }
+      }
+      return null;
+    }
+
     try {
       globalThis.document = {
         createElement: (tagName) => new MockNode(tagName),
@@ -970,6 +997,29 @@ await (async () => {
         "friend",
         "report"
       ]);
+
+      const mainUserItem = createUserItem(
+        { id: "u2", name: "Nadia", type: "registered", friendshipStatus: "none" },
+        "u1",
+        null,
+        "userList"
+      );
+      const drawerUserItem = createUserItem(
+        { id: "u2", name: "Nadia", type: "registered", friendshipStatus: "none" },
+        "u1",
+        null,
+        "drawerUserList"
+      );
+      const mainMenu = findUserNode(mainUserItem, (node) => node.className === "user-item__menu");
+      const drawerMenu = findUserNode(drawerUserItem, (node) => node.className === "user-item__menu");
+      const mainTrigger = findUserNode(mainUserItem, (node) => node.className === "user-item__trigger");
+      const drawerTrigger = findUserNode(drawerUserItem, (node) => node.className === "user-item__trigger");
+
+      assert.equal(mainMenu.id, "user-action-menu-userList-u2");
+      assert.equal(drawerMenu.id, "user-action-menu-drawerUserList-u2");
+      assert.notEqual(mainMenu.id, drawerMenu.id);
+      assert.equal(mainTrigger.attributes.get("aria-controls"), mainMenu.id);
+      assert.equal(drawerTrigger.attributes.get("aria-controls"), drawerMenu.id);
     } finally {
       globalThis.document = previousDocument;
     }
@@ -4491,7 +4541,9 @@ await (async () => {
         sessions: diagnostics.sessions,
         reports: diagnostics.reports,
         blockedSessions: 1,
-        blockedIps: 1
+        blockedIps: 1,
+        topicFollows: diagnostics.topicFollows,
+        productEvents: diagnostics.productEvents
       });
     });
   });
@@ -6123,6 +6175,45 @@ await (async () => {
     assert.match(body.html, /123456/);
     assert.match(body.html, /TOPYKLY/);
     assert.match(body.html, /No se creó ninguna cuenta/);
+  });
+
+  await test("auth service sends opted-in topic activity emails through Resend", async () => {
+    const calls = [];
+    const authService = createAuthService({
+      env: {
+        TOPYKLY_RESEND_API_KEY: "resend-key",
+        TOPYKLY_RESEND_FROM: "TOPYKLY <activity@topykly.com>"
+      },
+      async fetchImpl(url, options) {
+        calls.push({ url, options });
+        return {
+          ok: true,
+          async text() {
+            return JSON.stringify({ id: "email-activity-1" });
+          }
+        };
+      }
+    });
+
+    const result = await authService.sendTopicActivityEmail({
+      email: "follower@example.com",
+      recipientName: "Seguidora",
+      actorName: "Autor\nmalicioso",
+      topicTitle: "Una charla\nabierta",
+      topicUrl: "https://www.topykly.com/tema/topic-1/una-charla",
+      deliveryKey: "topic-activity-topic-1-user-1"
+    });
+    const body = JSON.parse(calls[0].options.body);
+
+    assert.equal(authService.isEmailConfigured(), true);
+    assert.deepEqual(result, { id: "email-activity-1", skipped: false });
+    assert.equal(calls[0].url, "https://api.resend.com/emails");
+    assert.equal(calls[0].options.headers["Idempotency-Key"], "topic-activity-topic-1-user-1");
+    assert.deepEqual(body.to, ["follower@example.com"]);
+    assert.equal(body.subject.includes("\n"), false);
+    assert.match(body.text, /desactivar estos avisos desde Configuraci/);
+    assert.match(body.html, /Abrir conversaci/);
+    assert.match(body.html, /https:\/\/www\.topykly\.com\/tema\/topic-1\/una-charla/);
   });
 
   await test("auth service recovery emails use the password reset copy", async () => {
@@ -10088,24 +10179,16 @@ await (async () => {
       /Puedes completar esto ahora|Quitar seleccion|id="profileAvatarClearButton"/
     );
     assert.doesNotMatch(html, /id="paletteModalTitle"/);
-    assert.match(
+    assert.doesNotMatch(
       html,
-      /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.css/
-    );
-    assert.match(
-      html,
-      /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min\.js/
+      /cdn\.jsdelivr\.net\/gh\/mdbassit\/Coloris@v0\.25\.0\/dist\/coloris\.min/
     );
     assert.doesNotMatch(html, /challenges\.cloudflare\.com\/turnstile\/v0\/api\.js/);
-    assert.match(
-      html,
-      /integrity="sha384-DY3umZptOgjUNshBFbvu1\+3RVFPoD1\/CgGcc1yyJ77\/aFOJ7jtN4BORnz\/D\/xF0n"/
-    );
-    assert.match(
-      html,
-      /integrity="sha384-olpkBKjEFqOOAAUzqL1y4xnKDCVmmXNaoRDWmHnRTutomMnUySX9hqDgVQVcvMdc"/
-    );
-    assert.match(html, /crossorigin="anonymous"/);
+    const colorisLoader = await read("services/coloris-loader.js");
+    assert.match(colorisLoader, /Coloris@/);
+    assert.match(colorisLoader, /COLORIS_STYLE_INTEGRITY/);
+    assert.match(colorisLoader, /COLORIS_SCRIPT_INTEGRITY/);
+    assert.match(colorisLoader, /crossOrigin = "anonymous"/);
     assert.match(
       themeBootstrap,
       /localStorage\.getItem\("topykly-theme"\) \|\| localStorage\.getItem\("chetrend-theme"\) \|\| "dark"/
@@ -11324,8 +11407,9 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
     assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260709-topicrace1"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
-    assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;/);
-    assert.match(controllerApp, /const SLOW_TOPIC_REFRESH_INTERVAL_MS = 5000;/);
+    assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 5000;/);
+    assert.match(controllerApp, /const SLOW_TOPIC_REFRESH_INTERVAL_MS = 15000;/);
+    assert.match(controllerApp, /const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 30000;/);
     assert.match(
       controllerApp,
       /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/
@@ -11848,6 +11932,7 @@ await (async () => {
       "settingsProfileIndexableToggle",
       "settingsFilterProfanityToggle",
       "settingsFriendsOnlyToggle",
+      "settingsEmailActivityToggle",
       "settingsSlowModeToggle",
       "settingsBlockedUsers",
       "settingsDeleteAccountButton",
@@ -12194,18 +12279,21 @@ await (async () => {
 
       // El filtro de insultos arranca activado por defecto.
       assert.equal(voterPayload.viewer.filterProfanity, true);
-      // Las cuentas nuevas usan el modo en vivo de un segundo por defecto.
+      // Las cuentas nuevas usan la sincronizacion adaptativa por defecto.
       assert.equal(voterPayload.viewer.slowMode, false);
+      assert.equal(voterPayload.viewer.emailActivityEnabled, false);
 
       const updated = store.updateSettings({
         sessionId: "session-settings-voter",
         filterProfanity: false,
         notificationsFriendsOnly: true,
-        slowMode: true
+        slowMode: true,
+        emailActivityEnabled: true
       });
       assert.equal(updated.viewer.filterProfanity, false);
       assert.equal(updated.viewer.notificationsFriendsOnly, true);
       assert.equal(updated.viewer.slowMode, true);
+      assert.equal(updated.viewer.emailActivityEnabled, true);
       assert.equal(updated.viewer.likesAnonymous, false);
 
       // La visibilidad en buscadores se guarda desde configuracion.
@@ -12260,6 +12348,129 @@ await (async () => {
       assert.throws(
         () => store.updateSettings({ sessionId: "session-settings-guest", filterProfanity: true }),
         (error) => error?.code === "LOGIN_REQUIRED"
+      );
+    });
+  });
+
+  await test("backend persists followed topics and prepares opted-in activity emails", async () => {
+    await withTempStore(
+      (store) => {
+        const author = store.registerWithPassword({
+          sessionId: "session-follow-author",
+          email: "follow-author@example.com",
+          password: "password-segura",
+          nickname: "follow_author"
+        });
+        const registration = store.createEmailAuthChallenge({
+          email: "follow-reader@example.com",
+          nickname: "follow_reader",
+          age: MINIMUM_REGISTRATION_AGE,
+          acceptedTerms: true,
+          termsVersion: TERMS_VERSION,
+          password: "password-segura",
+          nowMs: Date.UTC(2026, 6, 16, 12)
+        });
+        const reader = store.verifyEmailAuthChallenge({
+          challengeId: registration.challengeId,
+          code: registration.code,
+          sessionId: "session-follow-reader",
+          nowMs: Date.UTC(2026, 6, 16, 12, 0, 1)
+        });
+        const created = store.createTopic({
+          sessionId: "session-follow-author",
+          title: "Charla seguida",
+          text: "Mensaje inicial"
+        });
+        const topic = created.topics.find((entry) => entry.title === "Charla seguida");
+
+        const followed = store.followTopic(topic.id, {
+          sessionId: "session-follow-reader"
+        });
+        assert.deepEqual(followed.followedTopicIds, [topic.id]);
+
+        const optedIn = store.updateSettings({
+          sessionId: "session-follow-reader",
+          selectedTopicId: topic.id,
+          emailActivityEnabled: true
+        });
+        assert.equal(optedIn.viewer.emailActivityEnabled, true);
+        assert.equal(
+          store.bootstrap({
+            sessionId: "session-follow-reader",
+            selectedTopicId: topic.id
+          }).followedTopicIds.includes(topic.id),
+          true
+        );
+
+        const recipients = store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id);
+        assert.deepEqual(
+          recipients.map(({ userId, email, topicId }) => ({ userId, email, topicId })),
+          [{
+            userId: reader.viewer.id,
+            email: "follow-reader@example.com",
+            topicId: topic.id
+          }]
+        );
+        assert.deepEqual(
+          store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id),
+          []
+        );
+      },
+      { seedDemoData: false }
+    );
+  });
+
+  await test("backend records a pseudonymous product funnel for moderators", async () => {
+    await withTempStore((store) => {
+      const pageView = store.recordProductEvent({
+        sessionId: "session-product-analytics",
+        authMode: "guest",
+        eventName: "page_view",
+        routeGroup: "/tema/topic-1/charla",
+        ipAddress: "203.0.113.20"
+      });
+      store.recordProductEvent({
+        sessionId: pageView.sessionId,
+        authMode: "guest",
+        eventName: "topic_open",
+        routeGroup: "/tema/topic-1/charla",
+        ipAddress: "203.0.113.20"
+      });
+      store.recordProductEvent({
+        sessionId: pageView.sessionId,
+        authMode: "guest",
+        eventName: "auth_open",
+        routeGroup: "/"
+      });
+
+      store.login({
+        sessionId: "session-product-moderator",
+        userId: "u2"
+      });
+      const report = store.getProductAnalyticsForViewer({
+        sessionId: "session-product-moderator",
+        days: 30
+      });
+      const counts = Object.fromEntries(report.events.map((event) => [event.eventName, event]));
+
+      assert.equal(report.days, 30);
+      assert.equal(counts.page_view.total, 1);
+      assert.equal(counts.page_view.uniqueSubjects, 1);
+      assert.equal(counts.topic_open.total, 1);
+      assert.equal(counts.auth_open.total, 1);
+      assert.equal(store.getDiagnostics().productEvents, 3);
+      assert.throws(
+        () => store.getProductAnalyticsForViewer({ sessionId: pageView.sessionId }),
+        (error) => error?.code === "MODERATOR_REQUIRED"
+      );
+      assert.throws(
+        () =>
+          store.recordProductEvent({
+            sessionId: pageView.sessionId,
+            eventName: "return_visit",
+            routeGroup: "/"
+          }),
+        (error) => error?.code === "INVALID_PRODUCT_EVENT"
       );
     });
   });

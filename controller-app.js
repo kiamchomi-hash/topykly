@@ -18,8 +18,11 @@ import {
   showWebNotification
 } from "./ui/notifications.js";
 
-const LIVE_TOPIC_REFRESH_INTERVAL_MS = 1000;
-const SLOW_TOPIC_REFRESH_INTERVAL_MS = 5000;
+const LIVE_TOPIC_REFRESH_INTERVAL_MS = 5000;
+const SLOW_TOPIC_REFRESH_INTERVAL_MS = 15000;
+const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 30000;
+const IDLE_TOPIC_REFRESH_INTERVAL_MS = 15000;
+const LIVE_TOPIC_IDLE_AFTER_MS = 60000;
 const FAKE_SOCIAL_PARAM_VALUES = new Set(["1", "true", "yes", "demo"]);
 
 function isLocalDevelopmentHost(hostname) {
@@ -281,6 +284,9 @@ async function hydrateInitialData(render, initialSelectedTopicId = null, { fakeS
     const preview = fakeSocial ? createFakeSocialPreview(payload) : null;
     const nextPayload = preview?.payload || payload;
     dispatch(state, reducers.hydrateFromBackend, nextPayload);
+    if (!fakeSocial) {
+      void api.trackProductEvent("page_view").catch(() => {});
+    }
     dispatch(state, reducers.setWebNotificationsPermission, getWebNotificationPermission());
     if (publicProfileNickname) {
       openSharedPublicProfile(publicProfileNickname);
@@ -317,11 +323,43 @@ export function createLiveTopicSync({
   apiClient = api,
   intervalMs = LIVE_TOPIC_REFRESH_INTERVAL_MS,
   slowIntervalMs = SLOW_TOPIC_REFRESH_INTERVAL_MS,
+  hiddenIntervalMs = HIDDEN_TOPIC_REFRESH_INTERVAL_MS,
+  idleIntervalMs = IDLE_TOPIC_REFRESH_INTERVAL_MS,
+  idleAfterMs = LIVE_TOPIC_IDLE_AFTER_MS,
+  documentRef = typeof document !== "undefined" ? document : null,
+  windowRef = typeof window !== "undefined" ? window : null,
+  now = () => Date.now(),
   onError = console.error
 }) {
   let timer = 0;
   let running = false;
   let inFlight = false;
+  let lastInteractionAt = now();
+
+  function getNextIntervalMs() {
+    if (documentRef?.visibilityState === "hidden") {
+      return hiddenIntervalMs;
+    }
+    if (state.viewer?.slowMode) {
+      return slowIntervalMs;
+    }
+    if (now() - lastInteractionAt >= idleAfterMs) {
+      return idleIntervalMs;
+    }
+    return intervalMs;
+  }
+
+  function markInteraction() {
+    lastInteractionAt = now();
+  }
+
+  function handleVisibilityChange() {
+    if (documentRef?.visibilityState === "visible") {
+      markInteraction();
+      void refreshNow();
+    }
+    reschedule();
+  }
 
   async function refreshNow() {
     if (inFlight || !state.viewer || state.pendingMessageReactionIds?.length) {
@@ -374,7 +412,7 @@ export function createLiveTopicSync({
       return;
     }
 
-    const nextIntervalMs = state.viewer?.slowMode ? slowIntervalMs : intervalMs;
+    const nextIntervalMs = getNextIntervalMs();
     timer = setTimeout(async () => {
       timer = 0;
       await refreshNow();
@@ -388,11 +426,19 @@ export function createLiveTopicSync({
       return;
     }
     running = true;
+    documentRef?.addEventListener?.("visibilitychange", handleVisibilityChange);
+    windowRef?.addEventListener?.("pointerdown", markInteraction, { passive: true });
+    windowRef?.addEventListener?.("keydown", markInteraction);
+    windowRef?.addEventListener?.("focus", handleVisibilityChange);
     schedule();
   }
 
   function stop() {
     running = false;
+    documentRef?.removeEventListener?.("visibilitychange", handleVisibilityChange);
+    windowRef?.removeEventListener?.("pointerdown", markInteraction);
+    windowRef?.removeEventListener?.("keydown", markInteraction);
+    windowRef?.removeEventListener?.("focus", handleVisibilityChange);
     if (timer) {
       clearTimeout(timer);
       timer = 0;
@@ -518,6 +564,7 @@ export function bootstrap() {
     openDrawer: (side, trigger) => openDrawer(side, dom, closeTimerRef, trigger),
     closeDrawers: actions.closeDrawers,
     flashTitle: actions.flashTitle,
+    trackProductEvent: actions.trackProductEvent,
     getAuthStatus: actions.getAuthStatus,
     login: actions.login,
     loginWithPassword: actions.loginWithPassword,

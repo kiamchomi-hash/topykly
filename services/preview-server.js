@@ -27,6 +27,7 @@ const DEFAULT_REACTION_RESET_CHECK_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
+const TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS = 30 * 60_000;
 const MAX_HTTP_RATE_LIMIT_BUCKETS = 10_000;
 const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
 const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
@@ -45,6 +46,7 @@ const mime = {
 };
 const PUBLIC_SERVICE_MODULES = new Set([
   "api.js",
+  "coloris-loader.js",
   "drawer-service.js",
   "palette-service.js",
   "seo-pages.js"
@@ -427,6 +429,30 @@ function sendBackendPayload(res, req, authService, statusCode, payload) {
   });
 }
 
+async function deliverTopicActivityEmails(store, authService, {
+  topicId,
+  actorUserId,
+  actorName
+} = {}) {
+  if (!authService.isEmailConfigured()) {
+    return;
+  }
+  const recipients = store.claimTopicActivityEmailRecipients(topicId, actorUserId);
+  if (!recipients.length) {
+    return;
+  }
+
+  const origin = resolvePublicOrigin();
+  await Promise.allSettled(recipients.map((recipient) => authService.sendTopicActivityEmail({
+    email: recipient.email,
+    recipientName: recipient.name,
+    actorName,
+    topicTitle: recipient.topicTitle,
+    topicUrl: `${origin}${topicPath({ id: recipient.topicId, title: recipient.topicTitle })}`,
+    deliveryKey: `topic-activity-${recipient.topicId}-${recipient.userId}-${Math.floor(Date.now() / TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS)}`
+  })));
+}
+
 async function handleApiRequest(store, authService, req, res, url) {
   const context = getRequestContext(req);
 
@@ -444,6 +470,16 @@ async function handleApiRequest(store, authService, req, res, url) {
       sendBackendPayload(res, req, authService, 200, store.refresh({
         ...context,
         selectedTopicId: normalizeSelectedTopicId(url)
+      }));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/events") {
+      const body = await readJsonBody(req);
+      sendBackendPayload(res, req, authService, 202, store.recordProductEvent({
+        ...context,
+        eventName: body.eventName,
+        routeGroup: body.routeGroup
       }));
       return;
     }
@@ -665,6 +701,7 @@ async function handleApiRequest(store, authService, req, res, url) {
         likesAnonymous: typeof body.likesAnonymous === "boolean" ? body.likesAnonymous : null,
         filterProfanity: typeof body.filterProfanity === "boolean" ? body.filterProfanity : null,
         notificationsFriendsOnly: typeof body.notificationsFriendsOnly === "boolean" ? body.notificationsFriendsOnly : null,
+        emailActivityEnabled: typeof body.emailActivityEnabled === "boolean" ? body.emailActivityEnabled : null,
         slowMode: typeof body.slowMode === "boolean" ? body.slowMode : null,
         profileIndexable: typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
         selectedTopicId: body.selectedTopicId ?? null
@@ -698,14 +735,33 @@ async function handleApiRequest(store, authService, req, res, url) {
       return;
     }
 
+    if (req.method === "POST" && url.pathname.startsWith("/api/topics/") && url.pathname.endsWith("/follow")) {
+      const segments = url.pathname.split("/").filter(Boolean);
+      const topicId = segments[2] || "";
+      const body = await readJsonBody(req);
+      sendBackendPayload(res, req, authService, 200, store.followTopic(topicId, {
+        ...context,
+        selectedTopicId: body.selectedTopicId ?? topicId
+      }));
+      return;
+    }
+
     if (req.method === "POST" && url.pathname.startsWith("/api/topics/") && url.pathname.endsWith("/messages")) {
       const segments = url.pathname.split("/").filter(Boolean);
       const topicId = segments[2] || "";
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.addMessage(topicId, {
+      const payload = store.addMessage(topicId, {
         ...context,
         text: body.text
-      }));
+      });
+      sendBackendPayload(res, req, authService, 200, payload);
+      queueMicrotask(() => {
+        void deliverTopicActivityEmails(store, authService, {
+          topicId,
+          actorUserId: payload.viewer?.id,
+          actorName: payload.viewer?.displayName || "Alguien"
+        }).catch(console.error);
+      });
       return;
     }
 
@@ -803,6 +859,14 @@ async function handleApiRequest(store, authService, req, res, url) {
 
     if (req.method === "GET" && url.pathname === "/api/diagnostics") {
       sendJson(res, 200, store.getDiagnosticsForViewer(context));
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/admin/analytics") {
+      sendJson(res, 200, store.getProductAnalyticsForViewer({
+        ...context,
+        days: url.searchParams.get("days")
+      }));
       return;
     }
 
@@ -1307,9 +1371,11 @@ function handleStaticRequest(req, res, url, store) {
 
     const contentType = mime[path.extname(resolvedFilePath)] || "application/octet-stream";
     const extension = path.extname(resolvedFilePath);
-    const cacheControl = [".html", ".js", ".css"].includes(extension)
+    const cacheControl = extension === ".html"
       ? "no-store, max-age=0"
-      : "public, max-age=3600";
+      : [".js", ".css"].includes(extension)
+        ? "public, max-age=300, must-revalidate"
+        : "public, max-age=3600";
     res.writeHead(200, {
       ...getSecurityHeaders({ includeCsp: extension === ".html", req: res.req }),
       "Content-Type": contentType,

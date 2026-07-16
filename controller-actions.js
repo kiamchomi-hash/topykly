@@ -13,6 +13,7 @@ import {
   updateDocumentFavicon
 } from "./palettes.js";
 import { getWebNotificationPermission, requestWebNotificationPermission } from "./ui/notifications.js";
+import { ensureColorisLoaded } from "./services/coloris-loader.js";
 
 const ADMIN_ACTION_FEEDBACK = {
   approve_avatar: "Foto aprobada",
@@ -121,6 +122,7 @@ export function createActionHandlers({
   syncResponsiveView,
   isMobileViewport,
   closeDrawers,
+  apiClient = api,
   onLiveSyncPreferenceChange = null
 }) {
   let syncAuthUiRef = () => {};
@@ -135,6 +137,11 @@ export function createActionHandlers({
 
   function flashTitle(text) {
     showFeedback(text, { kind: "info" });
+  }
+
+  function trackProductEvent(eventName, routeGroup = null) {
+    return Promise.resolve(apiClient.trackProductEvent?.(eventName, routeGroup) ?? null)
+      .catch(() => null);
   }
 
   function showFeedback(message, { kind = "info", durationMs = 3600 } = {}) {
@@ -191,6 +198,7 @@ export function createActionHandlers({
     }
 
     dispatch(state, reducers.mergeLiveTopics, result);
+    void trackProductEvent("login_complete");
     render();
     return result;
   }
@@ -203,6 +211,7 @@ export function createActionHandlers({
       selectedTopicId: resolveSelectedTopicId(selectedTopicId)
     });
     dispatch(state, reducers.mergeLiveTopics, result);
+    void trackProductEvent("login_complete");
     render();
     return result;
   }
@@ -234,6 +243,7 @@ export function createActionHandlers({
       selectedTopicId: resolveSelectedTopicId(selectedTopicId)
     });
     dispatch(state, reducers.mergeLiveTopics, result);
+    void trackProductEvent("registration_complete");
     render();
     return result;
   }
@@ -519,9 +529,13 @@ export function createActionHandlers({
       on: "Solo verás notificaciones de tus amigos.",
       off: "Verás notificaciones de toda la actividad."
     },
+    emailActivityEnabled: {
+      on: "Avisos por correo activados.",
+      off: "Avisos por correo desactivados."
+    },
     slowMode: {
-      on: "Modo lento activado: el contenido se actualiza cada 5 segundos.",
-      off: "Modo en vivo activado: el contenido se actualiza cada segundo."
+      on: "Modo lento activado.",
+      off: "Modo en vivo activado."
     },
     profileIndexable: {
       on: "Tu perfil puede aparecer en buscadores.",
@@ -718,6 +732,7 @@ export function createActionHandlers({
       selectedTopicId: state.selectedTopicId
     });
     dispatch(state, reducers.mergeLiveTopics, payload);
+    void trackProductEvent("registration_complete");
     render();
     return payload;
   }
@@ -786,7 +801,7 @@ export function createActionHandlers({
     render();
   }
 
-  function openPaletteModal() {
+  async function openPaletteModal() {
     if (state.isPaletteModalOpen) {
       return;
     }
@@ -794,6 +809,15 @@ export function createActionHandlers({
     state.isPaletteModalOpen = true;
     render();
     focusPaletteModalStart(dom);
+    try {
+      await ensureColorisLoaded();
+      if (state.isPaletteModalOpen) {
+        render();
+      }
+    } catch (error) {
+      console.error(error);
+      showFeedback("No se pudo cargar el selector de color.", { kind: "error" });
+    }
   }
 
   function closePaletteModal() {
@@ -999,6 +1023,17 @@ export function createActionHandlers({
       clearDocumentTextSelection();
     }
     rankingActions.focusTopic(topicId);
+    if (topicId && (topicId || null) !== previousTopicId) {
+      void trackProductEvent("topic_open", "/tema");
+      if (state.viewer?.type === "registered" && typeof apiClient.followTopic === "function") {
+        void apiClient.followTopic(topicId, topicId)
+          .then((payload) => {
+            dispatch(state, reducers.mergeLiveTopics, payload);
+            render();
+          })
+          .catch(() => {});
+      }
+    }
     if ((topicId || null) !== previousTopicId) {
       clearMessageComposerDraft();
     }
@@ -1010,7 +1045,8 @@ export function createActionHandlers({
     isMobileViewport,
     syncResponsiveView,
     render,
-    showFeedback
+    showFeedback,
+    apiClient
   });
 
   return {
@@ -1036,6 +1072,7 @@ export function createActionHandlers({
     startAccountLink,
     logout,
     flashTitle,
+    trackProductEvent,
     showFeedback,
     enableWebNotifications,
     toggleFriendRequestsPanel,

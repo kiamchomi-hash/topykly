@@ -3,6 +3,7 @@ const SETTING_TOGGLE_KEYS = {
   profileIndexable: "settingsProfileIndexableToggle",
   filterProfanity: "settingsFilterProfanityToggle",
   notificationsFriendsOnly: "settingsFriendsOnlyToggle",
+  emailActivityEnabled: "settingsEmailActivityToggle",
   slowMode: "settingsSlowModeToggle"
 };
 
@@ -148,6 +149,11 @@ export function renderSettingsModal(state, dom) {
   syncSettingToggle(
     dom[SETTING_TOGGLE_KEYS.notificationsFriendsOnly],
     viewer.notificationsFriendsOnly,
+    pending
+  );
+  syncSettingToggle(
+    dom[SETTING_TOGGLE_KEYS.emailActivityEnabled],
+    viewer.emailActivityEnabled,
     pending
   );
   renderBlockedUsers(state, dom);

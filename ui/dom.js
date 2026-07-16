@@ -382,6 +382,7 @@ const DOM_IDS = [
   "settingsProfileIndexableToggle",
   "settingsFilterProfanityToggle",
   "settingsFriendsOnlyToggle",
+  "settingsEmailActivityToggle",
   "settingsSlowModeToggle",
   "settingsBlockedUsers",
   "settingsDeleteAccountButton",

@@ -120,6 +120,7 @@ function normalizeBackendPayload(payload) {
       friends: []
     },
     blockedUsers: Array.isArray(payload.blockedUsers) ? payload.blockedUsers : [],
+    followedTopicIds: Array.isArray(payload.followedTopicIds) ? payload.followedTopicIds : [],
     pendingModerationCount: Number.isFinite(payload.pendingModerationCount)
       ? payload.pendingModerationCount
       : 0,
@@ -148,6 +149,13 @@ export const api = {
 
   async openTopic(topicId) {
     return request(`/api/topics/${encodeURIComponent(topicId)}`);
+  },
+
+  async followTopic(topicId, selectedTopicId = null) {
+    return request(`/api/topics/${encodeURIComponent(topicId)}/follow`, {
+      method: "POST",
+      body: { selectedTopicId }
+    });
   },
 
   async getAuthStatus() {
@@ -297,6 +305,7 @@ export const api = {
     likesAnonymous = null,
     filterProfanity = null,
     notificationsFriendsOnly = null,
+    emailActivityEnabled = null,
     slowMode = null,
     profileIndexable = null,
     selectedTopicId = null
@@ -307,6 +316,7 @@ export const api = {
         likesAnonymous,
         filterProfanity,
         notificationsFriendsOnly,
+        emailActivityEnabled,
         slowMode,
         profileIndexable,
         selectedTopicId
@@ -332,6 +342,21 @@ export const api = {
     return request("/api/topics", {
       method: "POST",
       body: { title, text }
+    });
+  },
+
+  async trackProductEvent(eventName, routeGroup = null) {
+    const resolvedRouteGroup = routeGroup
+      ?? (typeof window !== "undefined" ? window.location.pathname : "/");
+    return readApiPayload("/api/events", {
+      method: "POST",
+      body: { eventName, routeGroup: resolvedRouteGroup }
+    });
+  },
+
+  async getProductAnalytics(days = 30) {
+    return readApiPayload("/api/admin/analytics", {
+      searchParams: { days }
     });
   },
 

@@ -36,6 +36,20 @@ const PASSWORD_RESET_EMAIL_HOURLY_MAX = 5;
 const PASSWORD_RESET_IP_HOURLY_MAX = 20;
 const PASSWORD_RESET_RATE_WINDOW_MS = 60 * 60_000;
 const ACCOUNT_REAUTH_WINDOW_MS = 15 * 60_000;
+const TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS = 30 * 60_000;
+const PRODUCT_ANALYTICS_RETENTION_DAYS = 90;
+const PRODUCT_ANALYTICS_PRUNE_META_KEY = "product_analytics_last_prune_day";
+const PRODUCT_ANALYTICS_SALT_META_KEY = "product_analytics_salt";
+const PRODUCT_EVENT_NAMES = new Set([
+  "page_view",
+  "topic_open",
+  "publish_attempt",
+  "topic_created",
+  "comment_created",
+  "auth_open",
+  "registration_complete",
+  "login_complete"
+]);
 // Used to keep unknown-email password attempts comparable to real accounts.
 const DUMMY_PASSWORD_HASH = hashPassword("topykly-password-timing-dummy");
 const LOCAL_AUTH_CHALLENGE_SECRET = crypto.randomBytes(32).toString("base64url");
@@ -713,6 +727,7 @@ function initSchema(db) {
       likes_anonymous INTEGER NOT NULL DEFAULT 0,
       filter_profanity INTEGER NOT NULL DEFAULT 1,
       notifications_friends_only INTEGER NOT NULL DEFAULT 0,
+      email_activity_enabled INTEGER NOT NULL DEFAULT 0,
       slow_mode INTEGER NOT NULL DEFAULT 0,
       avatar_url TEXT,
       avatar_pending_url TEXT,
@@ -820,6 +835,34 @@ function initSchema(db) {
       FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS topic_follows (
+      user_id TEXT NOT NULL,
+      topic_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, topic_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS topic_email_deliveries (
+      user_id TEXT NOT NULL,
+      topic_id TEXT NOT NULL,
+      last_sent_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, topic_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS product_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_key TEXT NOT NULL,
+      viewer_type TEXT NOT NULL CHECK (viewer_type IN ('guest', 'registered')),
+      event_name TEXT NOT NULL,
+      route_group TEXT NOT NULL DEFAULT '/',
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS moderation_actions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action_type TEXT NOT NULL,
@@ -908,6 +951,7 @@ function initSchema(db) {
   ensureColumn(db, "users", "likes_anonymous", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "notifications_friends_only", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "users", "email_activity_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "slow_mode", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "profile_indexable", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "users", "nickname", "TEXT");
@@ -1025,6 +1069,18 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS user_blocks_blocked_idx
     ON user_blocks(blocked_id, blocker_id);
+
+    CREATE INDEX IF NOT EXISTS topic_follows_topic_idx
+    ON topic_follows(topic_id, user_id);
+
+    CREATE INDEX IF NOT EXISTS topic_email_deliveries_sent_idx
+    ON topic_email_deliveries(last_sent_at);
+
+    CREATE INDEX IF NOT EXISTS product_events_created_idx
+    ON product_events(created_at DESC, event_name);
+
+    CREATE INDEX IF NOT EXISTS product_events_subject_idx
+    ON product_events(subject_key, created_at DESC);
 
     CREATE INDEX IF NOT EXISTS guest_ip_rate_limits_updated_idx
     ON guest_ip_rate_limits(updated_at);
@@ -1493,6 +1549,7 @@ function mapViewerRow(row, sessionRow) {
     likesAnonymous: row.likes_anonymous === 1,
     filterProfanity: row.filter_profanity === 1,
     notificationsFriendsOnly: row.notifications_friends_only === 1,
+    emailActivityEnabled: row.email_activity_enabled === 1,
     slowMode: row.slow_mode === 1,
     createdAt: row.created_at ?? null,
     avatarUrl: row.avatar_url ?? null,
@@ -2292,6 +2349,125 @@ function usersBlockEachOther(db, leftUserId, rightUserId) {
     LIMIT 1
   `).get(leftUserId, rightUserId, rightUserId, leftUserId));
 }
+
+function followTopicForRegisteredViewer(db, context, topicId, nowIso = new Date().toISOString()) {
+  if (context.viewer.type !== "registered" || !topicId) {
+    return;
+  }
+
+  db.prepare(`
+    INSERT INTO topic_follows (user_id, topic_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id, topic_id) DO UPDATE SET updated_at = excluded.updated_at
+  `).run(context.viewer.id, topicId, nowIso, nowIso);
+}
+
+function getFollowedTopicIds(db, viewerId) {
+  if (!viewerId) {
+    return [];
+  }
+
+  return db.prepare(`
+    SELECT topic_id
+    FROM topic_follows
+    WHERE user_id = ?
+    ORDER BY updated_at DESC
+  `).all(viewerId).map((row) => row.topic_id);
+}
+
+function normalizeProductRouteGroup(value) {
+  const pathname = String(value || "/").trim().split("?")[0].split("#")[0];
+  if (pathname.startsWith("/tema/")) {
+    return "/tema";
+  }
+  if (pathname.startsWith("/u/")) {
+    return "/u";
+  }
+  if (pathname === "/temas" || pathname === "/archivo") {
+    return pathname;
+  }
+  return "/";
+}
+
+function getProductAnalyticsSalt(db) {
+  const existing = db.prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(PRODUCT_ANALYTICS_SALT_META_KEY);
+  if (existing?.value) {
+    return existing.value;
+  }
+
+  const salt = crypto.randomBytes(32).toString("base64url");
+  db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)")
+    .run(PRODUCT_ANALYTICS_SALT_META_KEY, salt, new Date().toISOString());
+  return salt;
+}
+
+function getProductAnalyticsSubjectKey(db, context) {
+  const identity = context.viewer.type === "registered"
+    ? `registered:${context.viewer.id}`
+    : `guest:${context.sessionId}`;
+  return crypto.createHmac("sha256", getProductAnalyticsSalt(db))
+    .update(identity)
+    .digest("base64url");
+}
+
+function pruneProductAnalyticsIfNeeded(db, now = new Date()) {
+  const today = now.toISOString().slice(0, 10);
+  const lastPrune = db.prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(PRODUCT_ANALYTICS_PRUNE_META_KEY);
+  if (lastPrune?.value === today) {
+    return;
+  }
+
+  const cutoff = new Date(now.getTime() - PRODUCT_ANALYTICS_RETENTION_DAYS * 24 * 60 * 60_000).toISOString();
+  db.prepare("DELETE FROM product_events WHERE created_at < ?").run(cutoff);
+  db.prepare(`
+    INSERT INTO app_metadata (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(PRODUCT_ANALYTICS_PRUNE_META_KEY, today, now.toISOString());
+}
+
+function recordProductEvent(db, context, eventName, routeGroup = "/", now = new Date()) {
+  const normalizedEventName = String(eventName || "").trim();
+  if (!PRODUCT_EVENT_NAMES.has(normalizedEventName)) {
+    throw new ApiError(400, "INVALID_PRODUCT_EVENT", "El evento de producto no es válido.");
+  }
+
+  pruneProductAnalyticsIfNeeded(db, now);
+  const subjectKey = getProductAnalyticsSubjectKey(db, context);
+  const normalizedRouteGroup = normalizeProductRouteGroup(routeGroup);
+  const createdAt = now.toISOString();
+  let returnVisitRecorded = false;
+
+  if (normalizedEventName === "page_view") {
+    const previousVisit = db.prepare(`
+      SELECT created_at
+      FROM product_events
+      WHERE subject_key = ? AND event_name = 'page_view'
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(subjectKey);
+    const previousVisitMs = Date.parse(previousVisit?.created_at || "");
+    returnVisitRecorded = Number.isFinite(previousVisitMs)
+      && now.getTime() - previousVisitMs >= 12 * 60 * 60_000;
+  }
+
+  db.prepare(`
+    INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(subjectKey, context.viewer.type, normalizedEventName, normalizedRouteGroup, createdAt);
+
+  if (returnVisitRecorded) {
+    db.prepare(`
+      INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, created_at)
+      VALUES (?, ?, 'return_visit', ?, ?)
+    `).run(subjectKey, context.viewer.type, normalizedRouteGroup, createdAt);
+  }
+
+  return { accepted: true, returnVisitRecorded };
+}
+
 function buildFrontendPayload(db, context, selectedTopicId = null, profileNickname = null) {
   rebuildActiveTopicRanks(db);
 
@@ -2370,6 +2546,9 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     })),
     friendships,
     blockedUsers,
+    followedTopicIds: context.viewer.type === "registered"
+      ? getFollowedTopicIds(db, context.viewer.id)
+      : [],
     topics,
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,
@@ -3452,6 +3631,97 @@ function trimTopicReplies(db, topicId) {
   });
 }
 
+function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new Date()) {
+  const topic = db.prepare("SELECT id, title FROM topics WHERE id = ?").get(String(topicId || ""));
+  if (!topic) {
+    return [];
+  }
+
+  const cutoff = new Date(now.getTime() - TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS).toISOString();
+  const nowIso = now.toISOString();
+  const recipients = db.prepare(`
+    SELECT users.id, users.name, users.email
+    FROM topic_follows
+    JOIN users ON users.id = topic_follows.user_id
+    LEFT JOIN topic_email_deliveries
+      ON topic_email_deliveries.user_id = topic_follows.user_id
+      AND topic_email_deliveries.topic_id = topic_follows.topic_id
+    WHERE topic_follows.topic_id = ?
+      AND users.id != ?
+      AND users.type = 'registered'
+      AND users.status = 'active'
+      AND users.email_activity_enabled = 1
+      AND users.email IS NOT NULL
+      AND users.email_verified_at IS NOT NULL
+      AND (topic_email_deliveries.last_sent_at IS NULL OR topic_email_deliveries.last_sent_at <= ?)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_blocks
+        WHERE (blocker_id = users.id AND blocked_id = ?)
+           OR (blocker_id = ? AND blocked_id = users.id)
+      )
+    ORDER BY topic_follows.created_at ASC
+    LIMIT 100
+  `).all(topic.id, actorUserId, cutoff, actorUserId, actorUserId);
+
+  const claim = db.prepare(`
+    INSERT INTO topic_email_deliveries (user_id, topic_id, last_sent_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id, topic_id) DO UPDATE SET last_sent_at = excluded.last_sent_at
+  `);
+  recipients.forEach((recipient) => claim.run(recipient.id, topic.id, nowIso));
+
+  return recipients.map((recipient) => ({
+    userId: recipient.id,
+    name: recipient.name,
+    email: recipient.email,
+    topicId: topic.id,
+    topicTitle: topic.title
+  }));
+}
+
+function buildProductAnalyticsReport(db, days = 30) {
+  const normalizedDays = Math.max(1, Math.min(90, Number.parseInt(days, 10) || 30));
+  const cutoff = new Date(Date.now() - normalizedDays * 24 * 60 * 60_000).toISOString();
+  const events = db.prepare(`
+    SELECT
+      event_name AS eventName,
+      COUNT(*) AS total,
+      COUNT(DISTINCT subject_key) AS uniqueSubjects
+    FROM product_events
+    WHERE created_at >= ?
+    GROUP BY event_name
+    ORDER BY total DESC, event_name ASC
+  `).all(cutoff).map((row) => ({
+    eventName: row.eventName,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+  const daily = db.prepare(`
+    SELECT
+      substr(created_at, 1, 10) AS day,
+      event_name AS eventName,
+      COUNT(*) AS total,
+      COUNT(DISTINCT subject_key) AS uniqueSubjects
+    FROM product_events
+    WHERE created_at >= ?
+    GROUP BY day, event_name
+    ORDER BY day ASC, event_name ASC
+  `).all(cutoff).map((row) => ({
+    day: row.day,
+    eventName: row.eventName,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+
+  return {
+    days: normalizedDays,
+    generatedAt: new Date().toISOString(),
+    events,
+    daily
+  };
+}
+
 function assertCommentableTopic(row) {
   if (!row) {
     throw new ApiError(404, "NOT_FOUND", "Tema no encontrado.");
@@ -4153,7 +4423,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, slowMode = null, profileIndexable = null, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, emailActivityEnabled = null, slowMode = null, profileIndexable = null, selectedTopicId = null, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
@@ -4167,6 +4437,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         const nextNotificationsFriendsOnly = notificationsFriendsOnly === null
           ? context.viewer.notificationsFriendsOnly
           : notificationsFriendsOnly === true;
+        const nextEmailActivityEnabled = emailActivityEnabled === null
+          ? context.viewer.emailActivityEnabled
+          : emailActivityEnabled === true;
         const nextSlowMode = slowMode === null ? context.viewer.slowMode : slowMode === true;
         const nextProfileIndexable = profileIndexable === null
           ? context.viewerRow.profile_indexable !== 0
@@ -4174,12 +4447,13 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
 
         db.prepare(`
           UPDATE users
-          SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, slow_mode = ?, profile_indexable = ?, updated_at = ?
+          SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, email_activity_enabled = ?, slow_mode = ?, profile_indexable = ?, updated_at = ?
           WHERE id = ?
         `).run(
           nextLikesAnonymous ? 1 : 0,
           nextFilterProfanity ? 1 : 0,
           nextNotificationsFriendsOnly ? 1 : 0,
+          nextEmailActivityEnabled ? 1 : 0,
           nextSlowMode ? 1 : 0,
           nextProfileIndexable ? 1 : 0,
           new Date().toISOString(),
@@ -4217,6 +4491,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
 
         db.prepare("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?").run(userId, userId);
         db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?").run(userId, userId);
+        db.prepare("DELETE FROM topic_follows WHERE user_id = ?").run(userId);
+        db.prepare("DELETE FROM topic_email_deliveries WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
 
         // Los mensajes y temas quedan (tienen FK al usuario); la fila se anonimiza y desactiva.
@@ -4261,7 +4537,22 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (!row) {
           throw new ApiError(404, "NOT_FOUND", "Tema no encontrado.");
         }
+        followTopicForRegisteredViewer(db, context, topicId);
         return buildFrontendPayload(db, context, topicId);
+      });
+    },
+    followTopic(topicId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        if (context.viewer.type !== "registered") {
+          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesión para seguir conversaciones.");
+        }
+        const row = db.prepare("SELECT id FROM topics WHERE id = ?").get(String(topicId || ""));
+        if (!row) {
+          throw new ApiError(404, "NOT_FOUND", "Tema no encontrado.");
+        }
+        followTopicForRegisteredViewer(db, context, row.id);
+        return buildFrontendPayload(db, context, selectedTopicId || row.id);
       });
     },
     createTopic({ sessionId, authMode, title, text, ipAddress = "" } = {}) {
@@ -4302,6 +4593,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
 
         rebuildActiveTopicRanks(db);
         updateViewerActivity(db, context, "last_topic_at");
+        followTopicForRegisteredViewer(db, context, topicId, nowIso);
 
         const refreshedContext = resolveViewer(db, {
           sessionId: context.sessionId,
@@ -4343,6 +4635,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
 
         rebuildActiveTopicRanks(db);
         updateViewerActivity(db, context, "last_message_at");
+        followTopicForRegisteredViewer(db, context, topicId, nowIso);
 
         const refreshedContext = resolveViewer(db, {
           sessionId: context.sessionId,
@@ -5150,6 +5443,34 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return this.getDiagnostics();
       });
     },
+    recordProductEvent({ sessionId, authMode, eventName, routeGroup = "/", ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, {
+          sessionId,
+          authMode,
+          ipAddress,
+          persistGuest: true
+        });
+        return {
+          sessionId: context.sessionId,
+          ...recordProductEvent(db, context, eventName, routeGroup)
+        };
+      });
+    },
+    getProductAnalyticsForViewer({ sessionId, authMode, days = 30, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertModerator(context.viewerRow);
+        return buildProductAnalyticsReport(db, days);
+      });
+    },
+    claimTopicActivityEmailRecipients(topicId, actorUserId) {
+      return withTransaction(db, () => claimTopicActivityEmailRecipients(
+        db,
+        String(topicId || ""),
+        String(actorUserId || "")
+      ));
+    },
     getDiagnostics() {
       const topics = db.prepare("SELECT COUNT(*) AS count FROM topics").get()?.count ?? 0;
       const messages = db.prepare("SELECT COUNT(*) AS count FROM messages").get()?.count ?? 0;
@@ -5158,6 +5479,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
       const reports = db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = ?").get(REPORT_STATUS_OPEN)?.count ?? 0;
       const blockedSessions = db.prepare("SELECT COUNT(*) AS count FROM blocked_sessions").get()?.count ?? 0;
       const blockedIps = db.prepare("SELECT COUNT(*) AS count FROM blocked_ips").get()?.count ?? 0;
+      const topicFollows = db.prepare("SELECT COUNT(*) AS count FROM topic_follows").get()?.count ?? 0;
+      const productEvents = db.prepare("SELECT COUNT(*) AS count FROM product_events").get()?.count ?? 0;
       return {
         dbPath: resolvedDbPath,
         dbPathSource: dbConfig.dbPathSource,
@@ -5169,7 +5492,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         sessions,
         reports,
         blockedSessions,
-        blockedIps
+        blockedIps,
+        topicFollows,
+        productEvents
       };
     }
   };

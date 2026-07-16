@@ -88,15 +88,20 @@ function getPreviousOrder(targets) {
   return Array.from(source.children).map((child) => child.dataset?.id).filter(Boolean);
 }
 
+function getUserMenuIdScope(target) {
+  return target.id || "user-list";
+}
+
 // A leaving item stays in the DOM (mid fade/collapse) across several render() calls,
 // since polling re-renders every 1s while the leave animation runs longer than that.
 // Reusing the same still-animating node (instead of building a fresh one each time)
 // keeps reconcile()'s patch a no-op for it, so it never clobbers the in-progress
 // inline height/padding styles driving the collapse.
 function buildMergedUserItemsForTarget(target, ordered, leavingIds, previousOrder, state) {
+  const menuIdScope = getUserMenuIdScope(target);
   const items = ordered.map((user) => ({
     id: user.id,
-    node: createUserItem(user, state.currentUserId, state.activeConnectedUserId)
+    node: createUserItem(user, state.currentUserId, state.activeConnectedUserId, menuIdScope)
   }));
 
   const existingByIdInTarget = new Map();
@@ -117,7 +122,7 @@ function buildMergedUserItemsForTarget(target, ordered, leavingIds, previousOrde
       if (!user) {
         return;
       }
-      node = createUserItem(user, state.currentUserId, state.activeConnectedUserId);
+      node = createUserItem(user, state.currentUserId, state.activeConnectedUserId, menuIdScope);
       node.classList.add("user-item--leaving");
     }
 
@@ -216,16 +221,25 @@ export function renderUsers(state, dom) {
   const previousHeights = newlyLeavingIds.size ? captureUserItemHeights(targets, newlyLeavingIds) : null;
 
   if (!leavingIds.size) {
-    renderIntoTargets(targets, "scroll-list user-list", () => {
-      if (isLoading) {
-        return Array.from({ length: 10 }, (_, i) => createUserSkeleton(i));
+    targets.forEach((target) => {
+      if (!target) {
+        return;
       }
 
-      if (!ordered.length) {
-        return [];
-      }
+      renderIntoTargets([target], "scroll-list user-list", () => {
+        if (isLoading) {
+          return Array.from({ length: 10 }, (_, i) => createUserSkeleton(i));
+        }
 
-      return ordered.map((user) => createUserItem(user, state.currentUserId, state.activeConnectedUserId));
+        if (!ordered.length) {
+          return [];
+        }
+
+        const menuIdScope = getUserMenuIdScope(target);
+        return ordered.map((user) =>
+          createUserItem(user, state.currentUserId, state.activeConnectedUserId, menuIdScope)
+        );
+      });
     });
   } else {
     targets.forEach((target) => {

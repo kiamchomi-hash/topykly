@@ -1519,6 +1519,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     resetAuthFieldValidation();
     setAuthStatusMessage();
     setAuthModalOpen(true);
+    void handlers.trackProductEvent?.("auth_open");
     await syncTurnstile();
   }
 
