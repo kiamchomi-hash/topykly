@@ -1,10 +1,13 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 
 import { createAuthService } from "./auth-service.js";
 import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-store.js";
+import { createLiveEventHub as createSharedLiveEventHub } from "./live-event-hub.js";
 import { renderTopicSocialCard } from "./social-card.js";
 import {
   renderNotFoundPage,
@@ -28,11 +31,17 @@ const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
 const TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS = 30 * 60_000;
-const LIVE_EVENT_HEARTBEAT_MS = 25_000;
-const MAX_LIVE_EVENT_CLIENTS = 1000;
 const MAX_HTTP_RATE_LIMIT_BUCKETS = 10_000;
 const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
 const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
+const COMPRESSIBLE_TYPE_PATTERN = /^(?:text\/|application\/(?:javascript|json|xml|manifest\+json)|image\/svg\+xml)/;
+// Por debajo de este tamano la compresion no compensa el overhead de cabeceras.
+const MIN_COMPRESSIBLE_BYTES = 1024;
+const BROTLI_QUALITY = 5;
+const GZIP_LEVEL = 6;
+const STATIC_CACHE_MAX_ENTRIES = 256;
+const SOCIAL_CARD_CACHE_MAX_ENTRIES = 64;
+const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -159,6 +168,104 @@ function getSecurityHeaders({ includeCsp = true, req = null } = {}) {
   return headers;
 }
 
+function parseAcceptEncoding(headerValue) {
+  const accepted = new Map();
+  for (const part of String(headerValue || "").split(",")) {
+    const [rawName, ...params] = part.trim().split(";");
+    const name = rawName.trim().toLowerCase();
+    if (!name) {
+      continue;
+    }
+    let quality = 1;
+    for (const param of params) {
+      const [key, value] = param.split("=").map((entry) => entry.trim().toLowerCase());
+      if (key === "q") {
+        const parsed = Number.parseFloat(value);
+        quality = Number.isFinite(parsed) ? parsed : 1;
+      }
+    }
+    accepted.set(name, quality);
+  }
+  return accepted;
+}
+
+// Brotli comprime mejor que gzip pero cuesta mas CPU; solo vale la pena porque
+// el resultado queda cacheado junto al archivo y se reutiliza en cada request.
+function negotiateEncoding(req) {
+  const accepted = parseAcceptEncoding(req?.headers?.["accept-encoding"]);
+  for (const candidate of ["br", "gzip"]) {
+    if ((accepted.get(candidate) ?? 0) > 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function isCompressibleType(contentType) {
+  return COMPRESSIBLE_TYPE_PATTERN.test(String(contentType || ""));
+}
+
+function compressBuffer(buffer, encoding) {
+  if (encoding === "br") {
+    return zlib.brotliCompressSync(buffer, {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY,
+        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buffer.length
+      }
+    });
+  }
+  if (encoding === "gzip") {
+    return zlib.gzipSync(buffer, { level: GZIP_LEVEL });
+  }
+  return buffer;
+}
+
+function computeEtag(buffer) {
+  return `"${crypto.createHash("sha1").update(buffer).digest("base64url")}"`;
+}
+
+function etagMatches(req, etag) {
+  const header = String(req?.headers?.["if-none-match"] || "");
+  if (!header || !etag) {
+    return false;
+  }
+  return header
+    .split(",")
+    .map((entry) => entry.trim().replace(/^W\//, ""))
+    .includes(etag);
+}
+
+// Devuelve el cuerpo ya negociado (comprimido o no) mas las cabeceras que
+// corresponden. No escribe la respuesta: eso queda en cada emisor.
+function negotiateBody(req, buffer, contentType, { compressedVariants = null } = {}) {
+  if (buffer.length < MIN_COMPRESSIBLE_BYTES || !isCompressibleType(contentType)) {
+    return { body: buffer, headers: { "Content-Length": buffer.length } };
+  }
+
+  const encoding = negotiateEncoding(req);
+  if (!encoding) {
+    return {
+      body: buffer,
+      headers: { "Content-Length": buffer.length, "Vary": "Accept-Encoding" }
+    };
+  }
+
+  let encoded = compressedVariants?.get(encoding);
+  if (!encoded) {
+    encoded = compressBuffer(buffer, encoding);
+    compressedVariants?.set(encoding, encoded);
+  }
+
+  return {
+    body: encoded,
+    headers: {
+      "Content-Length": encoded.length,
+      "Content-Encoding": encoding,
+      "Vary": "Accept-Encoding"
+    }
+  };
+}
+
 function writePlainText(res, statusCode, text) {
   res.writeHead(statusCode, {
     ...getSecurityHeaders({ req: res.req }),
@@ -168,27 +275,29 @@ function writePlainText(res, statusCode, text) {
   res.end(text);
 }
 function sendHtml(res, req, statusCode, html, headers = {}) {
-  const body = req.method === "HEAD" ? "" : html;
+  const contentType = "text/html; charset=utf-8";
+  const negotiated = negotiateBody(req, Buffer.from(html), contentType);
   res.writeHead(statusCode, {
     ...getSecurityHeaders({ includeCsp: true, req }),
-    "Content-Type": "text/html; charset=utf-8",
-    "Content-Length": Buffer.byteLength(html),
-    ...headers
+    "Content-Type": contentType,
+    ...headers,
+    ...negotiated.headers
   });
-  res.end(body);
+  res.end(req.method === "HEAD" ? "" : negotiated.body);
 }
 
 function sendJson(res, statusCode, payload, { headers = {}, cookies = [] } = {}) {
-  const body = JSON.stringify(payload);
+  const contentType = "application/json; charset=utf-8";
+  const negotiated = negotiateBody(res.req, Buffer.from(JSON.stringify(payload)), contentType);
   res.writeHead(statusCode, {
     ...getSecurityHeaders({ req: res.req }),
     "Cache-Control": "no-store",
     ...headers,
-    "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": Buffer.byteLength(body),
+    "Content-Type": contentType,
+    ...negotiated.headers,
     ...(cookies.length ? { "Set-Cookie": cookies } : {})
   });
-  res.end(body);
+  res.end(negotiated.body);
 }
 
 function sendRedirect(res, statusCode, location, { cookies = [] } = {}) {
@@ -198,88 +307,6 @@ function sendRedirect(res, statusCode, location, { cookies = [] } = {}) {
     ...(cookies.length ? { "Set-Cookie": cookies } : {})
   });
   res.end();
-}
-
-function createLiveEventHub({
-  heartbeatMs = LIVE_EVENT_HEARTBEAT_MS,
-  maxClients = MAX_LIVE_EVENT_CLIENTS
-} = {}) {
-  const clients = new Set();
-  let revision = 0;
-
-  function writeEvent(res, eventName, payload) {
-    res.write(`event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`);
-  }
-
-  function subscribe(req, res) {
-    if (clients.size >= maxClients) {
-      sendJson(res, 503, {
-        error: {
-          code: "LIVE_CAPACITY_REACHED",
-          message: "La sincronización en vivo está temporalmente ocupada."
-        }
-      });
-      return;
-    }
-
-    res.writeHead(200, {
-      ...getSecurityHeaders({ includeCsp: false, req }),
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
-      "X-Accel-Buffering": "no"
-    });
-    res.write("retry: 5000\n\n");
-    writeEvent(res, "ready", { revision });
-
-    const client = { res, heartbeatTimer: null };
-    clients.add(client);
-    client.heartbeatTimer = setInterval(() => {
-      if (!res.destroyed && !res.writableEnded) {
-        res.write(`: heartbeat ${Date.now()}\n\n`);
-      }
-    }, heartbeatMs);
-    client.heartbeatTimer.unref?.();
-
-    const cleanup = () => {
-      if (client.heartbeatTimer) {
-        clearInterval(client.heartbeatTimer);
-      }
-      clients.delete(client);
-    };
-    req.once("close", cleanup);
-    res.once("close", cleanup);
-  }
-
-  function publish(reason = "content") {
-    revision += 1;
-    for (const client of [...clients]) {
-      if (client.res.destroyed || client.res.writableEnded) {
-        if (client.heartbeatTimer) {
-          clearInterval(client.heartbeatTimer);
-        }
-        clients.delete(client);
-        continue;
-      }
-      writeEvent(client.res, "update", { revision, reason });
-    }
-  }
-
-  function close() {
-    for (const client of clients) {
-      if (client.heartbeatTimer) {
-        clearInterval(client.heartbeatTimer);
-      }
-      client.res.end();
-    }
-    clients.clear();
-  }
-
-  return {
-    subscribe,
-    publish,
-    close
-  };
 }
 
 function shouldPublishLiveChange(req, url) {
@@ -585,7 +612,8 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       sendBackendPayload(res, req, authService, 202, store.recordProductEvent({
         ...context,
         eventName: body.eventName,
-        routeGroup: body.routeGroup
+        routeGroup: body.routeGroup,
+        sourceGroup: body.sourceGroup
       }));
       return;
     }
@@ -1239,6 +1267,23 @@ function readTopicAvatarBuffer(store, topic) {
   }
 }
 
+const socialCardCache = new Map();
+
+// La tarjeta solo cambia si cambia alguno de los datos que dibuja, asi que ese
+// conjunto alcanza como clave y evita volver a invocar a sharp en cada visita.
+function socialCardFingerprint(topic, avatarBuffer) {
+  const rootMessage = topic.messages?.find((message) => message.isRoot) || topic.messages?.[0];
+  return crypto.createHash("sha1").update(JSON.stringify([
+    topic.title,
+    topic.commentCount || 0,
+    topic.author?.name || "",
+    topic.author?.nickname || "",
+    topic.author?.avatarUrl || "",
+    rootMessage?.text || "",
+    avatarBuffer?.length || 0
+  ])).digest("base64url");
+}
+
 async function handleTopicSocialCardRequest(store, req, res, url) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     writePlainText(res, 405, "Method not allowed");
@@ -1269,16 +1314,33 @@ async function handleTopicSocialCardRequest(store, req, res, url) {
     throw error;
   }
 
-  const image = await renderTopicSocialCard(topic, {
-    avatarBuffer: readTopicAvatarBuffer(store, topic)
-  });
-  res.writeHead(200, {
+  const avatarBuffer = readTopicAvatarBuffer(store, topic);
+  const fingerprint = socialCardFingerprint(topic, avatarBuffer);
+  let cached = socialCardCache.get(topic.id);
+  if (!cached || cached.fingerprint !== fingerprint) {
+    const image = await renderTopicSocialCard(topic, { avatarBuffer });
+    cached = rememberInBoundedCache(socialCardCache, topic.id, {
+      fingerprint,
+      image,
+      etag: computeEtag(image)
+    }, SOCIAL_CARD_CACHE_MAX_ENTRIES);
+  }
+
+  const baseHeaders = {
     ...getSecurityHeaders({ includeCsp: false, req }),
     "Content-Type": "image/png",
-    "Content-Length": image.length,
-    "Cache-Control": "public, max-age=300"
-  });
-  res.end(req.method === "HEAD" ? "" : image);
+    "Cache-Control": "public, max-age=3600",
+    "ETag": cached.etag
+  };
+
+  if (etagMatches(req, cached.etag)) {
+    res.writeHead(304, baseHeaders);
+    res.end();
+    return;
+  }
+
+  res.writeHead(200, { ...baseHeaders, "Content-Length": cached.image.length });
+  res.end(req.method === "HEAD" ? "" : cached.image);
 }
 
 function buildSitemapXml(store) {
@@ -1457,6 +1519,50 @@ function handleSeoPageRequest(store, req, res, url) {
   });
 }
 
+const staticFileCache = new Map();
+
+function rememberInBoundedCache(cache, key, entry, maxEntries) {
+  cache.set(key, entry);
+  while (cache.size > maxEntries) {
+    cache.delete(cache.keys().next().value);
+  }
+  return entry;
+}
+
+// Mantiene en memoria el contenido, su ETag y las variantes comprimidas. Se
+// revalida por mtime/size para no romper la edicion en caliente durante el dev.
+function readStaticFile(filePath) {
+  let stats;
+  try {
+    stats = fs.statSync(filePath);
+  } catch {
+    return null;
+  }
+  if (!stats.isFile()) {
+    return null;
+  }
+
+  const cached = staticFileCache.get(filePath);
+  if (cached && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+    return cached;
+  }
+
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath);
+  } catch {
+    return null;
+  }
+
+  return rememberInBoundedCache(staticFileCache, filePath, {
+    raw,
+    mtimeMs: stats.mtimeMs,
+    size: stats.size,
+    etag: computeEtag(raw),
+    compressedVariants: new Map()
+  }, STATIC_CACHE_MAX_ENTRIES);
+}
+
 function handleStaticRequest(req, res, url, store) {
   if (url.pathname.startsWith("/avatars/")) {
     handleAvatarRequest(res, url, store.avatarStorageDir);
@@ -1476,33 +1582,50 @@ function handleStaticRequest(req, res, url, store) {
     ? path.join(root, "favicon.svg")
     : filePath;
 
-  fs.readFile(resolvedFilePath, (error, data) => {
-    if (error) {
-      writePlainText(res, 404, "Not found");
-      return;
-    }
+  const entry = readStaticFile(resolvedFilePath);
+  if (!entry) {
+    writePlainText(res, 404, "Not found");
+    return;
+  }
 
-    const contentType = mime[path.extname(resolvedFilePath)] || "application/octet-stream";
-    const extension = path.extname(resolvedFilePath);
-    const cacheControl = extension === ".html"
-      ? "no-store, max-age=0"
+  const extension = path.extname(resolvedFilePath);
+  const contentType = mime[extension] || "application/octet-stream";
+  // Solo las URL que ya traen ?v= pueden cachearse de forma indefinida: el resto
+  // de los modulos se importa sin version y quedaria congelado tras un deploy.
+  const cacheControl = extension === ".html"
+    ? "no-store, max-age=0"
+    : url.searchParams.has("v")
+      ? IMMUTABLE_CACHE_CONTROL
       : [".js", ".css"].includes(extension)
         ? "public, max-age=300, must-revalidate"
         : "public, max-age=3600";
-    res.writeHead(200, {
-      ...getSecurityHeaders({ includeCsp: extension === ".html", req: res.req }),
-      "Content-Type": contentType,
-      "Cache-Control": cacheControl
-    });
-    res.end(data);
+
+  const baseHeaders = {
+    ...getSecurityHeaders({ includeCsp: extension === ".html", req }),
+    "Content-Type": contentType,
+    "Cache-Control": cacheControl,
+    "ETag": entry.etag
+  };
+
+  if (etagMatches(req, entry.etag)) {
+    res.writeHead(304, baseHeaders);
+    res.end();
+    return;
+  }
+
+  const negotiated = negotiateBody(req, entry.raw, contentType, {
+    compressedVariants: entry.compressedVariants
   });
+  res.writeHead(200, { ...baseHeaders, ...negotiated.headers });
+  res.end(negotiated.body);
 }
 
 export function startPreviewServer({
   port,
   host = "127.0.0.1",
   log = console.log,
-  dbPath
+  dbPath,
+  liveEventRelay = null
 }) {
   loadEnvFile(path.join(root, ".env"));
   const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
@@ -1521,7 +1644,17 @@ export function startPreviewServer({
     seedDemoData: shouldSeedDemoData(process.env, false)
   });
   const authService = createAuthService();
-  const liveEventHub = createLiveEventHub();
+  const liveEventHub = createSharedLiveEventHub({
+    relay: liveEventRelay,
+    log,
+    getHeaders: (req) => getSecurityHeaders({ includeCsp: false, req }),
+    rejectCapacity: (res) => sendJson(res, 503, {
+      error: {
+        code: "LIVE_CAPACITY_REACHED",
+        message: "La sincronización en vivo está temporalmente ocupada."
+      }
+    })
+  });
   const httpRateLimitConfig = resolveHttpRateLimitConfig();
   const httpRateLimitBuckets = new Map();
   const sitemapCache = { xml: null, expiresAt: 0 };

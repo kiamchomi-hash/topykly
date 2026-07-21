@@ -1,0 +1,7 @@
+Los archivos emote-01.png a emote-16.png provienen de Noto Emoji
+(https://github.com/googlefonts/noto-emoji), (c) Google Inc.,
+distribuidos bajo la Apache License, Version 2.0:
+https://www.apache.org/licenses/LICENSE-2.0
+
+La licencia permite uso comercial, modificación y redistribución,
+conservando este aviso.

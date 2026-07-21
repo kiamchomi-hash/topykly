@@ -1,5 +1,5 @@
 import { CUSTOM_PALETTE_ID } from "../palettes.js";
-import { resetSocialEditing, setProfileSectionEditing, setSocialFieldEditing } from "./profile-modal.js";
+import { resetSocialEditing, setProfileSectionEditing, setSocialFieldEditing } from "./profile-edit-state.js";
 import { dispatch, reducers } from "../store-logic.js?v=20260709-topicrace1";
 import { computeAgeFromBirthdateParts, MINIMUM_REGISTRATION_AGE, populateBirthYearOptions } from "./date-utils.js";
 const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -269,11 +269,15 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function applyDocumentAuthState() {
+    const authState = handlers.state?.viewer
+      ? (isLoggedIn() ? "logged-in" : "logged-out")
+      : "pending";
     if (typeof document === "undefined") {
-      return;
+      return authState;
     }
 
-    document.documentElement.dataset.authState = isLoggedIn() ? "logged-in" : "logged-out";
+    document.documentElement.dataset.authState = authState;
+    return authState;
   }
 
   function syncProfileButtonAvatar() {
@@ -1656,7 +1660,8 @@ export function bindTopbarActionEvents(dom, handlers) {
     const label = dom.authButton?.querySelector(".button-label");
     const privateDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-auth-private]") ?? [];
     const adminDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-admin-private]") ?? [];
-    applyDocumentAuthState();
+    const authState = applyDocumentAuthState();
+    const authResolved = authState !== "pending";
     syncThemeTogglePlacement();
     syncProfileButtonAvatar();
     const authLabel = loggedIn
@@ -1672,9 +1677,9 @@ export function bindTopbarActionEvents(dom, handlers) {
         ? "text-button discreet-auth"
         : "text-button text-button--accent prominent-auth";
       dom.authButton.setAttribute("aria-label", authLabel);
-      dom.authButton.hidden = isMobile && loggedIn;
-      dom.authButton.disabled = authPending;
-      dom.authButton.setAttribute("aria-busy", String(authPending));
+      dom.authButton.hidden = !authResolved || (isMobile && loggedIn);
+      dom.authButton.disabled = authPending || !authResolved;
+      dom.authButton.setAttribute("aria-busy", String(authPending || !authResolved));
     }
 
     if (dom.authTools) {
@@ -2096,6 +2101,10 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (event.key === "Escape" && dom.settingsModalBackdrop && !dom.settingsModalBackdrop.hidden) {
       handlers.closeSettingsModal?.();
     }
+
+    if (event.key === "Escape" && dom.storeModalBackdrop && !dom.storeModalBackdrop.hidden) {
+      handlers.closeStoreModal?.();
+    }
   });
 
   addListener(dom.friendRequestsButton, "click", (event) => {
@@ -2121,7 +2130,22 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
 
   addListener(dom.storeButton, "click", () => {
-    handlers.flashTitle("Tienda en preparacion");
+    handlers.openStoreModal?.();
+  });
+  addListener(dom.closeStoreModalButton, "click", () => {
+    handlers.closeStoreModal?.();
+  });
+  addListener(dom.storeModalBackdrop, "click", (event) => {
+    if (event.target === dom.storeModalBackdrop) {
+      handlers.closeStoreModal?.();
+    }
+  });
+  addListener(dom.storeCategoryTabs, "click", (event) => {
+    const eventElement = resolveEventElement(event);
+    const categoryTarget = eventElement?.closest?.("[data-store-category]") ?? null;
+    if (categoryTarget instanceof HTMLElement) {
+      handlers.setStoreCategory?.(categoryTarget.dataset.storeCategory);
+    }
   });
   addListener(dom.mobileTopbarMenu, "click", (event) => {
     const eventElement = resolveEventElement(event);
@@ -2178,7 +2202,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (target.dataset.mobileTopbarAction === "store") {
       setMobileDrawerPanel(null, { restoreFocus: false });
       handlers.closeDrawers?.();
-      handlers.flashTitle("Tienda en preparacion");
+      scheduleOpen(() => handlers.openStoreModal?.());
       return;
     }
 

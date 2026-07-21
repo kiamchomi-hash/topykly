@@ -326,6 +326,16 @@ export const reducers = {
     settingsDeleteConfirming: false
   }),
 
+  setStoreModalOpen: (state, isStoreModalOpen) => ({
+    ...state,
+    isStoreModalOpen
+  }),
+
+  setStoreCategory: (state, storeCategory) => ({
+    ...state,
+    storeCategory
+  }),
+
   setSettingsSection: (state, settingsSection) => ({
     ...state,
     settingsSection,

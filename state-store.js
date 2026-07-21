@@ -5,6 +5,8 @@ export const state = {
   isPaletteModalOpen: false,
   isProfileModalOpen: false,
   isSettingsModalOpen: false,
+  isStoreModalOpen: false,
+  storeCategory: "emotes",
   settingsSection: "privacy",
   settingsDeleteConfirming: false,
   settingsUpdatePending: false,

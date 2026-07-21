@@ -6,7 +6,7 @@ function createLazyMascot(className) {
   placeholder.className = `topykly-mascot ${className}`;
   placeholder.setAttribute("aria-hidden", "true");
 
-  void import("./mascot.js").then(({ createTopyklyMascot }) => {
+  void import("./mascot.js?v=20260716-quality1").then(({ createTopyklyMascot }) => {
     placeholder.replaceWith?.(createTopyklyMascot(className, documentRef));
   }).catch(() => {
     placeholder.remove?.();

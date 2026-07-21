@@ -1,5 +1,6 @@
 import { formatProfileJoinedDate } from "./date-utils.js";
 import { createIcon } from "./icons.js";
+import { resetProfileEditing } from "./profile-edit-state.js";
 
 const SOCIAL_PLATFORMS = ["Whatsapp", "Instagram", "Tiktok", "Facebook", "Twitter", "Discord"];
 
@@ -9,77 +10,6 @@ function ensureSocialIcons(dom) {
     if (iconContainer && iconContainer.childElementCount === 0) {
       iconContainer.appendChild(createIcon(platform.toLowerCase()));
     }
-  });
-}
-
-const PROFILE_SECTION_CONFIG = {
-  name: {
-    sectionKey: "profileNameSection",
-    editButtonKey: "profileNameEditButton",
-    controls: ["profileNameInput"]
-  },
-  description: {
-    sectionKey: "profileDescriptionSection",
-    editButtonKey: "profileDescriptionEditButton",
-    controls: ["profileDescriptionInput"]
-  }
-};
-
-export function setProfileSectionEditing(dom, section, editing) {
-  const config = PROFILE_SECTION_CONFIG[section];
-  if (!config) {
-    return;
-  }
-
-  const isEditing = Boolean(editing);
-  const sectionNode = dom[config.sectionKey];
-  const editButton = dom[config.editButtonKey];
-  sectionNode?.classList?.toggle("is-editing", isEditing);
-  sectionNode?.setAttribute?.("data-editing", String(isEditing));
-  editButton?.setAttribute?.("aria-pressed", String(isEditing));
-
-  config.controls.forEach((key) => {
-    const control = dom[key];
-    if (!control) {
-      return;
-    }
-
-    if (key === "profileAvatarPreview" || key === "profileAvatarInput" || key === "profileAvatarPickButton") {
-      control.disabled = !isEditing;
-      control.setAttribute("aria-disabled", String(!isEditing));
-      return;
-    }
-
-    control.readOnly = !isEditing;
-    control.setAttribute("aria-readonly", String(!isEditing));
-  });
-}
-
-export function resetProfileEditing(dom) {
-  Object.keys(PROFILE_SECTION_CONFIG).forEach((section) => setProfileSectionEditing(dom, section, false));
-  resetSocialEditing(dom);
-}
-
-export function setSocialFieldEditing(field, editing) {
-  const input = field?.querySelector?.("input");
-  const button = field?.querySelector?.("[data-profile-social-edit]");
-  if (!input || !button) {
-    return;
-  }
-
-  const isEditing = Boolean(editing);
-  const platform = field.querySelector(".profile-modal__social-label span:last-child")?.textContent || "red social";
-  field.classList.toggle("is-editing", isEditing);
-  field.dataset.editing = String(isEditing);
-  input.readOnly = !isEditing;
-  input.setAttribute("aria-readonly", String(!isEditing));
-  button.setAttribute("aria-pressed", String(isEditing));
-  button.setAttribute("aria-label", (isEditing ? "Confirmar " : "Editar ") + platform);
-}
-
-export function resetSocialEditing(dom) {
-  dom.profileSocialSection?.querySelectorAll?.(".profile-modal__social-field")?.forEach((field) => {
-    setSocialFieldEditing(field, false);
   });
 }
 

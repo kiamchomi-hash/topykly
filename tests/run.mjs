@@ -64,7 +64,7 @@ import { applyStoredTheme } from "../controller-theme.js";
 import { createActionHandlers } from "../controller-actions.js";
 import { dispatch, reducers } from "../store-logic.js";
 import { api } from "../services/api.js";
-import { api as versionedApiForControllerActions } from "../services/api.js?v=20260709-topicrace1";
+import { api as versionedApiForControllerActions } from "../services/api.js?v=20260716-quality1";
 import {
   buildCustomPaletteOption,
   CUSTOM_PALETTE_ID,
@@ -106,6 +106,7 @@ import { isFriendOnline, splitFriendsByPresence } from "../ui/friend-requests.js
 import {
   formatJoinedDateParts,
   formatMessageTime,
+  formatRelativeActivityTime,
   formatProfileJoinedDate
 } from "../ui/date-utils.js";
 import { renderTitles } from "../ui/titles.js";
@@ -1017,6 +1018,8 @@ await (async () => {
     );
     assert.equal(formatMessageTime(yesterday, "es-AR", now), "Ene 1");
     assert.equal(formatMessageTime(olderDay, "es-AR", now), "Abr 13");
+    assert.equal(formatRelativeActivityTime(new Date(now.getTime() - 32 * 60_000), now), "hace 32 min");
+    assert.equal(formatRelativeActivityTime(new Date(now.getTime() - 5 * 60 * 60_000), now), "hace 5 h");
     assert.equal(formatProfileJoinedDate(joinedAt), "Registro: 02/01/26");
     assert.deepEqual(formatJoinedDateParts(joinedAt), ["02", "01", "2026"]);
     assert.equal(formatMessageTime(""), "");
@@ -1513,15 +1516,15 @@ await (async () => {
     );
     assert.doesNotMatch(notificationSource, /^import .*mascot\.js/m);
     assert.doesNotMatch(friendRequestSource, /^import .*mascot\.js/m);
-    assert.match(notificationSource, /import\("\.\/mascot\.js"\)/);
-    assert.match(friendRequestSource, /import\("\.\/mascot\.js"\)/);
+    assert.match(notificationSource, /import\("\.\/mascot\.js\?v=20260716-quality1"\)/);
+    assert.match(friendRequestSource, /import\("\.\/mascot\.js\?v=20260716-quality1"\)/);
     assert.doesNotMatch(chatSource, /createTopyklyMascot/);
-    assert.match(mascotSource, /href="\/assets\/mascot\/topy-concept-v8\.png"/);
+    assert.match(mascotSource, /href="\/assets\/mascot\/topy-concept-v8\.webp"/);
     assert.match(mascotSource, /flood-color="var\(--mascot-accent\)"/);
     assert.match(mascotSource, /in2="SourceAlpha"/);
     assert.match(mascotSource, /class="topykly-mascot__neutral-face" fill="#000"/);
     assert.match(mascotSource, /stroke="#000"/);
-    assert.match(styles, /mask: url\("\.\/assets\/mascot\/topy-concept-v8\.png"\)/);
+    assert.match(styles, /mask: url\("\.\/assets\/mascot\/topy-concept-v8\.webp"\)/);
     assert.match(styles, /transform: scale\(1\.012\)/);
     assert.ok(styles.includes(".topykly-mascot"));
     assert.ok(styles.includes("width: 92px"));
@@ -4878,6 +4881,7 @@ await (async () => {
 
   await test("create topic action opens the composer view on mobile", () => {
     const state = {
+      viewer: { id: "u1", type: "registered" },
       selectedTopicId: "topic-1",
       mobileView: "browse",
       topics: [],
@@ -4913,6 +4917,35 @@ await (async () => {
     assert.equal(responsiveSyncCalls, 1);
     assert.equal(renderCalls, 1);
   });
+
+  await test("guest participation opens authentication before showing a composer", async () => {
+    const feedback = [];
+    let authClicks = 0;
+    const state = {
+      viewer: { id: "guest-1", type: "guest" },
+      selectedTopicId: "topic-1",
+      topics: [],
+      users: []
+    };
+    const actions = createChatActions({
+      state,
+      dom: {
+        authButton: { click() { authClicks += 1; } },
+        messageInput: { value: "Mensaje" }
+      },
+      render() {},
+      showFeedback(message) { feedback.push(message); }
+    });
+
+    actions.createNewTopic();
+    await actions.submitMessage({ preventDefault() {} });
+
+    assert.equal(state.selectedTopicId, "topic-1");
+    assert.equal(authClicks, 2);
+    assert.equal(feedback.length, 2);
+    assert.match(feedback[0], /Inicia sesión/);
+  });
+
   await test("report action hydrates reported topic and message ids from backend payloads", async () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -6437,6 +6470,8 @@ await (async () => {
   await test("preview server pushes successful content changes through live events", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-live-"));
     const abortController = new AbortController();
+    const relayedEvents = [];
+    let relaySubscriber = null;
     let preview = null;
     let reader = null;
 
@@ -6445,7 +6480,16 @@ await (async () => {
         port: 0,
         host: "127.0.0.1",
         log() {},
-        dbPath: path.join(tempDir, "preview.sqlite")
+        dbPath: path.join(tempDir, "preview.sqlite"),
+        liveEventRelay: {
+          subscribe(handler) {
+            relaySubscriber = handler;
+            return () => { relaySubscriber = null; };
+          },
+          publish(event) {
+            relayedEvents.push(event);
+          }
+        }
       });
       if (!preview.server.listening) {
         await new Promise((resolve, reject) => {
@@ -6500,6 +6544,10 @@ await (async () => {
         livePayload += decoder.decode(chunk.value);
       }
       assert.match(livePayload, /"reason":"\/api\/topics"/);
+      assert.equal(typeof relaySubscriber, "function");
+      assert.equal(relayedEvents.length, 1);
+      assert.equal(relayedEvents[0].reason, "/api/topics");
+      assert.match(relayedEvents[0].sourceId, /^node-/);
     } finally {
       abortController.abort();
       await reader?.cancel?.().catch(() => {});
@@ -7573,6 +7621,7 @@ await (async () => {
     const state = {
       viewer: { id: "guest-auth", type: "guest" }
     };
+    let syncAuthUi = null;
     let loginCalls = 0;
     let logoutCalls = 0;
 
@@ -7640,6 +7689,9 @@ await (async () => {
         flashTitle(message) {
           flashCalls.push(message);
         },
+        setAuthUiSync(sync) {
+          syncAuthUi = sync;
+        },
         state,
         async login() {
           loginCalls += 1;
@@ -7668,6 +7720,18 @@ await (async () => {
       assert.equal(themeToggle.dataset.themeTogglePlacement, "desktop");
       assert.equal(authButton.label.textContent, "Iniciar sesión");
       assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
+
+      state.viewer = null;
+      syncAuthUi();
+      assert.equal(globalThis.document.documentElement.dataset.authState, "pending");
+      assert.equal(authButton.hidden, true);
+      assert.equal(authButton.disabled, true);
+
+      state.viewer = { id: "guest-auth", type: "guest" };
+      syncAuthUi();
+      assert.equal(globalThis.document.documentElement.dataset.authState, "logged-out");
+      assert.equal(authButton.hidden, false);
+      assert.equal(authButton.disabled, false);
 
       authButton.dispatch("click");
       await flushAsyncEvents();
@@ -9883,7 +9947,7 @@ await (async () => {
       assert.equal(themeToggle["aria-checked"], "true");
       assert.equal(themeToggle["aria-label"], "Tema oscuro");
       assert.equal(themeToggle.title, "Cambiar a tema claro");
-      assert.equal(document.title, "TOPYKLY — Comunidad de temas y rankings en español");
+      assert.equal(document.title, "TOPYKLY — Conversaciones por temas en español");
 
       state.theme = "light";
       state.topics = [{ id: "topic-1", title: "Tema alpha", subtitle: "Subtitulo", messages: [] }];
@@ -10167,6 +10231,7 @@ await (async () => {
     const paletteModal = await read("ui/palette-modal.js");
     const publicProfileModal = await read("ui/public-profile-modal.js");
     const profileModal = await read("ui/profile-modal.js");
+    const profileEditState = await read("ui/profile-edit-state.js");
     const adminPanel = await read("ui/admin-panel.js");
     const icons = await read("ui/icons.js");
     const sharedBaseComponents = await read("features/shared/components/base.js");
@@ -10224,7 +10289,7 @@ await (async () => {
     );
     assert.match(
       previewServer,
-      /getSecurityHeaders\(\{ includeCsp: extension === "\.html", req: res\.req \}\)/
+      /getSecurityHeaders\(\{ includeCsp: extension === "\.html", req(?:: res\.req)? \}\)/
     );
     assert.match(previewServer, /"Strict-Transport-Security"/);
     assert.match(previewServer, /DEFAULT_GUEST_CLEANUP_INTERVAL_MS/);
@@ -10271,14 +10336,14 @@ await (async () => {
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
 
-    assert.match(html, /<title>TOPYKLY — Comunidad de temas y rankings en español<\/title>/);
+    assert.match(html, /<title>TOPYKLY — Conversaciones por temas en español<\/title>/);
     assert.match(html, /<meta name="robots" content="index,follow" \/>/);
     assert.match(html, /<link rel="canonical" href="https:\/\/www\.topykly\.com\/" \/>/);
     assert.match(html, /<meta property="og:url" content="https:\/\/www\.topykly\.com\/" \/>/);
     assert.match(html, /<main id="main-content" class="workspace" aria-label="Chat social">/);
     assert.match(
       html,
-      /<h1 class="sr-only">TOPYKLY: comunidad de temas y rankings en español<\/h1>/
+      /<h1 class="sr-only">TOPYKLY: conversaciones por temas en español<\/h1>/
     );
     assert.match(html, /class="topbar__title" role="img" aria-label="TOPYKLY"/);
     assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
@@ -10431,7 +10496,7 @@ await (async () => {
       themeBootstrap,
       /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/
     );
-    assert.match(themeBootstrap, /const authState = "logged-out";/);
+    assert.match(themeBootstrap, /const authState = "pending";/);
     assert.match(themeBootstrap, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(themeBootstrap, /document\.documentElement\.dataset\.authState = authState/);
     assert.match(
@@ -10444,7 +10509,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /html\[data-auth-state="logged-out"\] \[data-auth-private\]\s*\{[\s\S]*display:\s*none !important;/
+      /html\[data-auth-state="pending"\] \[data-auth-private\],[\s\S]*html\[data-auth-state="logged-out"\] \[data-auth-private\]\s*\{[\s\S]*display:\s*none !important;/
     );
     assert.match(html, /id="authGoogleButton"[\s\S]*id="authTurnstile"/);
     assert.doesNotMatch(html, /Resend|Google ya esta disponible|auth-modal__note/);
@@ -11577,7 +11642,7 @@ await (async () => {
       styles,
       /html\[data-theme="light"\] \.rankings-section\s*\{[\s\S]*border-left:\s*0;[\s\S]*border-top:\s*1px solid/
     );
-    assert.match(app, /from "\.\/controller\.js\?v=20260709-topicrace1"/);
+    assert.match(app, /from "\.\/controller\.js\?v=20260716-quality1"/);
     assert.match(components, /createProfileAvatar/);
     assert.match(components, /message__avatar/);
     assert.match(components, /Abrir opciones de reaccion del mensaje de/);
@@ -11623,7 +11688,7 @@ await (async () => {
     assert.doesNotMatch(components, /getUserRole|Aviso|Invitado/);
     assert.match(
       controller,
-      /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260709-topicrace1";/
+      /export \{ bootstrap \} from "\.\/controller-app\.js\?v=20260716-quality1";/
     );
     assert.match(controllerApp, /from "\.\/ui\/transition-utils\.js"/);
     assert.match(controllerTheme, /export function applyStoredTheme/);
@@ -11636,10 +11701,10 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/app-store\.js"/);
     assert.match(controllerApp, /from "\.\/ui\/dom\.js"/);
     assert.match(controllerApp, /quoteMessage: actions\.quoteMessage/);
-    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260709-topicrace1"/);
-    assert.match(controllerApp, /from "\.\/controller-actions\.js\?v=20260709-topicrace1"/);
+    assert.match(controllerApp, /from "\.\/ui\/events\.js\?v=20260716-quality1"/);
+    assert.match(controllerApp, /from "\.\/controller-actions\.js\?v=20260716-quality1"/);
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
-    assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260709-topicrace1"/);
+    assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260716-quality1"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
     assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 30000;/);
     assert.match(controllerApp, /const SLOW_TOPIC_REFRESH_INTERVAL_MS = 60000;/);
@@ -11663,7 +11728,7 @@ await (async () => {
       controllerApp,
       /function cacheDom|function bindEvents|function renderIntoTargets|function getTransitionDurationMs|function bindTopbarEvents|function toggleTheme|function submitMessage/
     );
-    assert.match(actions, /from "\.\/services\/api\.js\?v=20260709-topicrace1"/);
+    assert.match(actions, /from "\.\/services\/api\.js\?v=20260716-quality1"/);
     assert.match(actions, /export function createActionHandlers/);
     assert.match(actions, /createNewTopic/);
     assert.match(actions, /openPaletteModal/);
@@ -11699,9 +11764,10 @@ await (async () => {
     assert.match(palettes, /export function parseHexColor/);
     assert.match(responsiveController, /export function createResponsiveHelpers/);
     assert.match(renderController, /export function createRenderers/);
-    assert.match(renderController, /from "\.\/ui\/palette-modal\.js\?v=20260709-topicrace1"/);
-    assert.match(renderController, /renderPaletteModal/);
-    assert.match(renderController, /renderPublicProfileModal/);
+    assert.match(renderController, /import\("\.\/ui\/palette-modal\.js\?v=20260716-secondary1"\)/);
+    assert.match(renderController, /import\("\.\/ui\/admin-panel\.js\?v=20260716-quality1"\)/);
+    assert.match(renderController, /exportName: "renderPaletteModal"/);
+    assert.match(renderController, /exportName: "renderPublicProfileModal"/);
     assert.match(chat, /renderChat/);
     assert.match(chat, /panel--topic-create/);
     assert.match(chat, /Primer mensaje/);
@@ -11764,8 +11830,9 @@ await (async () => {
     assert.match(icons, /20\.317 4\.3698/);
     assert.match(styles, /--social-color/);
     assert.match(profileModal, /ensureSocialIcons/);
-    assert.match(profileModal, /export function setSocialFieldEditing/);
-    assert.match(profileModal, /input\.readOnly = !isEditing/);
+    assert.match(profileModal, /from "\.\/profile-edit-state\.js"/);
+    assert.match(profileEditState, /export function setSocialFieldEditing/);
+    assert.match(profileEditState, /input\.readOnly = !isEditing/);
     assert.match(profileModal, /if \(justOpened \|\| input\.dataset\.renderedValue !== value\)/);
     assert.match(topbarActionEvents, /setSocialFieldEditing\(field, !isEditing\)/);
     assert.match(
@@ -11905,7 +11972,7 @@ await (async () => {
     assert.match(domModule, /paletteOptionGrid/);
     assert.match(domModule, /assertRequiredDom/);
     assert.match(domModule, /Missing required DOM nodes/);
-    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260709-topicrace1"/);
+    assert.match(eventsModule, /from "\.\/topbar\.js\?v=20260716-quality1"/);
     assert.match(eventsModule, /syncComposerTextareaHeight/);
     assert.match(eventsModule, /function shouldBlockTextareaInput\(textarea, event\)/);
     assert.match(
@@ -11994,7 +12061,7 @@ await (async () => {
     assert.match(renderUtils, /function shouldPreserveMessageLayoutStyle/);
     assert.match(renderUtils, /existing\.classList\?\.contains\?\.\("message"\)/);
     assert.match(drawers, /getTransitionDurationMs/);
-    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260709-topicrace1"/);
+    assert.match(topbar, /from "\.\/topbar-action-events\.js\?v=20260716-quality1"/);
     assert.match(topbar, /bindTopbarEvents/);
     assert.match(topbarActionEvents, /openPaletteModal/);
     assert.match(topbarActionEvents, /closePaletteModal/);
@@ -12032,7 +12099,7 @@ await (async () => {
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(
       topbarActionEvents,
-      /document\.documentElement\.dataset\.authState = isLoggedIn\(\) \? "logged-in" : "logged-out"/
+      /handlers\.state\?\.viewer[\s\S]*\? \(isLoggedIn\(\) \? "logged-in" : "logged-out"\)[\s\S]*: "pending"/
     );
     assert.match(
       topbarActionEvents,
@@ -12042,7 +12109,7 @@ await (async () => {
     assert.match(topbarActionEvents, /dom\.authTools\.hidden = !loggedIn/);
     assert.match(topbarActionEvents, /setLoggedIn/);
     assert.match(topbarActionEvents, /addListener\(dom\.authButton,\s*"click"/);
-    assert.match(topbarActionEvents, /dom\.authButton\.hidden = isMobile && loggedIn/);
+    assert.match(topbarActionEvents, /dom\.authButton\.hidden = !authResolved \|\| \(isMobile && loggedIn\)/);
     assert.match(
       topbarActionEvents,
       /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/
@@ -12193,6 +12260,66 @@ await (async () => {
     const settingsIndex = indexSource.indexOf('id="settingsButton"');
     const paletteIndex = indexSource.indexOf('id="paletteButton"');
     assert.equal(profileIndex < settingsIndex && settingsIndex < paletteIndex, true);
+  });
+
+  await test("store modal wires categories with emotes first and priced noto emotes", async () => {
+    const domSource = await read("ui/dom.js");
+    const indexSource = await read("index.html");
+    const eventsSource = await read("ui/topbar-action-events.js");
+    const renderSource = await read("controller-render.js");
+    const storeIds = [
+      "storeButton",
+      "storeModalBackdrop",
+      "storeModal",
+      "closeStoreModalButton",
+      "storeCategoryTabs",
+      "storeItemGrid"
+    ];
+    const domIdsSection = domSource.slice(domSource.indexOf("const DOM_IDS"));
+    for (const id of storeIds) {
+      assert.equal(domIdsSection.includes(`"${id}"`), true, `DOM_IDS debe incluir ${id}`);
+      assert.equal(indexSource.includes(`id="${id}"`), true, `index.html debe incluir #${id}`);
+    }
+
+    assert.match(eventsSource, /dom\.storeButton, "click"[\s\S]*?handlers\.openStoreModal/);
+    assert.match(eventsSource, /dom\.storeCategoryTabs, "click"[\s\S]*?handlers\.setStoreCategory/);
+    assert.match(renderSource, /store: \{ load: \(\) => import\("\.\/ui\/store-modal\.js"\)/);
+
+    const catalog = await import("../store-catalog.js");
+    assert.equal(catalog.STORE_CATEGORIES[0].id, "emotes", "los emotes van primero en la tienda");
+    assert.equal(catalog.DEFAULT_STORE_CATEGORY_ID, "emotes");
+    assert.equal(catalog.STORE_CATEGORIES[0].items.length >= 12, true);
+    assert.equal(
+      catalog.STORE_CATEGORIES.every((category) => category.items.length > 0),
+      true
+    );
+    assert.equal(catalog.isStoreCategoryId("emotes"), true);
+    assert.equal(catalog.isStoreCategoryId("no-existe"), false);
+    assert.equal(catalog.getStoreCategory("no-existe").id, "emotes");
+
+    for (const item of catalog.STORE_CATEGORIES[0].items) {
+      assert.equal(
+        typeof item.assetUrl === "string" && item.assetUrl.startsWith("assets/emotes/"),
+        true,
+        `el emote ${item.id} debe tener asset en assets/emotes/`
+      );
+      assert.equal(
+        typeof item.price === "number" && item.price > 0,
+        true,
+        `el emote ${item.id} debe tener precio en puntos`
+      );
+    }
+    const accessories = catalog.STORE_CATEGORIES.slice(1);
+    assert.equal(
+      accessories.every((category) => category.items.every((item) => item.assetUrl === null)),
+      true,
+      "los accesorios siguen como placeholders"
+    );
+
+    const openState = reducers.setStoreModalOpen({ isStoreModalOpen: false }, true);
+    assert.equal(openState.isStoreModalOpen, true);
+    const categoryState = reducers.setStoreCategory({ storeCategory: "emotes" }, "marcos");
+    assert.equal(categoryState.storeCategory, "marcos");
   });
 
   await test("profile and sectioned settings modals stay closable in the real mobile visual viewport", async () => {
@@ -12670,6 +12797,7 @@ await (async () => {
         authMode: "guest",
         eventName: "page_view",
         routeGroup: "/tema/topic-1/charla",
+        sourceGroup: "social",
         ipAddress: "203.0.113.20"
       });
       store.recordProductEvent({
@@ -12701,6 +12829,18 @@ await (async () => {
       assert.equal(counts.page_view.uniqueSubjects, 1);
       assert.equal(counts.topic_open.total, 1);
       assert.equal(counts.auth_open.total, 1);
+      assert.deepEqual(report.routes, [{
+        routeGroup: "/tema",
+        total: 1,
+        uniqueSubjects: 1
+      }]);
+      assert.deepEqual(report.sources, [{
+        sourceGroup: "social",
+        total: 1,
+        uniqueSubjects: 1
+      }]);
+      assert.equal(report.cohorts.length, 1);
+      assert.equal(report.cohorts[0].visitors, 1);
       const dashboard = store.getAdminDashboard({
         sessionId: "session-product-moderator"
       });

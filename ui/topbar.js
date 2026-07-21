@@ -1,4 +1,4 @@
-import { bindTopbarActionEvents } from "./topbar-action-events.js?v=20260709-topicrace1";
+import { bindTopbarActionEvents } from "./topbar-action-events.js?v=20260716-quality1";
 import { bindTopbarDrawerEvents } from "./topbar-drawer-events.js";
 import { bindTopbarRankingEvents } from "./topbar-ranking-events.js";
 

@@ -36,6 +36,34 @@ export function formatMessageTime(timestamp, locale = DEFAULT_LOCALE, now = new 
   });
 }
 
+export function formatRelativeActivityTime(timestamp, now = new Date()) {
+  const date = parseDate(timestamp);
+  const referenceDate = parseDate(now) || new Date();
+  if (!date) {
+    return "";
+  }
+
+  const elapsedMinutes = Math.max(0, Math.floor((referenceDate.getTime() - date.getTime()) / 60_000));
+  if (elapsedMinutes < 1) {
+    return "ahora";
+  }
+  if (elapsedMinutes < 60) {
+    return `hace ${elapsedMinutes} min`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `hace ${elapsedHours} h`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) {
+    return `hace ${elapsedDays} d`;
+  }
+
+  return formatMessageTime(date, DEFAULT_LOCALE, referenceDate);
+}
+
 export function formatProfileJoinedDate(createdAt) {
   const date = parseDate(createdAt);
   if (!date) {

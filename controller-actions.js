@@ -1,6 +1,6 @@
 import { createChatActions } from "./controller-chat-actions.js";
 import { createRankingActions } from "./controller-ranking-actions.js";
-import { api } from "./services/api.js?v=20260709-topicrace1";
+import { api } from "./services/api.js?v=20260716-quality1";
 import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 import {
   applyPaletteToDocument,
@@ -12,7 +12,8 @@ import {
   parseHexColor,
   updateDocumentFavicon
 } from "./palettes.js";
-import { getWebNotificationPermission, requestWebNotificationPermission } from "./ui/notifications.js";
+import { getWebNotificationPermission, requestWebNotificationPermission } from "./ui/notifications.js?v=20260716-quality1";
+import { isStoreCategoryId } from "./store-catalog.js";
 
 const ADMIN_ACTION_FEEDBACK = {
   approve_avatar: "Foto aprobada",
@@ -513,6 +514,28 @@ export function createActionHandlers({
     dispatch(state, reducers.setSettingsModalOpen, false);
     render();
     dom.settingsButton?.focus?.();
+  }
+
+  function openStoreModal() {
+    dispatch(state, reducers.setStoreModalOpen, true);
+    render();
+    setTimeout(() => {
+      dom.storeModal?.focus?.();
+    }, 0);
+  }
+
+  function closeStoreModal() {
+    dispatch(state, reducers.setStoreModalOpen, false);
+    render();
+    dom.storeButton?.focus?.();
+  }
+
+  function setStoreCategory(storeCategory) {
+    if (!isStoreCategoryId(storeCategory)) {
+      return;
+    }
+    dispatch(state, reducers.setStoreCategory, storeCategory);
+    render();
   }
 
   function setSettingsSection(settingsSection) {
@@ -1100,6 +1123,9 @@ export function createActionHandlers({
     openSettingsModal,
     closeSettingsModal,
     setSettingsSection,
+    openStoreModal,
+    closeStoreModal,
+    setStoreCategory,
     toggleSetting,
     requestAccountDeletion,
     cancelAccountDeletion,

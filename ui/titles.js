@@ -4,7 +4,7 @@ import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel, getScope
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
 const SITE_NAME = "TOPYKLY";
-const BASE_TITLE = "TOPYKLY — Comunidad de temas y rankings en español";
+const BASE_TITLE = "TOPYKLY — Conversaciones por temas en español";
 
 const observedChatTitles = new WeakSet();
 let chatTitleResizeObserver = null;

@@ -1,22 +1,22 @@
 import { openDrawer, closeDrawers } from "./ui/drawers.js";
-import { bindPageEvents } from "./ui/events.js?v=20260709-topicrace1";
+import { bindPageEvents } from "./ui/events.js?v=20260716-quality1";
 import { cacheDom } from "./ui/dom.js";
-import { createActionHandlers } from "./controller-actions.js?v=20260709-topicrace1";
+import { createActionHandlers } from "./controller-actions.js?v=20260716-quality1";
 import { createResponsiveHelpers } from "./controller-responsive.js";
-import { createRenderers } from "./controller-render.js?v=20260709-topicrace1";
+import { createRenderers } from "./controller-render.js?v=20260716-quality1";
 import { closeTimerRef, dom, state } from "./app-store.js";
 import { applyStoredTheme, createBackToTopicsHandler, createResizeHandler } from "./controller-runtime.js";
 import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
-import { api } from "./services/api.js?v=20260709-topicrace1";
+import { api } from "./services/api.js?v=20260716-quality1";
 import {
   collectTopicNotifications,
   createNotificationStateUpdate,
   filterNotificationsForFriends,
   getWebNotificationPermission,
   showWebNotification
-} from "./ui/notifications.js";
+} from "./ui/notifications.js?v=20260716-quality1";
 
 const LIVE_TOPIC_REFRESH_INTERVAL_MS = 30000;
 const SLOW_TOPIC_REFRESH_INTERVAL_MS = 60000;
@@ -582,6 +582,9 @@ export function bootstrap() {
     openSettingsModal: actions.openSettingsModal,
     closeSettingsModal: actions.closeSettingsModal,
     setSettingsSection: actions.setSettingsSection,
+    openStoreModal: actions.openStoreModal,
+    closeStoreModal: actions.closeStoreModal,
+    setStoreCategory: actions.setStoreCategory,
     toggleSetting: actions.toggleSetting,
     requestAccountDeletion: actions.requestAccountDeletion,
     cancelAccountDeletion: actions.cancelAccountDeletion,

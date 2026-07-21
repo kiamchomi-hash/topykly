@@ -1,6 +1,6 @@
 import { getSelectedTopic } from "./model.js";
-import { api, ApiError } from "./services/api.js";
-import { collectTopicNotifications, createNotificationStateUpdate } from "./ui/notifications.js";
+import { api, ApiError } from "./services/api.js?v=20260716-quality1";
+import { collectTopicNotifications, createNotificationStateUpdate } from "./ui/notifications.js?v=20260716-quality1";
 import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 import { composeReportReason } from "./report-reasons.js";
 
@@ -183,6 +183,11 @@ export function createChatActions({
 
   async function submitMessage(event) {
     event.preventDefault();
+    if (state.viewer?.type !== "registered") {
+      showFeedback?.("Inicia sesión o crea una cuenta para conversar.");
+      dom.authButton?.click?.();
+      return;
+    }
     const input = dom.messageInput;
     if (!input) {
       return;
@@ -270,6 +275,11 @@ export function createChatActions({
   }
 
   function createNewTopic() {
+    if (state.viewer?.type !== "registered") {
+      showFeedback?.("Inicia sesión o crea una cuenta para abrir una conversación.");
+      dom.authButton?.click?.();
+      return;
+    }
     dispatch(state, reducers.setSelectedTopic, null);
     if (isMobileViewport?.()) {
       dispatch(state, reducers.setMobileView, "chat");

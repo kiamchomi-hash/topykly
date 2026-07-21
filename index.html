@@ -8,7 +8,7 @@
     <link rel="canonical" href="https://www.topykly.com/" />
     <meta property="og:site_name" content="TOPYKLY" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="TOPYKLY — Comunidad de temas y rankings en español" />
+    <meta property="og:title" content="TOPYKLY — Conversaciones por temas en español" />
     <meta property="og:description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
     <meta property="og:url" content="https://www.topykly.com/" />
     <meta property="og:locale" content="es_ES" />
@@ -16,13 +16,13 @@
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="TOPYKLY, comunidad de temas y rankings en español" />
+    <meta property="og:image:alt" content="TOPYKLY, conversaciones por temas en español" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="TOPYKLY — Comunidad de temas y rankings en español" />
+    <meta name="twitter:title" content="TOPYKLY — Conversaciones por temas en español" />
     <meta name="twitter:description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
     <meta name="twitter:image" content="https://www.topykly.com/og-image.png" />
-    <meta name="twitter:image:alt" content="TOPYKLY, comunidad de temas y rankings en español" />
-    <title>TOPYKLY — Comunidad de temas y rankings en español</title>
+    <meta name="twitter:image:alt" content="TOPYKLY, conversaciones por temas en español" />
+    <title>TOPYKLY — Conversaciones por temas en español</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -40,7 +40,7 @@
     </script>
     <script src="./theme-bootstrap.js"></script>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260716-quality1" />
   </head>
   <body>
     <div class="shell">
@@ -130,7 +130,7 @@
               </span>
             </button>
           </div>
-          <button class="text-button text-button--prominent" id="storeButton" type="button" aria-label="Tienda" data-auth-private>
+          <button class="text-button text-button--prominent" id="storeButton" type="button" aria-label="Tienda" aria-haspopup="dialog" aria-controls="storeModal" aria-expanded="false" data-auth-private>
             <span class="icon-button__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 9h14l-1 11H6L5 9Z"></path>
@@ -175,7 +175,7 @@
       </header>
 
       <main id="main-content" class="workspace" aria-label="Chat social">
-        <h1 class="sr-only">TOPYKLY: comunidad de temas y rankings en español</h1>
+        <h1 class="sr-only">TOPYKLY: conversaciones por temas en español</h1>
         <section class="panel panel--topics" aria-label="Temas">
           <div class="topics-panel__body">
             <div class="topics-panel__list-frame">
@@ -240,6 +240,11 @@
 
           <div class="message-stream" id="messageStream" aria-live="polite"></div>
 
+          <div class="guest-composer-gate" data-guest-composer-gate hidden>
+            <strong>Entra para conversar</strong>
+            <span>Necesitas una cuenta para escribir o abrir un tema.</span>
+            <button class="primary-button" type="button">Entrar o crear cuenta</button>
+          </div>
           <form class="composer" id="messageForm">
             <label class="composer__field" hidden>
               <input id="topicTitleInput" type="text" maxlength="80" placeholder="Titulo del tema" autocomplete="off" aria-label="Titulo del nuevo tema" />
@@ -408,6 +413,25 @@
         </div>
         <div class="palette-modal__body">
           <div class="palette-grid" id="paletteOptionGrid"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="store-modal-backdrop" id="storeModalBackdrop" hidden>
+      <section class="store-modal" id="storeModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Tienda" tabindex="-1">
+        <div class="store-modal__header">
+          <h2>Tienda</h2>
+          <button class="icon-button icon-button--compact store-modal__close" id="closeStoreModalButton" type="button" aria-label="Cerrar tienda">
+            <span class="modal-close-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 6l12 12M18 6 6 18"></path>
+              </svg>
+            </span>
+          </button>
+        </div>
+        <div class="store-modal__body">
+          <nav class="store-modal__tabs" id="storeCategoryTabs" role="tablist" aria-label="Categorías de la tienda"></nav>
+          <div class="store-modal__grid" id="storeItemGrid"></div>
         </div>
       </section>
     </div>
@@ -1315,7 +1339,7 @@
     <div class="notification-toasts" id="notificationToasts" role="status" aria-live="polite" aria-label="Notificaciones" hidden></div>
     <div class="action-feedback" id="actionFeedback" role="status" aria-live="polite" hidden></div>
 
-    <script type="module" src="./app.js?v=20260702-sessioncookie"></script>
+    <script type="module" src="./app.js?v=20260716-quality1"></script>
     <script type="module" src="./auth-fallback.js?v=20260702-sessioncookie"></script>
   </body>
 </html>

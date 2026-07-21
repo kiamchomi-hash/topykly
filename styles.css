@@ -252,6 +252,7 @@ button {
   display: none !important;
 }
 
+html[data-auth-state="pending"] [data-auth-private],
 html[data-auth-state="logged-out"] [data-auth-private] {
   display: none !important;
 }
@@ -3037,8 +3038,8 @@ html[data-theme="dark"] .composer textarea:focus {
   inset: 0;
   background: var(--mascot-accent);
   content: "";
-  -webkit-mask: url("./assets/mascot/topy-concept-v8.png") center / contain no-repeat;
-  mask: url("./assets/mascot/topy-concept-v8.png") center / contain no-repeat;
+  -webkit-mask: url("./assets/mascot/topy-concept-v8.webp") center / contain no-repeat;
+  mask: url("./assets/mascot/topy-concept-v8.webp") center / contain no-repeat;
   transform: scale(1.012);
 }
 
@@ -13019,5 +13020,257 @@ body.is-topic-share-open {
 
   .topic-share-preview__excerpt {
     -webkit-line-clamp: 3;
+  }
+}
+/* Acceso previo al compositor */
+.guest-composer-gate {
+  display: grid;
+  gap: 8px;
+  margin: auto 16px 16px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+}
+
+.guest-composer-gate[hidden] {
+  display: none;
+}
+
+.guest-composer-gate span {
+  color: var(--text-soft);
+  font-size: 0.88rem;
+}
+
+.guest-composer-gate .primary-button {
+  justify-self: start;
+}
+
+/* Tienda */
+.store-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(12, 10, 9, 0.34);
+  backdrop-filter: blur(8px);
+}
+
+.store-modal {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  width: min(860px, 100%);
+  max-height: min(78dvh, 720px);
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+  animation: admin-modal-in 180ms cubic-bezier(0.2, 0.72, 0.24, 1) both;
+}
+
+.store-modal__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 56px 16px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.store-modal__header h2 {
+  margin: 0;
+  font-size: 1.22rem;
+  letter-spacing: -0.02em;
+}
+
+.store-modal__close {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+}
+
+.store-modal__body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+  padding: 16px 24px 20px;
+}
+
+.store-modal__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.store-modal__tab {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.86rem;
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.store-modal__tab:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.store-modal__tab.is-active {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.store-modal__grid {
+  overflow: auto;
+  min-height: 0;
+  padding-right: 6px;
+  scrollbar-color: var(--palette-modal-scrollbar-thumb) var(--palette-modal-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+.store-modal__grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.store-modal__grid::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: var(--palette-modal-scrollbar-track);
+}
+
+.store-modal__grid::-webkit-scrollbar-thumb {
+  border: 2px solid var(--palette-modal-scrollbar-track);
+  border-radius: 999px;
+  background: var(--palette-modal-scrollbar-thumb);
+}
+
+.store-modal__grid::-webkit-scrollbar-thumb:hover {
+  background: var(--palette-modal-scrollbar-thumb-hover);
+}
+
+.store-modal__category-copy {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.store-modal__items {
+  display: grid;
+  gap: 10px;
+}
+
+.store-modal__grid--emotes .store-modal__items {
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+}
+
+.store-modal__grid--accessories .store-modal__items {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.store-item {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 14px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  text-align: center;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.store-item:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(12, 10, 9, 0.14);
+}
+
+.store-item--placeholder {
+  border-style: dashed;
+}
+
+.store-item--placeholder:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.store-item__art {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+}
+
+.store-item__image {
+  max-width: 74%;
+  max-height: 74%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(12, 10, 9, 0.18));
+}
+
+.store-item__placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+}
+
+.store-item__placeholder svg {
+  width: 26px;
+  height: 26px;
+}
+
+.store-item__name {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.store-item__price {
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  background: var(--bg);
+}
+
+@media (max-width: 720px) {
+  .store-modal-backdrop {
+    padding: 10px;
+  }
+
+  .store-modal {
+    max-height: calc(100svh - 20px);
+  }
+
+  .store-modal__header {
+    padding: 16px 48px 12px;
+  }
+
+  .store-modal__body {
+    padding: 12px 16px 16px;
+  }
+
+  .store-modal__grid--emotes .store-modal__items {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   }
 }

@@ -83,7 +83,7 @@ export function renderChat(state, dom) {
   const reportedMessageIds = new Set(state.reportedMessageIds || []);
   const isTopicReported = Boolean(topic && state.reportedTopicIds?.includes?.(topic.id));
 
-  syncChatComposer(topic, dom, isLoading, state.mobileView);
+  syncChatComposer(topic, dom, isLoading, state.mobileView, state.viewer);
   syncTopicReportButton(topic, dom, isLoading, isTopicReported);
   syncTopicShareButton(topic, dom, isLoading);
 
@@ -208,8 +208,20 @@ function syncMessageCardHeights(messageStream) {
   });
 }
 
-function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
+function ensureGuestComposerGate(dom) {
+  const gate = dom.messageForm?.parentElement?.querySelector?.("[data-guest-composer-gate]") || null;
+  if (!gate || gate.dataset.bound === "true") {
+    return gate;
+  }
+
+  gate.querySelector("button")?.addEventListener("click", () => dom.authButton?.click?.());
+  gate.dataset.bound = "true";
+  return gate;
+}
+
+function syncChatComposer(topic, dom, isLoading, mobileView = "browse", viewer = null) {
   const isCreatingTopic = !topic;
+  const canParticipate = viewer?.type === "registered";
   const isCommentableTopic = !topic || topic.status === "active" || topic.status === "pinned";
   const isArchivedTopic = topic?.status === "expelled" || topic?.isArchived === true;
   const topicTitleField = dom.topicTitleInput?.closest(".composer__field");
@@ -217,6 +229,11 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
   const chatPanel = dom.messageForm?.closest(".panel--chat");
   const submitButton = dom.composerSubmitButton;
   const submitLabel = submitButton?.querySelector(".button-label");
+  const guestGate = ensureGuestComposerGate(dom);
+
+  if (guestGate) {
+    guestGate.hidden = isLoading || canParticipate;
+  }
 
   if (topicTitleField) {
     topicTitleField.hidden = isLoading || !isCreatingTopic;
@@ -228,7 +245,7 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse") {
     chatPanel.classList.toggle("panel--topic-create", !isLoading && isCreatingTopic);
   }
   if (dom.messageForm) {
-    dom.messageForm.hidden = isLoading;
+    dom.messageForm.hidden = isLoading || !canParticipate;
     dom.messageForm.classList.toggle("composer--topic-create", isCreatingTopic);
     dom.messageForm.classList.toggle("composer--read-only", !isCreatingTopic && !isCommentableTopic);
     dom.messageForm.dataset.topicStatus = topic?.status || "draft";

@@ -1,4 +1,4 @@
-import { bindTopbarEvents } from "./topbar.js?v=20260709-topicrace1";
+import { bindTopbarEvents } from "./topbar.js?v=20260716-quality1";
 import { syncComposerTextareaHeight } from "./chat.js";
 import { bindTopicShareEvents } from "./topic-share.js";
 

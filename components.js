@@ -1,5 +1,5 @@
 import { createAvatarIcon as createProfileAvatar, createIcon } from "./ui/icons.js";
-import { formatMessageTime } from "./ui/date-utils.js";
+import { formatMessageTime, formatRelativeActivityTime } from "./ui/date-utils.js";
 import { filterDisplayText } from "./profanity-filter.js";
 
 function el(tag, className, text) {
@@ -134,10 +134,15 @@ export function createTopicItem(topic, users, selected = false, currentUserId = 
   );
   const separator = el("span", "topic-item__meta-separator", ", ");
   const lastCommenter = el("span", "topic-item__meta-user", lastCommenterName);
+  const activityTime = el(
+    "span",
+    "topic-item__meta-time",
+    lastCommentAuthor ? ` · ${formatRelativeActivityTime(lastCommentAuthor.createdAt || lastCommentAuthor.timestamp)}` : ""
+  );
   if (lastCommentAuthor) {
     meta.dataset.lastAuthorId = lastCommentAuthor.authorId;
   }
-  meta.append(commentCount, separator, lastCommenter);
+  meta.append(commentCount, separator, lastCommenter, activityTime);
   content.append(
     el("span", "topic-item__title", filterDisplayText(topic.title)),
     meta
