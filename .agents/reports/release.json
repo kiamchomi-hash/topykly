@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T19:22:58-03:00",
+  "generatedAt": "2026-07-21T13:19:32-03:00",
   "decision": "released",
   "environment": "production",
   "provider": {
@@ -12,32 +12,35 @@
   "source": {
     "repository": "kiamchomi-hash/topykly",
     "branch": "main",
-    "releaseCommit": "afbed3a2764168e524013d3b5352ce812d272039",
-    "releaseCommitMessage": "Mejorar SEO, métricas y sincronización",
-    "previousProductionCommit": "e8bce7ec9abb00be386b8d1c9ae0b27060431ab3"
+    "releaseCommit": "522e4c417c7f81f618e20e1a90d8e5275f1c5ac9",
+    "releaseCommitMessage": "Mejorar rendimiento, tienda y acceso mobile",
+    "previousProductionCommit": "29829e4bbec74701c45b1affbeb44e7fe415fd84"
   },
   "releaseContents": [
-    "Noindex y exclusión de sitemap, hubs y relacionados para temas ofensivos o con reportes abiertos.",
-    "Panel visual administrativo con embudo, métricas agregadas y actividad diaria.",
-    "SSE para avisos de cambios con polling de respaldo espaciado.",
-    "Ajustes conservadores de concurrencia y memoria para SQLite.",
-    "Carga diferida de mascota, PNG y cargador de Coloris."
+    "Estado pending de autenticacion para evitar el destello de acceso durante la recarga mobile.",
+    "Tienda visual con catalogo inicial de emotes Noto y categorias de accesorios.",
+    "Gate de participacion para invitados y actividad relativa en la lista de temas.",
+    "Compresion Brotli/gzip, ETag, cache estatica acotada y cache de tarjetas sociales.",
+    "Relay de eventos live compatible con una instancia y separacion de modulos secundarios.",
+    "Mascota WebP y ajustes de carga diferida, SEO y copy publico."
   ],
   "backup": {
-    "requiredForThisRelease": false,
-    "reason": "No hay migraciones de tablas o columnas; los cambios de SQLite son PRAGMA compatibles y reversibles.",
-    "recentLogicalBackup": "/var/data/topykly/backups/topykly-2026-07-16T20-42-50-525Z.sqlite",
+    "requiredForThisRelease": true,
+    "reason": "No hay migraciones, pero se creo un punto de recuperacion fresco antes del deploy.",
+    "logicalBackup": "/var/data/topykly/backups/topykly-2026-07-21T16-04-48-913Z.sqlite",
+    "backupBytes": 417792,
+    "integrityCheck": "ok",
     "renderDiskId": "dsk-d9376o6h2hms73cd7j80",
     "renderDiskMount": "/var/data/topykly"
   },
   "deployment": {
-    "deployId": "dep-d9clhosvikkc73d38mug",
+    "deployId": "dep-d9fpk2gjo6nc73dp8jlg",
     "status": "live",
-    "startedAt": "2026-07-16T22:19:15.708220Z",
-    "finishedAt": "2026-07-16T22:20:01.084793Z",
-    "githubActionsRunId": 29539156122,
+    "startedAt": "2026-07-21T16:10:50.66122Z",
+    "finishedAt": "2026-07-21T16:11:34.312024Z",
+    "githubActionsRunId": 29847425454,
     "githubActionsConclusion": "success",
-    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29539156122",
+    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29847425454",
     "jobs": [
       "core: success",
       "ui: success",
@@ -47,42 +50,61 @@
     ]
   },
   "preDeployChecks": {
-    "localQa": "passed: 178 deterministic tests and 12 smoke tests",
+    "localQa": "passed: 182 deterministic tests and 12 smoke checks",
     "npmAudit": "0 vulnerabilities",
-    "secretScan": "no credential patterns found in the application diff",
+    "secretScan": "no credential-like additions in the staged release diff",
     "diffCheck": "passed",
-    "formatCheck": "existing Prettier debt remains in 11 touched files; no bulk formatting was applied",
-    "databaseMigration": "none; only runtime PRAGMA additions",
+    "formatCheck": "existing Prettier debt remains in 27 touched files; no bulk rewrite was applied",
+    "databaseMigration": "none",
+    "environment": "required production, database, origin and auth variables present",
     "branchSync": "main matched origin/main before the release commit"
   },
   "postDeployVerification": {
-    "shell": "200 with HSTS and CSP from https://www.topykly.com/",
-    "authentication": "GET /api/auth/status returned 200 with configured Google, Turnstile and email checks",
-    "bootstrap": "200 guest payload with 15 topics, Secure HttpOnly cookie and no session ID in the body",
-    "authorization": "anonymous dashboard, diagnostics and analytics requests returned 403",
-    "liveEvents": "GET /api/live returned 200 text/event-stream and an initial ready event",
-    "seoEndpoints": "robots.txt, sitemap.xml and terms returned 200 on the canonical www host",
-    "offensiveNoindex": "one live offensive topic returned X-Robots-Tag noindex, meta noindex and was absent from sitemap.xml",
-    "deployedCode": "SSE, stream safety interval, analytics panel and deferred mascot markers are live",
+    "shell": "200 with deployed store and version markers",
+    "authentication": "GET /api/auth/status returned 200 with OIDC, session secret, Turnstile and email checks configured",
+    "bootstrap": "200 guest payload with 17 topics and no session ID in the body",
+    "authorization": "anonymous admin dashboard returned 403",
+    "securityHeaders": "HSTS and CSP present",
+    "seoEndpoints": "robots.txt, sitemap.xml and terms returned 200",
+    "staticDelivery": "versioned catalog returned immutable cache headers, ETag, conditional 304 and Brotli at the Render origin",
+    "newAssets": "store catalog, first emote and mascot WebP returned 200",
+    "liveEvents": "GET /api/live returned text/event-stream and an initial ready event",
     "browser": {
       "viewport": "390x844",
-      "flow": "topic list, topic selection, conversation rendering and return to list passed",
-      "consoleErrors": 0,
-      "initialMascotRequested": false,
-      "initialColorisRequested": false
-    }
+      "flow": "topic list, topic selection, guest composer gate and return to list passed without writes",
+      "authReload": "pending banner hidden, then logged-out login/register banner visible after bootstrap",
+      "consoleErrors": 0
+    },
+    "renderErrorLogs": 0,
+    "renderHttp5xxLogs": 0
+  },
+  "metrics": {
+    "cpu": {
+      "beforeMax": 0.037638765,
+      "afterMax": 0.0013305667,
+      "latest": 0.00012156666
+    },
+    "memoryBytes": {
+      "beforeMax": 52076544,
+      "afterMax": 51785730,
+      "latest": 40644610
+    },
+    "diskUsageBytes": {
+      "beforeMax": 6455296,
+      "afterMax": 6455296,
+      "latest": 6455296
+    },
+    "assessment": "CPU and memory settled below the pre-deploy maxima, disk usage stayed flat, and no stop condition occurred."
   },
   "rollback": {
-    "codeTargetCommit": "e8bce7ec9abb00be386b8d1c9ae0b27060431ab3",
-    "codeTargetDeployId": "dep-d9ck53svikkc73d21mfg",
+    "codeTargetCommit": "29829e4bbec74701c45b1affbeb44e7fe415fd84",
+    "codeTargetDeployId": "dep-d9fgc7t8nd3s73f6vsb0",
     "databaseCompatibility": "No schema migration was applied; the previous deploy can use the same database unchanged.",
-    "procedure": "Redeploy dep-d9ck53svikkc73d21mfg if a code rollback is required. A database restore is not expected for this release."
+    "procedure": "Redeploy dep-d9fgc7t8nd3s73f6vsb0 if a code rollback is required. Restore the logical backup only if persistent data integrity is affected."
   },
   "unresolvedRisks": [
-    "The original mascot image remains large when an empty state is opened, although it no longer affects initial loading.",
-    "The in-memory SSE hub and SQLite remain single-instance components; future horizontal scaling needs shared pub/sub and multi-instance persistence.",
-    "The initial ES-module graph remains broad even after removing deferred modules.",
     "Repository-wide Prettier debt remains outside this release.",
-    "Render metrics and logs were not queried because no workspace was explicitly selected; deploy state, public endpoints, CI and browser checks showed no failure."
+    "The live relay and SQLite deployment remain single-instance components.",
+    "Render deploys on commit rather than waiting for CI; local QA completed before push and remote CI passed during deploy."
   ]
 }
