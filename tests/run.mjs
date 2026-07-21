@@ -11770,6 +11770,8 @@ await (async () => {
     assert.match(adminPanel, /button\.dataset\.adminSection = item\.id/);
     assert.match(adminPanel, /Métricas/);
     assert.match(adminPanel, /dashboard\.productAnalytics/);
+    assert.match(adminPanel, /Regreso por fuente/);
+    assert.match(adminPanel, /analytics\?\.retentionBySource/);
     assert.match(adminPanel, /admin-panel__analytics-bar/);
     assert.match(styles, /\.admin-panel__metrics\s*\{/);
     assert.match(styles, /\.admin-panel__analytics-bar\s*\{/);
@@ -12686,6 +12688,49 @@ await (async () => {
           }),
         (error) => error?.code === "INVALID_PRODUCT_EVENT"
       );
+    });
+  });
+
+  await test("product analytics splits retention by acquisition source", async () => {
+    await withTempStore((store) => {
+      store.recordProductEvent({
+        sessionId: "session-src-search",
+        authMode: "guest",
+        eventName: "page_view",
+        routeGroup: "/",
+        sourceGroup: "search",
+        ipAddress: "203.0.113.30"
+      });
+      store.recordProductEvent({
+        sessionId: "session-src-direct",
+        authMode: "guest",
+        eventName: "page_view",
+        routeGroup: "/",
+        sourceGroup: "direct",
+        ipAddress: "203.0.113.31"
+      });
+
+      store.login({ sessionId: "session-src-moderator", userId: "u2" });
+      const report = store.getProductAnalyticsForViewer({
+        sessionId: "session-src-moderator",
+        days: 30
+      });
+
+      const bySource = Object.fromEntries(
+        report.retentionBySource.map((row) => [row.sourceGroup, row])
+      );
+      // A first page_view attributes the subject to its source; nobody returned
+      // within the test window, so returnedVisitors stays at zero per source.
+      assert.deepEqual(bySource.search, {
+        sourceGroup: "search",
+        visitors: 1,
+        returnedVisitors: 0
+      });
+      assert.deepEqual(bySource.direct, {
+        sourceGroup: "direct",
+        visitors: 1,
+        returnedVisitors: 0
+      });
     });
   });
 

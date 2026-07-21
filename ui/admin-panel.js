@@ -319,6 +319,71 @@ function renderAnalyticsDashboard(analytics) {
     eventList.append(row);
   });
 
+  const sourceLabels = {
+    direct: "Directo",
+    internal: "Navegación interna",
+    search: "Buscadores",
+    social: "Redes sociales",
+    email: "Correo",
+    campaign: "Campañas",
+    referral: "Referencias"
+  };
+  const sourceList = el("div", "admin-panel__analytics-events");
+  (analytics?.sources || []).forEach((source) => {
+    const row = el("div", "admin-panel__analytics-event");
+    row.append(
+      el("span", "", sourceLabels[source.sourceGroup] || source.sourceGroup),
+      el("strong", "", String(source.total)),
+      el("small", "", `${source.uniqueSubjects} personas`)
+    );
+    sourceList.append(row);
+  });
+  if (!sourceList.childElementCount) {
+    sourceList.append(renderEmpty("Aún no hay fuentes de adquisición registradas."));
+  }
+
+  const routeList = el("div", "admin-panel__analytics-events");
+  (analytics?.routes || []).forEach((route) => {
+    const row = el("div", "admin-panel__analytics-event");
+    row.append(
+      el("span", "", route.routeGroup),
+      el("strong", "", String(route.total)),
+      el("small", "", `${route.uniqueSubjects} personas`)
+    );
+    routeList.append(row);
+  });
+  if (!routeList.childElementCount) {
+    routeList.append(renderEmpty("Aún no hay páginas de entrada registradas."));
+  }
+
+  const cohortList = el("div", "admin-panel__analytics-events");
+  (analytics?.cohorts || []).slice(-7).forEach((cohort) => {
+    const row = el("div", "admin-panel__analytics-event");
+    row.append(
+      el("span", "", cohort.cohortDay),
+      el("strong", "", formatConversion(cohort.returnedVisitors, cohort.visitors)),
+      el("small", "", `${cohort.returnedVisitors}/${cohort.visitors} regresaron`)
+    );
+    cohortList.append(row);
+  });
+  if (!cohortList.childElementCount) {
+    cohortList.append(renderEmpty("Aún no hay cohortes suficientes para calcular regresos."));
+  }
+
+  const retentionSourceList = el("div", "admin-panel__analytics-events");
+  (analytics?.retentionBySource || []).forEach((entry) => {
+    const row = el("div", "admin-panel__analytics-event");
+    row.append(
+      el("span", "", sourceLabels[entry.sourceGroup] || entry.sourceGroup),
+      el("strong", "", formatConversion(entry.returnedVisitors, entry.visitors)),
+      el("small", "", `${entry.returnedVisitors}/${entry.visitors} regresaron`)
+    );
+    retentionSourceList.append(row);
+  });
+  if (!retentionSourceList.childElementCount) {
+    retentionSourceList.append(renderEmpty("Aún no hay datos de regreso por fuente."));
+  }
+
   const dailyTotals = new Map();
   (analytics?.daily || []).forEach((entry) => {
     dailyTotals.set(entry.day, (dailyTotals.get(entry.day) || 0) + entry.total);
@@ -347,6 +412,14 @@ function renderAnalyticsDashboard(analytics) {
     metrics,
     el("h4", "admin-panel__analytics-subtitle", "Eventos registrados"),
     eventList,
+    el("h4", "admin-panel__analytics-subtitle", "Adquisición"),
+    sourceList,
+    el("h4", "admin-panel__analytics-subtitle", "Páginas de entrada"),
+    routeList,
+    el("h4", "admin-panel__analytics-subtitle", "Regreso por cohorte"),
+    cohortList,
+    el("h4", "admin-panel__analytics-subtitle", "Regreso por fuente"),
+    retentionSourceList,
     el("h4", "admin-panel__analytics-subtitle", "Actividad reciente"),
     dailyChart
   );

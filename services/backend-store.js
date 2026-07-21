@@ -864,6 +864,7 @@ function initSchema(db) {
       viewer_type TEXT NOT NULL CHECK (viewer_type IN ('guest', 'registered')),
       event_name TEXT NOT NULL,
       route_group TEXT NOT NULL DEFAULT '/',
+      source_group TEXT NOT NULL DEFAULT 'direct',
       created_at TEXT NOT NULL
     );
 
@@ -979,6 +980,7 @@ function initSchema(db) {
   ensureColumn(db, "reports", "resolved_at", "TEXT");
   ensureColumn(db, "moderation_actions", "actor_user_id", "TEXT");
   ensureColumn(db, "moderation_actions", "reason", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "product_events", "source_group", "TEXT NOT NULL DEFAULT 'direct'");
   ensureColumn(db, "users", "total_connected_seconds", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "connected_seconds_24h", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "users", "connected_seconds_today", "INTEGER NOT NULL DEFAULT 0");
@@ -1085,6 +1087,14 @@ function initSchema(db) {
 
     CREATE INDEX IF NOT EXISTS product_events_subject_idx
     ON product_events(subject_key, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS product_events_source_idx
+    ON product_events(source_group, created_at DESC)
+    WHERE event_name = 'page_view';
+
+    CREATE INDEX IF NOT EXISTS product_events_route_idx
+    ON product_events(route_group, created_at DESC)
+    WHERE event_name = 'page_view';
 
     CREATE INDEX IF NOT EXISTS guest_ip_rate_limits_updated_idx
     ON guest_ip_rate_limits(updated_at);
@@ -2430,6 +2440,12 @@ function normalizeProductRouteGroup(value) {
   return "/";
 }
 
+function normalizeProductSourceGroup(value) {
+  const normalized = String(value || "direct").trim().toLowerCase();
+  const allowedSources = new Set(["direct", "internal", "search", "social", "email", "campaign", "referral"]);
+  return allowedSources.has(normalized) ? normalized : "referral";
+}
+
 function getProductAnalyticsSalt(db) {
   const existing = db.prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(PRODUCT_ANALYTICS_SALT_META_KEY);
@@ -2469,7 +2485,7 @@ function pruneProductAnalyticsIfNeeded(db, now = new Date()) {
   `).run(PRODUCT_ANALYTICS_PRUNE_META_KEY, today, now.toISOString());
 }
 
-function recordProductEvent(db, context, eventName, routeGroup = "/", now = new Date()) {
+function recordProductEvent(db, context, eventName, routeGroup = "/", sourceGroup = "direct", now = new Date()) {
   const normalizedEventName = String(eventName || "").trim();
   if (!PRODUCT_EVENT_NAMES.has(normalizedEventName)) {
     throw new ApiError(400, "INVALID_PRODUCT_EVENT", "El evento de producto no es válido.");
@@ -2478,6 +2494,7 @@ function recordProductEvent(db, context, eventName, routeGroup = "/", now = new 
   pruneProductAnalyticsIfNeeded(db, now);
   const subjectKey = getProductAnalyticsSubjectKey(db, context);
   const normalizedRouteGroup = normalizeProductRouteGroup(routeGroup);
+  const normalizedSourceGroup = normalizeProductSourceGroup(sourceGroup);
   const createdAt = now.toISOString();
   let returnVisitRecorded = false;
 
@@ -2495,15 +2512,15 @@ function recordProductEvent(db, context, eventName, routeGroup = "/", now = new 
   }
 
   db.prepare(`
-    INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(subjectKey, context.viewer.type, normalizedEventName, normalizedRouteGroup, createdAt);
+    INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, source_group, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(subjectKey, context.viewer.type, normalizedEventName, normalizedRouteGroup, normalizedSourceGroup, createdAt);
 
   if (returnVisitRecorded) {
     db.prepare(`
-      INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, created_at)
-      VALUES (?, ?, 'return_visit', ?, ?)
-    `).run(subjectKey, context.viewer.type, normalizedRouteGroup, createdAt);
+      INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, source_group, created_at)
+      VALUES (?, ?, 'return_visit', ?, ?, ?)
+    `).run(subjectKey, context.viewer.type, normalizedRouteGroup, normalizedSourceGroup, createdAt);
   }
 
   return { accepted: true, returnVisitRecorded };
@@ -3754,12 +3771,104 @@ function buildProductAnalyticsReport(db, days = 30) {
     total: Number(row.total ?? 0),
     uniqueSubjects: Number(row.uniqueSubjects ?? 0)
   }));
+  const routes = db.prepare(`
+    SELECT
+      route_group AS routeGroup,
+      COUNT(*) AS total,
+      COUNT(DISTINCT subject_key) AS uniqueSubjects
+    FROM product_events
+    WHERE created_at >= ? AND event_name = 'page_view'
+    GROUP BY route_group
+    ORDER BY total DESC, route_group ASC
+  `).all(cutoff).map((row) => ({
+    routeGroup: row.routeGroup,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+  const sources = db.prepare(`
+    SELECT
+      source_group AS sourceGroup,
+      COUNT(*) AS total,
+      COUNT(DISTINCT subject_key) AS uniqueSubjects
+    FROM product_events
+    WHERE created_at >= ? AND event_name = 'page_view'
+    GROUP BY source_group
+    ORDER BY total DESC, source_group ASC
+  `).all(cutoff).map((row) => ({
+    sourceGroup: row.sourceGroup,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+  const cohorts = db.prepare(`
+    WITH first_visits AS (
+      SELECT subject_key, MIN(created_at) AS first_at
+      FROM product_events
+      WHERE event_name = 'page_view'
+      GROUP BY subject_key
+    )
+    SELECT
+      substr(first_at, 1, 10) AS cohortDay,
+      COUNT(*) AS visitors,
+      SUM(CASE WHEN EXISTS (
+        SELECT 1
+        FROM product_events later
+        WHERE later.subject_key = first_visits.subject_key
+          AND later.event_name = 'page_view'
+          AND julianday(later.created_at) - julianday(first_visits.first_at) >= 0.5
+      ) THEN 1 ELSE 0 END) AS returnedVisitors
+    FROM first_visits
+    WHERE first_at >= ?
+    GROUP BY cohortDay
+    ORDER BY cohortDay ASC
+  `).all(cutoff).map((row) => ({
+    cohortDay: row.cohortDay,
+    visitors: Number(row.visitors ?? 0),
+    returnedVisitors: Number(row.returnedVisitors ?? 0)
+  }));
+  // Retention split by acquisition source: answers whether search-sourced
+  // visitors come back at a different rate than direct/social ones — the signal
+  // that couples the SEO loop with the product loop. A subject's source is the
+  // source_group of its first page_view; SQLite returns that bare column from
+  // the same row as MIN(created_at) because there is exactly one min aggregate.
+  const retentionBySource = db.prepare(`
+    WITH first_visits AS (
+      SELECT
+        subject_key,
+        MIN(created_at) AS first_at,
+        source_group AS first_source
+      FROM product_events
+      WHERE event_name = 'page_view'
+      GROUP BY subject_key
+    )
+    SELECT
+      first_source AS sourceGroup,
+      COUNT(*) AS visitors,
+      SUM(CASE WHEN EXISTS (
+        SELECT 1
+        FROM product_events later
+        WHERE later.subject_key = first_visits.subject_key
+          AND later.event_name = 'page_view'
+          AND julianday(later.created_at) - julianday(first_visits.first_at) >= 0.5
+      ) THEN 1 ELSE 0 END) AS returnedVisitors
+    FROM first_visits
+    WHERE first_visits.first_at >= ?
+    GROUP BY first_source
+    ORDER BY visitors DESC, sourceGroup ASC
+  `).all(cutoff).map((row) => ({
+    sourceGroup: row.sourceGroup,
+    visitors: Number(row.visitors ?? 0),
+    returnedVisitors: Number(row.returnedVisitors ?? 0)
+  }));
 
   return {
     days: normalizedDays,
     generatedAt: new Date().toISOString(),
     events,
-    daily
+    daily,
+    routes,
+    sources,
+    cohorts,
+    retentionBySource
   };
 }
 
@@ -5531,7 +5640,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return this.getDiagnostics();
       });
     },
-    recordProductEvent({ sessionId, authMode, eventName, routeGroup = "/", ipAddress = "" } = {}) {
+    recordProductEvent({ sessionId, authMode, eventName, routeGroup = "/", sourceGroup = "direct", ipAddress = "" } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, {
           sessionId,
@@ -5541,7 +5650,7 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         });
         return {
           sessionId: context.sessionId,
-          ...recordProductEvent(db, context, eventName, routeGroup)
+          ...recordProductEvent(db, context, eventName, routeGroup, sourceGroup)
         };
       });
     },
