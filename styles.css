@@ -327,8 +327,11 @@ html.is-mobile-viewport[data-auth-state="logged-out"] .auth-banner {
   display: flex;
 }
 
+/* Sin el botón de acceso la derecha queda solo con el interruptor de tema, así
+   que igualar la columna vacía de la izquierda centra el logo en el viewport. */
 html.is-mobile-viewport[data-auth-state="logged-out"] .topbar {
   top: var(--auth-banner-offset, 0px);
+  grid-template-columns: 78px minmax(0, 1fr) 78px;
 }
 
 .topbar {

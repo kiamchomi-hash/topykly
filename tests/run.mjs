@@ -5785,7 +5785,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /html\.is-mobile-viewport\[data-auth-state="logged-out"\] \.topbar\s*\{\s*top:\s*var\(--auth-banner-offset, 0px\);/
+      /html\.is-mobile-viewport\[data-auth-state="logged-out"\] \.topbar\s*\{\s*top:\s*var\(--auth-banner-offset, 0px\);\s*grid-template-columns:\s*78px minmax\(0, 1fr\) 78px;/
     );
     assert.match(styles, /html\.is-mobile-viewport\[data-auth-state\] #authButton\s*\{\s*display:\s*none;/);
 
