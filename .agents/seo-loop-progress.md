@@ -85,6 +85,14 @@ Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retenció
 
 > Formato por entrada. La más reciente arriba.
 
+### Infra — 2026-07-21 — Señal de acoplamiento lista (retención por fuente)
+- **Estado:** sigue BLOQUEADO por precondiciones (§0); esto no es una iteración de SEO, es infraestructura que el loop necesita.
+- **Qué se construyó:** analítica de producto por fuente de adquisición, con retención cruzada por fuente. Commits (locales, sin pushear):
+  - `17153e3` — `retentionBySource` en el reporte (`buildProductAnalyticsReport`) + sección "Regreso por fuente" en el panel admin + tests.
+  - `3850697` — detector de fuente en el cliente (`getProductSourceGroup` → `search`/`social`/`referral`/`campaign`/`email`/`internal`/`direct`), enviado en `trackProductEvent`.
+- **Para qué sirve a ESTE loop:** permite responder *"¿el tráfico de búsqueda que traigo retiene distinto que el directo?"*. Si el SEO sube impresiones pero esa fuente no vuelve, el problema es intención/calidad de la keyword (palanca de este loop), no del producto. Cruzar esta señal antes de dar por bueno un crecimiento de tráfico.
+- **Cambio SEO aplicado:** ninguno.
+
 ### Iteración 0 — 2026-07-20 — Setup
 - **Estado:** loop armado, BLOQUEADO por precondiciones (§0). Sin cambios aplicados.
 - **Contexto:** andamiaje SEO ya existe en código (SSR de temas en `/tema/:id/:slug`, `/temas`, `/archivo`, perfiles `/u/:nickname`, sitemap, robots, JSON-LD `DiscussionForumPosting`, thin-content a `noindex`, internal linking vía `relatedTopics`).
@@ -123,7 +131,8 @@ Ordenado por prioridad. El agente toma de acá o de una señal nueva de los dato
 1. **[bloqueante]** Cerrar precondiciones de §0 (hosting, prod, 301, alta en GSC). Sin esto el loop no arranca.
 2. Definir y probar el comando de deploy (§5).
 3. Al haber datos: capturar baseline (§2).
-4. Primera optimización de bajo riesgo candidata: revisar titles/descriptions de las páginas de tema con más impresiones y CTR bajo.
+4. Al haber datos: cruzar la **retención por fuente** (ya implementada, ver Log/Infra) para validar que el tráfico de búsqueda retiene, no solo que sube en volumen.
+5. Primera optimización de bajo riesgo candidata: revisar titles/descriptions de las páginas de tema con más impresiones y CTR bajo.
 
 ---
 
