@@ -115,7 +115,11 @@ Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retenció
 
 ## 5. Deploy
 
-> **TODO al cerrar precondiciones:** documentar aquí el comando/script exacto de deploy de TOPYKLY (git pull + arranque de `local-server.cjs`/`preview-server.js` en el server casero por SSH, o lo que aplique). Hasta que esté probado a mano una vez, el loop no despliega.
+> **TODO — pendiente de decidir el hosting.** A 2026-07-21 no existe comando/script de deploy en el repo (ni `.sh`, ni Dockerfile, ni `ecosystem.config`/Procfile/systemd), y el destino de producción está sin definir (hosting de topykly.com pendiente, con una migración a Cloudflare en curso). No asumir el patrón del otro proyecto (git pull por SSH al miniPC): eso era del laboratorio, no de TOPYKLY.
+>
+> Lo único confirmado del repo: **no hay paso de build** — el server se arranca con `node local-server.cjs` (sirve los archivos directo del fuente), así que "deploy" = llevar el código al host + reiniciar el proceso node.
+>
+> Cuando se decida el hosting, documentar acá el comando textual (transferencia + reinicio) y probarlo a mano una vez. **Hasta entonces el loop no despliega.**
 
 Reglas de deploy:
 - Solo desplegar con `npm run qa` en verde.
