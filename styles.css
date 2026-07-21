@@ -273,6 +273,64 @@ html[data-auth-state="logged-out"] [data-auth-private] {
   height: 100dvh;
 }
 
+.auth-banner {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 21;
+  display: none;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-strong);
+}
+
+.auth-banner__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  overflow: hidden;
+  min-width: 0;
+  height: 38px;
+  padding-inline: 10px;
+  border: 2px solid var(--accent-strong);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--accent-strong);
+  white-space: nowrap;
+  /* Opaco sobre el fondo del banner: un tinte translúcido se confunde con él. */
+  background: color-mix(in srgb, var(--accent) 25%, var(--surface-strong));
+  cursor: pointer;
+}
+
+.auth-banner__button:hover,
+.auth-banner__button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 38%, var(--surface-strong));
+}
+
+.auth-banner__button--accent {
+  border-color: var(--accent-strong);
+  color: var(--button-fill-text);
+  background: var(--button-fill-bg);
+}
+
+.auth-banner__button--accent:hover,
+.auth-banner__button--accent:focus-visible {
+  border-color: var(--accent-strong);
+  background: var(--button-fill-bg-hover);
+}
+
+html.is-mobile-viewport[data-auth-state="logged-out"] .auth-banner {
+  display: flex;
+}
+
+html.is-mobile-viewport[data-auth-state="logged-out"] .topbar {
+  top: var(--auth-banner-offset, 0px);
+}
+
 .topbar {
   position: fixed;
   inset: 0 0 auto;
@@ -4469,7 +4527,9 @@ html.is-mobile-viewport #authButton .button-label {
 html.is-mobile-viewport #storeButton .button-label {
   display: none;
 }
-html.is-mobile-viewport[data-auth-state="logged-in"] #authButton {
+/* Con el controlador activo el acceso vive en .auth-banner; sin él, el botón
+   del topbar sigue siendo la única entrada disponible en mobile. */
+html.is-mobile-viewport[data-auth-state] #authButton {
   display: none;
 }
 

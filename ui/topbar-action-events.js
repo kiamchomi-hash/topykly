@@ -44,6 +44,7 @@ export function bindTopbarActionEvents(dom, handlers) {
   let turnstileRequired = false;
   let pendingTurnstileToken = null;
   let logoutConfirmTrigger = null;
+  let authModalTrigger = null;
   let authButtonErrorTimer = 0;
   let authValidationMessage = "";
   let authResendCooldownTimer = 0;
@@ -1502,16 +1503,22 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    dom.authButton?.focus?.();
+    (authModalTrigger || dom.authButton)?.focus?.();
+    authModalTrigger = null;
   }
 
   function getPendingAuthTopicId() {
     return pendingAuthTopicId ?? handlers.state?.selectedTopicId ?? null;
   }
 
-  async function openAuthModal() {
+  async function openAuthModal({ mode, trigger = null } = {}) {
     if (authPending || isLoggedIn()) {
       return;
+    }
+
+    authModalTrigger = trigger;
+    if (mode) {
+      setAuthPasswordMode(mode);
     }
 
     pendingAuthTopicId = handlers.state?.selectedTopicId ?? null;
@@ -1749,6 +1756,12 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   addListener(dom.authButton, "click", handleAuthButtonClick);
+  addListener(dom.authBannerLoginButton, "click", () => {
+    void openAuthModal({ mode: "login", trigger: dom.authBannerLoginButton });
+  });
+  addListener(dom.authBannerRegisterButton, "click", () => {
+    void openAuthModal({ mode: "register", trigger: dom.authBannerRegisterButton });
+  });
   addListener(typeof document !== "undefined" ? document : null, "click", (event) => {
     const eventElement = resolveEventElement(event);
     if (eventElement?.closest?.("#authButton")) {

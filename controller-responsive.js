@@ -50,9 +50,13 @@ export function createResponsiveHelpers({ state, dom }) {
       return;
     }
 
+    const bannerHeight = Math.ceil(dom.authBanner?.getBoundingClientRect?.().height ?? 0);
+    document.documentElement.style.setProperty("--auth-banner-offset", `${bannerHeight}px`);
+
+    // El topbar es fijo: su borde inferior ya incluye el desplazamiento del banner.
     document.documentElement.style.setProperty(
       "--topbar-offset",
-      `${Math.ceil(topbar.getBoundingClientRect().height)}px`
+      `${Math.ceil(topbar.getBoundingClientRect().bottom)}px`
     );
   }
 

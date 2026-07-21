@@ -5764,6 +5764,41 @@ await (async () => {
     assert.doesNotMatch(notifications, /replaceChildren/);
   });
 
+  await test("mobile shows a login/register banner above the topbar", async () => {
+    const markup = await read("index.html");
+    const styles = await read("styles.css");
+    const topbarActionEvents = await read("ui/topbar-action-events.js");
+    const responsive = await read("controller-responsive.js");
+
+    assert.match(markup, /<div class="auth-banner" id="authBanner">/);
+    assert.match(markup, /id="authBannerLoginButton"[\s\S]*Iniciar sesión/);
+    assert.match(markup, /id="authBannerRegisterButton"[\s\S]*Registrate/);
+
+    assert.match(styles, /\.auth-banner\s*\{[\s\S]*position:\s*fixed;[\s\S]*display:\s*none;/);
+    assert.match(
+      styles,
+      /\.auth-banner__button\s*\{[\s\S]*border:\s*2px solid var\(--accent-strong\);[\s\S]*color:\s*var\(--accent-strong\);[\s\S]*background:\s*color-mix\(in srgb, var\(--accent\) 25%, var\(--surface-strong\)\);/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport\[data-auth-state="logged-out"\] \.auth-banner\s*\{\s*display:\s*flex;/
+    );
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport\[data-auth-state="logged-out"\] \.topbar\s*\{\s*top:\s*var\(--auth-banner-offset, 0px\);/
+    );
+    assert.match(styles, /html\.is-mobile-viewport\[data-auth-state\] #authButton\s*\{\s*display:\s*none;/);
+
+    assert.match(topbarActionEvents, /openAuthModal\(\{ mode: "login", trigger: dom\.authBannerLoginButton \}\)/);
+    assert.match(
+      topbarActionEvents,
+      /openAuthModal\(\{ mode: "register", trigger: dom\.authBannerRegisterButton \}\)/
+    );
+
+    assert.match(responsive, /"--auth-banner-offset"/);
+    assert.match(responsive, /"--topbar-offset",\s*`\$\{Math\.ceil\(topbar\.getBoundingClientRect\(\)\.bottom\)\}px`/);
+  });
+
   await test("mobile exposes notifications as a safe-area floating action", async () => {
     const notifications = await read("ui/notifications.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
@@ -11154,7 +11189,7 @@ await (async () => {
     );
     assert.match(
       styles,
-      /html\.is-mobile-viewport\[data-auth-state="logged-in"\] #authButton\s*\{[\s\S]*display:\s*none;/
+      /html\.is-mobile-viewport\[data-auth-state\] #authButton\s*\{[\s\S]*display:\s*none;/
     );
     assert.match(
       styles,
