@@ -25,6 +25,49 @@ function clearLegacyClientSessionId() {
   }
 }
 
+function getProductSourceGroup() {
+  if (typeof window === "undefined") {
+    return "direct";
+  }
+
+  const storageKey = "topykly-product-source";
+  try {
+    const stored = window.sessionStorage?.getItem(storageKey);
+    if (stored) {
+      return stored;
+    }
+  } catch {
+    // Storage is optional; source detection still works for this page.
+  }
+
+  const url = new URL(window.location.href);
+  const medium = String(url.searchParams.get("utm_medium") || "").toLowerCase();
+  const hasCampaign = url.searchParams.has("utm_source") || url.searchParams.has("utm_campaign");
+  let source = hasCampaign ? "campaign" : "direct";
+  if (medium === "email" || medium === "newsletter") {
+    source = "email";
+  } else if (typeof document !== "undefined" && document.referrer) {
+    const referrer = new URL(document.referrer);
+    const host = referrer.hostname.toLowerCase();
+    if (host === window.location.hostname.toLowerCase()) {
+      source = "internal";
+    } else if (/(google|bing|duckduckgo|yahoo|ecosia)\./.test(host)) {
+      source = "search";
+    } else if (/(facebook|instagram|tiktok|twitter|x|reddit|whatsapp|linkedin)\./.test(host)) {
+      source = "social";
+    } else {
+      source = "referral";
+    }
+  }
+
+  try {
+    window.sessionStorage?.setItem(storageKey, source);
+  } catch {
+    // Ignore storage failures.
+  }
+  return source;
+}
+
 function createHeaders(extraHeaders = {}) {
   clearLegacyClientSessionId();
   return {
@@ -357,7 +400,7 @@ export const api = {
       ?? (typeof window !== "undefined" ? window.location.pathname : "/");
     return readApiPayload("/api/events", {
       method: "POST",
-      body: { eventName, routeGroup: resolvedRouteGroup }
+      body: { eventName, routeGroup: resolvedRouteGroup, sourceGroup: getProductSourceGroup() }
     });
   },
 
