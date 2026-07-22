@@ -2,14 +2,20 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
+    <meta
+      name="description"
+      content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil."
+    />
     <meta name="robots" content="index,follow" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="canonical" href="https://www.topykly.com/" />
     <meta property="og:site_name" content="TOPYKLY" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="TOPYKLY — Conversaciones por temas en español" />
-    <meta property="og:description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
+    <meta
+      property="og:description"
+      content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil."
+    />
     <meta property="og:url" content="https://www.topykly.com/" />
     <meta property="og:locale" content="es_ES" />
     <meta property="og:image" content="https://www.topykly.com/og-image.png" />
@@ -19,7 +25,10 @@
     <meta property="og:image:alt" content="TOPYKLY, conversaciones por temas en español" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="TOPYKLY — Conversaciones por temas en español" />
-    <meta name="twitter:description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil." />
+    <meta
+      name="twitter:description"
+      content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil."
+    />
     <meta name="twitter:image" content="https://www.topykly.com/og-image.png" />
     <meta name="twitter:image:alt" content="TOPYKLY, conversaciones por temas en español" />
     <title>TOPYKLY — Conversaciones por temas en español</title>
@@ -45,18 +54,41 @@
   <body>
     <div class="shell">
       <div class="auth-banner" id="authBanner">
-        <button class="auth-banner__button" id="authBannerLoginButton" type="button" aria-label="Iniciar sesión">
+        <button
+          class="auth-banner__button"
+          id="authBannerLoginButton"
+          type="button"
+          aria-label="Iniciar sesión"
+        >
           Iniciar sesión
         </button>
-        <button class="auth-banner__button auth-banner__button--accent" id="authBannerRegisterButton" type="button" aria-label="Registrate">
+        <button
+          class="auth-banner__button auth-banner__button--accent"
+          id="authBannerRegisterButton"
+          type="button"
+          aria-label="Registrate"
+        >
           Registrate
         </button>
       </div>
       <header class="topbar" role="banner">
         <div class="topbar__group topbar__group--left">
-          <button class="icon-button" id="profileButton" type="button" aria-label="Perfil" data-auth-private>
+          <button
+            class="icon-button"
+            id="profileButton"
+            type="button"
+            aria-label="Perfil"
+            data-auth-private
+          >
             <span class="profile-button__avatar" aria-hidden="true">
-              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 48 48"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <rect x="4" y="4" width="40" height="40" rx="10"></rect>
                 <circle cx="24" cy="18" r="7"></circle>
                 <path d="M11.5 38c2.6-6.2 7.7-9.3 12.5-9.3S33.9 31.8 36.5 38"></path>
@@ -64,15 +96,42 @@
             </span>
             <span class="button-label">Perfil</span>
           </button>
-          <button class="icon-button icon-button--circular" id="settingsButton" type="button" aria-label="Configuración" aria-haspopup="dialog" aria-controls="settingsModal" aria-expanded="false" data-auth-private hidden>
+          <button
+            class="icon-button icon-button--circular"
+            id="settingsButton"
+            type="button"
+            aria-label="Configuración"
+            aria-haspopup="dialog"
+            aria-controls="settingsModal"
+            aria-expanded="false"
+            data-auth-private
+            hidden
+          >
             <span class="icon-button__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.88Z"></path>
+                <path
+                  d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.88Z"
+                ></path>
               </svg>
             </span>
           </button>
-          <button class="icon-button" id="paletteButton" type="button" aria-label="Paletas" aria-haspopup="dialog" aria-controls="paletteModal" aria-expanded="false">
+          <button
+            class="icon-button"
+            id="paletteButton"
+            type="button"
+            aria-label="Paletas"
+            aria-haspopup="dialog"
+            aria-controls="paletteModal"
+            aria-expanded="false"
+          >
             <span class="icon-button__icon" aria-hidden="true">
               <span class="palette-mark" aria-hidden="true">
                 <span class="palette-mark__swatch palette-mark__swatch--one"></span>
@@ -82,15 +141,24 @@
             </span>
             <span class="theme-toggle__label">Paletas</span>
           </button>
-          <div class="theme-toggle-slot theme-toggle-slot--desktop" id="themeToggleDesktopSlot"></div>
+          <div
+            class="theme-toggle-slot theme-toggle-slot--desktop"
+            id="themeToggleDesktopSlot"
+          ></div>
         </div>
 
         <div class="topbar__title" role="img" aria-label="TOPYKLY">
           <span class="brand-mark__icon" aria-hidden="true">
             <svg viewBox="0 0 64 64" fill="none">
               <rect class="brand-mark__icon-base" width="64" height="64" rx="16"></rect>
-              <path class="brand-mark__icon-fill" d="M17 19h30v18c0 5.5-4.5 10-10 10H27c-5.5 0-10-4.5-10-10V19Z"></path>
-              <path class="brand-mark__icon-stroke" d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44"></path>
+              <path
+                class="brand-mark__icon-fill"
+                d="M17 19h30v18c0 5.5-4.5 10-10 10H27c-5.5 0-10-4.5-10-10V19Z"
+              ></path>
+              <path
+                class="brand-mark__icon-stroke"
+                d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44"
+              ></path>
               <path class="brand-mark__icon-stroke" d="M22 48h20"></path>
               <path class="brand-mark__icon-stroke" d="M26 14v7M32 11v10M38 14v7"></path>
             </svg>
@@ -103,17 +171,43 @@
 
         <div class="topbar__group topbar__group--right">
           <div class="topbar__auth-tools" id="authTools" data-auth-private hidden>
-            <button class="icon-button icon-button--circular" id="adminPanelButton" type="button" aria-label="Administración" data-admin-private hidden>
+            <button
+              class="icon-button icon-button--circular"
+              id="adminPanelButton"
+              type="button"
+              aria-label="Administración"
+              data-admin-private
+              hidden
+            >
               <span class="icon-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path d="M12 3l7 3v5c0 4.5-2.9 8.4-7 10-4.1-1.6-7-5.5-7-10V6l7-3Z"></path>
                   <path d="M9 12l2 2 4-5"></path>
                 </svg>
               </span>
             </button>
-            <button class="icon-button icon-button--circular" id="friendRequestsButton" type="button" aria-label="Solicitudes de amistad">
+            <button
+              class="icon-button icon-button--circular"
+              id="friendRequestsButton"
+              type="button"
+              aria-label="Solicitudes de amistad"
+            >
               <span class="icon-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
                   <circle cx="9" cy="7" r="4"></circle>
                   <line x1="19" y1="8" x2="19" y2="14"></line>
@@ -121,18 +215,46 @@
                 </svg>
               </span>
             </button>
-            <button class="icon-button icon-button--circular" id="notificationsButton" type="button" aria-label="Notificaciones">
+            <button
+              class="icon-button icon-button--circular"
+              id="notificationsButton"
+              type="button"
+              aria-label="Notificaciones"
+            >
               <span class="icon-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                   <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                 </svg>
               </span>
             </button>
           </div>
-          <button class="text-button text-button--prominent" id="storeButton" type="button" aria-label="Tienda" aria-haspopup="dialog" aria-controls="storeModal" aria-expanded="false" data-auth-private>
+          <button
+            class="text-button text-button--prominent"
+            id="storeButton"
+            type="button"
+            aria-label="Tienda"
+            aria-haspopup="dialog"
+            aria-controls="storeModal"
+            aria-expanded="false"
+            data-auth-private
+          >
             <span class="icon-button__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M5 9h14l-1 11H6L5 9Z"></path>
                 <path d="M9 9V7a3 3 0 0 1 6 0v2"></path>
               </svg>
@@ -140,30 +262,68 @@
             <span class="button-label">Tienda</span>
           </button>
           <div class="theme-toggle-slot theme-toggle-slot--mobile" id="themeToggleMobileSlot"></div>
-          <button class="text-button text-button--accent prominent-auth" id="authButton" type="button" aria-label="Iniciar sesión">
+          <button
+            class="text-button text-button--accent prominent-auth"
+            id="authButton"
+            type="button"
+            aria-label="Iniciar sesión"
+          >
             <span class="button-label">Iniciar sesión</span>
           </button>
-          <button class="icon-button icon-button--drawer mobile-right-drawer" id="openRightDrawer" type="button" aria-label="Abrir menú" aria-controls="rightDrawer" aria-expanded="false">
+          <button
+            class="icon-button icon-button--drawer mobile-right-drawer"
+            id="openRightDrawer"
+            type="button"
+            aria-label="Abrir menú"
+            aria-controls="rightDrawer"
+            aria-expanded="false"
+          >
             <span class="icon-button__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M4 6h16M4 12h16M4 18h16"></path>
               </svg>
             </span>
           </button>
         </div>
         <template id="themeToggleTemplate">
-          <button class="theme-switch" id="themeToggle" type="button" role="switch" aria-checked="true" aria-label="Tema oscuro">
+          <button
+            class="theme-switch"
+            id="themeToggle"
+            type="button"
+            role="switch"
+            aria-checked="true"
+            aria-label="Tema oscuro"
+          >
             <span class="theme-switch__track" aria-hidden="true">
               <span class="theme-switch__icons">
                 <span class="theme-switch__icon theme-switch__icon--light">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <circle cx="12" cy="12" r="3.5"></circle>
-                    <path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4L6 18M18 18l-1.6-1.6M7.6 7.6L6 6"></path>
+                    <path
+                      d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4L6 18M18 18l-1.6-1.6M7.6 7.6L6 6"
+                    ></path>
                   </svg>
                 </span>
                 <span class="theme-switch__icon theme-switch__icon--dark">
                   <svg viewBox="0 0 24 24" fill="none" stroke="none">
-                    <path fill="currentColor" d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2Z"></path>
+                    <path
+                      fill="currentColor"
+                      d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2Z"
+                    ></path>
                   </svg>
                 </span>
               </span>
@@ -186,7 +346,12 @@
               </div>
             </div>
             <div class="topics-panel__footer">
-              <button class="primary-button topics-panel__create-button" id="createTopicButton" type="button" aria-label="Crear nuevo tema de chat">
+              <button
+                class="primary-button topics-panel__create-button"
+                id="createTopicButton"
+                type="button"
+                aria-label="Crear nuevo tema de chat"
+              >
                 Crear nuevo tema
               </button>
             </div>
@@ -196,9 +361,21 @@
         <section class="panel panel--chat" aria-labelledby="chatTitle">
           <div class="panel__header panel__header--chat">
             <div class="panel__header-title">
-              <button class="icon-button icon-button--circular chat-header__back" id="backToTopics" type="button" aria-label="Volver a temas">
+              <button
+                class="icon-button icon-button--circular chat-header__back"
+                id="backToTopics"
+                type="button"
+                aria-label="Volver a temas"
+              >
                 <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <path d="m15 18-6-6 6-6"></path>
                   </svg>
                 </span>
@@ -210,9 +387,22 @@
               </h2>
             </div>
             <div class="chat-actions">
-              <button class="icon-button icon-button--compact chat-actions__share" id="shareTopicButton" type="button" aria-label="Compartir tema" hidden>
+              <button
+                class="icon-button icon-button--compact chat-actions__share"
+                id="shareTopicButton"
+                type="button"
+                aria-label="Compartir tema"
+                hidden
+              >
                 <span class="share-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <circle cx="18" cy="5" r="2.5"></circle>
                     <circle cx="6" cy="12" r="2.5"></circle>
                     <circle cx="18" cy="19" r="2.5"></circle>
@@ -221,9 +411,22 @@
                 </span>
                 <span class="button-label">Compartir</span>
               </button>
-              <button class="icon-button icon-button--compact chat-actions__report" id="reportTopicButton" type="button" aria-label="Reportar tema" hidden>
+              <button
+                class="icon-button icon-button--compact chat-actions__report"
+                id="reportTopicButton"
+                type="button"
+                aria-label="Reportar tema"
+                hidden
+              >
                 <span class="report-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.9"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <path d="M5 21V4"></path>
                     <path d="M5 4h13.5l-3 4.5 3 4.5H5"></path>
                   </svg>
@@ -235,7 +438,9 @@
 
           <div class="chat-hero">
             <h3 id="chatTopicName" hidden>Selecciona un tema</h3>
-            <p class="chat-hero__description" id="chatTopicDescription" hidden>Selecciona un tema para empezar a chatear.</p>
+            <p class="chat-hero__description" id="chatTopicDescription" hidden>
+              Selecciona un tema para empezar a chatear.
+            </p>
           </div>
 
           <div class="message-stream" id="messageStream" aria-live="polite"></div>
@@ -247,12 +452,28 @@
           </div>
           <form class="composer" id="messageForm">
             <label class="composer__field" hidden>
-              <input id="topicTitleInput" type="text" maxlength="80" placeholder="Titulo del tema" autocomplete="off" aria-label="Titulo del nuevo tema" />
+              <input
+                id="topicTitleInput"
+                type="text"
+                maxlength="80"
+                placeholder="Titulo del tema"
+                autocomplete="off"
+                aria-label="Titulo del nuevo tema"
+              />
             </label>
             <label class="composer__field composer__field--message">
-              <textarea id="messageInput" rows="2" maxlength="240" placeholder="Escribe aqui..." required aria-label="Mensaje del chat"></textarea>
+              <textarea
+                id="messageInput"
+                rows="2"
+                maxlength="240"
+                placeholder="Escribe aqui..."
+                required
+                aria-label="Mensaje del chat"
+              ></textarea>
             </label>
-            <button class="primary-button" type="submit" aria-label="Enviar mensaje al chat"><span class="button-label">Enviar</span></button>
+            <button class="primary-button" type="submit" aria-label="Enviar mensaje al chat">
+              <span class="button-label">Enviar</span>
+            </button>
           </form>
         </section>
 
@@ -268,7 +489,14 @@
             <div class="users-section">
               <div class="section-title panel__title-inline">
                 <span class="section-title__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z"></path>
                     <path d="M6 20a6 6 0 0 1 12 0"></path>
                   </svg>
@@ -284,33 +512,89 @@
                   <h3 id="rankingsTitle">Ranking</h3>
                 </div>
                 <div class="rankings-legacy" hidden>
-                  <button class="icon-button icon-button--drawer ranking-scope-toggle" id="rankingScopeButton" type="button" aria-label="Cambiar entre ranking global y por tema">
+                  <button
+                    class="icon-button icon-button--drawer ranking-scope-toggle"
+                    id="rankingScopeButton"
+                    type="button"
+                    aria-label="Cambiar entre ranking global y por tema"
+                  >
                     <span class="icon-button__icon" aria-hidden="true" id="rankingScopeIcon"></span>
                   </button>
                 </div>
               </div>
               <div class="ranking-controls">
-                <div class="ranking-scope-tabs" id="rankingScopeTabs" role="group" aria-label="Alcance del ranking">
-                  <button class="ranking-scope-tabs__button" type="button" data-ranking-scope="global">GLOBAL</button>
+                <div
+                  class="ranking-scope-tabs"
+                  id="rankingScopeTabs"
+                  role="group"
+                  aria-label="Alcance del ranking"
+                >
+                  <button
+                    class="ranking-scope-tabs__button"
+                    type="button"
+                    data-ranking-scope="global"
+                  >
+                    GLOBAL
+                  </button>
                   <span class="ranking-scope-tabs__divider" aria-hidden="true">/</span>
-                  <button class="ranking-scope-tabs__button" type="button" data-ranking-scope="topic">TEMA</button>
+                  <button
+                    class="ranking-scope-tabs__button"
+                    type="button"
+                    data-ranking-scope="topic"
+                  >
+                    TEMA
+                  </button>
                 </div>
-                <div class="ranking-mode-list" id="rankingModeList" role="group" aria-label="Modo de ranking"></div>
+                <div
+                  class="ranking-mode-list"
+                  id="rankingModeList"
+                  role="group"
+                  aria-label="Modo de ranking"
+                ></div>
               </div>
               <div class="ranking-carousel" role="group" aria-label="Cambiar ranking">
-                <button class="icon-button icon-button--compact ranking-carousel__nav" id="rankingPrev" type="button" aria-label="Ranking anterior">
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="rankingPrev"
+                  type="button"
+                  aria-label="Ranking anterior"
+                >
                   <span class="icon-button__icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
                       <path d="m15 18-6-6 6-6"></path>
                     </svg>
                   </span>
                 </button>
-                <button class="icon-button icon-button--compact ranking-carousel__current" id="rankingCurrent" type="button" aria-label="Modo actual">
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__current"
+                  id="rankingCurrent"
+                  type="button"
+                  aria-label="Modo actual"
+                >
                   <span class="button-label">TEMA COMENTARIOS</span>
                 </button>
-                <button class="icon-button icon-button--compact ranking-carousel__nav" id="rankingNext" type="button" aria-label="Ranking siguiente">
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="rankingNext"
+                  type="button"
+                  aria-label="Ranking siguiente"
+                >
                   <span class="icon-button__icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
                       <path d="m9 18 6-6-6-6"></path>
                     </svg>
                   </span>
@@ -333,12 +617,25 @@
       </footer>
     </div>
     <div class="topic-share-modal-backdrop" id="shareTopicModalBackdrop" hidden>
-      <section class="topic-share-modal" id="shareTopicModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="shareTopicModalTitle" tabindex="-1">
+      <section
+        class="topic-share-modal"
+        id="shareTopicModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-labelledby="shareTopicModalTitle"
+        tabindex="-1"
+      >
         <header class="topic-share-modal__header">
           <div>
             <h2 id="shareTopicModalTitle">Compartir tema</h2>
           </div>
-          <button class="icon-button icon-button--compact topic-share-modal__close" id="closeShareTopicModalButton" type="button" aria-label="Cerrar compartir tema">
+          <button
+            class="icon-button icon-button--compact topic-share-modal__close"
+            id="closeShareTopicModalButton"
+            type="button"
+            aria-label="Cerrar compartir tema"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -353,7 +650,9 @@
                 <svg viewBox="0 0 64 64" fill="none">
                   <rect width="64" height="64" rx="16"></rect>
                   <path d="M17 19h30v18c0 5.5-4.5 10-10 10H27c-5.5 0-10-4.5-10-10V19Z"></path>
-                  <path d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44M22 48h20M26 14v7M32 11v10M38 14v7"></path>
+                  <path
+                    d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44M22 48h20M26 14v7M32 11v10M38 14v7"
+                  ></path>
                 </svg>
               </span>
               <span class="topic-share-preview__wordmark"><span>TOPY</span><span>KLY</span></span>
@@ -379,9 +678,20 @@
               <span>Enlace:</span>
               <input id="shareTopicUrl" type="text" readonly />
             </label>
-            <button class="primary-button topic-share-modal__primary" id="nativeShareTopicButton" type="button">
+            <button
+              class="primary-button topic-share-modal__primary"
+              id="nativeShareTopicButton"
+              type="button"
+            >
               <span class="share-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <circle cx="18" cy="5" r="2.5"></circle>
                   <circle cx="6" cy="12" r="2.5"></circle>
                   <circle cx="18" cy="19" r="2.5"></circle>
@@ -391,8 +701,12 @@
               Compartir tema
             </button>
             <div class="topic-share-modal__secondary-actions">
-              <button class="text-button" id="copyTopicLinkButton" type="button">Copiar enlace</button>
-              <button class="text-button" id="downloadTopicCardButton" type="button">Descargar imagen</button>
+              <button class="text-button" id="copyTopicLinkButton" type="button">
+                Copiar enlace
+              </button>
+              <button class="text-button" id="downloadTopicCardButton" type="button">
+                Descargar imagen
+              </button>
             </div>
           </div>
         </div>
@@ -401,9 +715,22 @@
     </div>
 
     <div class="palette-modal-backdrop" id="paletteModalBackdrop" hidden>
-      <section class="palette-modal" id="paletteModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Selector de paletas" tabindex="-1">
+      <section
+        class="palette-modal"
+        id="paletteModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Selector de paletas"
+        tabindex="-1"
+      >
         <div class="palette-modal__header">
-          <button class="icon-button icon-button--compact palette-modal__close" id="closePaletteModalButton" type="button" aria-label="Cerrar selector de paletas">
+          <button
+            class="icon-button icon-button--compact palette-modal__close"
+            id="closePaletteModalButton"
+            type="button"
+            aria-label="Cerrar selector de paletas"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -418,10 +745,23 @@
     </div>
 
     <div class="store-modal-backdrop" id="storeModalBackdrop" hidden>
-      <section class="store-modal" id="storeModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Tienda" tabindex="-1">
+      <section
+        class="store-modal"
+        id="storeModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Tienda"
+        tabindex="-1"
+      >
         <div class="store-modal__header">
           <h2>Tienda</h2>
-          <button class="icon-button icon-button--compact store-modal__close" id="closeStoreModalButton" type="button" aria-label="Cerrar tienda">
+          <button
+            class="icon-button icon-button--compact store-modal__close"
+            id="closeStoreModalButton"
+            type="button"
+            aria-label="Cerrar tienda"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -430,21 +770,41 @@
           </button>
         </div>
         <div class="store-modal__body">
-          <nav class="store-modal__tabs" id="storeCategoryTabs" role="tablist" aria-label="Categorías de la tienda"></nav>
+          <nav
+            class="store-modal__tabs"
+            id="storeCategoryTabs"
+            role="tablist"
+            aria-label="Categorías de la tienda"
+          ></nav>
           <div class="store-modal__grid" id="storeItemGrid"></div>
         </div>
       </section>
     </div>
 
     <div class="admin-modal-backdrop" id="adminModalBackdrop" hidden>
-      <section class="admin-modal" id="adminModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Panel de administración" tabindex="-1">
+      <section
+        class="admin-modal"
+        id="adminModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Panel de administración"
+        tabindex="-1"
+      >
         <div class="admin-modal__header">
           <div>
             <p class="panel__kicker">Operaciones</p>
             <h2>Centro de moderación</h2>
-            <p class="admin-modal__subtitle">Revisa pendientes, aplica sanciones y corrige decisiones.</p>
+            <p class="admin-modal__subtitle">
+              Revisa pendientes, aplica sanciones y corrige decisiones.
+            </p>
           </div>
-          <button class="icon-button icon-button--compact admin-modal__close" id="closeAdminModalButton" type="button" aria-label="Cerrar administración">
+          <button
+            class="icon-button icon-button--compact admin-modal__close"
+            id="closeAdminModalButton"
+            type="button"
+            aria-label="Cerrar administración"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -456,13 +816,26 @@
       </section>
     </div>
     <div class="report-modal-backdrop" id="reportModalBackdrop" hidden>
-      <section class="report-modal" id="reportModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Reportar" tabindex="-1">
+      <section
+        class="report-modal"
+        id="reportModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Reportar"
+        tabindex="-1"
+      >
         <div class="report-modal__header">
           <div>
             <p class="panel__kicker">Reporte</p>
             <h2 id="reportModalTitle">Reportar</h2>
           </div>
-          <button class="icon-button icon-button--compact report-modal__close" id="closeReportModalButton" type="button" aria-label="Cerrar reporte">
+          <button
+            class="icon-button icon-button--compact report-modal__close"
+            id="closeReportModalButton"
+            type="button"
+            aria-label="Cerrar reporte"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -472,20 +845,54 @@
         </div>
         <form class="report-modal__body" id="reportReasonForm" novalidate>
           <p class="report-modal__intro">Elige el motivo que mejor describe el problema.</p>
-          <div class="report-modal__reasons" id="reportReasonOptions" role="radiogroup" aria-label="Motivo del reporte"></div>
-          <label class="report-modal__other-field" id="reportOtherReasonField" for="reportOtherReasonInput">
+          <div
+            class="report-modal__reasons"
+            id="reportReasonOptions"
+            role="radiogroup"
+            aria-label="Motivo del reporte"
+          ></div>
+          <label
+            class="report-modal__other-field"
+            id="reportOtherReasonField"
+            for="reportOtherReasonInput"
+          >
             <span class="report-modal__other-label">Cuéntanos más detalles (opcional)</span>
-            <textarea id="reportOtherReasonInput" maxlength="240" rows="3" placeholder="Agrega contexto sobre el problema..."></textarea>
+            <textarea
+              id="reportOtherReasonInput"
+              maxlength="240"
+              rows="3"
+              placeholder="Agrega contexto sobre el problema..."
+            ></textarea>
           </label>
-          <button class="primary-button report-modal__submit" id="reportModalSubmitButton" type="submit" disabled>Enviar reporte</button>
+          <button
+            class="primary-button report-modal__submit"
+            id="reportModalSubmitButton"
+            type="submit"
+            disabled
+          >
+            Enviar reporte
+          </button>
         </form>
       </section>
     </div>
     <div class="auth-modal-backdrop" id="authModalBackdrop" hidden>
-      <section class="auth-modal" id="authModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Iniciar Sesión" tabindex="-1">
+      <section
+        class="auth-modal"
+        id="authModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Iniciar Sesión"
+        tabindex="-1"
+      >
         <div class="auth-modal__header">
           <h2 id="authModalTitle">Iniciar Sesión</h2>
-          <button class="icon-button icon-button--compact auth-modal__close" id="closeAuthModalButton" type="button" aria-label="Cerrar inicio de sesión">
+          <button
+            class="icon-button icon-button--compact auth-modal__close"
+            id="closeAuthModalButton"
+            type="button"
+            aria-label="Cerrar inicio de sesión"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -495,16 +902,40 @@
         </div>
         <div class="auth-modal__body">
           <input id="authTurnstileToken" type="hidden" value="" />
-          <p class="auth-modal__status" id="authStatus" role="status" aria-live="polite" data-status-kind="off"></p>
+          <p
+            class="auth-modal__status"
+            id="authStatus"
+            role="status"
+            aria-live="polite"
+            data-status-kind="off"
+          ></p>
           <div class="auth-google-section" id="authGoogleSection">
             <div class="auth-google-section__inner">
-              <button class="auth-google-button" id="authGoogleButton" type="button" data-auth-provider="google" disabled>
+              <button
+                class="auth-google-button"
+                id="authGoogleButton"
+                type="button"
+                data-auth-provider="google"
+                disabled
+              >
                 <span class="auth-google-button__logo" aria-hidden="true">
                   <svg viewBox="0 0 24 24" role="img" focusable="false">
-                    <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.4-1.1 2.6-2.3 3.4v2.8h3.7c2.2-2 3.6-4.9 3.6-8.3Z"></path>
-                    <path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.7-2.8c-1 .7-2.4 1.1-4.2 1.1-3.1 0-5.7-2.1-6.7-4.9H1.5v2.9C3.5 21.3 7.5 24 12 24Z"></path>
-                    <path fill="#FBBC05" d="M5.3 14.5c-.2-.7-.4-1.5-.4-2.5s.1-1.7.4-2.5V6.6H1.5C.5 8.2 0 10 0 12s.5 3.8 1.5 5.4l3.8-2.9Z"></path>
-                    <path fill="#EA4335" d="M12 4.7c1.7 0 3.3.6 4.5 1.8l3.3-3.3C17.9 1.2 15.2 0 12 0 7.5 0 3.5 2.7 1.5 6.6l3.8 2.9c1-2.8 3.6-4.8 6.7-4.8Z"></path>
+                    <path
+                      fill="#4285F4"
+                      d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.4-1.1 2.6-2.3 3.4v2.8h3.7c2.2-2 3.6-4.9 3.6-8.3Z"
+                    ></path>
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.7-2.8c-1 .7-2.4 1.1-4.2 1.1-3.1 0-5.7-2.1-6.7-4.9H1.5v2.9C3.5 21.3 7.5 24 12 24Z"
+                    ></path>
+                    <path
+                      fill="#FBBC05"
+                      d="M5.3 14.5c-.2-.7-.4-1.5-.4-2.5s.1-1.7.4-2.5V6.6H1.5C.5 8.2 0 10 0 12s.5 3.8 1.5 5.4l3.8-2.9Z"
+                    ></path>
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.7c1.7 0 3.3.6 4.5 1.8l3.3-3.3C17.9 1.2 15.2 0 12 0 7.5 0 3.5 2.7 1.5 6.6l3.8 2.9c1-2.8 3.6-4.8 6.7-4.8Z"
+                    ></path>
                   </svg>
                 </span>
                 <span data-auth-button-label>Continuar con Google</span>
@@ -516,17 +947,49 @@
           </div>
           <form class="auth-email-form" id="authPasswordForm" novalidate>
             <div class="auth-mode-tabs" role="group" aria-label="Modo de acceso">
-              <button class="auth-mode-tabs__button is-active" id="authLoginModeButton" type="button" data-auth-mode="login">Entrar</button>
-              <button class="auth-mode-tabs__button" id="authRegisterModeButton" type="button" data-auth-mode="register">Crear cuenta</button>
+              <button
+                class="auth-mode-tabs__button is-active"
+                id="authLoginModeButton"
+                type="button"
+                data-auth-mode="login"
+              >
+                Entrar
+              </button>
+              <button
+                class="auth-mode-tabs__button"
+                id="authRegisterModeButton"
+                type="button"
+                data-auth-mode="register"
+              >
+                Crear cuenta
+              </button>
             </div>
             <label class="auth-email-form__field auth-profile-step" for="authNicknameInput" hidden>
-              <span class="auth-email-form__label-text">Nombre de Usuario <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
-              <input id="authNicknameInput" type="text" autocomplete="nickname" maxlength="24" aria-describedby="authStatus" />
+              <span class="auth-email-form__label-text"
+                >Nombre de Usuario
+                <span class="auth-field-error-marker" aria-hidden="true">*</span></span
+              >
+              <input
+                id="authNicknameInput"
+                type="text"
+                autocomplete="nickname"
+                maxlength="24"
+                aria-describedby="authStatus"
+              />
             </label>
             <div class="auth-email-form__field auth-profile-step auth-birthdate-field" hidden>
-              <span class="auth-email-form__label-text" id="authBirthdateLabel">Fecha de nacimiento <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
+              <span class="auth-email-form__label-text" id="authBirthdateLabel"
+                >Fecha de nacimiento
+                <span class="auth-field-error-marker" aria-hidden="true">*</span></span
+              >
               <div class="auth-birthdate" role="group" aria-labelledby="authBirthdateLabel">
-                <select id="authBirthDay" class="auth-birthdate__select auth-birthdate__select--day" autocomplete="bday-day" aria-label="Día" aria-describedby="authStatus">
+                <select
+                  id="authBirthDay"
+                  class="auth-birthdate__select auth-birthdate__select--day"
+                  autocomplete="bday-day"
+                  aria-label="Día"
+                  aria-describedby="authStatus"
+                >
                   <option value="" disabled hidden selected>Día</option>
                   <option value="1">1</option>
                   <option value="2">2</option>
@@ -560,7 +1023,13 @@
                   <option value="30">30</option>
                   <option value="31">31</option>
                 </select>
-                <select id="authBirthMonth" class="auth-birthdate__select auth-birthdate__select--month" autocomplete="bday-month" aria-label="Mes" aria-describedby="authStatus">
+                <select
+                  id="authBirthMonth"
+                  class="auth-birthdate__select auth-birthdate__select--month"
+                  autocomplete="bday-month"
+                  aria-label="Mes"
+                  aria-describedby="authStatus"
+                >
                   <option value="" disabled hidden selected>Mes</option>
                   <option value="1">Enero</option>
                   <option value="2">Febrero</option>
@@ -575,7 +1044,13 @@
                   <option value="11">Noviembre</option>
                   <option value="12">Diciembre</option>
                 </select>
-                <select id="authBirthYear" class="auth-birthdate__select auth-birthdate__select--year" autocomplete="bday-year" aria-label="Año" aria-describedby="authStatus">
+                <select
+                  id="authBirthYear"
+                  class="auth-birthdate__select auth-birthdate__select--year"
+                  autocomplete="bday-year"
+                  aria-label="Año"
+                  aria-describedby="authStatus"
+                >
                   <option value="" disabled hidden selected>Año</option>
                 </select>
               </div>
@@ -583,47 +1058,158 @@
             </div>
             <div class="auth-credentials-fields auth-credentials-step">
               <label class="auth-email-form__field" id="authEmailField" for="authEmailInput">
-                <span class="auth-email-form__label-text">Email <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
-                <input id="authEmailInput" type="email" autocomplete="email" required aria-describedby="authStatus" />
+                <span class="auth-email-form__label-text"
+                  >Email <span class="auth-field-error-marker" aria-hidden="true">*</span></span
+                >
+                <input
+                  id="authEmailInput"
+                  type="email"
+                  autocomplete="email"
+                  required
+                  aria-describedby="authStatus"
+                />
               </label>
               <label class="auth-email-form__field" id="authPasswordField" for="authPasswordInput">
-                <span class="auth-email-form__label-text">Contraseña <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
-                <input id="authPasswordInput" type="password" autocomplete="current-password" minlength="8" maxlength="256" aria-describedby="authStatus" />
+                <span class="auth-email-form__label-text"
+                  >Contraseña
+                  <span class="auth-field-error-marker" aria-hidden="true">*</span></span
+                >
+                <input
+                  id="authPasswordInput"
+                  type="password"
+                  autocomplete="current-password"
+                  minlength="8"
+                  maxlength="256"
+                  aria-describedby="authStatus"
+                />
               </label>
             </div>
-              <label class="auth-email-form__field" id="authPasswordConfirmField" for="authPasswordConfirmInput" hidden>
-                <span class="auth-email-form__label-text">Repetir contraseña <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
-                <input id="authPasswordConfirmInput" type="password" autocomplete="new-password" minlength="8" maxlength="256" aria-describedby="authStatus" />
-              </label>
+            <label
+              class="auth-email-form__field"
+              id="authPasswordConfirmField"
+              for="authPasswordConfirmInput"
+              hidden
+            >
+              <span class="auth-email-form__label-text"
+                >Repetir contraseña
+                <span class="auth-field-error-marker" aria-hidden="true">*</span></span
+              >
+              <input
+                id="authPasswordConfirmInput"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                maxlength="256"
+                aria-describedby="authStatus"
+              />
+            </label>
             <div class="auth-email-form__field auth-verify-step auth-code-field" hidden>
-              <span class="auth-email-form__label-text" id="authCodeLabel">Código de acceso <span class="auth-field-error-marker" aria-hidden="true">*</span></span>
+              <span class="auth-email-form__label-text" id="authCodeLabel"
+                >Código de acceso
+                <span class="auth-field-error-marker" aria-hidden="true">*</span></span
+              >
               <p class="auth-code-hint" id="authCodeHint" aria-live="polite"></p>
-              <div class="auth-code-boxes" id="authCodeBoxes" role="group" aria-labelledby="authCodeLabel">
-                <input class="auth-code-box" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="1" aria-label="Dígito 1 de 6" />
-                <input class="auth-code-box" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="1" aria-label="Dígito 2 de 6" />
-                <input class="auth-code-box" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="1" aria-label="Dígito 3 de 6" />
-                <input class="auth-code-box" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="1" aria-label="Dígito 4 de 6" />
-                <input class="auth-code-box" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="1" aria-label="Dígito 5 de 6" />
-                <input class="auth-code-box" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="1" aria-label="Dígito 6 de 6" />
+              <div
+                class="auth-code-boxes"
+                id="authCodeBoxes"
+                role="group"
+                aria-labelledby="authCodeLabel"
+              >
+                <input
+                  class="auth-code-box"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="one-time-code"
+                  maxlength="1"
+                  aria-label="Dígito 1 de 6"
+                />
+                <input
+                  class="auth-code-box"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="one-time-code"
+                  maxlength="1"
+                  aria-label="Dígito 2 de 6"
+                />
+                <input
+                  class="auth-code-box"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="one-time-code"
+                  maxlength="1"
+                  aria-label="Dígito 3 de 6"
+                />
+                <input
+                  class="auth-code-box"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="one-time-code"
+                  maxlength="1"
+                  aria-label="Dígito 4 de 6"
+                />
+                <input
+                  class="auth-code-box"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="one-time-code"
+                  maxlength="1"
+                  aria-label="Dígito 5 de 6"
+                />
+                <input
+                  class="auth-code-box"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  autocomplete="one-time-code"
+                  maxlength="1"
+                  aria-label="Dígito 6 de 6"
+                />
               </div>
               <input id="authCodeInput" type="hidden" aria-describedby="authStatus" />
             </div>
             <label class="auth-terms auth-profile-step" id="authTermsField" hidden>
               <input id="authTermsInput" type="checkbox" />
-              <span>Acepto los <a href="/terms.html" target="_blank" rel="noopener">Términos y Condiciones</a> y consiento el tratamiento y las transferencias necesarias de mis datos según la <a href="/privacy.html" target="_blank" rel="noopener">Política de Privacidad</a>.</span>
+              <span
+                >Acepto los
+                <a href="/terms.html" target="_blank" rel="noopener">Términos y Condiciones</a> y
+                consiento el tratamiento y las transferencias necesarias de mis datos según la
+                <a href="/privacy.html" target="_blank" rel="noopener">Política de Privacidad</a
+                >.</span
+              >
             </label>
             <div class="auth-form-actions">
-              <button class="auth-back-button" id="authBackButton" type="button" hidden>Volver</button>
-              <button class="auth-email-submit" id="authPasswordButton" type="submit"><span data-auth-button-label>Iniciar sesión</span></button>
+              <button class="auth-back-button" id="authBackButton" type="button" hidden>
+                Volver
+              </button>
+              <button class="auth-email-submit" id="authPasswordButton" type="submit">
+                <span data-auth-button-label>Iniciar sesión</span>
+              </button>
             </div>
-            <button class="auth-recovery-button" id="authRecoveryButton" type="button">¿Olvidaste tu contraseña?</button>
-            <button class="auth-resend-button" id="authSendCodeAgainButton" type="button" hidden>Reenviar código</button>
+            <button class="auth-recovery-button" id="authRecoveryButton" type="button">
+              ¿Olvidaste tu contraseña?
+            </button>
+            <button class="auth-resend-button" id="authSendCodeAgainButton" type="button" hidden>
+              Reenviar código
+            </button>
           </form>
         </div>
       </section>
     </div>
     <div class="logout-confirm-backdrop" id="logoutConfirmBackdrop" hidden>
-      <section class="logout-confirm" id="logoutConfirmModal" role="alertdialog" aria-modal="true" aria-hidden="true" aria-labelledby="logoutConfirmTitle" tabindex="-1">
+      <section
+        class="logout-confirm"
+        id="logoutConfirmModal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-labelledby="logoutConfirmTitle"
+        tabindex="-1"
+      >
         <span class="logout-confirm__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" focusable="false">
             <path d="M10 5H6.5A2.5 2.5 0 0 0 4 7.5v9A2.5 2.5 0 0 0 6.5 19H10"></path>
@@ -633,19 +1219,44 @@
         <p class="logout-confirm__eyebrow">Cerrar sesión</p>
         <h2 id="logoutConfirmTitle">¿Deseas cerrar sesión?</h2>
         <div class="logout-confirm__actions">
-          <button class="text-button logout-confirm__cancel" id="logoutConfirmCancelButton" type="button">Cancelar</button>
-          <button class="primary-button logout-confirm__submit" id="logoutConfirmSubmitButton" type="button">Cerrar sesión</button>
+          <button
+            class="text-button logout-confirm__cancel"
+            id="logoutConfirmCancelButton"
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            class="primary-button logout-confirm__submit"
+            id="logoutConfirmSubmitButton"
+            type="button"
+          >
+            Cerrar sesión
+          </button>
         </div>
       </section>
     </div>
     <div class="profile-modal-backdrop" id="profileModalBackdrop" hidden>
-      <section class="profile-modal" id="profileModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Perfil" tabindex="-1">
+      <section
+        class="profile-modal"
+        id="profileModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Perfil"
+        tabindex="-1"
+      >
         <div class="profile-modal__header">
           <div>
             <h2 class="profile-modal__title">Perfil</h2>
             <h2 id="profileDisplayName">Usuario</h2>
           </div>
-          <button class="icon-button icon-button--compact profile-modal__close" id="closeProfileModalButton" type="button" aria-label="Cerrar perfil">
+          <button
+            class="icon-button icon-button--compact profile-modal__close"
+            id="closeProfileModalButton"
+            type="button"
+            aria-label="Cerrar perfil"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -654,143 +1265,436 @@
           </button>
         </div>
         <form class="profile-modal__body" id="profileForm">
-          <div class="profile-modal__field profile-modal__field--name" id="profileNameSection" data-profile-section="name" data-editing="false">
+          <div
+            class="profile-modal__field profile-modal__field--name"
+            id="profileNameSection"
+            data-profile-section="name"
+            data-editing="false"
+          >
             <div class="profile-modal__field-heading">
               <label for="profileNameInput">Nombre visible</label>
             </div>
             <div class="profile-modal__input-shell">
-              <input id="profileNameInput" type="text" autocomplete="name" maxlength="50" placeholder="Abril" aria-describedby="profileNameFeedback" readonly />
-              <button class="profile-modal__edit-button profile-modal__edit-button--inside" id="profileNameEditButton" type="button" aria-label="Editar nombre visible" aria-pressed="false" data-profile-section-edit="name">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"/></svg>
+              <input
+                id="profileNameInput"
+                type="text"
+                autocomplete="name"
+                maxlength="50"
+                placeholder="Abril"
+                aria-describedby="profileNameFeedback"
+                readonly
+              />
+              <button
+                class="profile-modal__edit-button profile-modal__edit-button--inside"
+                id="profileNameEditButton"
+                type="button"
+                aria-label="Editar nombre visible"
+                aria-pressed="false"
+                data-profile-section-edit="name"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z" />
+                </svg>
               </button>
             </div>
             <p class="profile-modal__field-feedback" id="profileNameFeedback" hidden></p>
-            <div class="profile-modal__field profile-modal__field--username" id="profileUsernameSection">
+            <div
+              class="profile-modal__field profile-modal__field--username"
+              id="profileUsernameSection"
+            >
               <div class="profile-modal__field-heading">
                 <label for="profileUsernameInput">Username</label>
               </div>
               <div class="profile-modal__input-shell">
-                <input id="profileUsernameInput" type="text" autocomplete="username" maxlength="24" pattern="[A-Za-z][A-Za-z0-9_.-]{2,23}" placeholder="abril_rosa" aria-describedby="profileUsernameFeedback" readonly />
+                <input
+                  id="profileUsernameInput"
+                  type="text"
+                  autocomplete="username"
+                  maxlength="24"
+                  pattern="[A-Za-z][A-Za-z0-9_.-]{2,23}"
+                  placeholder="abril_rosa"
+                  aria-describedby="profileUsernameFeedback"
+                  readonly
+                />
               </div>
               <p class="profile-modal__field-feedback" id="profileUsernameFeedback" hidden></p>
             </div>
           </div>
-          <button class="profile-modal__preview profile-modal__preview-button" id="profileAvatarPreview" type="button" aria-label="Cambiar avatar"></button>
+          <button
+            class="profile-modal__preview profile-modal__preview-button"
+            id="profileAvatarPreview"
+            type="button"
+            aria-label="Cambiar avatar"
+          ></button>
           <div class="profile-modal__avatar-meta">
-            <div class="profile-modal__field profile-modal__field--avatar" id="profileAvatarSection">
-              <input class="profile-modal__file-input" id="profileAvatarInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
-              <button class="text-button profile-modal__file-button" id="profileAvatarPickButton" type="button">Elegir avatar</button>
+            <div
+              class="profile-modal__field profile-modal__field--avatar"
+              id="profileAvatarSection"
+            >
+              <input
+                class="profile-modal__file-input"
+                id="profileAvatarInput"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+              />
+              <button
+                class="text-button profile-modal__file-button"
+                id="profileAvatarPickButton"
+                type="button"
+              >
+                Elegir avatar
+              </button>
             </div>
             <div class="profile-modal__joined" id="profileJoinedAtSection">
               <span class="profile-modal__joined-info">
                 <span class="profile-modal__joined-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <rect x="3" y="5" width="18" height="16" rx="2" />
+                    <path d="M8 3v4M16 3v4M3 10h18" />
+                  </svg>
                 </span>
-                <span class="profile-modal__joined-text" id="profileJoinedAtText">Fecha de registro</span>
+                <span class="profile-modal__joined-text" id="profileJoinedAtText"
+                  >Fecha de registro</span
+                >
               </span>
-              <button class="profile-modal__visibility-button" id="profileJoinedAtVisibilityButton" type="button" aria-label="Ocultar fecha de registro" aria-pressed="false" data-visible="true" data-profile-visibility="joinedAt"></button>
+              <button
+                class="profile-modal__visibility-button"
+                id="profileJoinedAtVisibilityButton"
+                type="button"
+                aria-label="Ocultar fecha de registro"
+                aria-pressed="false"
+                data-visible="true"
+                data-profile-visibility="joinedAt"
+              ></button>
             </div>
           </div>
-          <div class="profile-modal__field profile-modal__field--description" id="profileDescriptionSection" data-profile-section="description" data-editing="false">
+          <div
+            class="profile-modal__field profile-modal__field--description"
+            id="profileDescriptionSection"
+            data-profile-section="description"
+            data-editing="false"
+          >
             <div class="profile-modal__field-heading">
               <label for="profileDescriptionInput">Descripción</label>
               <span class="profile-modal__field-actions">
-                <button class="profile-modal__visibility-button" id="profileDescriptionVisibilityButton" type="button" aria-label="Ocultar descripción" aria-pressed="false" data-visible="true" data-profile-visibility="description"></button>
-                <button class="profile-modal__edit-button" id="profileDescriptionEditButton" type="button" aria-label="Editar descripción" aria-pressed="false" data-profile-section-edit="description">
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"/></svg>
+                <button
+                  class="profile-modal__visibility-button"
+                  id="profileDescriptionVisibilityButton"
+                  type="button"
+                  aria-label="Ocultar descripción"
+                  aria-pressed="false"
+                  data-visible="true"
+                  data-profile-visibility="description"
+                ></button>
+                <button
+                  class="profile-modal__edit-button"
+                  id="profileDescriptionEditButton"
+                  type="button"
+                  aria-label="Editar descripción"
+                  aria-pressed="false"
+                  data-profile-section-edit="description"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z" />
+                  </svg>
                 </button>
               </span>
             </div>
-            <textarea id="profileDescriptionInput" maxlength="180" placeholder="Cuenta algo breve sobre ti" readonly></textarea>
+            <textarea
+              id="profileDescriptionInput"
+              maxlength="180"
+              placeholder="Cuenta algo breve sobre ti"
+              readonly
+            ></textarea>
           </div>
           <div class="profile-modal__bottom-row">
-            <div class="profile-modal__field profile-modal__field--social" id="profileSocialSection">
+            <div
+              class="profile-modal__field profile-modal__field--social"
+              id="profileSocialSection"
+            >
               <span class="profile-modal__social-legend">Redes sociales</span>
-              <button class="profile-modal__visibility-button profile-modal__social-toggle" id="profileSocialVisibilityButton" type="button" aria-label="Ocultar redes sociales" aria-pressed="false" data-visible="true" data-profile-visibility="social"></button>
+              <button
+                class="profile-modal__visibility-button profile-modal__social-toggle"
+                id="profileSocialVisibilityButton"
+                type="button"
+                aria-label="Ocultar redes sociales"
+                aria-pressed="false"
+                data-visible="true"
+                data-profile-visibility="social"
+              ></button>
               <div class="profile-modal__social-grid">
                 <label class="profile-modal__social-field" data-editing="false">
                   <span class="profile-modal__social-label">
-                    <span class="profile-modal__social-icon social-icon--whatsapp" id="socialWhatsappIcon" aria-hidden="true"></span>
+                    <span
+                      class="profile-modal__social-icon social-icon--whatsapp"
+                      id="socialWhatsappIcon"
+                      aria-hidden="true"
+                    ></span>
                     <span>WhatsApp</span>
                   </span>
                   <span class="profile-modal__social-input-shell">
-
-                    <input id="socialWhatsappInput" type="text" maxlength="40" readonly aria-readonly="true" />
-                    <button class="profile-modal__social-edit" type="button" aria-label="Editar red social" aria-pressed="false" data-profile-social-edit>
-                      <svg class="profile-modal__social-edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg><svg class="profile-modal__social-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"></path></svg>
+                    <input
+                      id="socialWhatsappInput"
+                      type="text"
+                      maxlength="40"
+                      readonly
+                      aria-readonly="true"
+                    />
+                    <button
+                      class="profile-modal__social-edit"
+                      type="button"
+                      aria-label="Editar red social"
+                      aria-pressed="false"
+                      data-profile-social-edit
+                    >
+                      <svg
+                        class="profile-modal__social-edit-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg
+                      ><svg
+                        class="profile-modal__social-check-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M4 12l5 5L20 6"></path>
+                      </svg>
                     </button>
                   </span>
                 </label>
                 <label class="profile-modal__social-field" data-editing="false">
                   <span class="profile-modal__social-label">
-                    <span class="profile-modal__social-icon social-icon--instagram" id="socialInstagramIcon" aria-hidden="true"></span>
+                    <span
+                      class="profile-modal__social-icon social-icon--instagram"
+                      id="socialInstagramIcon"
+                      aria-hidden="true"
+                    ></span>
                     <span>Instagram</span>
                   </span>
                   <span class="profile-modal__social-input-shell">
                     <span class="profile-modal__social-prefix" aria-hidden="true">@</span>
-                    <input id="socialInstagramInput" type="text" maxlength="40" readonly aria-readonly="true" />
-                    <button class="profile-modal__social-edit" type="button" aria-label="Editar red social" aria-pressed="false" data-profile-social-edit>
-                      <svg class="profile-modal__social-edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg><svg class="profile-modal__social-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"></path></svg>
+                    <input
+                      id="socialInstagramInput"
+                      type="text"
+                      maxlength="40"
+                      readonly
+                      aria-readonly="true"
+                    />
+                    <button
+                      class="profile-modal__social-edit"
+                      type="button"
+                      aria-label="Editar red social"
+                      aria-pressed="false"
+                      data-profile-social-edit
+                    >
+                      <svg
+                        class="profile-modal__social-edit-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg
+                      ><svg
+                        class="profile-modal__social-check-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M4 12l5 5L20 6"></path>
+                      </svg>
                     </button>
                   </span>
                 </label>
                 <label class="profile-modal__social-field" data-editing="false">
                   <span class="profile-modal__social-label">
-                    <span class="profile-modal__social-icon social-icon--tiktok" id="socialTiktokIcon" aria-hidden="true"></span>
+                    <span
+                      class="profile-modal__social-icon social-icon--tiktok"
+                      id="socialTiktokIcon"
+                      aria-hidden="true"
+                    ></span>
                     <span>TikTok</span>
                   </span>
                   <span class="profile-modal__social-input-shell">
                     <span class="profile-modal__social-prefix" aria-hidden="true">@</span>
-                    <input id="socialTiktokInput" type="text" maxlength="40" readonly aria-readonly="true" />
-                    <button class="profile-modal__social-edit" type="button" aria-label="Editar red social" aria-pressed="false" data-profile-social-edit>
-                      <svg class="profile-modal__social-edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg><svg class="profile-modal__social-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"></path></svg>
+                    <input
+                      id="socialTiktokInput"
+                      type="text"
+                      maxlength="40"
+                      readonly
+                      aria-readonly="true"
+                    />
+                    <button
+                      class="profile-modal__social-edit"
+                      type="button"
+                      aria-label="Editar red social"
+                      aria-pressed="false"
+                      data-profile-social-edit
+                    >
+                      <svg
+                        class="profile-modal__social-edit-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg
+                      ><svg
+                        class="profile-modal__social-check-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M4 12l5 5L20 6"></path>
+                      </svg>
                     </button>
                   </span>
                 </label>
                 <label class="profile-modal__social-field" data-editing="false">
                   <span class="profile-modal__social-label">
-                    <span class="profile-modal__social-icon social-icon--facebook" id="socialFacebookIcon" aria-hidden="true"></span>
+                    <span
+                      class="profile-modal__social-icon social-icon--facebook"
+                      id="socialFacebookIcon"
+                      aria-hidden="true"
+                    ></span>
                     <span>Facebook</span>
                   </span>
                   <span class="profile-modal__social-input-shell">
                     <span class="profile-modal__social-prefix" aria-hidden="true">@</span>
-                    <input id="socialFacebookInput" type="text" maxlength="40" readonly aria-readonly="true" />
-                    <button class="profile-modal__social-edit" type="button" aria-label="Editar red social" aria-pressed="false" data-profile-social-edit>
-                      <svg class="profile-modal__social-edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg><svg class="profile-modal__social-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"></path></svg>
+                    <input
+                      id="socialFacebookInput"
+                      type="text"
+                      maxlength="40"
+                      readonly
+                      aria-readonly="true"
+                    />
+                    <button
+                      class="profile-modal__social-edit"
+                      type="button"
+                      aria-label="Editar red social"
+                      aria-pressed="false"
+                      data-profile-social-edit
+                    >
+                      <svg
+                        class="profile-modal__social-edit-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg
+                      ><svg
+                        class="profile-modal__social-check-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M4 12l5 5L20 6"></path>
+                      </svg>
                     </button>
                   </span>
                 </label>
                 <label class="profile-modal__social-field" data-editing="false">
                   <span class="profile-modal__social-label">
-                    <span class="profile-modal__social-icon social-icon--twitter" id="socialTwitterIcon" aria-hidden="true"></span>
+                    <span
+                      class="profile-modal__social-icon social-icon--twitter"
+                      id="socialTwitterIcon"
+                      aria-hidden="true"
+                    ></span>
                     <span>Twitter/X</span>
                   </span>
                   <span class="profile-modal__social-input-shell">
                     <span class="profile-modal__social-prefix" aria-hidden="true">@</span>
-                    <input id="socialTwitterInput" type="text" maxlength="40" readonly aria-readonly="true" />
-                    <button class="profile-modal__social-edit" type="button" aria-label="Editar red social" aria-pressed="false" data-profile-social-edit>
-                      <svg class="profile-modal__social-edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg><svg class="profile-modal__social-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"></path></svg>
+                    <input
+                      id="socialTwitterInput"
+                      type="text"
+                      maxlength="40"
+                      readonly
+                      aria-readonly="true"
+                    />
+                    <button
+                      class="profile-modal__social-edit"
+                      type="button"
+                      aria-label="Editar red social"
+                      aria-pressed="false"
+                      data-profile-social-edit
+                    >
+                      <svg
+                        class="profile-modal__social-edit-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg
+                      ><svg
+                        class="profile-modal__social-check-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M4 12l5 5L20 6"></path>
+                      </svg>
                     </button>
                   </span>
                 </label>
                 <label class="profile-modal__social-field" data-editing="false">
                   <span class="profile-modal__social-label">
-                    <span class="profile-modal__social-icon social-icon--discord" id="socialDiscordIcon" aria-hidden="true"></span>
+                    <span
+                      class="profile-modal__social-icon social-icon--discord"
+                      id="socialDiscordIcon"
+                      aria-hidden="true"
+                    ></span>
                     <span>Discord</span>
                   </span>
                   <span class="profile-modal__social-input-shell">
                     <span class="profile-modal__social-prefix" aria-hidden="true">@</span>
-                    <input id="socialDiscordInput" type="text" maxlength="40" readonly aria-readonly="true" />
-                    <button class="profile-modal__social-edit" type="button" aria-label="Editar red social" aria-pressed="false" data-profile-social-edit>
-                      <svg class="profile-modal__social-edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg><svg class="profile-modal__social-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12l5 5L20 6"></path></svg>
+                    <input
+                      id="socialDiscordInput"
+                      type="text"
+                      maxlength="40"
+                      readonly
+                      aria-readonly="true"
+                    />
+                    <button
+                      class="profile-modal__social-edit"
+                      type="button"
+                      aria-label="Editar red social"
+                      aria-pressed="false"
+                      data-profile-social-edit
+                    >
+                      <svg
+                        class="profile-modal__social-edit-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.5 9.5-3.5.5.5-3.5Z"></path></svg
+                      ><svg
+                        class="profile-modal__social-check-icon"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M4 12l5 5L20 6"></path>
+                      </svg>
                     </button>
                   </span>
                 </label>
               </div>
             </div>
             <div class="profile-modal__actions">
-              <button class="text-button" id="profileLinkGoogleButton" type="button" hidden>Vincular Google</button>
-            <button class="text-button" id="skipProfileButton" type="button">Cancelar</button>
+              <button class="text-button" id="profileLinkGoogleButton" type="button" hidden>
+                Vincular Google
+              </button>
+              <button class="text-button" id="skipProfileButton" type="button">Cancelar</button>
               <button class="primary-button" id="saveProfileButton" type="submit">Guardar</button>
             </div>
           </div>
@@ -798,14 +1702,26 @@
       </section>
     </div>
 
-
     <div class="profile-modal-backdrop settings-modal-backdrop" id="settingsModalBackdrop" hidden>
-      <section class="profile-modal settings-modal" id="settingsModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Configuración" tabindex="-1">
+      <section
+        class="profile-modal settings-modal"
+        id="settingsModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Configuración"
+        tabindex="-1"
+      >
         <div class="profile-modal__header">
           <div>
             <h2 class="profile-modal__title">Configuración</h2>
           </div>
-          <button class="icon-button icon-button--compact profile-modal__close" id="closeSettingsModalButton" type="button" aria-label="Cerrar configuración">
+          <button
+            class="icon-button icon-button--compact profile-modal__close"
+            id="closeSettingsModalButton"
+            type="button"
+            aria-label="Cerrar configuración"
+          >
             <span class="modal-close-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
                 <path d="M6 6l12 12M18 6 6 18"></path>
@@ -815,127 +1731,317 @@
         </div>
         <div class="settings-modal__body">
           <nav class="settings-panel__nav" aria-label="Secciones de configuración" role="tablist">
-            <button class="settings-panel__nav-button is-active" id="settingsNavPrivacy" type="button" role="tab" aria-selected="true" aria-controls="settingsPanelPrivacy" data-settings-section="privacy">Privacidad</button>
-            <button class="settings-panel__nav-button" id="settingsNavExperience" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelExperience" data-settings-section="experience">Contenido</button>
-            <button class="settings-panel__nav-button" id="settingsNavBlocks" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelBlocks" data-settings-section="blocks">Bloqueos</button>
-            <button class="settings-panel__nav-button" id="settingsNavAccount" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelAccount" data-settings-section="account">Cuenta</button>
+            <button
+              class="settings-panel__nav-button is-active"
+              id="settingsNavPrivacy"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="settingsPanelPrivacy"
+              data-settings-section="privacy"
+            >
+              Privacidad
+            </button>
+            <button
+              class="settings-panel__nav-button"
+              id="settingsNavExperience"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="settingsPanelExperience"
+              data-settings-section="experience"
+            >
+              Contenido
+            </button>
+            <button
+              class="settings-panel__nav-button"
+              id="settingsNavBlocks"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="settingsPanelBlocks"
+              data-settings-section="blocks"
+            >
+              Bloqueos
+            </button>
+            <button
+              class="settings-panel__nav-button"
+              id="settingsNavAccount"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="settingsPanelAccount"
+              data-settings-section="account"
+            >
+              Cuenta
+            </button>
           </nav>
           <div class="settings-panel__workspace">
-          <section class="settings-modal__group" id="settingsPanelPrivacy" role="tabpanel" aria-labelledby="settingsNavPrivacy" data-settings-panel="privacy">
-            <h3 class="settings-modal__group-title">Privacidad</h3>
-            <div class="settings-modal__card">
-              <div class="settings-modal__option">
-                <span class="settings-modal__option-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
-                </span>
-                <div class="settings-modal__option-text">
-                  <span class="settings-modal__option-title">Likes anónimos</span>
-                  <span class="settings-modal__option-copy">Tu nombre no se muestra cuando das like a un posteo o comentario.</span>
+            <section
+              class="settings-modal__group"
+              id="settingsPanelPrivacy"
+              role="tabpanel"
+              aria-labelledby="settingsNavPrivacy"
+              data-settings-panel="privacy"
+            >
+              <h3 class="settings-modal__group-title">Privacidad</h3>
+              <div class="settings-modal__card">
+                <div class="settings-modal__option">
+                  <span class="settings-modal__option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path
+                        d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8Z"
+                      />
+                    </svg>
+                  </span>
+                  <div class="settings-modal__option-text">
+                    <span class="settings-modal__option-title">Likes anónimos</span>
+                    <span class="settings-modal__option-copy"
+                      >Tu nombre no se muestra cuando das like a un posteo o comentario.</span
+                    >
+                  </div>
+                  <button
+                    class="settings-switch"
+                    id="settingsLikesAnonymousToggle"
+                    type="button"
+                    role="switch"
+                    aria-checked="false"
+                    data-setting-toggle="likesAnonymous"
+                    aria-label="Likes anónimos"
+                  >
+                    <span class="settings-switch__thumb" aria-hidden="true"></span>
+                  </button>
                 </div>
-                <button class="settings-switch" id="settingsLikesAnonymousToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="likesAnonymous" aria-label="Likes anónimos">
-                  <span class="settings-switch__thumb" aria-hidden="true"></span>
-                </button>
-              </div>
-              <div class="settings-modal__option">
-                <span class="settings-modal__option-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-                </span>
-                <div class="settings-modal__option-text">
-                  <span class="settings-modal__option-title">Perfil en buscadores</span>
-                  <span class="settings-modal__option-copy">Tu perfil público puede aparecer en Google y otros buscadores.</span>
-                </div>
-                <button class="settings-switch" id="settingsProfileIndexableToggle" type="button" role="switch" aria-checked="true" data-setting-toggle="profileIndexable" aria-label="Perfil en buscadores">
-                  <span class="settings-switch__thumb" aria-hidden="true"></span>
-                </button>
-              </div>
-            </div>
-          </section>
-          <section class="settings-modal__group" id="settingsPanelExperience" role="tabpanel" aria-labelledby="settingsNavExperience" data-settings-panel="experience" hidden>
-            <h3 class="settings-modal__group-title">Contenido y notificaciones</h3>
-            <div class="settings-modal__card">
-              <div class="settings-modal__option">
-                <span class="settings-modal__option-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3l7 3v5c0 4.6-3 8.1-7 10-4-1.9-7-5.4-7-10V6Z"/><path d="M9 12l2 2 4-4"/></svg>
-                </span>
-                <div class="settings-modal__option-text">
-                  <span class="settings-modal__option-title">Filtrar insultos</span>
-                  <span class="settings-modal__option-copy">Censura malas palabras (español e inglés) en mensajes y títulos.</span>
-                </div>
-                <button class="settings-switch" id="settingsFilterProfanityToggle" type="button" role="switch" aria-checked="true" data-setting-toggle="filterProfanity" aria-label="Filtrar insultos">
-                  <span class="settings-switch__thumb" aria-hidden="true"></span>
-                </button>
-              </div>
-              <div class="settings-modal__option">
-                <span class="settings-modal__option-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
-                </span>
-                <div class="settings-modal__option-text">
-                  <span class="settings-modal__option-title">Notificaciones solo de amigos</span>
-                  <span class="settings-modal__option-copy">Solo verás notificaciones de la actividad de tus amigos.</span>
-                </div>
-                <button class="settings-switch" id="settingsFriendsOnlyToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="notificationsFriendsOnly" aria-label="Notificaciones solo de amigos">
-                  <span class="settings-switch__thumb" aria-hidden="true"></span>
-                </button>
-              </div>
-              <div class="settings-modal__option">
-                <span class="settings-modal__option-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><path d="M4 6h16v12H4Z"/><path d="m4 7 8 6 8-6"/></svg>
-                </span>
-                <div class="settings-modal__option-text">
-                  <span class="settings-modal__option-title">Avisos de actividad por correo</span>
-                  <span class="settings-modal__option-copy">Recibe un aviso cuando otra persona responda en un tema que sigues. Se limita a un correo por tema cada 30 minutos.</span>
-                </div>
-                <button class="settings-switch" id="settingsEmailActivityToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="emailActivityEnabled" aria-label="Avisos de actividad por correo">
-                  <span class="settings-switch__thumb" aria-hidden="true"></span>
-                </button>
-              </div>
-              <div class="settings-modal__option">
-                <span class="settings-modal__option-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                </span>
-                <div class="settings-modal__option-text">
-                  <span class="settings-modal__option-title">Modo lento</span>
-                  <span class="settings-modal__option-copy">Reduce las actualizaciones en vivo para ahorrar datos y batería.</span>
-                </div>
-                <button class="settings-switch" id="settingsSlowModeToggle" type="button" role="switch" aria-checked="false" data-setting-toggle="slowMode" aria-label="Modo lento">
-                  <span class="settings-switch__thumb" aria-hidden="true"></span>
-                </button>
-              </div>
-            </div>
-          </section>
-          <section class="settings-modal__group" id="settingsPanelBlocks" role="tabpanel" aria-labelledby="settingsNavBlocks" data-settings-panel="blocks" hidden>
-            <h3 class="settings-modal__group-title" id="settingsBlockedUsersTitle">Cuentas bloqueadas</h3>
-            <div class="settings-modal__blocked-list" id="settingsBlockedUsers" aria-live="polite"></div>
-          </section>
-          <section class="settings-modal__group" id="settingsPanelAccount" role="tabpanel" aria-labelledby="settingsNavAccount" data-settings-panel="account" hidden>
-            <h3 class="settings-modal__group-title settings-modal__group-title--danger">Cuenta</h3>
-            <div class="settings-modal__card settings-modal__danger">
-              <div class="settings-modal__option settings-modal__option--danger">
-                <span class="settings-modal__option-icon settings-modal__option-icon--danger" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg>
-                </span>
-                <div class="settings-modal__option-text">
-                  <span class="settings-modal__option-title">Eliminar cuenta</span>
-                  <span class="settings-modal__option-copy">Se cierra tu sesión y tus datos personales se eliminan de forma permanente.</span>
-                </div>
-                <button class="text-button settings-modal__danger-button" id="settingsDeleteAccountButton" type="button">Eliminar</button>
-              </div>
-              <div class="settings-modal__danger-confirm" id="settingsDeleteConfirmRow" hidden>
-                <p class="settings-modal__danger-copy">¿Seguro? Esta acción no se puede deshacer.</p>
-                <div class="settings-modal__danger-actions">
-                  <button class="text-button" id="settingsDeleteCancelButton" type="button">Cancelar</button>
-                  <button class="primary-button settings-modal__danger-confirm-button" id="settingsDeleteConfirmButton" type="button">Eliminar definitivamente</button>
+                <div class="settings-modal__option">
+                  <span class="settings-modal__option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M21 21l-4.35-4.35" />
+                    </svg>
+                  </span>
+                  <div class="settings-modal__option-text">
+                    <span class="settings-modal__option-title">Perfil en buscadores</span>
+                    <span class="settings-modal__option-copy"
+                      >Tu perfil público puede aparecer en Google y otros buscadores.</span
+                    >
+                  </div>
+                  <button
+                    class="settings-switch"
+                    id="settingsProfileIndexableToggle"
+                    type="button"
+                    role="switch"
+                    aria-checked="true"
+                    data-setting-toggle="profileIndexable"
+                    aria-label="Perfil en buscadores"
+                  >
+                    <span class="settings-switch__thumb" aria-hidden="true"></span>
+                  </button>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+            <section
+              class="settings-modal__group"
+              id="settingsPanelExperience"
+              role="tabpanel"
+              aria-labelledby="settingsNavExperience"
+              data-settings-panel="experience"
+              hidden
+            >
+              <h3 class="settings-modal__group-title">Contenido y notificaciones</h3>
+              <div class="settings-modal__card">
+                <div class="settings-modal__option">
+                  <span class="settings-modal__option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M12 3l7 3v5c0 4.6-3 8.1-7 10-4-1.9-7-5.4-7-10V6Z" />
+                      <path d="M9 12l2 2 4-4" />
+                    </svg>
+                  </span>
+                  <div class="settings-modal__option-text">
+                    <span class="settings-modal__option-title">Filtrar insultos</span>
+                    <span class="settings-modal__option-copy"
+                      >Censura malas palabras (español e inglés) en mensajes y títulos.</span
+                    >
+                  </div>
+                  <button
+                    class="settings-switch"
+                    id="settingsFilterProfanityToggle"
+                    type="button"
+                    role="switch"
+                    aria-checked="true"
+                    data-setting-toggle="filterProfanity"
+                    aria-label="Filtrar insultos"
+                  >
+                    <span class="settings-switch__thumb" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div class="settings-modal__option">
+                  <span class="settings-modal__option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6" />
+                      <path d="M10 19a2 2 0 0 0 4 0" />
+                    </svg>
+                  </span>
+                  <div class="settings-modal__option-text">
+                    <span class="settings-modal__option-title">Notificaciones solo de amigos</span>
+                    <span class="settings-modal__option-copy"
+                      >Solo verás notificaciones de la actividad de tus amigos.</span
+                    >
+                  </div>
+                  <button
+                    class="settings-switch"
+                    id="settingsFriendsOnlyToggle"
+                    type="button"
+                    role="switch"
+                    aria-checked="false"
+                    data-setting-toggle="notificationsFriendsOnly"
+                    aria-label="Notificaciones solo de amigos"
+                  >
+                    <span class="settings-switch__thumb" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div class="settings-modal__option">
+                  <span class="settings-modal__option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M4 6h16v12H4Z" />
+                      <path d="m4 7 8 6 8-6" />
+                    </svg>
+                  </span>
+                  <div class="settings-modal__option-text">
+                    <span class="settings-modal__option-title">Avisos de actividad por correo</span>
+                    <span class="settings-modal__option-copy"
+                      >Recibe un aviso cuando otra persona responda en un tema que sigues. Se limita
+                      a un correo por tema cada 30 minutos.</span
+                    >
+                  </div>
+                  <button
+                    class="settings-switch"
+                    id="settingsEmailActivityToggle"
+                    type="button"
+                    role="switch"
+                    aria-checked="false"
+                    data-setting-toggle="emailActivityEnabled"
+                    aria-label="Avisos de actividad por correo"
+                  >
+                    <span class="settings-switch__thumb" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div class="settings-modal__option">
+                  <span class="settings-modal__option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                  </span>
+                  <div class="settings-modal__option-text">
+                    <span class="settings-modal__option-title">Modo lento</span>
+                    <span class="settings-modal__option-copy"
+                      >Reduce las actualizaciones en vivo para ahorrar datos y batería.</span
+                    >
+                  </div>
+                  <button
+                    class="settings-switch"
+                    id="settingsSlowModeToggle"
+                    type="button"
+                    role="switch"
+                    aria-checked="false"
+                    data-setting-toggle="slowMode"
+                    aria-label="Modo lento"
+                  >
+                    <span class="settings-switch__thumb" aria-hidden="true"></span>
+                  </button>
+                </div>
+              </div>
+            </section>
+            <section
+              class="settings-modal__group"
+              id="settingsPanelBlocks"
+              role="tabpanel"
+              aria-labelledby="settingsNavBlocks"
+              data-settings-panel="blocks"
+              hidden
+            >
+              <h3 class="settings-modal__group-title" id="settingsBlockedUsersTitle">
+                Cuentas bloqueadas
+              </h3>
+              <div
+                class="settings-modal__blocked-list"
+                id="settingsBlockedUsers"
+                aria-live="polite"
+              ></div>
+            </section>
+            <section
+              class="settings-modal__group"
+              id="settingsPanelAccount"
+              role="tabpanel"
+              aria-labelledby="settingsNavAccount"
+              data-settings-panel="account"
+              hidden
+            >
+              <h3 class="settings-modal__group-title settings-modal__group-title--danger">
+                Cuenta
+              </h3>
+              <div class="settings-modal__card settings-modal__danger">
+                <div class="settings-modal__option settings-modal__option--danger">
+                  <span
+                    class="settings-modal__option-icon settings-modal__option-icon--danger"
+                    aria-hidden="true"
+                  >
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path
+                        d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"
+                      />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  </span>
+                  <div class="settings-modal__option-text">
+                    <span class="settings-modal__option-title">Eliminar cuenta</span>
+                    <span class="settings-modal__option-copy"
+                      >Se cierra tu sesión y tus datos personales se eliminan de forma
+                      permanente.</span
+                    >
+                  </div>
+                  <button
+                    class="text-button settings-modal__danger-button"
+                    id="settingsDeleteAccountButton"
+                    type="button"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+                <div class="settings-modal__danger-confirm" id="settingsDeleteConfirmRow" hidden>
+                  <p class="settings-modal__danger-copy">
+                    ¿Seguro? Esta acción no se puede deshacer.
+                  </p>
+                  <div class="settings-modal__danger-actions">
+                    <button class="text-button" id="settingsDeleteCancelButton" type="button">
+                      Cancelar
+                    </button>
+                    <button
+                      class="primary-button settings-modal__danger-confirm-button"
+                      id="settingsDeleteConfirmButton"
+                      type="button"
+                    >
+                      Eliminar definitivamente
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </section>
     </div>
 
     <div class="profile-avatar-crop-backdrop" id="profileAvatarCropBackdrop" hidden>
-      <section class="profile-avatar-crop" id="profileAvatarCropModal" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Ajustar foto" tabindex="-1">
+      <section
+        class="profile-avatar-crop"
+        id="profileAvatarCropModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-label="Ajustar foto"
+        tabindex="-1"
+      >
         <div class="profile-avatar-crop__header">
           <div>
             <p class="panel__kicker">Foto</p>
@@ -944,7 +2050,13 @@
         </div>
         <div class="profile-avatar-crop__body">
           <div class="profile-avatar-crop__frame" id="profileAvatarCropFrame">
-            <img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" width="320" height="320" />
+            <img
+              class="profile-avatar-crop__image"
+              id="profileAvatarCropImage"
+              alt=""
+              width="320"
+              height="320"
+            />
             <span class="profile-avatar-crop__window" aria-hidden="true"></span>
           </div>
           <label class="profile-avatar-crop__control" for="profileAvatarCropZoom">
@@ -953,13 +2065,29 @@
           </label>
         </div>
         <div class="profile-avatar-crop__actions">
-          <button class="text-button" id="profileAvatarCropCancelButton" type="button">Cancelar</button>
-          <button class="primary-button" id="profileAvatarCropApplyButton" type="button">Usar foto</button>
+          <button class="text-button" id="profileAvatarCropCancelButton" type="button">
+            Cancelar
+          </button>
+          <button class="primary-button" id="profileAvatarCropApplyButton" type="button">
+            Usar foto
+          </button>
         </div>
       </section>
     </div>
-    <div class="profile-modal-backdrop public-profile-modal-backdrop" id="publicProfileModalBackdrop" hidden>
-      <section class="profile-modal public-profile-modal" id="publicProfileModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="publicProfileName" tabindex="-1">
+    <div
+      class="profile-modal-backdrop public-profile-modal-backdrop"
+      id="publicProfileModalBackdrop"
+      hidden
+    >
+      <section
+        class="profile-modal public-profile-modal"
+        id="publicProfileModal"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-labelledby="publicProfileName"
+        tabindex="-1"
+      >
         <div class="profile-modal__header">
           <div>
             <h2 class="profile-modal__title">Perfil</h2>
@@ -967,16 +2095,38 @@
             <p class="public-profile-modal__username" id="publicProfileUsername">@usuario</p>
           </div>
           <div class="public-profile-modal__header-actions">
-            <button class="text-button public-profile-modal__block-button" id="publicProfileBlockButton" type="button" aria-label="Bloquear usuario" hidden>
+            <button
+              class="text-button public-profile-modal__block-button"
+              id="publicProfileBlockButton"
+              type="button"
+              aria-label="Bloquear usuario"
+              hidden
+            >
               <span class="block-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  focusable="false"
+                >
                   <circle cx="12" cy="12" r="9"></circle>
                   <path d="M5.6 5.6 18.4 18.4"></path>
                 </svg>
               </span>
               <span class="button-label">Bloquear</span>
             </button>
-            <button class="icon-button icon-button--compact public-profile-modal__report" id="publicProfileReportButton" type="button" data-report-entity-type="user" data-report-entity-id="" aria-label="Reportar usuario" title="Reportar usuario">
+            <button
+              class="icon-button icon-button--compact public-profile-modal__report"
+              id="publicProfileReportButton"
+              type="button"
+              data-report-entity-type="user"
+              data-report-entity-id=""
+              aria-label="Reportar usuario"
+              title="Reportar usuario"
+            >
               <span class="modal-close-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
                   <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
@@ -984,7 +2134,15 @@
                 </svg>
               </span>
             </button>
-            <button class="icon-button icon-button--compact public-profile-modal__copy-link" id="publicProfileCopyLinkButton" type="button" data-profile-nickname="" aria-label="Copiar enlace del perfil" title="Copiar enlace del perfil" hidden>
+            <button
+              class="icon-button icon-button--compact public-profile-modal__copy-link"
+              id="publicProfileCopyLinkButton"
+              type="button"
+              data-profile-nickname=""
+              aria-label="Copiar enlace del perfil"
+              title="Copiar enlace del perfil"
+              hidden
+            >
               <span class="modal-close-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
                   <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
@@ -992,7 +2150,12 @@
                 </svg>
               </span>
             </button>
-            <button class="icon-button icon-button--compact profile-modal__close" id="closePublicProfileModalButton" type="button" aria-label="Cerrar perfil">
+            <button
+              class="icon-button icon-button--compact profile-modal__close"
+              id="closePublicProfileModalButton"
+              type="button"
+              aria-label="Cerrar perfil"
+            >
               <span class="modal-close-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
                   <path d="M6 6l12 12M18 6 6 18"></path>
@@ -1008,26 +2171,50 @@
                   <strong>Ocultar su contenido</strong>
                   <span>No verás sus temas ni comentarios.</span>
                 </div>
-                <button class="settings-switch is-on" id="publicProfileHideContentToggle" type="button" role="switch" aria-checked="true" aria-label="Ocultar contenido de la cuenta bloqueada">
+                <button
+                  class="settings-switch is-on"
+                  id="publicProfileHideContentToggle"
+                  type="button"
+                  role="switch"
+                  aria-checked="true"
+                  aria-label="Ocultar contenido de la cuenta bloqueada"
+                >
                   <span class="settings-switch__thumb" aria-hidden="true"></span>
                 </button>
               </div>
               <div class="public-profile-modal__block-confirm-actions">
-                <button class="text-button" id="publicProfileBlockCancelButton" type="button">Cancelar</button>
-                <button class="primary-button public-profile-modal__block-confirm-button" id="publicProfileBlockConfirmButton" type="button">Bloquear cuenta</button>
+                <button class="text-button" id="publicProfileBlockCancelButton" type="button">
+                  Cancelar
+                </button>
+                <button
+                  class="primary-button public-profile-modal__block-confirm-button"
+                  id="publicProfileBlockConfirmButton"
+                  type="button"
+                >
+                  Bloquear cuenta
+                </button>
               </div>
             </div>
           </div>
         </div>
         <div class="profile-modal__body public-profile-modal__body">
-          <div class="public-profile-modal__guest-notice" id="publicProfileGuestNotice" role="status" hidden>
+          <div
+            class="public-profile-modal__guest-notice"
+            id="publicProfileGuestNotice"
+            role="status"
+            hidden
+          >
             <span class="public-profile-modal__guest-icon" aria-hidden="true">*</span>
             <div>
               <strong>Usuario invitado</strong>
               <p>Los invitados no tienen perfil ni acciones disponibles.</p>
             </div>
           </div>
-          <div class="profile-modal__preview public-profile-modal__avatar" id="publicProfileAvatar" aria-hidden="true"></div>
+          <div
+            class="profile-modal__preview public-profile-modal__avatar"
+            id="publicProfileAvatar"
+            aria-hidden="true"
+          ></div>
           <div class="public-profile-modal__joined-wrap">
             <span class="public-profile-modal__joined-label">Miembro desde</span>
             <p class="public-profile-modal__joined" id="publicProfileJoinedAt"></p>
@@ -1039,21 +2226,44 @@
           </div>
           <div class="public-profile-modal__social" id="publicProfileSocial" hidden></div>
         </div>
-        <div class="public-profile-modal__scroll-indicator" id="publicProfileScrollIndicator" aria-hidden="true"></div>
+        <div
+          class="public-profile-modal__scroll-indicator"
+          id="publicProfileScrollIndicator"
+          aria-hidden="true"
+        ></div>
       </section>
     </div>
 
     <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
 
-    <div class="drawer drawer--left" id="leftDrawer" role="dialog" aria-modal="true" aria-label="Temas" aria-hidden="true" hidden>
+    <div
+      class="drawer drawer--left"
+      id="leftDrawer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Temas"
+      aria-hidden="true"
+      hidden
+    >
       <div class="drawer__header">
         <div>
           <p class="panel__kicker">Menú</p>
           <h2>Temas</h2>
         </div>
-        <button class="icon-button icon-button--compact" data-close-drawer="left" type="button" aria-label="Cerrar temas">
+        <button
+          class="icon-button icon-button--compact"
+          data-close-drawer="left"
+          type="button"
+          aria-label="Cerrar temas"
+        >
           <span class="drawer-close-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+            >
               <path d="M6 6l12 12M18 6 6 18"></path>
             </svg>
           </span>
@@ -1062,14 +2272,28 @@
       <div class="scroll-list" id="leftDrawerTopics"></div>
     </div>
 
-    <div class="drawer drawer--right" id="rightDrawer" role="dialog" aria-modal="true" aria-label="Menú móvil" aria-hidden="true" hidden>
+    <div
+      class="drawer drawer--right"
+      id="rightDrawer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Menú móvil"
+      aria-hidden="true"
+      hidden
+    >
       <div class="drawer__header">
         <div class="drawer__brand" aria-hidden="true">
           <span class="brand-mark__icon drawer__brand-icon" aria-hidden="true">
             <svg viewBox="0 0 64 64" fill="none">
               <rect class="brand-mark__icon-base" width="64" height="64" rx="16"></rect>
-              <path class="brand-mark__icon-fill" d="M17 19h30v18c0 5.5-4.5 10-10 10H27c-5.5 0-10-4.5-10-10V19Z"></path>
-              <path class="brand-mark__icon-stroke" d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44"></path>
+              <path
+                class="brand-mark__icon-fill"
+                d="M17 19h30v18c0 5.5-4.5 10-10 10H27c-5.5 0-10-4.5-10-10V19Z"
+              ></path>
+              <path
+                class="brand-mark__icon-stroke"
+                d="M44 23h4.2c2.7 0 4.8 2.1 4.8 4.8s-2.1 4.8-4.8 4.8H44"
+              ></path>
               <path class="brand-mark__icon-stroke" d="M22 48h20"></path>
               <path class="brand-mark__icon-stroke" d="M26 14v7M32 11v10M38 14v7"></path>
             </svg>
@@ -1078,265 +2302,584 @@
             <span class="brand-mark__che">TOPY</span><span class="brand-mark__trend">KLY</span>
           </span>
         </div>
-        <button class="icon-button icon-button--compact" data-close-drawer="right" type="button" aria-label="Cerrar menú">
+        <button
+          class="icon-button icon-button--compact"
+          data-close-drawer="right"
+          type="button"
+          aria-label="Cerrar menú"
+        >
           <span class="drawer-close-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+            >
               <path d="M6 6l12 12M18 6 6 18"></path>
             </svg>
           </span>
         </button>
       </div>
-      <section class="drawer__section drawer__section--menu" id="mobileTopbarMenu" aria-label="Acciones secundarias">
-          <div class="drawer-search">
-            <label class="drawer-search__field" for="mobileDrawerSearch">
-              <span class="drawer-search__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="11" cy="11" r="6.5"></circle>
-                  <path d="m16 16 4 4"></path>
-                </svg>
-              </span>
-              <input class="drawer-search__input" id="mobileDrawerSearch" type="text" inputmode="search" enterkeyhint="search" placeholder="Buscar en menú" autocomplete="off" spellcheck="false" />
-            </label>
-          </div>
-          <div class="drawer-action-stack">
-            <button class="drawer-action-button" type="button" data-mobile-topbar-action="admin" data-admin-private hidden>
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 3l7 3v5c0 4.5-2.9 8.4-7 10-4.1-1.6-7-5.5-7-10V6l7-3Z"></path>
-                  <path d="M9 12l2 2 4-5"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Admin</span>
-            </button>            <button class="drawer-action-button" type="button" data-mobile-topbar-action="profile" data-auth-private>
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="8" r="3.5"></circle>
-                  <path d="M5 19c1.8-4.1 4.8-6.1 7-6.1s5.2 2 7 6.1"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Perfil</span>
-            </button>
-            <button class="drawer-action-button" type="button" data-mobile-topbar-action="friends" data-auth-private>
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <line x1="19" y1="8" x2="19" y2="14"></line>
-                  <line x1="16" y1="11" x2="22" y2="11"></line>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Amigos</span>
-            </button>
-            <button class="drawer-action-button" type="button" data-mobile-topbar-action="home">
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter">
-                  <path d="M3.5 11.5 12 4l8.5 7.5"></path>
-                  <path d="M6.5 10.5V20h11v-9.5"></path>
-                  <path d="M10 20v-5.5h4V20"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Inicio</span>
-            </button>
-            <button class="drawer-action-button" type="button" data-mobile-topbar-action="palette">
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 4.5c-4.7 0-8.5 3.4-8.5 7.7S7.3 20 12 20h1.1c1.2 0 2-.9 2-2 0-.8-.4-1.4-.4-2 0-.8.6-1.4 1.5-1.4H17c2 0 3.5-1.6 3.5-3.6 0-3.5-3.6-6.5-8.5-6.5Z"></path>
-                  <circle cx="8" cy="11" r="1"></circle>
-                  <circle cx="11.5" cy="8.5" r="1"></circle>
-                  <circle cx="15.5" cy="9.5" r="1"></circle>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Paletas</span>
-            </button>
-            <button class="drawer-action-button" type="button" data-mobile-topbar-action="settings" data-auth-private>
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.88Z"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Configuración</span>
-            </button>
-            <button class="drawer-action-button drawer-action-button--store" type="button" data-mobile-topbar-action="store" data-auth-private>
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M5 9h14l-1 11H6L5 9Z"></path>
-                  <path d="M9 9V7a3 3 0 0 1 6 0v2"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Tienda</span>
-            </button>
-            <button class="drawer-action-button" type="button" data-mobile-drawer-panel="users" aria-pressed="false">
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter">
-                  <circle cx="12" cy="8" r="2.25"></circle>
-                  <circle cx="6.25" cy="9.25" r="1.75"></circle>
-                  <circle cx="17.75" cy="9.25" r="1.75"></circle>
-                  <path d="M8.5 18.5v-.75c0-1.5 1.25-2.75 2.75-2.75h1.5c1.5 0 2.75 1.25 2.75 2.75v.75"></path>
-                  <path d="M3.75 18.5V18c0-1.4 1.1-2.5 2.5-2.5H7"></path>
-                  <path d="M17 15.5h.75c1.4 0 2.5 1.1 2.5 2.5v.5"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Usuarios</span>
-            </button>
-            <button class="drawer-action-button" type="button" data-mobile-drawer-panel="ranking" aria-pressed="false">
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" stroke-linejoin="miter">
-                  <path d="M4 19.5h16"></path>
-                  <path d="M5.5 16.5 10 12l3.25 3.25L18.5 10"></path>
-                  <path d="M14.5 10h4v4"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Ranking</span>
-            </button>
-            <button class="drawer-action-button drawer-action-button--auth" type="button" data-mobile-topbar-action="auth" data-auth-private>
-              <span class="drawer-action-button__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M10 6H6.5v12H10"></path>
-                  <path d="M13 8.5 17 12l-4 3.5"></path>
-                  <path d="M9 12h8"></path>
-                </svg>
-              </span>
-              <span class="drawer-action-button__label">Cerrar sesión</span>
-            </button>
-          </div>
-          <div class="drawer-theme-slot" aria-label="Tema">
-            <div class="theme-toggle-slot theme-toggle-slot--drawer" id="themeToggleDrawerSlot"></div>
-          </div>
+      <section
+        class="drawer__section drawer__section--menu"
+        id="mobileTopbarMenu"
+        aria-label="Acciones secundarias"
+      >
+        <div class="drawer-search">
+          <label class="drawer-search__field" for="mobileDrawerSearch">
+            <span class="drawer-search__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="11" cy="11" r="6.5"></circle>
+                <path d="m16 16 4 4"></path>
+              </svg>
+            </span>
+            <input
+              class="drawer-search__input"
+              id="mobileDrawerSearch"
+              type="text"
+              inputmode="search"
+              enterkeyhint="search"
+              placeholder="Buscar en menú"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+        </div>
+        <div class="drawer-action-stack">
+          <button
+            class="drawer-action-button"
+            type="button"
+            data-mobile-topbar-action="admin"
+            data-admin-private
+            hidden
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 3l7 3v5c0 4.5-2.9 8.4-7 10-4.1-1.6-7-5.5-7-10V6l7-3Z"></path>
+                <path d="M9 12l2 2 4-5"></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Admin</span>
+          </button>
+          <button
+            class="drawer-action-button"
+            type="button"
+            data-mobile-topbar-action="profile"
+            data-auth-private
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="8" r="3.5"></circle>
+                <path d="M5 19c1.8-4.1 4.8-6.1 7-6.1s5.2 2 7 6.1"></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Perfil</span>
+          </button>
+          <button
+            class="drawer-action-button"
+            type="button"
+            data-mobile-topbar-action="friends"
+            data-auth-private
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <line x1="19" y1="8" x2="19" y2="14"></line>
+                <line x1="16" y1="11" x2="22" y2="11"></line>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Amigos</span>
+          </button>
+          <button class="drawer-action-button" type="button" data-mobile-topbar-action="home">
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="square"
+                stroke-linejoin="miter"
+              >
+                <path d="M3.5 11.5 12 4l8.5 7.5"></path>
+                <path d="M6.5 10.5V20h11v-9.5"></path>
+                <path d="M10 20v-5.5h4V20"></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Inicio</span>
+          </button>
+          <button class="drawer-action-button" type="button" data-mobile-topbar-action="palette">
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M12 4.5c-4.7 0-8.5 3.4-8.5 7.7S7.3 20 12 20h1.1c1.2 0 2-.9 2-2 0-.8-.4-1.4-.4-2 0-.8.6-1.4 1.5-1.4H17c2 0 3.5-1.6 3.5-3.6 0-3.5-3.6-6.5-8.5-6.5Z"
+                ></path>
+                <circle cx="8" cy="11" r="1"></circle>
+                <circle cx="11.5" cy="8.5" r="1"></circle>
+                <circle cx="15.5" cy="9.5" r="1"></circle>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Paletas</span>
+          </button>
+          <button
+            class="drawer-action-button"
+            type="button"
+            data-mobile-topbar-action="settings"
+            data-auth-private
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="3"></circle>
+                <path
+                  d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.08a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1.88Z"
+                ></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Configuración</span>
+          </button>
+          <button
+            class="drawer-action-button drawer-action-button--store"
+            type="button"
+            data-mobile-topbar-action="store"
+            data-auth-private
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M5 9h14l-1 11H6L5 9Z"></path>
+                <path d="M9 9V7a3 3 0 0 1 6 0v2"></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Tienda</span>
+          </button>
+          <button
+            class="drawer-action-button"
+            type="button"
+            data-mobile-drawer-panel="users"
+            aria-pressed="false"
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="square"
+                stroke-linejoin="miter"
+              >
+                <circle cx="12" cy="8" r="2.25"></circle>
+                <circle cx="6.25" cy="9.25" r="1.75"></circle>
+                <circle cx="17.75" cy="9.25" r="1.75"></circle>
+                <path
+                  d="M8.5 18.5v-.75c0-1.5 1.25-2.75 2.75-2.75h1.5c1.5 0 2.75 1.25 2.75 2.75v.75"
+                ></path>
+                <path d="M3.75 18.5V18c0-1.4 1.1-2.5 2.5-2.5H7"></path>
+                <path d="M17 15.5h.75c1.4 0 2.5 1.1 2.5 2.5v.5"></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Usuarios</span>
+          </button>
+          <button
+            class="drawer-action-button"
+            type="button"
+            data-mobile-drawer-panel="ranking"
+            aria-pressed="false"
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="square"
+                stroke-linejoin="miter"
+              >
+                <path d="M4 19.5h16"></path>
+                <path d="M5.5 16.5 10 12l3.25 3.25L18.5 10"></path>
+                <path d="M14.5 10h4v4"></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Ranking</span>
+          </button>
+          <button
+            class="drawer-action-button drawer-action-button--auth"
+            type="button"
+            data-mobile-topbar-action="auth"
+            data-auth-private
+          >
+            <span class="drawer-action-button__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M10 6H6.5v12H10"></path>
+                <path d="M13 8.5 17 12l-4 3.5"></path>
+                <path d="M9 12h8"></path>
+              </svg>
+            </span>
+            <span class="drawer-action-button__label">Cerrar sesión</span>
+          </button>
+        </div>
+        <div class="drawer-theme-slot" aria-label="Tema">
+          <div class="theme-toggle-slot theme-toggle-slot--drawer" id="themeToggleDrawerSlot"></div>
+        </div>
       </section>
       <div class="drawer-mobile-panels" id="mobileDrawerPanels" hidden>
-      <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerUsersSection" hidden>
-        <h3>Usuarios activos</h3>
-        <div class="drawer-mobile-panel__header">
-          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menú">
-            <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m15 18-6-6 6-6"></path>
-              </svg>
-            </span>
-          </button>
+        <section
+          class="drawer__section drawer__section--half drawer__section--mobile-panel"
+          id="drawerUsersSection"
+          hidden
+        >
           <h3>Usuarios activos</h3>
-        </div>
-        <div class="scroll-list" id="drawerUserList"></div>
-      </section>
-      <section class="drawer__section drawer__section--half drawer__section--mobile-panel" id="drawerRankingsSection" hidden>
-        <div class="drawer-ranking__header">
-          <button class="drawer-mobile-panel__back" type="button" data-mobile-drawer-back aria-label="Volver al menú">
-            <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m15 18-6-6 6-6"></path>
-              </svg>
-            </span>
-          </button>
-          <div class="panel__title-inline panel__title-inline--ranking">
-            <span class="panel__title-glyph" id="drawerRankingsGlyph" aria-hidden="true"></span>
-            <h3 id="drawerRankingsTitle">Ranking</h3>
+          <div class="drawer-mobile-panel__header">
+            <button
+              class="drawer-mobile-panel__back"
+              type="button"
+              data-mobile-drawer-back
+              aria-label="Volver al menú"
+            >
+              <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="m15 18-6-6 6-6"></path>
+                </svg>
+              </span>
+            </button>
+            <h3>Usuarios activos</h3>
           </div>
-        </div>
-        <div class="panel__body panel__body--drawer-rankings">
-          <div class="ranking-controls ranking-controls--drawer" hidden>
-            <div class="ranking-scope-tabs" id="drawerRankingScopeTabs" role="group" aria-label="Alcance del ranking">
-              <button class="ranking-scope-tabs__button" type="button" data-ranking-scope="global">GLOBAL</button>
-              <span class="ranking-scope-tabs__divider" aria-hidden="true">/</span>
-              <button class="ranking-scope-tabs__button" type="button" data-ranking-scope="topic">TEMA</button>
+          <div class="scroll-list" id="drawerUserList"></div>
+        </section>
+        <section
+          class="drawer__section drawer__section--half drawer__section--mobile-panel"
+          id="drawerRankingsSection"
+          hidden
+        >
+          <div class="drawer-ranking__header">
+            <button
+              class="drawer-mobile-panel__back"
+              type="button"
+              data-mobile-drawer-back
+              aria-label="Volver al menú"
+            >
+              <span class="drawer-mobile-panel__back-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="m15 18-6-6 6-6"></path>
+                </svg>
+              </span>
+            </button>
+            <div class="panel__title-inline panel__title-inline--ranking">
+              <span class="panel__title-glyph" id="drawerRankingsGlyph" aria-hidden="true"></span>
+              <h3 id="drawerRankingsTitle">Ranking</h3>
             </div>
           </div>
-          <div class="scroll-list" id="drawerRankingList" style="display: none !important;"></div>
-
-          <!-- Global Ranking -->
-          <div class="panel" id="drawerGlobalRankingPanel">
-            <div class="panel__header ranking-scope-switch" id="drawerGlobalRankingHeader">
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerGlobalScopePrev" type="button" aria-label="Cambiar a ranking por tema">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m15 18-6-6 6-6"></path>
-                  </svg>
-                </span>
-              </button>
-              <div class="panel__title-inline panel__title-inline--ranking">
-                <h3>Global</h3>
+          <div class="panel__body panel__body--drawer-rankings">
+            <div class="ranking-controls ranking-controls--drawer" hidden>
+              <div
+                class="ranking-scope-tabs"
+                id="drawerRankingScopeTabs"
+                role="group"
+                aria-label="Alcance del ranking"
+              >
+                <button
+                  class="ranking-scope-tabs__button"
+                  type="button"
+                  data-ranking-scope="global"
+                >
+                  GLOBAL
+                </button>
+                <span class="ranking-scope-tabs__divider" aria-hidden="true">/</span>
+                <button class="ranking-scope-tabs__button" type="button" data-ranking-scope="topic">
+                  TEMA
+                </button>
               </div>
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerGlobalScopeNext" type="button" aria-label="Cambiar a ranking por tema">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m9 18 6-6-6-6"></path>
-                  </svg>
-                </span>
-              </button>
             </div>
-            <div class="drawer-ranking__switch drawer-ranking__switch--split" id="drawerGlobalRankingSwitch">
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerGlobalRankingPrev" type="button" aria-label="Ranking anterior">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m15 18-6-6 6-6"></path>
-                  </svg>
-                </span>
-              </button>
-              <button class="icon-button icon-button--compact ranking-carousel__current" id="drawerGlobalRankingCurrent" type="button" aria-label="Modo actual">
-                <span class="button-label">TEMAS COMENTARIOS</span>
-              </button>
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerGlobalRankingNext" type="button" aria-label="Ranking siguiente">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m9 18 6-6-6-6"></path>
-                  </svg>
-                </span>
-              </button>
-            </div>
-            <div class="scroll-list" id="drawerGlobalRankingList"></div>
-          </div>
+            <div class="scroll-list" id="drawerRankingList" style="display: none !important"></div>
 
-          <!-- Topic (Tema) Ranking -->
-          <div class="panel" id="drawerTopicRankingPanel">
-            <div class="panel__header ranking-scope-switch" id="drawerTopicRankingHeader">
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerTopicScopePrev" type="button" aria-label="Cambiar a ranking global">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m15 18-6-6 6-6"></path>
-                  </svg>
-                </span>
-              </button>
-              <div class="panel__title-inline panel__title-inline--ranking">
-                <h3 id="drawerTopicRankingTitle">Tema</h3>
+            <!-- Global Ranking -->
+            <div class="panel" id="drawerGlobalRankingPanel">
+              <div class="panel__header ranking-scope-switch" id="drawerGlobalRankingHeader">
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerGlobalScopePrev"
+                  type="button"
+                  aria-label="Cambiar a ranking por tema"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m15 18-6-6 6-6"></path>
+                    </svg>
+                  </span>
+                </button>
+                <div class="panel__title-inline panel__title-inline--ranking">
+                  <h3>Global</h3>
+                </div>
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerGlobalScopeNext"
+                  type="button"
+                  aria-label="Cambiar a ranking por tema"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m9 18 6-6-6-6"></path>
+                    </svg>
+                  </span>
+                </button>
               </div>
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerTopicScopeNext" type="button" aria-label="Cambiar a ranking global">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m9 18 6-6-6-6"></path>
-                  </svg>
-                </span>
-              </button>
+              <div
+                class="drawer-ranking__switch drawer-ranking__switch--split"
+                id="drawerGlobalRankingSwitch"
+              >
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerGlobalRankingPrev"
+                  type="button"
+                  aria-label="Ranking anterior"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m15 18-6-6 6-6"></path>
+                    </svg>
+                  </span>
+                </button>
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__current"
+                  id="drawerGlobalRankingCurrent"
+                  type="button"
+                  aria-label="Modo actual"
+                >
+                  <span class="button-label">TEMAS COMENTARIOS</span>
+                </button>
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerGlobalRankingNext"
+                  type="button"
+                  aria-label="Ranking siguiente"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m9 18 6-6-6-6"></path>
+                    </svg>
+                  </span>
+                </button>
+              </div>
+              <div class="scroll-list" id="drawerGlobalRankingList"></div>
             </div>
-            <div class="drawer-ranking__switch drawer-ranking__switch--split" id="drawerTopicRankingSwitch">
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerRankingPrev" type="button" aria-label="Ranking anterior">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m15 18-6-6 6-6"></path>
-                  </svg>
-                </span>
-              </button>
-              <button class="icon-button icon-button--compact ranking-carousel__current" id="drawerRankingCurrent" type="button" aria-label="Modo actual">
-                <span class="button-label">COMENTARIOS</span>
-              </button>
-              <button class="icon-button icon-button--compact ranking-carousel__nav" id="drawerRankingNext" type="button" aria-label="Ranking siguiente">
-                <span class="icon-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m9 18 6-6-6-6"></path>
-                  </svg>
-                </span>
-              </button>
-            </div>
-            <div class="scroll-list" id="drawerTopicRankingList"></div>
-          </div>
 
-          <div class="panel__empty panel__empty--drawer" id="drawerRankingsEmpty" hidden></div>
-        </div>
-      </section>
+            <!-- Topic (Tema) Ranking -->
+            <div class="panel" id="drawerTopicRankingPanel">
+              <div class="panel__header ranking-scope-switch" id="drawerTopicRankingHeader">
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerTopicScopePrev"
+                  type="button"
+                  aria-label="Cambiar a ranking global"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m15 18-6-6 6-6"></path>
+                    </svg>
+                  </span>
+                </button>
+                <div class="panel__title-inline panel__title-inline--ranking">
+                  <h3 id="drawerTopicRankingTitle">Tema</h3>
+                </div>
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerTopicScopeNext"
+                  type="button"
+                  aria-label="Cambiar a ranking global"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m9 18 6-6-6-6"></path>
+                    </svg>
+                  </span>
+                </button>
+              </div>
+              <div
+                class="drawer-ranking__switch drawer-ranking__switch--split"
+                id="drawerTopicRankingSwitch"
+              >
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerRankingPrev"
+                  type="button"
+                  aria-label="Ranking anterior"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m15 18-6-6 6-6"></path>
+                    </svg>
+                  </span>
+                </button>
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__current"
+                  id="drawerRankingCurrent"
+                  type="button"
+                  aria-label="Modo actual"
+                >
+                  <span class="button-label">COMENTARIOS</span>
+                </button>
+                <button
+                  class="icon-button icon-button--compact ranking-carousel__nav"
+                  id="drawerRankingNext"
+                  type="button"
+                  aria-label="Ranking siguiente"
+                >
+                  <span class="icon-button__icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m9 18 6-6-6-6"></path>
+                    </svg>
+                  </span>
+                </button>
+              </div>
+              <div class="scroll-list" id="drawerTopicRankingList"></div>
+            </div>
+
+            <div class="panel__empty panel__empty--drawer" id="drawerRankingsEmpty" hidden></div>
+          </div>
+        </section>
       </div>
     </div>
 
-    <div class="friend-request-panel" id="friendRequestsPanel" aria-label="Solicitudes de amistad" aria-hidden="true" hidden></div>
-    <div class="notification-toasts" id="notificationToasts" role="status" aria-live="polite" aria-label="Notificaciones" hidden></div>
+    <div
+      class="friend-request-panel"
+      id="friendRequestsPanel"
+      aria-label="Solicitudes de amistad"
+      aria-hidden="true"
+      hidden
+    ></div>
+    <div
+      class="notification-toasts"
+      id="notificationToasts"
+      role="status"
+      aria-live="polite"
+      aria-label="Notificaciones"
+      hidden
+    ></div>
     <div class="action-feedback" id="actionFeedback" role="status" aria-live="polite" hidden></div>
 
     <script type="module" src="./app.js?v=20260716-quality1"></script>

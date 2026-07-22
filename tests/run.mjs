@@ -10220,11 +10220,11 @@ await (async () => {
 
     assert.match(
       html,
-      /<div class="drawer drawer--left" id="leftDrawer" role="dialog" aria-modal="true" aria-label="Temas"/
+      /<div\s+class="drawer drawer--left"\s+id="leftDrawer"\s+role="dialog"\s+aria-modal="true"\s+aria-label="Temas"/
     );
     assert.match(
       html,
-      /<div class="drawer drawer--right" id="rightDrawer" role="dialog" aria-modal="true" aria-label="Menú móvil"/
+      /<div\s+class="drawer drawer--right"\s+id="rightDrawer"\s+role="dialog"\s+aria-modal="true"\s+aria-label="Menú móvil"/
     );
     assert.doesNotMatch(html, /<aside[^>]*\brole="dialog"/);
   });
@@ -10422,7 +10422,7 @@ await (async () => {
       html,
       /id="authGoogleButton"[^>]*disabled[\s\S]*Continuar con Google[\s\S]*auth-google-button__spinner/
     );
-    assert.match(html, /data-auth-mode="register">Crear cuenta<\/button>/);
+    assert.match(html, /data-auth-mode="register"\s*>\s*Crear cuenta\s*<\/button>/);
     assert.match(html, /id="authBackButton"[^>]*>[\s\S]*Volver[\s\S]*<\/button>/);
     assert.match(html, /Nombre de Usuario[\s\S]*id="authNicknameInput"/);
     assert.match(html, /Email[\s\S]*id="authEmailInput"[\s\S]*required/);
@@ -10444,7 +10444,7 @@ await (async () => {
     assert.match(html, /<h2 class="profile-modal__title">Perfil<\/h2>/);
     assert.match(
       html,
-      /<meta name="description" content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil\." \/>/
+      /<meta\s+name="description"\s+content="TOPYKLY es una comunidad social para conversar por temas, descubrir rankings, conectar con usuarios y personalizar tu perfil\."\s*\/>/
     );
     assert.match(
       html,
@@ -10465,7 +10465,7 @@ await (async () => {
     assert.match(html, /id="profileAvatarPreview"[\s\S]*aria-label="Cambiar avatar"/);
     assert.match(
       html,
-      /<img class="profile-avatar-crop__image" id="profileAvatarCropImage" alt="" width="320" height="320" \/>[\s\S]*<span class="profile-avatar-crop__window" aria-hidden="true"><\/span>/
+      /<img\s+class="profile-avatar-crop__image"\s+id="profileAvatarCropImage"\s+alt=""\s+width="320"\s+height="320"\s*\/>[\s\S]*<span class="profile-avatar-crop__window" aria-hidden="true"><\/span>/
     );
     assert.match(html, /id="profileJoinedAtText"/);
     assert.match(
@@ -10591,7 +10591,7 @@ await (async () => {
     assert.doesNotMatch(html, /data-mobile-topbar-action="theme"/);
     assert.match(html, /data-mobile-drawer-panel="ranking"/);
     assert.match(html, /data-mobile-drawer-back/);
-    assert.match(html, /id="drawerRankingsSection" hidden/);
+    assert.match(html, /id="drawerRankingsSection"\s+hidden/);
     assert.doesNotMatch(html, /5 combinaciones con variante light y dark/);
     assert.doesNotMatch(html, /Personalizacion/);
     assert.match(html, /class="brand-mark__icon"[\s\S]*brand-mark__icon-base/);
