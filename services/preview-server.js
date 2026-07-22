@@ -1586,6 +1586,15 @@ function isSeoPagePath(pathname) {
   );
 }
 
+function isArchivedTopic(store, topicId) {
+  try {
+    return store.getTopicPageData(topicId).isArchived === true;
+  } catch {
+    // Si el tema no existe, que siga el flujo normal y resuelva el 404 mas abajo.
+    return false;
+  }
+}
+
 function handleSeoPageRequest(store, req, res, url) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     writePlainText(res, 405, "Method not allowed");
@@ -1612,7 +1621,11 @@ function handleSeoPageRequest(store, req, res, url) {
       } catch {
         topicId = "";
       }
-      if (topicId) {
+      // Un tema archivado es de solo lectura: mandar a la app a quien llega desde
+      // una busqueda lo deja en una conversacion muerta sin haber leido lo que vino
+      // a leer. En ese caso se le sirve la pagina, igual que a un buscador, con su
+      // CTA al chat vivo. Los temas activos si siguen abriendo la app directamente.
+      if (topicId && !isArchivedTopic(store, topicId)) {
         sendRedirect(res, 302, `/?selectedTopicId=${encodeURIComponent(topicId)}`);
         return;
       }
