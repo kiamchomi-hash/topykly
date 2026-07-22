@@ -79,15 +79,26 @@ Límites conocidos de esa deduplicación — anotarlos al interpretar, no "corre
 
 Snapshot del punto de partida, para medir contra esto.
 
+**Capturado el 2026-07-22** (`/api/admin/analytics?days=30`). El pedido era de 30 días pero **solo hay 7 días de datos**: el primer evento es del 2026-07-16. Todo en `uniqueSubjects`.
+
 | Métrica | Valor baseline | Fecha |
 |---|---|---|
-| Visitantes únicos / semana | _pendiente_ | — |
-| Conversión visita → abre tema | _pendiente_ | — |
-| Conversión `auth_open` → registro | _pendiente_ | — |
-| Conversión → primer post | _pendiente_ | — |
-| Retención (regreso ≥12 h) total | _pendiente_ | — |
-| Retención por fuente (search / direct / social…) | _pendiente_ | — |
-| New users / día | _pendiente_ | — |
+| Visitantes únicos / semana | **51** — de los cuales ~37 son sospechosos (ver abajo); humanos plausibles ~14 | 2026-07-16 → 07-22 |
+| Conversión visita → abre tema | 7 / 51 = **13,7 %** (≈50 % si se excluyen los sospechosos) | ídem |
+| Conversión `auth_open` → registro | **0 / 1** — un solo sujeto abrió el modal en toda la ventana | ídem |
+| Conversión → primer post | 2 sujetos publicaron, ambos **ya registrados de antes** | ídem |
+| Retención (regreso ≥12 h) total | 3 / 51 = **5,9 %** | ídem |
+| Retención por fuente | `direct` 3 / 51. **No hay otra fuente**: 0 search, 0 social, 0 referral | ídem |
+| New users / día | **0 registros y 0 logins** en los 7 días | ídem |
+
+Rutas de entrada: **el 100 % de los 94 `page_view` cayó en `/`**. Cero visitas a cualquier página SEO (`/tema/…`, `/temas`, `/archivo`, `/u/…`).
+
+### Advertencias de lectura (no borrar)
+
+1. **El pico del 18 y 19 de julio (37 de 51 sujetos, el 73 %) no parece tráfico humano.** Firma: ~1,0 `page_view` por sujeto, 1 solo `topic_open` entre los dos días, y **0 regresos de ambas cohortes**. Además es *anterior* al lanzamiento en producción del 2026-07-21, así que llegó por la URL de Render o por el dominio recién apareciendo en los logs de Certificate Transparency — que es exactamente lo que rastrean los escáneres automáticos. Hipótesis principal: rastreadores con JS. **Sin confirmar.**
+2. **`product_events` no filtra bots.** `page_view` se emite desde el cliente (`controller-app.js:324`), así que cualquier rastreador que ejecute JS cuenta como visitante y cada visita estrena `subject_key`. Mientras siga así, **todo denominador está inflado y toda tasa de conversión subestimada.** Arreglarlo antes de correr cualquier experimento; si no, una mejora real puede quedar enterrada bajo tráfico automático.
+3. **El 0 de registros es real, no un fallo de medición.** Verificado en código: `registration_complete` y `login_complete` se emiten (`controller-actions.js:207,225,257,814`) y están en la lista blanca de eventos (`backend-store.js:74-75`).
+4. **Estos 7 días son de *antes* de los cambios del 2026-07-22.** Este baseline mide el producto viejo: sin estado vacío, con la ventana fija de 20 y con el archivo rebotando a quien llegaba. Sirve como punto de partida, no como término de comparación limpio con lo que venga.
 
 ---
 
@@ -118,6 +129,17 @@ Snapshot del punto de partida, para medir contra esto.
 ## 6. Log de iteraciones
 
 > La más reciente arriba.
+
+### Baseline — 2026-07-22 — Primera lectura real: el problema es adquisición, no producto
+
+- **Estado:** sigue BLOQUEADO (§0), y ahora con números que lo demuestran en vez de suponerlo. Baseline cargado en §3.
+- **Datos (7 días reales, no 30):** 51 visitantes únicos, 94 `page_view`, 100 % directos, 100 % sobre `/`.
+- **Veredicto del experimento anterior:** no había ninguno.
+- **Fuga detectada — y no es la que veníamos suponiendo.** El backlog apuntaba al drop-off `auth_open` → `registration_complete` como primer foco. **Los datos lo descartan por ahora:** en 7 días **un solo sujeto** abrió el modal de registro. No se puede tener un problema de conversión en un paso al que no llega nadie. La fuga real está mucho más arriba: no entra gente. Cero búsqueda, cero social, cero referidos, cero visitas a páginas SEO.
+- **Qué queda confirmado:** la tesis del plan de crecimiento era correcta. El SEO no puede traer a los primeros usuarios —hoy aporta exactamente 0— y el único canal disponible es la siembra manual ([`SIEMBRA_FASE2.md`](../SIEMBRA_FASE2.md)). Todo trabajo de producto adicional antes de tener tráfico es optimizar un embudo vacío.
+- **Hipótesis:** ninguna formulable. Con ~14 humanos plausibles en 7 días, cualquier lectura de retención es ruido (§1 regla 7).
+- **Experimento propuesto:** **ninguno**, y no debe proponerse ninguno hasta que entre tráfico real y se filtren los bots (§3, advertencia 2).
+- **Acción que sí corresponde:** ejecutar la Fase 2 de siembra manual, en tandas chicas y separadas para poder atribuir.
 
 ### ⚠️ Fecha de corte — 2026-07-22 — Cuatro cambios de producto desplegados juntos
 
@@ -174,15 +196,15 @@ Snapshot del punto de partida, para medir contra esto.
 
 Ordenado por prioridad.
 
-1. **[medible ya]** Consultar la analítica propia (`/api/admin/analytics` o la SQLite) y anotar cuántos visitantes únicos y usuarios nuevos por día hay hoy. Es un dato que **ya se puede obtener** y define cuán lejos está la precondición de volumen. No depende de GSC.
-2. **[bloqueante, espera]** Acumular volumen suficiente por cohorte. Semanas, no días.
-3. **[entorno, RESUELTO el 2026-07-22]** Las variables `GH_TOKEN` y `GITHUB_TOKEN` fueron eliminadas del entorno de usuario. `gh` y `git push` usan el token del keyring (`gho_…`, scopes `gist, read:org, repo, workflow`) y funcionan sin workaround; verificado con `git push --dry-run`. El mecanismo de branch/PR de la regla 1 ya no está bloqueado por esto.
+1. **[HECHO el 2026-07-22]** Baseline capturado y cargado en §3. Resultado: ~51 visitantes en 7 días, la mayoría probablemente automáticos, y 0 registros.
+2. **[nuevo, bloqueante para medir]** **Filtrar tráfico automático en `product_events`.** Hoy no hay ningún filtro y `page_view` se dispara desde el cliente, así que cualquier rastreador con JS entra al denominador. Mientras siga así, ninguna tasa de conversión es confiable y un experimento real puede quedar tapado por ruido. Es lo primero a resolver **antes** del primer experimento, no después.
+3. **[bloqueante, espera]** Acumular volumen suficiente por cohorte. Semanas, no días. La vía es la siembra manual de [`SIEMBRA_FASE2.md`](../SIEMBRA_FASE2.md); el SEO hoy aporta 0.
+4. **[entorno, RESUELTO el 2026-07-22]** Las variables `GH_TOKEN` y `GITHUB_TOKEN` fueron eliminadas del entorno de usuario. `gh` y `git push` usan el token del keyring (`gho_…`, scopes `gist, read:org, repo, workflow`) y funcionan sin workaround; verificado con `git push --dry-run`. El mecanismo de branch/PR de la regla 1 ya no está bloqueado por esto.
 
    Detalle por si reaparece, porque el diagnóstico fácil es engañoso: **eran dos tokens distintos, no una variable duplicada.** `GH_TOKEN` estaba lisa y llanamente vencida (401). `GITHUB_TOKEN` era un PAT fine-grained **válido** que autenticaba bien y devolvía `permissions.push: true` al consultar el repo — pero igual daba 403 al pushear. Ese campo de la API describe el rol de **la cuenta** en el repositorio, no lo que el token fine-grained tiene concedido; no sirve para decidir si un token puede escribir. La única prueba que vale es intentar la operación (`git push --dry-run`). Como `gh` prioriza `GH_TOKEN` sobre `GITHUB_TOKEN` y ambas sobre el keyring, cualquiera de las dos presente tapaba al token que sí servía.
-4. **[pendiente de dato real]** Revisar el arreglo del puente archivo → chat vivo cuando exista el **primer tema archivado** en producción. Está desplegado y verificado en local, pero nunca se ejercitó con datos reales (ver la fecha de corte en §6).
-5. Al haber datos: capturar baseline (§3), **empezando el rango el 2026-07-22**: cualquier serie que cruce esa fecha mezcla dos productos distintos.
-6. Cruzar `retentionBySource` con las fuentes que trae el loop de SEO — responder si el tráfico de búsqueda retiene distinto ANTES de proponer cambios de producto.
-7. Primer foco candidato de bajo costo: el drop-off `auth_open` → `registration_complete` (gente que abre el modal de registro y no completa). Ya está medido; una hipótesis de copy/fricción del formulario es barata y reversible. **Ojo con el alcance:** participar exige cuenta y así queda por decisión de producto (2026-07-22), así que la palanca se busca **adentro** del registro — por ejemplo evitar el viaje al correo con `registerWithPassword`, que ya existe— y nunca abriendo la participación a invitados.
+5. **[pendiente de dato real]** Revisar el arreglo del puente archivo → chat vivo cuando exista el **primer tema archivado** en producción. Está desplegado y verificado en local, pero nunca se ejercitó con datos reales (ver la fecha de corte en §6).
+6. **[en espera de que exista tráfico de búsqueda]** Cruzar `retentionBySource` con lo que traiga el loop de SEO. Hoy es **imposible**: el reporte tiene una sola fila, `direct`. No hay con qué comparar.
+7. **[despriorizado por los datos del 2026-07-22]** El drop-off `auth_open` → `registration_complete` venía como primer foco candidato. **Los datos lo descartan por ahora:** hubo *un* `auth_open` en 7 días. No se optimiza un paso al que no llega nadie; primero tiene que haber tráfico. Cuando lo haya, la advertencia de alcance sigue vigente: participar exige cuenta por decisión de producto (2026-07-22), así que la palanca se busca **adentro** del registro —por ejemplo evitar el viaje al correo con `registerWithPassword`, que ya existe— y nunca abriendo la participación a invitados.
 
 ---
 
