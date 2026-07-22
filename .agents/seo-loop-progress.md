@@ -66,6 +66,8 @@ Snapshot del punto de partida, para medir contra esto. Actualizar solo si se reb
 
 Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retención D1/D7 → estos los cubre el **loop de producto**, no este. Pero anotalos aquí para tener contexto, porque en TOPYKLY el contenido = actividad de usuarios: si la retención cae, este loop se queda sin materia prima.
 
+> **Al leer la analítica propia (p. ej. para cruzar `retentionBySource`): usar `uniqueSubjects`, nunca `total`.** `total` cuenta filas crudas y **una recarga (F5) suma una**, así que infla las visitas. `uniqueSubjects` cuenta personas. Detalle completo y límites conocidos en la [regla de lectura del loop de producto](./product-loop-progress.md#regla-de-lectura-uniquesubjects-nunca-total).
+
 ---
 
 ## 3. Protocolo de cada corrida

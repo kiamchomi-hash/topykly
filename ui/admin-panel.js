@@ -275,9 +275,11 @@ function renderAnalyticsMetric(label, value, detail) {
   const card = el("article", "admin-panel__metric");
   card.append(
     el("span", "admin-panel__metric-label", label),
-    el("strong", "admin-panel__metric-value", String(value)),
-    el("span", "admin-panel__metric-detail", detail)
+    el("strong", "admin-panel__metric-value", String(value))
   );
+  if (detail) {
+    card.append(el("span", "admin-panel__metric-detail", detail));
+  }
   return card;
 }
 
@@ -305,11 +307,7 @@ function renderAnalyticsDashboard(analytics) {
 
   const metrics = el("div", "admin-panel__metrics");
   metrics.append(
-    renderAnalyticsMetric(
-      "Personas visitantes",
-      pageViews.uniqueSubjects,
-      `${pageViews.total} vistas registradas`
-    ),
+    renderAnalyticsMetric("Personas visitantes", pageViews.uniqueSubjects),
     renderAnalyticsMetric(
       "Conversaciones abiertas",
       topicOpens.uniqueSubjects,

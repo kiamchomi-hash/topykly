@@ -55,6 +55,24 @@ El loop lee la analítica de producto **first-party** (sin dependencias externas
 - **Eventos del funnel:** `page_view` → `topic_open` → `auth_open` → `registration_complete` / `login_complete` → `publish_attempt` → `topic_created` / `comment_created`; más `return_visit` (derivado a ≥12 h).
 - **El puente con el [loop de SEO](./seo-loop-progress.md):** `retentionBySource` responde *"¿el tráfico de búsqueda vuelve a distinto ritmo que el directo?"*. Si el SEO trae mucha gente que no retiene, el problema puede ser intención/calidad del tráfico (lo arregla el loop de SEO ajustando a qué keywords apunta), no el producto. **Diagnosticar esto antes de rediseñar features.**
 
+### Regla de lectura: `uniqueSubjects`, nunca `total`
+
+Cada evento del reporte trae dos números y **elegir mal invalida la conclusión**:
+
+- `total` — filas crudas. **Una recarga (F5) suma una fila.** Inflado por definición.
+- `uniqueSubjects` — `COUNT(DISTINCT subject_key)`. Es el número de **personas**.
+
+> **Usar siempre `uniqueSubjects`, tanto en numeradores como en denominadores.** Mezclar los dos produce tasas de conversión sin sentido. Si una corrida reporta "visitas" con `total`, el resultado se descarta.
+
+Por qué `uniqueSubjects` resiste el F5: `subject_key` es un HMAC de `registered:<userId>` o `guest:<sessionId>`, y la cookie de sesión dura 30 días. Veinte recargas de la misma persona son veinte filas con **un** `subject_key`.
+
+Límites conocidos de esa deduplicación — anotarlos al interpretar, no "corregirlos":
+
+- **Un invitado que se registra cambia de `subject_key`** (`guest:sesión` → `registered:id`) y se cuenta como dos personas. El sesgo pega justo en el tramo de conversión que más interesa: infla el denominador de registro.
+- **Borrar cookies o cambiar de navegador crea un sujeto nuevo.** Inevitable sin fingerprinting, que está descartado por privacidad.
+- **`return_visit` es inmune al F5**: exige ≥12 h entre visitas del mismo sujeto. Es la métrica más confiable del set.
+- **Publicaciones (`topic_created` + `comment_created`) es el único caso donde `total` es correcto**: publicar dos veces son dos publicaciones. Pero entonces su tasa **no es comparable** con las demás, que están en personas. No ponerlas en la misma tabla sin aclararlo.
+
 ---
 
 ## 3. Baseline (rellenar al cerrar precondiciones)
