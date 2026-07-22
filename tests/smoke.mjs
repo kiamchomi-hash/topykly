@@ -3,7 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { MINIMUM_REGISTRATION_AGE, TERMS_VERSION } from "../services/backend-store.js";
+import {
+  MINIMUM_REGISTRATION_AGE,
+  resolveVisibleTopicLimit,
+  TERMS_VERSION
+} from "../services/backend-store.js";
 import { startPreviewServer } from "../services/preview-server.js";
 
 const host = "127.0.0.1";
@@ -259,7 +263,17 @@ try {
     assert.equal(Object.prototype.hasOwnProperty.call(payload, "sessionId"), false);
     assert.match(cookieJars.get("session-smoke-bootstrap") || "", /topykly_sid=/);
     assert.equal(payload.topics.length, 40);
-    assert.equal(payload.topics.filter((topic) => topic.visible).length, 20);
+    // La ventana visible se adapta a la gente conectada, que en un smoke depende de
+    // cuantas sesiones dejaron vivas los tests anteriores. Lo que debe cumplirse
+    // siempre es que sea un escalon valido y nunca supere el techo de 20.
+    const visibleCount = payload.topics.filter((topic) => topic.visible).length;
+    const allowedWindows = new Set([0, 5, 20, 40, 100].map(resolveVisibleTopicLimit));
+    assert.equal(
+      allowedWindows.has(visibleCount),
+      true,
+      `ventana visible inesperada: ${visibleCount}`
+    );
+    assert.equal(visibleCount <= 20, true);
     assert.equal(payload.viewer.type, "guest");
     assert.equal(
       payload.users.every((user) => !Object.hasOwn(user, "email")),

@@ -15,11 +15,14 @@ import {
   shouldTrustProxy
 } from "../services/preview-server.js";
 import {
+  ACTIVE_TOPIC_LIMIT,
   createBackendStore,
   MINIMUM_REGISTRATION_AGE,
   resolveDbConfig,
+  resolveVisibleTopicLimit,
   shouldSeedDemoData,
-  TERMS_VERSION
+  TERMS_VERSION,
+  VISIBLE_TOPIC_LIMIT
 } from "../services/backend-store.js";
 import {
   escapeHtml,
@@ -2029,7 +2032,7 @@ await (async () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
-  await test("backend bootstrap returns a guest viewer plus 40 active topics with 20 visible", async () => {
+  await test("backend bootstrap returns a guest viewer plus 40 active topics with a window sized to the audience", async () => {
     await withTempStore((store) => {
       const payload = store.bootstrap({
         sessionId: "session-bootstrap",
@@ -2038,8 +2041,12 @@ await (async () => {
 
       assert.equal(payload.viewer.type, "guest");
       assert.match(payload.viewer.displayName, /^\*topy\d{2}$/);
+      // El conjunto activo sigue siendo 40: la ventana adaptativa no expulsa temas.
       assert.equal(payload.topics.length, TOPIC_ACTIVE_LIMIT);
-      assert.equal(payload.topics.filter((topic) => topic.visible).length, TOPIC_VISIBLE_LIMIT);
+      // Con una sola persona conectada la ventana se concentra en el primer escalon.
+      const visibleCount = payload.topics.filter((topic) => topic.visible).length;
+      assert.equal(visibleCount, resolveVisibleTopicLimit(1));
+      assert.equal(visibleCount < TOPIC_VISIBLE_LIMIT, true);
       assert.equal(
         payload.topics.some((topic) => topic.title.startsWith("¿Cómo")),
         true
@@ -2672,7 +2679,7 @@ await (async () => {
       );
     });
   });
-  await test("backend fills a blocked viewer's 20 visible slots only from the global active 40", async () => {
+  await test("backend fills a blocked viewer's visible slots only from the global active 40", async () => {
     await withTempStore((store) => {
       const viewer = store.login({ sessionId: "session-block-many-u1", userId: "u1" });
       let personalized = viewer;
@@ -2685,10 +2692,14 @@ await (async () => {
       }
 
       assert.equal(personalized.topics.length, 20);
-      assert.equal(personalized.topics.filter((topic) => topic.visible).length, 20);
+      // La ventana visible se dimensiona por poblacion conectada (aqui, un solo
+      // usuario), pero se sirve del conjunto activo global.
+      const expectedVisible = resolveVisibleTopicLimit(1);
+      assert.equal(personalized.topics.filter((topic) => topic.visible).length, expectedVisible);
       assert.equal(
-        personalized.topics.some((topic) => topic.visible && topic.activeRank >= 20),
-        true
+        personalized.topics.some((topic) => topic.activeRank >= 20),
+        true,
+        "los temas disponibles deben salir de los 40 activos, no solo de los 20 primeros"
       );
       assert.equal(
         personalized.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT),
@@ -2704,7 +2715,10 @@ await (async () => {
         hideContent: true
       });
       assert.equal(fewerThanTwenty.topics.length, 16);
-      assert.equal(fewerThanTwenty.topics.filter((topic) => topic.visible).length, 16);
+      assert.equal(
+        fewerThanTwenty.topics.filter((topic) => topic.visible).length,
+        Math.min(expectedVisible, 16)
+      );
       assert.equal(
         fewerThanTwenty.topics.every((topic) => topic.activeRank < TOPIC_ACTIVE_LIMIT),
         true
@@ -6984,12 +6998,33 @@ await (async () => {
 
     // El tema activo si mantiene el acceso directo a su propia conversacion.
     assert.equal(
-      html.includes(
-        `<a class="seo-cta" href="/?selectedTopicId=topic-xss">Abrir en TOPYKLY</a>`
-      ),
+      html.includes(`<a class="seo-cta" href="/?selectedTopicId=topic-xss">Abrir en TOPYKLY</a>`),
       true
     );
     assert.equal(html.includes("Otros temas activos"), true);
+  });
+
+  await test("visible topic window adapts to the connected population", () => {
+    // Con poca gente la ventana se concentra para que coincidan en los mismos temas.
+    assert.equal(resolveVisibleTopicLimit(0), 5);
+    assert.equal(resolveVisibleTopicLimit(1), 5);
+    assert.equal(resolveVisibleTopicLimit(7), 5);
+    // Bordes exactos de cada escalon.
+    assert.equal(resolveVisibleTopicLimit(8), 8);
+    assert.equal(resolveVisibleTopicLimit(19), 8);
+    assert.equal(resolveVisibleTopicLimit(20), 12);
+    assert.equal(resolveVisibleTopicLimit(39), 12);
+    assert.equal(resolveVisibleTopicLimit(40), VISIBLE_TOPIC_LIMIT);
+
+    // No regresion: a escala el comportamiento es identico al de siempre y nunca
+    // supera el techo historico ni el conjunto activo.
+    assert.equal(resolveVisibleTopicLimit(500), VISIBLE_TOPIC_LIMIT);
+    assert.equal(resolveVisibleTopicLimit(500) <= ACTIVE_TOPIC_LIMIT, true);
+
+    // Entradas invalidas no deben abrir la ventana de par en par.
+    assert.equal(resolveVisibleTopicLimit(-3), 5);
+    assert.equal(resolveVisibleTopicLimit(Number.NaN), 5);
+    assert.equal(resolveVisibleTopicLimit(undefined), 5);
   });
 
   await test("public profile pages stay indexable without a JS redirect", () => {

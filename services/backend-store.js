@@ -13,6 +13,29 @@ export const VISIBLE_TOPIC_LIMIT = 20;
 export const TOPIC_REPLY_LIMIT = 29;
 export const TOPIC_TOTAL_MESSAGE_LIMIT = TOPIC_REPLY_LIMIT + 1;
 
+// Ventana visible adaptativa a la poblacion conectada. Con poca gente, repartirla
+// entre 20 temas hace que nadie coincida con nadie y muere justo la propiedad que
+// define al producto: que haya conversacion viva ahora. La ventana se concentra
+// cuando hay pocos y se abre sola al crecer, con VISIBLE_TOPIC_LIMIT como techo.
+//
+// Esto solo decide QUE temas se muestran. No toca ACTIVE_TOPIC_LIMIT ni la regla de
+// expulsion: reducir el conjunto activo expulsaria temas antes de tiempo y eso borra
+// mensajes fisicamente, que es irreversible.
+export const VISIBLE_TOPIC_STEPS = [
+  { minOnline: 0, limit: 5 },
+  { minOnline: 8, limit: 8 },
+  { minOnline: 20, limit: 12 },
+  { minOnline: 40, limit: VISIBLE_TOPIC_LIMIT }
+];
+
+export function resolveVisibleTopicLimit(onlineCount) {
+  const online = Number.isFinite(onlineCount) && onlineCount > 0 ? Math.floor(onlineCount) : 0;
+  const step = [...VISIBLE_TOPIC_STEPS]
+    .reverse()
+    .find((candidate) => online >= candidate.minOnline);
+  return Math.min(step?.limit ?? VISIBLE_TOPIC_STEPS[0].limit, VISIBLE_TOPIC_LIMIT);
+}
+
 const REGISTERED_USER_ID = "u1";
 const SHARED_GUEST_USER_ID = "guest-anonymous";
 const DEFAULT_MODERATOR_USER_ID = "u2";
@@ -2442,12 +2465,24 @@ function buildBackendRankings(db, context, selectedTopicId = null) {
     }
   };
 }
-function hydrateTopic(db, row, { forceVisible = null, viewerId = null } = {}) {
+// Personas distintas con sesion viva en la ventana de presencia. Cuenta invitados
+// ademas de registrados: en el arranque son la mayoria de quienes estan mirando.
+function countOnlineUsers(db) {
+  const since = new Date(Date.now() - PRESENCE_ONLINE_WINDOW_MS).toISOString();
+  return Number(
+    db
+      .prepare("SELECT COUNT(DISTINCT user_id) AS count FROM sessions WHERE updated_at >= ?")
+      .get(since)?.count ?? 0
+  );
+}
+
+function hydrateTopic(db, row, { forceVisible = null, viewerId = null, visibleLimit = null } = {}) {
+  const resolvedVisibleLimit = visibleLimit ?? resolveVisibleTopicLimit(countOnlineUsers(db));
   const isVisible =
     forceVisible ??
     (row.status !== TOPIC_STATUS_EXPELLED &&
       row.active_rank !== null &&
-      row.active_rank < VISIBLE_TOPIC_LIMIT);
+      row.active_rank < resolvedVisibleLimit);
 
   return {
     id: row.id,
@@ -2987,11 +3022,15 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
       messages
     };
   };
+  // Una sola lectura de presencia por request: la ventana visible es la misma para
+  // todos los temas de este snapshot.
+  const visibleLimit = resolveVisibleTopicLimit(countOnlineUsers(db));
   const topics = activeTopicRows
     .map((row, index) =>
       hydrateTopic(db, row, {
-        forceVisible: index < VISIBLE_TOPIC_LIMIT,
-        viewerId: context.viewer.id
+        forceVisible: index < visibleLimit,
+        viewerId: context.viewer.id,
+        visibleLimit
       })
     )
     .map(hideBlockedMessages);
@@ -3006,7 +3045,11 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     if (selectedRow && !hiddenBlockedUserIds.has(selectedRow.author_id)) {
       topics.push(
         hideBlockedMessages(
-          hydrateTopic(db, selectedRow, { forceVisible: false, viewerId: context.viewer.id })
+          hydrateTopic(db, selectedRow, {
+            forceVisible: false,
+            viewerId: context.viewer.id,
+            visibleLimit
+          })
         )
       );
       resolvedSelectedTopicId = selectedTopicId;
