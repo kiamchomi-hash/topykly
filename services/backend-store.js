@@ -1492,6 +1492,94 @@ function seedDatabase(db, { includeFakeFriendRequests = true } = {}) {
   }
 }
 
+export const EDITORIAL_ROLE = "Cuenta editorial";
+
+// Inverso de seedEditorialContentIntoDatabase. No existia: la siembra editorial se
+// corrio a mano y no habia forma de deshacerla, ni siquiera apagando
+// TOPYKLY_SEED_DEMO_DATA (ese flag dispara purgeDemoData, que solo alcanza a los ids
+// u1..u10 y topic-N, no a los editorial-*).
+//
+// Orden de borrado impuesto por el esquema: reports y sessions no tienen cascada, y
+// topics.author_id / messages.author_id apuntan a users sin ON DELETE, asi que el
+// usuario se borra ultimo. Al borrar un tema, la cascada se lleva sus mensajes, sus
+// likes, los follows y los envios de email.
+//
+// moderation_actions NO se toca: es el registro de auditoria.
+function removeEditorialSeedContentFromDatabase(db, { dryRun = true } = {}) {
+  const editorialUsers = db
+    .prepare("SELECT id, name, nickname FROM users WHERE role = ? ORDER BY id ASC")
+    .all(EDITORIAL_ROLE);
+  const editorialUserIds = editorialUsers.map((row) => row.id);
+
+  if (!editorialUserIds.length) {
+    return { dryRun, users: [], topics: [], removedUsers: 0, removedTopics: 0, removedMessages: 0 };
+  }
+
+  const placeholders = editorialUserIds.map(() => "?").join(", ");
+  const topics = db
+    .prepare(
+      `SELECT id, title FROM topics WHERE author_id IN (${placeholders}) ORDER BY created_at ASC`
+    )
+    .all(...editorialUserIds);
+  const topicIds = topics.map((row) => row.id);
+  const messageRows = db
+    .prepare(
+      `SELECT id FROM messages
+       WHERE author_id IN (${placeholders})
+          ${topicIds.length ? `OR topic_id IN (${topicIds.map(() => "?").join(", ")})` : ""}`
+    )
+    .all(...editorialUserIds, ...topicIds);
+
+  const summary = {
+    dryRun,
+    users: editorialUsers.map((row) => ({ id: row.id, name: row.name, nickname: row.nickname })),
+    topics: topics.map((row) => ({ id: row.id, title: row.title })),
+    removedUsers: dryRun ? 0 : editorialUserIds.length,
+    removedTopics: dryRun ? 0 : topicIds.length,
+    removedMessages: dryRun ? 0 : messageRows.length
+  };
+
+  if (dryRun) {
+    return summary;
+  }
+
+  // 1. Reportes: la tabla no tiene claves foraneas, hay que limpiarla a mano.
+  const messageIds = messageRows.map((row) => String(row.id));
+  if (messageIds.length) {
+    db.prepare(
+      `DELETE FROM reports WHERE entity_type = 'message' AND entity_id IN (${messageIds.map(() => "?").join(", ")})`
+    ).run(...messageIds);
+  }
+  if (topicIds.length) {
+    db.prepare(
+      `DELETE FROM reports WHERE entity_type = 'topic' AND entity_id IN (${topicIds.map(() => "?").join(", ")})`
+    ).run(...topicIds);
+  }
+  db.prepare(
+    `DELETE FROM reports WHERE entity_type = 'user' AND entity_id IN (${placeholders})`
+  ).run(...editorialUserIds);
+
+  // 2. Sesiones: FK sin cascada.
+  db.prepare(`DELETE FROM sessions WHERE user_id IN (${placeholders})`).run(...editorialUserIds);
+
+  // 3. Temas. La cascada arrastra mensajes, likes, dislikes, follows y emails.
+  if (topicIds.length) {
+    db.prepare(`DELETE FROM topics WHERE id IN (${topicIds.map(() => "?").join(", ")})`).run(
+      ...topicIds
+    );
+  }
+
+  // 4. Mensajes que estas cuentas dejaron en temas de gente real: no los alcanza la
+  //    cascada anterior y bloquearian el borrado del usuario.
+  db.prepare(`DELETE FROM messages WHERE author_id IN (${placeholders})`).run(...editorialUserIds);
+
+  // 5. Usuarios. Ahora si: la cascada limpia amistades, bloqueos y follows restantes.
+  db.prepare(`DELETE FROM users WHERE id IN (${placeholders})`).run(...editorialUserIds);
+
+  rebuildActiveTopicRanks(db);
+  return summary;
+}
+
 function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
   const limit = normalizePositiveInteger(requestedLimit, 5, {
     min: 1,
@@ -5803,6 +5891,33 @@ export function createBackendStore({
     },
     seedEditorialContent({ limit = 5 } = {}) {
       return withTransaction(db, () => seedEditorialContentIntoDatabase(db, limit));
+    },
+    // Destructivo e irreversible. Por defecto hace una simulacion: hay que pedir
+    // explicitamente dryRun:false para que borre.
+    removeEditorialSeedContent({ sessionId, authMode, dryRun = true, ipAddress = "" } = {}) {
+      return withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertModerator(context.viewerRow);
+        const summary = removeEditorialSeedContentFromDatabase(db, { dryRun: dryRun !== false });
+        if (summary.dryRun) {
+          return summary;
+        }
+
+        recordModerationAction(db, {
+          actionType: "remove_editorial_seed",
+          targetType: "system",
+          targetId: "editorial-seed",
+          actorUserId: context.viewer.id,
+          reason: "Retiro de contenido editorial de demostracion",
+          metadataJson: JSON.stringify({
+            removedUsers: summary.removedUsers,
+            removedTopics: summary.removedTopics,
+            removedMessages: summary.removedMessages
+          }),
+          createdAt: new Date().toISOString()
+        });
+        return summary;
+      });
     },
     openTopic(topicId, { sessionId, authMode, ipAddress = "" } = {}) {
       return withTransaction(db, () => {

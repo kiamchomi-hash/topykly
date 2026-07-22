@@ -1150,6 +1150,21 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       return;
     }
 
+    // Retiro del contenido editorial de demostracion. Es destructivo, asi que solo
+    // borra si el cuerpo trae dryRun:false de forma explicita; sin eso devuelve la
+    // simulacion con el detalle de lo que se iria.
+    if (req.method === "POST" && url.pathname === "/api/admin/editorial/purge") {
+      const body = await readJsonBody(req);
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.removeEditorialSeedContent({ ...context, dryRun: body.dryRun !== false })
+      );
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/moderation/actions") {
       const body = await readJsonBody(req);
       sendBackendPayload(

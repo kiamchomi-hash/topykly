@@ -2204,6 +2204,112 @@ await (async () => {
     );
   });
 
+  await test("backend removes editorial seed content without touching real activity", async () => {
+    const previousAdminEmails = process.env.TOPYKLY_ADMIN_EMAILS;
+    process.env.TOPYKLY_ADMIN_EMAILS = "admin-purge@example.com";
+
+    try {
+      await withTempStore(
+        (store) => {
+          store.seedEditorialContent({ limit: 3 });
+
+          // Actividad real que TIENE que sobrevivir: un usuario con su propio tema, y
+          // ademas un comentario suyo dentro de un tema editorial.
+          store.registerWithPassword({
+            sessionId: "session-real-user",
+            email: "real@example.com",
+            password: "password-segura",
+            nickname: "persona_real"
+          });
+          store.createTopic({
+            sessionId: "session-real-user",
+            authMode: "registered",
+            title: "Tema de una persona real",
+            text: "Este mensaje no se puede perder."
+          });
+          const editorialTopicId = store
+            .bootstrap({ sessionId: "session-peek" })
+            .topics.find((topic) => topic.authorId === "editorial-u10").id;
+          store.addMessage(editorialTopicId, {
+            sessionId: "session-real-user",
+            authMode: "registered",
+            text: "Comentario real dentro de un tema editorial."
+          });
+
+          // Moderador real: el rol se resuelve por email verificado contra la
+          // allowlist, asi que hace falta una identidad con emailVerified.
+          const admin = store.loginWithIdentity({
+            sessionId: "session-admin-purge",
+            sourceSessionId: "session-admin-purge-src",
+            authProvider: "https://accounts.example.com",
+            authSubject: "admin-purge-subject",
+            email: "admin-purge@example.com",
+            emailVerified: true,
+            displayName: "Admin Purge"
+          });
+          assert.equal(admin.viewer.isAdmin, true);
+
+          // Un usuario comun no puede correr esto.
+          assert.throws(
+            () =>
+              store.removeEditorialSeedContent({
+                sessionId: "session-real-user",
+                authMode: "registered",
+                dryRun: false
+              }),
+            (error) => error.code === "MODERATOR_REQUIRED"
+          );
+
+          // La simulacion informa sin borrar nada.
+          const dry = store.removeEditorialSeedContent({
+            sessionId: "session-admin-purge",
+            authMode: "registered"
+          });
+          assert.equal(dry.dryRun, true);
+          assert.equal(dry.users.length, initialUsers.length);
+          assert.equal(dry.topics.length, 3);
+          assert.equal(dry.removedTopics, 0);
+          assert.equal(store.getDiagnostics().topics, 4);
+
+          const purge = store.removeEditorialSeedContent({
+            sessionId: "session-admin-purge",
+            authMode: "registered",
+            dryRun: false
+          });
+          assert.equal(purge.dryRun, false);
+          assert.equal(purge.removedUsers, initialUsers.length);
+          assert.equal(purge.removedTopics, 3);
+
+          const after = store.bootstrap({ sessionId: "session-after-purge" });
+          assert.equal(after.topics.length, 1);
+          assert.equal(after.topics[0].title, "Tema de una persona real");
+          assert.equal(
+            after.users.some((user) => user.role === "Cuenta editorial"),
+            false
+          );
+          // El comentario real se va con su tema editorial, pero el tema propio queda intacto.
+          assert.equal(after.topics[0].messages[0].text, "Este mensaje no se puede perder.");
+
+          // Idempotente: correrlo de nuevo no encuentra nada y no falla.
+          const again = store.removeEditorialSeedContent({
+            sessionId: "session-admin-purge",
+            authMode: "registered",
+            dryRun: false
+          });
+          assert.equal(again.removedUsers, 0);
+          assert.equal(again.removedTopics, 0);
+        },
+        { seedDemoData: false }
+      );
+    } finally {
+      if (previousAdminEmails === undefined) {
+        delete process.env.TOPYKLY_ADMIN_EMAILS;
+      } else {
+        process.env.TOPYKLY_ADMIN_EMAILS = previousAdminEmails;
+      }
+    }
+  });
+
   await test("backend caps materialized guest storage for rotating report sessions", async () => {
     await withTempStore((store) => {
       const topicId = store.createTopic({
