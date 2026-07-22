@@ -84,6 +84,7 @@ import {
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
 import { renderPresenceCount, selectOnlineUsers } from "../ui/users.js";
+import { createTopicsEmptyState } from "../ui/topics.js";
 import { createMessageItem, createTopicItem, createUserItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
@@ -7021,6 +7022,52 @@ await (async () => {
     assert.equal(html.includes("Otros temas activos"), true);
   });
 
+  await test("empty topic list tells the viewer what to do next", () => {
+    const previousDocument = globalThis.document;
+
+    class MockNode {
+      constructor(tagName) {
+        this.tagName = tagName;
+        this.children = [];
+        this.dataset = {};
+        this.className = "";
+        this.textContent = "";
+      }
+
+      append(...nodes) {
+        this.children.push(...nodes);
+      }
+    }
+
+    try {
+      globalThis.document = { createElement: (tagName) => new MockNode(tagName) };
+
+      const readCopy = (node) => node.children.map((child) => child.textContent).join(" | ");
+
+      // Un registrado puede abrir el primer tema, asi que se lo invita a hacerlo.
+      const registered = createTopicsEmptyState({ viewer: { type: "registered" } });
+      assert.equal(registered.className, "empty-state");
+      assert.equal(readCopy(registered).includes("Crear nuevo tema"), true);
+
+      // Un invitado no puede: mandarlo al boton seria empujarlo contra el registro
+      // sin avisarle, asi que se le nombra el costo real.
+      const guest = createTopicsEmptyState({ viewer: { type: "guest" } });
+      assert.equal(readCopy(guest).includes("Creá una cuenta"), true);
+      assert.equal(readCopy(guest).includes("Crear nuevo tema"), false);
+
+      // Sin viewer resuelto todavia se trata como invitado, nunca como registrado.
+      assert.equal(readCopy(createTopicsEmptyState({})).includes("Creá una cuenta"), true);
+
+      // Cada lista recibe su propio nodo: el mismo no puede colgar de dos padres.
+      assert.notEqual(
+        createTopicsEmptyState({ viewer: { type: "registered" } }),
+        createTopicsEmptyState({ viewer: { type: "registered" } })
+      );
+    } finally {
+      globalThis.document = previousDocument;
+    }
+  });
+
   await test("presence count reports real people without inflating them", () => {
     const target = { hidden: false, textContent: "x" };
     const dom = { presenceCount: target };
@@ -12113,7 +12160,10 @@ await (async () => {
     assert.match(titles, /renderTitles/);
     assert.match(topics, /renderTopics/);
     assert.match(topics, /const isLoading = !state\.viewer/);
-    assert.match(topics, /if \(!topics\.length\) \{\s*return \[\];\s*\}/);
+    assert.match(
+      topics,
+      /if \(!topics\.length\) \{\s*return \[createTopicsEmptyState\(state\)\];\s*\}/
+    );
     assert.match(users, /renderUsers/);
     assert.match(users, /const isLoading = !state\.viewer/);
     assert.match(users, /if \(!ordered\.length\) \{\s*return \[\];\s*\}/);

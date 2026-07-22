@@ -1,6 +1,21 @@
-import { createTopicItem, createTopicSkeleton } from "../components.js";
+import { createEmptyState, createTopicItem, createTopicSkeleton } from "../components.js";
 import { getVisibleTopics, TOPIC_VISIBLE_LIMIT } from "../model.js";
 import { renderIntoTargets } from "./render-utils.js";
+
+// Sin temas la lista quedaba literalmente vacia y la app se leia como rota. El
+// texto cambia segun el viewer porque un invitado no puede abrir un tema: decirle
+// que use el boton seria mandarlo contra el muro de registro sin avisarle.
+export function createTopicsEmptyState(state) {
+  return state.viewer?.type === "registered"
+    ? createEmptyState(
+        "Todavía no hay conversaciones abiertas",
+        "Abrí la primera con «Crear nuevo tema»."
+      )
+    : createEmptyState(
+        "Todavía no hay conversaciones abiertas",
+        "Creá una cuenta para abrir la primera."
+      );
+}
 
 export function renderTopics(state, dom, onFocusTopic) {
   const topics = getVisibleTopics(state.topics);
@@ -12,7 +27,7 @@ export function renderTopics(state, dom, onFocusTopic) {
     }
 
     if (!topics.length) {
-      return [];
+      return [createTopicsEmptyState(state)];
     }
 
     return topics.map((topic) => {
