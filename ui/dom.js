@@ -214,6 +214,7 @@ const REQUIRED_DOM_KEYS = [
 ];
 
 const DOM_IDS = [
+  "presenceCount",
   "themeToggle",
   "shareTopicButton",
   "shareTopicModalBackdrop",

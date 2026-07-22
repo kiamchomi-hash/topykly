@@ -24,6 +24,7 @@ export const state = {
   adminSection: "reports",
   adminDashboard: null,
   pendingModerationCount: 0,
+  onlineCount: 0,
   reportModal: { isOpen: false, entityType: null, entityId: null },
   adminConfirmAction: null,
   feedback: null,

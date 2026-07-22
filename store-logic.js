@@ -157,7 +157,8 @@ function buildHydratedState(state, payload, topics) {
     selectedTopicId: nextSelectedTopicId,
     activeConnectedUserId: nextActiveConnectedUserId,
     publicProfileUserId: nextPublicProfileUserId,
-    pendingModerationCount: payload.pendingModerationCount ?? state.pendingModerationCount ?? 0
+    pendingModerationCount: payload.pendingModerationCount ?? state.pendingModerationCount ?? 0,
+    onlineCount: payload.onlineCount ?? state.onlineCount ?? 0
   };
 }
 

@@ -3805,6 +3805,28 @@ html[data-theme="dark"] .rankings-section {
   color: var(--accent-strong);
 }
 
+.presence-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent-strong);
+}
+
+.presence-count::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.presence-count[hidden] {
+  display: none;
+}
+
 .section-title__icon svg {
   width: 100%;
   height: 100%;

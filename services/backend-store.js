@@ -3024,7 +3024,8 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   };
   // Una sola lectura de presencia por request: la ventana visible es la misma para
   // todos los temas de este snapshot.
-  const visibleLimit = resolveVisibleTopicLimit(countOnlineUsers(db));
+  const onlineCount = countOnlineUsers(db);
+  const visibleLimit = resolveVisibleTopicLimit(onlineCount);
   const topics = activeTopicRows
     .map((row, index) =>
       hydrateTopic(db, row, {
@@ -3117,6 +3118,10 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     reportedTopicIds: reportSnapshot.reportedTopicIds,
     reportedMessageIds: reportSnapshot.reportedMessageIds,
     rankings: buildBackendRankings(db, context, resolvedSelectedTopicId),
+    // Gente realmente conectada, invitados incluidos. La lista de usuarios solo
+    // muestra registrados, asi que sin este numero una sala con invitados parece
+    // vacia. Es el dato crudo: si hay 3 personas, se informan 3.
+    onlineCount,
     pendingModerationCount
   };
 }

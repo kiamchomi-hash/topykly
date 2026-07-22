@@ -167,6 +167,7 @@ function normalizeBackendPayload(payload) {
     pendingModerationCount: Number.isFinite(payload.pendingModerationCount)
       ? payload.pendingModerationCount
       : 0,
+    onlineCount: Number.isFinite(payload.onlineCount) ? payload.onlineCount : 0,
     users: buildUsers(payload.users || []),
     topics: Array.isArray(payload.topics) ? payload.topics.map(normalizeTopic) : []
   };

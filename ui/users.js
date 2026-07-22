@@ -201,6 +201,26 @@ function scheduleLeaveCleanup(targets, leavingIds) {
   }, LEAVE_ANIMATION_MS);
 }
 
+// La lista de usuarios solo muestra registrados, asi que con invitados presentes
+// una sala activa puede parecer vacia. Este contador informa la presencia real,
+// sin inflarla: si hay 3 personas, dice 3.
+export function renderPresenceCount(state, dom) {
+  const target = dom.presenceCount;
+  if (!target) {
+    return;
+  }
+
+  const count = Number.isFinite(state.onlineCount) ? state.onlineCount : 0;
+  if (!state.viewer || count <= 0) {
+    target.hidden = true;
+    target.textContent = "";
+    return;
+  }
+
+  target.hidden = false;
+  target.textContent = count === 1 ? "1 en línea" : `${count} en línea`;
+}
+
 export function renderUsers(state, dom) {
   const isLoading = !state.viewer;
   const ordered = selectOnlineUsers(state);

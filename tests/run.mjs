@@ -83,7 +83,7 @@ import {
   isPaletteId
 } from "../palettes.js";
 import { buildPostRankingEntries, buildUserRankingEntries } from "../ui/ranking-data.js";
-import { selectOnlineUsers } from "../ui/users.js";
+import { renderPresenceCount, selectOnlineUsers } from "../ui/users.js";
 import { createMessageItem, createTopicItem, createUserItem } from "../components.js";
 import { bindTopbarActionEvents } from "../ui/topbar-action-events.js";
 import { bindPageEvents } from "../ui/events.js";
@@ -4283,6 +4283,23 @@ await (async () => {
         true
       );
 
+      // El puente archivo -> chat vivo. getTopicPageData().isArchived es la senal que
+      // usa el servidor para NO rebotar a un navegador hacia un tema de solo lectura,
+      // y la pagina servida tiene que invitar a la conversacion viva, no a si misma.
+      for (const archivedId of expelledCandidateIds) {
+        const pageData = store.getTopicPageData(archivedId);
+        assert.equal(pageData.isArchived, true);
+
+        const archivedPage = renderTopicPage(pageData, { origin: "https://topykly.com" });
+        assert.equal(archivedPage.includes("window.location.replace"), false);
+        assert.equal(archivedPage.includes("Entrar al chat en vivo de TOPYKLY"), true);
+        assert.equal(
+          archivedPage.includes(`selectedTopicId=${encodeURIComponent(archivedId)}`),
+          false,
+          "una pagina archivada no debe enlazar de vuelta al tema muerto"
+        );
+      }
+
       for (const expelledCandidateId of expelledCandidateIds) {
         assert.throws(
           () => {
@@ -7002,6 +7019,33 @@ await (async () => {
       true
     );
     assert.equal(html.includes("Otros temas activos"), true);
+  });
+
+  await test("presence count reports real people without inflating them", () => {
+    const target = { hidden: false, textContent: "x" };
+    const dom = { presenceCount: target };
+
+    // Sin sesion todavia cargada no se afirma nada sobre la sala.
+    renderPresenceCount({ viewer: null, onlineCount: 5 }, dom);
+    assert.equal(target.hidden, true);
+
+    // Cero conectados no se muestra: no hay nada que informar.
+    renderPresenceCount({ viewer: { id: "u1" }, onlineCount: 0 }, dom);
+    assert.equal(target.hidden, true);
+
+    renderPresenceCount({ viewer: { id: "u1" }, onlineCount: 1 }, dom);
+    assert.equal(target.hidden, false);
+    assert.equal(target.textContent, "1 en línea");
+
+    renderPresenceCount({ viewer: { id: "u1" }, onlineCount: 3 }, dom);
+    assert.equal(target.textContent, "3 en línea");
+
+    // Nunca inventa gente cuando el backend no manda el dato.
+    renderPresenceCount({ viewer: { id: "u1" } }, dom);
+    assert.equal(target.hidden, true);
+
+    // Sin el elemento en el DOM no debe romper el render.
+    renderPresenceCount({ viewer: { id: "u1" }, onlineCount: 3 }, {});
   });
 
   await test("visible topic window adapts to the connected population", () => {

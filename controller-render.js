@@ -4,7 +4,7 @@ import { renderFriendRequests } from "./ui/friend-requests.js?v=20260716-quality
 import { renderNotifications } from "./ui/notifications.js?v=20260716-quality1";
 import { renderRankings } from "./ui/rankings.js";
 import { renderTitles } from "./ui/titles.js";
-import { renderUsers } from "./ui/users.js";
+import { renderPresenceCount, renderUsers } from "./ui/users.js";
 import { renderTopicsWithFocus } from "./ui/topic-renderers.js";
 import { setProfanityFilterEnabled } from "./profanity-filter.js";
 import { topicPath } from "./services/seo-pages.js";
@@ -116,6 +116,7 @@ export function createRenderers({
     });
     renderChat(state, dom);
     renderUsers(state, dom);
+    renderPresenceCount(state, dom);
     renderRankings(state, dom);
     renderTitles(state, dom);
     renderSecondary(secondaryRenderers.palette, Boolean(state.isPaletteModalOpen));
