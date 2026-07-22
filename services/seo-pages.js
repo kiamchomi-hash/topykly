@@ -112,11 +112,12 @@ export function renderPageShell({
   ogImageAlt = "",
   ogImageWidth = 1200,
   ogImageHeight = 630,
-  bodyHtml = "",
-  redirectUrl = ""
+  bodyHtml = ""
 }) {
+  // Sin redireccion automatica por JS: estas paginas son la version indexable del
+  // contenido. Un window.location.replace en el head las convierte en redirect a
+  // ojos de Google y deja a quien llega desde una busqueda sin leer nada.
   const head = [
-    redirectUrl ? `<script>window.location.replace(${JSON.stringify(redirectUrl)});</script>` : "",
     `<meta charset="UTF-8">`,
     `<meta name="viewport" content="width=device-width, initial-scale=1.0">`,
     `<title>${escapeHtml(title)}</title>`,
@@ -234,14 +235,22 @@ export function renderTopicPage(topic, { origin }) {
     )
     .join("\n        ");
 
+  // Un tema archivado es de solo lectura: mandar a quien llega desde Google al propio
+  // tema lo deja en una conversacion muerta donde no puede participar. El CTA de una
+  // pagina archivada tiene que llevar al chat vivo.
+  const ctaHtml = isArchived
+    ? `<a class="seo-cta" href="/">Entrar al chat en vivo de TOPYKLY</a>`
+    : `<a class="seo-cta" href="/?selectedTopicId=${escapeHtml(encodeURIComponent(topic.id))}">Abrir en TOPYKLY</a>`;
+  const relatedTitle = isArchived ? "Conversaciones abiertas ahora" : "Otros temas activos";
+
   const bodyHtml = `<article>
         <h1 class="seo-title">${escapeHtml(topic.title)}</h1>
         <p class="seo-meta">Por ${escapeHtml(topic.author?.name || "Usuario de TOPYKLY")} · ${escapeHtml(formatDate(topic.createdAt))} · ${escapeHtml(commentLabel)}</p>
         ${isArchived ? `<p class="seo-meta"><strong>Tema archivado:</strong> esta conversación se conserva para consulta y ya no admite comentarios ni reacciones.</p>` : ""}
         ${topic.messages.map(renderMessageBlock).join("\n      ")}
-        <a class="seo-cta" href="/?selectedTopicId=${escapeHtml(encodeURIComponent(topic.id))}">Abrir en TOPYKLY</a>
+        ${ctaHtml}
       </article>
-      ${relatedItems ? `<h2 class="seo-section-title">Otros temas activos</h2>\n      <ul class="seo-list">\n        ${relatedItems}\n      </ul>` : ""}`;
+      ${relatedItems ? `<h2 class="seo-section-title">${escapeHtml(relatedTitle)}</h2>\n      <ul class="seo-list">\n        ${relatedItems}\n      </ul>` : ""}`;
 
   return renderPageShell({
     title: `${topic.title} — TOPYKLY`,
@@ -252,8 +261,7 @@ export function renderTopicPage(topic, { origin }) {
     ogType: "article",
     ogImage: `${origin}/og/tema/${encodeURIComponent(topic.id)}.png`,
     ogImageAlt: `Tarjeta del tema ${topic.title} en TOPYKLY`,
-    bodyHtml,
-    redirectUrl: `/?selectedTopicId=${encodeURIComponent(topic.id)}`
+    bodyHtml
   });
 }
 
@@ -378,8 +386,7 @@ export function renderProfilePage(profile, { origin }) {
     jsonLd,
     ogType: "profile",
     ogImage: profile.avatarUrl ? `${origin}${profile.avatarUrl}` : `${origin}/og-image.png`,
-    bodyHtml,
-    redirectUrl: `/?perfil=${encodeURIComponent(profile.nickname)}`
+    bodyHtml
   });
 }
 

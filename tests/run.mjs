@@ -23,6 +23,7 @@ import {
 } from "../services/backend-store.js";
 import {
   escapeHtml,
+  renderProfilePage,
   renderTopicPage,
   resolvePublicOrigin,
   slugify
@@ -6953,6 +6954,70 @@ await (async () => {
     assert.equal(archivedHtml.includes(`<meta name="robots" content="index,follow">`), true);
     assert.equal(archivedHtml.includes("Tema archivado:"), true);
     assert.equal(archivedHtml.includes("ya no admite comentarios ni reacciones"), true);
+
+    // Ninguna pagina SEO puede autorredirigir por JS: es la version indexable del
+    // contenido y el redirect deja al visitante de Google sin leer nada.
+    assert.equal(
+      html.includes("window.location.replace"),
+      false,
+      "la pagina de un tema activo no debe autorredirigir por JS"
+    );
+    assert.equal(
+      archivedHtml.includes("window.location.replace"),
+      false,
+      "la pagina de un tema archivado no debe autorredirigir por JS"
+    );
+
+    // El tema archivado es de solo lectura: su CTA tiene que llevar al chat vivo,
+    // no de vuelta a la conversacion muerta.
+    assert.equal(
+      archivedHtml.includes(`<a class="seo-cta" href="/">Entrar al chat en vivo de TOPYKLY</a>`),
+      true,
+      "el CTA de un tema archivado debe apuntar al chat vivo"
+    );
+    assert.equal(
+      archivedHtml.includes("selectedTopicId=topic-xss"),
+      false,
+      "un tema archivado no debe enlazar a si mismo dentro de la app"
+    );
+    assert.equal(archivedHtml.includes("Conversaciones abiertas ahora"), true);
+
+    // El tema activo si mantiene el acceso directo a su propia conversacion.
+    assert.equal(
+      html.includes(
+        `<a class="seo-cta" href="/?selectedTopicId=topic-xss">Abrir en TOPYKLY</a>`
+      ),
+      true
+    );
+    assert.equal(html.includes("Otros temas activos"), true);
+  });
+
+  await test("public profile pages stay indexable without a JS redirect", () => {
+    const profileHtml = renderProfilePage(
+      {
+        name: "Mara",
+        nickname: "mara",
+        description: "Perfil de prueba.",
+        joinedAt: "2026-01-05T10:00:00.000Z",
+        postCount: 3,
+        commentCount: 12,
+        likeCount: 40,
+        indexable: true,
+        avatarUrl: null,
+        recentTopics: [{ id: "topic-1", title: "Rutas de fin de semana" }]
+      },
+      { origin: "https://topykly.com" }
+    );
+    assert.equal(
+      profileHtml.includes("window.location.replace"),
+      false,
+      "el perfil publico no debe autorredirigir por JS"
+    );
+    assert.equal(
+      profileHtml.includes(`<link rel="canonical" href="https://topykly.com/u/mara">`),
+      true
+    );
+    assert.equal(profileHtml.includes(`href="/?perfil=mara"`), true);
   });
 
   await test("topic sharing builds stable public URLs and branded PNG cards", async () => {
