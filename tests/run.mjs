@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -2279,6 +2280,20 @@ await (async () => {
           assert.equal(purge.dryRun, false);
           assert.equal(purge.removedUsers, initialUsers.length);
           assert.equal(purge.removedTopics, 3);
+
+          // El borrado deja una copia de la base en disco antes de tocar nada.
+          assert.equal(typeof purge.backupPath, "string");
+          assert.equal(existsSync(purge.backupPath), true, "la copia de respaldo debe existir");
+          // Y la copia conserva lo borrado: se puede abrir y todavia tiene lo editorial.
+          const respaldo = new DatabaseSync(purge.backupPath);
+          try {
+            const enRespaldo = respaldo
+              .prepare("SELECT COUNT(*) AS total FROM users WHERE role = ?")
+              .get("Cuenta editorial");
+            assert.equal(Number(enRespaldo.total), initialUsers.length);
+          } finally {
+            respaldo.close();
+          }
 
           const after = store.bootstrap({ sessionId: "session-after-purge" });
           assert.equal(after.topics.length, 1);

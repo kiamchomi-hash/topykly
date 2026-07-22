@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
+import { backupSqliteDatabase } from "../scripts/backup-sqlite.mjs";
 import { hasProfanity } from "../profanity-filter.js";
 import { SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
 
@@ -5894,14 +5895,41 @@ export function createBackendStore({
     },
     // Destructivo e irreversible. Por defecto hace una simulacion: hay que pedir
     // explicitamente dryRun:false para que borre.
+    //
+    // Antes de borrar toma una copia de la base con VACUUM INTO. La copia queda en
+    // el disco del servidor, nunca se expone por HTTP: la base tiene emails, hashes
+    // de contrasena y tokens de sesion. Si la copia falla, no se borra nada.
     removeEditorialSeedContent({ sessionId, authMode, dryRun = true, ipAddress = "" } = {}) {
+      const wantsDelete = dryRun === false;
+
+      // Autorizar primero, para que nadie sin permiso dispare siquiera la copia.
+      const preview = withTransaction(db, () => {
+        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+        assertModerator(context.viewerRow);
+        return removeEditorialSeedContentFromDatabase(db, { dryRun: true });
+      });
+
+      if (!wantsDelete) {
+        return preview;
+      }
+
+      // Fuera de transaccion: VACUUM INTO no puede correr dentro de una.
+      let backupPath = null;
+      try {
+        backupPath = backupSqliteDatabase({ dbPath: resolvedDbPath }).backupPath;
+      } catch (error) {
+        throw new ApiError(
+          500,
+          "BACKUP_FAILED",
+          `No se pudo respaldar la base antes de borrar, no se borro nada: ${error.message}`
+        );
+      }
+
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
-        const summary = removeEditorialSeedContentFromDatabase(db, { dryRun: dryRun !== false });
-        if (summary.dryRun) {
-          return summary;
-        }
+        const summary = removeEditorialSeedContentFromDatabase(db, { dryRun: false });
+        summary.backupPath = backupPath;
 
         recordModerationAction(db, {
           actionType: "remove_editorial_seed",
@@ -5912,7 +5940,8 @@ export function createBackendStore({
           metadataJson: JSON.stringify({
             removedUsers: summary.removedUsers,
             removedTopics: summary.removedTopics,
-            removedMessages: summary.removedMessages
+            removedMessages: summary.removedMessages,
+            backupPath
           }),
           createdAt: new Date().toISOString()
         });
