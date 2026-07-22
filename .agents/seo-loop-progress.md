@@ -10,14 +10,16 @@
 
 El loop **no debe ejecutar cambios** hasta que TODO esto sea cierto. Si alguna falla, la corrida solo registra "bloqueado por precondición X" y termina sin tocar nada.
 
-- [ ] `topykly.com` sirviendo en hosting real de producción (`NODE_ENV=production`).
-- [ ] Redirect 301 `www` → apex (o apex → `www`) consistente y una sola canónica.
+- [x] `topykly.com` sirviendo en hosting real de producción (`NODE_ENV=production`). *Render + Cloudflare desde el 2026-07-21.*
+- [x] Redirect 301 `www` → apex (o apex → `www`) consistente y una sola canónica. *Apex → `www`; canónica única `https://www.topykly.com/`.*
 - [ ] Propiedad dada de alta y verificada en Google Search Console.
 - [ ] Al menos **21 días** de datos acumulados en GSC (menos que eso es ruido, no señal).
 - [ ] MCP de Search Console conectado y con permiso de lectura.
-- [ ] Comando de deploy definido y probado a mano una vez (ver §5).
+- [x] Comando de deploy definido y probado a mano una vez (ver §5). *Ejercitado el 2026-07-22.*
 
-> Estado actual (2026-07-20): **BLOQUEADO.** Faltan hosting real, prod, 301 y alta en GSC. El andamiaje SEO del código (`services/seo-pages.js`, sitemap, robots, JSON-LD) ya está listo; falta lanzar y esperar datos.
+> Estado actual (2026-07-22): **BLOQUEADO, pero solo por Search Console.** El lanzamiento ya ocurrió: la app corre en producción, el 301 y la canónica están resueltos y el deploy está probado. Lo que falta es **dar de alta la propiedad en GSC, conectar el MCP y esperar 21 días de datos**. Sin esa fuente el loop no tiene señal sobre la que decidir, así que sigue sin ejecutar cambios.
+>
+> Ojo con el orden: el alta en GSC es manual y la hace un humano. Hasta que no esté, cada corrida debe terminar en "bloqueado por precondición: GSC" sin tocar nada.
 
 ---
 
@@ -85,6 +87,15 @@ Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retenció
 
 > Formato por entrada. La más reciente arriba.
 
+### Infra — 2026-07-22 — Lanzamiento cerrado; queda solo GSC
+
+- **Estado:** sigue BLOQUEADO (§0), pero el bloqueo se redujo a **Search Console**. No es una iteración de SEO: no se aplicó ningún cambio de la capa SEO.
+- **Qué cambió respecto de la entrada anterior:** la app ya está en producción real (Render + Cloudflare, desde el 2026-07-21), con `NODE_ENV=production`, apex → `www` por 301 y canónica única `https://www.topykly.com/`. Verificado en vivo el 2026-07-22.
+- **Deploy resuelto:** §5 dejó de ser un TODO. El deploy es `git push origin main` con auto-deploy de Render, ejercitado y verificado hoy (commit `01bf3fb`, run de QA en `success`, endpoints públicos en 200).
+- **Riesgo nuevo documentado:** Render despliega al commit sin esperar a CI, así que el gate local de `npm run qa` antes del push es la única barrera real. Anotado en §5.
+- **Lo que falta para desbloquear:** alta y verificación de la propiedad en GSC (manual, la hace un humano), conexión del MCP y 21 días de datos. No hay meta `google-site-verification` en el repo todavía.
+- **Cambio SEO aplicado:** ninguno.
+
 ### Infra — 2026-07-21 — Señal de acoplamiento lista (retención por fuente)
 - **Estado:** sigue BLOQUEADO por precondiciones (§0); esto no es una iteración de SEO, es infraestructura que el loop necesita.
 - **Qué se construyó:** analítica de producto por fuente de adquisición, con retención cruzada por fuente. Commits (locales, sin pushear):
@@ -115,16 +126,30 @@ Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retenció
 
 ## 5. Deploy
 
-> **TODO — pendiente de decidir el hosting.** A 2026-07-21 no existe comando/script de deploy en el repo (ni `.sh`, ni Dockerfile, ni `ecosystem.config`/Procfile/systemd), y el destino de producción está sin definir (hosting de topykly.com pendiente, con una migración a Cloudflare en curso). No asumir el patrón del otro proyecto (git pull por SSH al miniPC): eso era del laboratorio, no de TOPYKLY.
->
-> Lo único confirmado del repo: **no hay paso de build** — el server se arranca con `node local-server.cjs` (sirve los archivos directo del fuente), así que "deploy" = llevar el código al host + reiniciar el proceso node.
->
-> Cuando se decida el hosting, documentar acá el comando textual (transferencia + reinicio) y probarlo a mano una vez. **Hasta entonces el loop no despliega.**
+**Resuelto (2026-07-22).** El hosting es **Render** (aplicación) detrás de **Cloudflare** (edge), sirviendo `https://www.topykly.com/`.
+
+- Servicio Render: `srv-d92ilsa8qa3s73dg0msg` · repo `kiamchomi-hash/topykly` · rama `main`.
+- **No hay paso de build ni script de deploy en el repo** (no hay `render.yaml`, Dockerfile ni Procfile; la config vive en el panel de Render). El server arranca con `node local-server.cjs` y sirve los archivos directo del fuente.
+- **El comando de deploy es literalmente:**
+  ```
+  git push origin main
+  ```
+  Render detecta el commit y redespliega solo. Probado a mano el 2026-07-22 (commit `01bf3fb`): deploy sano y verificado en producción.
+
+> **Advertencia — Render despliega al commit, no espera a CI.** El workflow `qa.yml` corre *en paralelo* al deploy, así que un push con tests rojos llega igual a producción. Por eso el gate de `npm run qa` **local y previo al push** (§1, regla 10) no es opcional: es la única barrera real.
+
+Cómo verificar un deploy (lo que se comprobó el 2026-07-22):
+- `gh run list --limit 1` → el run de QA debe cerrar en `success`.
+- `GET /` , `/api/auth/status`, `/api/bootstrap`, `/sitemap.xml` → 200.
+- Confirmar que el HTML servido corresponde al commit nuevo (no basta el 200: comparar algún marcador del cambio).
+
+> **Nota de entorno.** Existe una variable `GH_TOKEN` inválida que pisa la sesión válida de `gh` guardada en el keyring y hace fallar `git push` y los comandos `gh`. Si una corrida automatizada falla autenticando, es esto. Se limpia con `setx GH_TOKEN ""`.
 
 Reglas de deploy:
-- Solo desplegar con `npm run qa` en verde.
+- Solo desplegar con `npm run qa` en verde **antes** del push (ver advertencia arriba).
 - Deploy = commit atómico ya pusheado; el hash queda en el log (§4) para rollback.
-- Rollback: `git revert <hash>` + redeploy. Si una corrida ve una caída brusca atribuible al cambio anterior, revertir es la primera acción, no seguir optimizando encima.
+- Rollback: `git revert <hash>` + push. Alternativa más rápida sin tocar el repo: redesplegar el deploy anterior desde el panel de Render.
+- Si una corrida ve una caída brusca atribuible al cambio anterior, revertir es la primera acción, no seguir optimizando encima.
 
 ---
 
@@ -132,11 +157,12 @@ Reglas de deploy:
 
 Ordenado por prioridad. El agente toma de acá o de una señal nueva de los datos.
 
-1. **[bloqueante]** Cerrar precondiciones de §0 (hosting, prod, 301, alta en GSC). Sin esto el loop no arranca.
-2. Definir y probar el comando de deploy (§5).
-3. Al haber datos: capturar baseline (§2).
-4. Al haber datos: cruzar la **retención por fuente** (ya implementada, ver Log/Infra) para validar que el tráfico de búsqueda retiene, no solo que sube en volumen.
-5. Primera optimización de bajo riesgo candidata: revisar titles/descriptions de las páginas de tema con más impresiones y CTR bajo.
+1. **[bloqueante, humano]** Dar de alta y verificar `topykly.com` en Google Search Console. Es lo único que separa al loop de arrancar. Implica añadir la meta `google-site-verification` al `<head>` de `index.html` (zona permitida, §1 regla 4) o verificar por DNS en Cloudflare, y enviar `sitemap.xml`.
+2. **[bloqueante]** Conectar el MCP de Search Console con permiso de lectura.
+3. **[bloqueante, espera]** Acumular 21 días de datos antes de la primera iteración real.
+4. Al haber datos: capturar baseline (§2).
+5. Al haber datos: cruzar la **retención por fuente** (ya implementada, ver Log/Infra) para validar que el tráfico de búsqueda retiene, no solo que sube en volumen.
+6. Primera optimización de bajo riesgo candidata: revisar titles/descriptions de las páginas de tema con más impresiones y CTR bajo.
 
 ---
 

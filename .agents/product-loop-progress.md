@@ -10,12 +10,16 @@
 
 Si alguna falla, la corrida solo registra "bloqueado por precondición X" y termina sin proponer nada.
 
-- [ ] App en **producción real con usuarios reales llegando** (depende del lanzamiento del [loop de SEO](./seo-loop-progress.md): hosting, prod, alta en GSC).
+- [ ] App en **producción real con usuarios reales llegando**. *La mitad está cumplida: la app corre en producción desde el 2026-07-21 (`https://www.topykly.com/`). Lo que falta es el **tráfico**, que depende del alta en GSC del [loop de SEO](./seo-loop-progress.md).*
 - [x] Analítica de producto instrumentada y registrando (`product_events`, funnel completo, retención por fuente). *Hecho en código.*
 - [ ] **Volumen mínimo por cohorte** para que un experimento no sea ruido (ver §1, rigor estadístico). Con ~10 usuarios/día todavía es chico: un experimento de retención tarda semanas en acumular señal.
-- [ ] Mecanismo de despliegue **con aprobación humana** (branch/PR). Este loop nunca hace `git push` a producción por su cuenta.
+- [ ] Mecanismo de despliegue **con aprobación humana** (branch/PR). Este loop nunca hace `git push` a `main` por su cuenta. *Ver la nota de `GH_TOKEN` abajo antes de asumir que `gh pr create` va a funcionar.*
 
-> Estado actual (2026-07-21): **BLOQUEADO.** La instrumentación existe, pero falta lanzar y acumular volumen. Este loop es el **más prematuro de los dos**: además de datos necesita *cantidad* de usuarios para que los experimentos de producto sean concluyentes.
+> Estado actual (2026-07-22): **BLOQUEADO.** El lanzamiento técnico ya ocurrió, pero eso no mueve este loop: lo que le falta no es infraestructura sino **usuarios**. Sigue siendo el **más prematuro de los dos** — necesita que primero entre tráfico (GSC) y después que ese tráfico acumule volumen suficiente para que un experimento sea concluyente. Contá varias semanas después del alta en GSC, no días.
+>
+> **Cuidado con el atajo tentador:** que la app esté publicada puede leerse como "ya se puede experimentar". No. Con el volumen actual cualquier lectura de retención es ruido, y §1 regla 7 lo prohíbe explícitamente.
+>
+> **Nota de entorno (bloquea el mecanismo de PR).** Hay una variable `GH_TOKEN` inválida que pisa la sesión válida de `gh` del keyring y hace fallar `git push` y los comandos `gh`. Mientras siga ahí, una corrida automatizada no puede abrir el branch/PR que exige la regla 1. Se limpia con `setx GH_TOKEN ""`.
 
 ---
 
@@ -97,6 +101,15 @@ Snapshot del punto de partida, para medir contra esto.
 
 > La más reciente arriba.
 
+### Infra — 2026-07-22 — Producción lista, sin usuarios todavía
+
+- **Estado:** sigue BLOQUEADO (§0). Ningún experimento propuesto.
+- **Qué cambió:** la app pasó a producción real el 2026-07-21 (Render + Cloudflare, `https://www.topykly.com/`), con deploy probado y verificado. Eso cierra la parte de *infraestructura* de la primera precondición.
+- **Qué NO cambió:** el tráfico. Sin alta en Search Console no hay adquisición orgánica, así que la analítica sigue sin cohortes de tamaño útil. La precondición de volumen sigue tan lejos como antes.
+- **Consecuencia práctica:** este loop no se desbloquea con el lanzamiento; se desbloquea varias semanas *después* de que el [loop de SEO](./seo-loop-progress.md) empiece a traer gente.
+- **Riesgo detectado:** la variable `GH_TOKEN` inválida del entorno impide que una corrida automatizada abra el branch/PR exigido por §1 regla 1. Si el loop se activara hoy, no podría entregar su propuesta. Anotado en §0.
+- **Experimento propuesto:** ninguno (falta volumen).
+
 ### Iteración 0 — 2026-07-21 — Setup
 - **Estado:** loop armado, BLOQUEADO por precondiciones (§0). Sin experimentos propuestos.
 - **Contexto:** la analítica de producto por fuente quedó completa en código (commits `17153e3` + `3850697`): funnel, cohortes y `retentionBySource`, visibles en el panel admin.
@@ -119,10 +132,12 @@ Snapshot del punto de partida, para medir contra esto.
 
 Ordenado por prioridad.
 
-1. **[bloqueante]** Cerrar el lanzamiento y acumular volumen (comparte precondición con el loop de SEO).
-2. Al haber datos: capturar baseline (§3).
-3. Cruzar `retentionBySource` con las fuentes que trae el loop de SEO — responder si el tráfico de búsqueda retiene distinto ANTES de proponer cambios de producto.
-4. Primer foco candidato de bajo costo: el drop-off `auth_open` → `registration_complete` (gente que abre el modal de registro y no completa). Ya está medido; una hipótesis de copy/fricción del formulario es barata y reversible.
+1. **[bloqueante, humano]** Alta en Search Console (tarea del [loop de SEO](./seo-loop-progress.md)). Es el grifo del tráfico: sin eso este loop no acumula nada.
+2. **[bloqueante, espera]** Acumular volumen suficiente por cohorte una vez que entre tráfico. Semanas, no días.
+3. **[entorno]** Limpiar la `GH_TOKEN` inválida para que el mecanismo de branch/PR funcione (§0).
+4. Al haber datos: capturar baseline (§3).
+5. Cruzar `retentionBySource` con las fuentes que trae el loop de SEO — responder si el tráfico de búsqueda retiene distinto ANTES de proponer cambios de producto.
+6. Primer foco candidato de bajo costo: el drop-off `auth_open` → `registration_complete` (gente que abre el modal de registro y no completa). Ya está medido; una hipótesis de copy/fricción del formulario es barata y reversible.
 
 ---
 
