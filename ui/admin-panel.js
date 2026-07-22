@@ -49,7 +49,14 @@ function formatAdminDate(value) {
   }).format(date);
 }
 
-function createAdminActionButton(label, actionType, targetType, targetId, isConfirming, tone = "neutral") {
+function createAdminActionButton(
+  label,
+  actionType,
+  targetType,
+  targetId,
+  isConfirming,
+  tone = "neutral"
+) {
   const button = el(
     "button",
     `admin-panel__action admin-panel__action--${tone}${isConfirming ? " is-confirming" : ""}`,
@@ -111,7 +118,8 @@ function getReportContent(report) {
   if (report.entityType === "user" && target) {
     return {
       title: target.name || "Usuario eliminado",
-      subtitle: target.status === "expelled" ? "Usuario con sancion permanente" : "Perfil de usuario",
+      subtitle:
+        target.status === "expelled" ? "Usuario con sancion permanente" : "Perfil de usuario",
       authorId: report.entityId,
       sanction: target.sanction
     };
@@ -143,48 +151,55 @@ function renderReportItem(report, adminConfirmAction) {
 
   const actions = el("div", "admin-panel__item-actions");
   const actionKey = (actionType, targetType, targetId) => `${actionType}:${targetType}:${targetId}`;
-  const isConfirming = (actionType, targetType, targetId) => (
-    adminConfirmAction?.key === actionKey(actionType, targetType, targetId)
-  );
+  const isConfirming = (actionType, targetType, targetId) =>
+    adminConfirmAction?.key === actionKey(actionType, targetType, targetId);
 
   if (report.entityType === "message" && report.target) {
-    actions.append(createAdminActionButton(
-      "Eliminar comentario",
-      "delete_message",
-      "message",
-      report.entityId,
-      isConfirming("delete_message", "message", report.entityId),
-      "danger"
-    ));
+    actions.append(
+      createAdminActionButton(
+        "Eliminar comentario",
+        "delete_message",
+        "message",
+        report.entityId,
+        isConfirming("delete_message", "message", report.entityId),
+        "danger"
+      )
+    );
   }
   if (report.entityType === "topic" && report.target) {
-    actions.append(createAdminActionButton(
-      "Bloquear tema",
-      "block_topic",
-      "topic",
-      report.entityId,
-      isConfirming("block_topic", "topic", report.entityId),
-      "danger"
-    ));
+    actions.append(
+      createAdminActionButton(
+        "Bloquear tema",
+        "block_topic",
+        "topic",
+        report.entityId,
+        isConfirming("block_topic", "topic", report.entityId),
+        "danger"
+      )
+    );
   }
   if (content.authorId && !content.sanction?.active) {
     const nextLabel = content.sanction?.nextLabel || "24 horas";
-    actions.append(createAdminActionButton(
-      `Sancion progresiva · ${nextLabel}`,
-      "expel_user",
-      "user",
-      content.authorId,
-      isConfirming("expel_user", "user", content.authorId),
-      "warning"
-    ));
+    actions.append(
+      createAdminActionButton(
+        `Sancion progresiva · ${nextLabel}`,
+        "expel_user",
+        "user",
+        content.authorId,
+        isConfirming("expel_user", "user", content.authorId),
+        "warning"
+      )
+    );
   }
-  actions.append(createAdminActionButton(
-    "Descartar reporte",
-    "dismiss_report",
-    report.entityType,
-    report.entityId,
-    false
-  ));
+  actions.append(
+    createAdminActionButton(
+      "Descartar reporte",
+      "dismiss_report",
+      report.entityType,
+      report.entityId,
+      false
+    )
+  );
 
   node.append(info, actions);
   return node;
@@ -193,11 +208,16 @@ function renderReportItem(report, adminConfirmAction) {
 function renderSanctionItem(item, adminConfirmAction) {
   const node = el("article", "admin-panel__item admin-panel__item--sanction");
   const info = el("div", "admin-panel__item-info");
-  const until = item.kind === "permanent"
-    ? "Sin fecha de finalizacion"
-    : `Finaliza ${formatAdminDate(item.bannedUntil)}`;
+  const until =
+    item.kind === "permanent"
+      ? "Sin fecha de finalizacion"
+      : `Finaliza ${formatAdminDate(item.bannedUntil)}`;
   info.append(
-    el("span", "admin-panel__eyebrow", item.kind === "permanent" ? "Sancion permanente" : "Suspension activa"),
+    el(
+      "span",
+      "admin-panel__eyebrow",
+      item.kind === "permanent" ? "Sancion permanente" : "Suspension activa"
+    ),
     el("strong", "admin-panel__item-title", item.name || item.userId),
     el("span", "admin-panel__item-meta", `${item.label} · ${until}`),
     el("p", "admin-panel__reason", item.reason || "Sin motivo detallado")
@@ -205,14 +225,16 @@ function renderSanctionItem(item, adminConfirmAction) {
 
   const key = `restore_user:user:${item.userId}`;
   const actions = el("div", "admin-panel__item-actions");
-  actions.append(createAdminActionButton(
-    "Anular sancion",
-    "restore_user",
-    "user",
-    item.userId,
-    adminConfirmAction?.key === key,
-    "danger"
-  ));
+  actions.append(
+    createAdminActionButton(
+      "Anular sancion",
+      "restore_user",
+      "user",
+      item.userId,
+      adminConfirmAction?.key === key,
+      "danger"
+    )
+  );
   node.append(info, actions);
   return node;
 }
@@ -233,11 +255,13 @@ function renderSection(title, count, children, description = "") {
 }
 
 function getAnalyticsEvent(analytics, eventName) {
-  return (analytics?.events || []).find((event) => event.eventName === eventName) || {
-    eventName,
-    total: 0,
-    uniqueSubjects: 0
-  };
+  return (
+    (analytics?.events || []).find((event) => event.eventName === eventName) || {
+      eventName,
+      total: 0,
+      uniqueSubjects: 0
+    }
+  );
 }
 
 function formatConversion(numerator, denominator) {
@@ -395,16 +419,27 @@ function renderAnalyticsDashboard(analytics) {
   recentDays.forEach(([day, total]) => {
     const row = el("div", "admin-panel__analytics-day");
     const bar = el("span", "admin-panel__analytics-bar");
-    bar.style.setProperty("--analytics-width", `${Math.max(4, Math.round((total / maximumDailyTotal) * 100))}%`);
+    bar.style.setProperty(
+      "--analytics-width",
+      `${Math.max(4, Math.round((total / maximumDailyTotal) * 100))}%`
+    );
     row.append(
-      el("time", "", new Intl.DateTimeFormat("es", { day: "2-digit", month: "short" }).format(new Date(`${day}T12:00:00Z`))),
+      el(
+        "time",
+        "",
+        new Intl.DateTimeFormat("es", { day: "2-digit", month: "short" }).format(
+          new Date(`${day}T12:00:00Z`)
+        )
+      ),
       bar,
       el("strong", "", String(total))
     );
     dailyChart.append(row);
   });
   if (!recentDays.length) {
-    dailyChart.append(renderEmpty("Aún no hay actividad suficiente para mostrar la evolución diaria."));
+    dailyChart.append(
+      renderEmpty("Aún no hay actividad suficiente para mostrar la evolución diaria.")
+    );
   }
 
   section.append(
@@ -435,7 +470,10 @@ function createAdminNavigation(activeSection, counts) {
     { id: "avatars", label: "Fotos", count: counts.avatars },
     { id: "sanctions", label: "Sanciones", count: counts.sanctions }
   ].forEach((item) => {
-    const button = el("button", `admin-panel__nav-button${activeSection === item.id ? " is-active" : ""}`);
+    const button = el(
+      "button",
+      `admin-panel__nav-button${activeSection === item.id ? " is-active" : ""}`
+    );
     button.type = "button";
     button.dataset.adminSection = item.id;
     button.setAttribute("aria-pressed", String(activeSection === item.id));
@@ -479,7 +517,9 @@ export function renderAdminPanel(state, dom) {
   const reportCount = Number.isFinite(dashboard.reportPagination?.total)
     ? dashboard.reportPagination.total
     : reports.length;
-  const activeSection = ["analytics", "reports", "avatars", "sanctions"].includes(state.adminSection)
+  const activeSection = ["analytics", "reports", "avatars", "sanctions"].includes(
+    state.adminSection
+  )
     ? state.adminSection
     : "reports";
 
@@ -508,12 +548,14 @@ export function renderAdminPanel(state, dom) {
   lastRenderedConfirmKey = confirmKey;
 
   dom.adminPanelBody.textContent = "";
-  dom.adminPanelBody.append(createAdminNavigation(activeSection, {
-    analytics: getAnalyticsEvent(productAnalytics, "page_view").total,
-    reports: reportCount,
-    avatars: avatarCount,
-    sanctions: activeSanctions.length
-  }));
+  dom.adminPanelBody.append(
+    createAdminNavigation(activeSection, {
+      analytics: getAnalyticsEvent(productAnalytics, "page_view").total,
+      reports: reportCount,
+      avatars: avatarCount,
+      sanctions: activeSanctions.length
+    })
+  );
 
   const workspace = el("div", "admin-panel__workspace");
   if (!dashboard.loaded && isOpen) {
@@ -525,31 +567,39 @@ export function renderAdminPanel(state, dom) {
   if (activeSection === "analytics") {
     workspace.append(renderAnalyticsDashboard(productAnalytics));
   } else if (activeSection === "avatars") {
-    workspace.append(renderSection(
-      "Fotos de perfil",
-      avatarCount,
-      pendingAvatars.length ? pendingAvatars.map(renderAvatarItem) : [renderEmpty("No hay fotos para revisar.")],
-      "Aprueba o rechaza imagenes antes de que aparezcan publicamente."
-    ));
+    workspace.append(
+      renderSection(
+        "Fotos de perfil",
+        avatarCount,
+        pendingAvatars.length
+          ? pendingAvatars.map(renderAvatarItem)
+          : [renderEmpty("No hay fotos para revisar.")],
+        "Aprueba o rechaza imagenes antes de que aparezcan publicamente."
+      )
+    );
   } else if (activeSection === "sanctions") {
-    workspace.append(renderSection(
-      "Sanciones activas",
-      activeSanctions.length,
-      activeSanctions.length
-        ? activeSanctions.map((item) => renderSanctionItem(item, state.adminConfirmAction))
-        : [renderEmpty("No hay usuarios con sanciones activas.")],
-      "Puedes anular una suspension o expulsion que se haya aplicado por error."
-    ));
+    workspace.append(
+      renderSection(
+        "Sanciones activas",
+        activeSanctions.length,
+        activeSanctions.length
+          ? activeSanctions.map((item) => renderSanctionItem(item, state.adminConfirmAction))
+          : [renderEmpty("No hay usuarios con sanciones activas.")],
+        "Puedes anular una suspension o expulsion que se haya aplicado por error."
+      )
+    );
   } else {
     REPORT_GROUPS.forEach((group) => {
       const items = reports.filter((report) => report.entityType === group.type);
-      workspace.append(renderSection(
-        group.title,
-        items.length,
-        items.length
-          ? items.map((report) => renderReportItem(report, state.adminConfirmAction))
-          : [renderEmpty(group.empty)]
-      ));
+      workspace.append(
+        renderSection(
+          group.title,
+          items.length,
+          items.length
+            ? items.map((report) => renderReportItem(report, state.adminConfirmAction))
+            : [renderEmpty(group.empty)]
+        )
+      );
     });
   }
 

@@ -17,7 +17,13 @@ export function renderTopics(state, dom, onFocusTopic) {
 
     return topics.map((topic) => {
       const isUnread = state.unreadTopicIds?.includes?.(topic.id) ?? false;
-      const button = createTopicItem(topic, state.users, topic.id === state.selectedTopicId, state.viewer?.id || null, isUnread);
+      const button = createTopicItem(
+        topic,
+        state.users,
+        topic.id === state.selectedTopicId,
+        state.viewer?.id || null,
+        isUnread
+      );
       button.addEventListener("click", (event) => {
         event.preventDefault();
         onFocusTopic(topic.id);

@@ -1,6 +1,19 @@
 const DEFAULT_LOCALE = "es-AR";
 const JOINED_DATE_FALLBACK = "Fecha de registro no disponible";
-const MONTH_ABBREVIATIONS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const MONTH_ABBREVIATIONS = [
+  "Ene",
+  "Feb",
+  "Mar",
+  "Abr",
+  "May",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dic"
+];
 
 function parseDate(value) {
   if (!value) {
@@ -43,7 +56,10 @@ export function formatRelativeActivityTime(timestamp, now = new Date()) {
     return "";
   }
 
-  const elapsedMinutes = Math.max(0, Math.floor((referenceDate.getTime() - date.getTime()) / 60_000));
+  const elapsedMinutes = Math.max(
+    0,
+    Math.floor((referenceDate.getTime() - date.getTime()) / 60_000)
+  );
   if (elapsedMinutes < 1) {
     return "ahora";
   }
@@ -96,7 +112,11 @@ export function computeAgeFromBirthdateParts(day, month, year) {
   }
 
   const birthDate = new Date(y, m - 1, d);
-  if (birthDate.getFullYear() !== y || birthDate.getMonth() !== m - 1 || birthDate.getDate() !== d) {
+  if (
+    birthDate.getFullYear() !== y ||
+    birthDate.getMonth() !== m - 1 ||
+    birthDate.getDate() !== d
+  ) {
     return null;
   }
 
@@ -110,7 +130,11 @@ export function computeAgeFromBirthdateParts(day, month, year) {
   return age;
 }
 
-export function populateBirthYearOptions(select, minimumAge = MINIMUM_REGISTRATION_AGE, maxYearsBack = 120) {
+export function populateBirthYearOptions(
+  select,
+  minimumAge = MINIMUM_REGISTRATION_AGE,
+  maxYearsBack = 120
+) {
   if (!select || typeof select.appendChild !== "function" || (select.options?.length || 0) > 1) {
     return;
   }

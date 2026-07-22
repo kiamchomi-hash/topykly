@@ -19,15 +19,16 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
     }
 
     globalThis.clearTimeout?.(pickerTriggerUnlockTimer);
-    pickerTriggerUnlockTimer = globalThis.setTimeout?.(() => {
-      if (pickerTrigger instanceof HTMLElement) {
-        delete pickerTrigger.dataset.pickerReopenLocked;
-      }
-      if (pickerInput instanceof HTMLInputElement) {
-        pickerInput.disabled = false;
-      }
-      pickerTriggerUnlockTimer = 0;
-    }, 240) ?? 0;
+    pickerTriggerUnlockTimer =
+      globalThis.setTimeout?.(() => {
+        if (pickerTrigger instanceof HTMLElement) {
+          delete pickerTrigger.dataset.pickerReopenLocked;
+        }
+        if (pickerInput instanceof HTMLInputElement) {
+          pickerInput.disabled = false;
+        }
+        pickerTriggerUnlockTimer = 0;
+      }, 240) ?? 0;
   }
 
   function isPickerReopenLocked() {
@@ -87,7 +88,9 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
       return;
     }
 
-    const committedHex = sanitizeHexDraft(pickerInput.dataset.committedHex || pickerInput.defaultValue || pickerInput.value);
+    const committedHex = sanitizeHexDraft(
+      pickerInput.dataset.committedHex || pickerInput.defaultValue || pickerInput.value
+    );
     const livePickerField = document.querySelector("#clr-color-value");
     const draftHex = sanitizeHexDraft(
       livePickerField instanceof HTMLInputElement && livePickerField.value
@@ -135,7 +138,10 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
   }
 
   function bindPickerLifecycle(pickerInput) {
-    if (!(pickerInput instanceof HTMLInputElement) || pickerInput.dataset.pickerLifecycleBound === "true") {
+    if (
+      !(pickerInput instanceof HTMLInputElement) ||
+      pickerInput.dataset.pickerLifecycleBound === "true"
+    ) {
       return;
     }
 
@@ -224,10 +230,13 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
   }
 
   function isCustomPickerEventTarget(target) {
-    return target instanceof Element && Boolean(
-      target.closest(".clr-picker") ||
+    return (
+      target instanceof Element &&
+      Boolean(
+        target.closest(".clr-picker") ||
         target.closest("[data-open-custom-palette-picker]") ||
         target.closest("[data-custom-palette-hex]")
+      )
     );
   }
   function dismissPaletteModal() {
@@ -273,20 +282,27 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
   }
 
   function handlePaletteGridClick(event) {
-    const hexInputTarget = event.target instanceof Element ? event.target.closest("[data-custom-palette-hex]") : null;
+    const hexInputTarget =
+      event.target instanceof Element ? event.target.closest("[data-custom-palette-hex]") : null;
     if (hexInputTarget instanceof HTMLInputElement) {
       hexInputTarget.focus();
       return;
     }
 
-    const randomizeTarget = event.target instanceof Element ? event.target.closest("[data-randomize-custom-palette]") : null;
+    const randomizeTarget =
+      event.target instanceof Element
+        ? event.target.closest("[data-randomize-custom-palette]")
+        : null;
     if (randomizeTarget instanceof HTMLElement) {
       requestPickerClose(false);
       handlers.randomizeCustomPalette();
       return;
     }
 
-    const pickerTarget = event.target instanceof Element ? event.target.closest("[data-open-custom-palette-picker]") : null;
+    const pickerTarget =
+      event.target instanceof Element
+        ? event.target.closest("[data-open-custom-palette-picker]")
+        : null;
     if (pickerTarget instanceof HTMLElement) {
       if (isPickerReopenLocked()) {
         return;
@@ -305,11 +321,13 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
           );
           syncCustomPickerDraft(committedHex, { commit: true });
           pickerInput.focus();
-          pickerInput.dispatchEvent(new MouseEvent("click", {
-            bubbles: false,
-            cancelable: true,
-            view: window
-          }));
+          pickerInput.dispatchEvent(
+            new MouseEvent("click", {
+              bubbles: false,
+              cancelable: true,
+              view: window
+            })
+          );
         } else {
           dom.paletteOptionGrid?.querySelector("[data-custom-palette-hex]")?.focus();
         }
@@ -319,17 +337,20 @@ export function createPalettePickerController(dom, handlers, scheduleOpen) {
       return;
     }
 
-    const customCardTarget = event.target instanceof Element ? event.target.closest("[data-custom-palette-card]") : null;
-    const customControlTarget = event.target instanceof Element
-      ? event.target.closest(".palette-option__controls, .palette-option__status--button")
-      : null;
+    const customCardTarget =
+      event.target instanceof Element ? event.target.closest("[data-custom-palette-card]") : null;
+    const customControlTarget =
+      event.target instanceof Element
+        ? event.target.closest(".palette-option__controls, .palette-option__status--button")
+        : null;
     if (customCardTarget instanceof HTMLElement && !(customControlTarget instanceof HTMLElement)) {
       requestPickerClose(false);
       handlers.selectPalette(CUSTOM_PALETTE_ID);
       return;
     }
 
-    const target = event.target instanceof Element ? event.target.closest("[data-palette-option]") : null;
+    const target =
+      event.target instanceof Element ? event.target.closest("[data-palette-option]") : null;
     if (target instanceof HTMLElement) {
       requestPickerClose(false);
       handlers.selectPalette(target.dataset.paletteOption);

@@ -15,7 +15,8 @@ export function syncComposerTextareaHeight(textarea) {
   const visibleHeight = textarea.clientHeight || textarea.offsetHeight;
   textarea.classList.toggle(
     "is-scrollable",
-    visibleHeight > 0 && textarea.scrollHeight > visibleHeight + COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX
+    visibleHeight > 0 &&
+      textarea.scrollHeight > visibleHeight + COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX
   );
 }
 
@@ -57,15 +58,18 @@ function createNextRenderedChatState(messageStream, topic) {
 }
 
 function isNearMessageStreamBottom(messageStream) {
-  const remainingDistance = messageStream.scrollHeight - messageStream.clientHeight - messageStream.scrollTop;
+  const remainingDistance =
+    messageStream.scrollHeight - messageStream.clientHeight - messageStream.scrollTop;
   return remainingDistance <= CHAT_SCROLL_BOTTOM_THRESHOLD_PX;
 }
 
 export function shouldSyncChatLayout(previousState, nextState) {
-  return previousState.topicId !== nextState.topicId
-    || previousState.messageCount !== nextState.messageCount
-    || previousState.lastMessageId !== nextState.lastMessageId
-    || Math.abs(previousState.width - nextState.width) > 1;
+  return (
+    previousState.topicId !== nextState.topicId ||
+    previousState.messageCount !== nextState.messageCount ||
+    previousState.lastMessageId !== nextState.lastMessageId ||
+    Math.abs(previousState.width - nextState.width) > 1
+  );
 }
 
 export function shouldScrollChatToBottom(previousState, nextState, wasNearBottom) {
@@ -115,20 +119,24 @@ export function renderChat(state, dom) {
   }
 
   const previousRenderState = readRenderedChatState(dom.messageStream);
-  const wasNearBottom = previousRenderState.topicId ? isNearMessageStreamBottom(dom.messageStream) : true;
+  const wasNearBottom = previousRenderState.topicId
+    ? isNearMessageStreamBottom(dom.messageStream)
+    : true;
   const hiddenBlockedQuoteAuthors = (state.blockedUsers || [])
     .filter((user) => user.hideContent)
     .flatMap((user) => [user.nickname, user.name])
     .filter(Boolean);
 
   renderIntoTargets([dom.messageStream], "message-stream", () =>
-    topic.messages.map((message) => createMessageItem(message, state.users, {
-      reported: reportedMessageIds.has(message.id),
-      currentUserId: state.viewer?.id || null,
-      blocked: (state.blockedUsers || []).some((user) => user.id === message.authorId),
-      hiddenBlockedQuoteAuthors,
-      readOnly: isReadOnlyTopic
-    }))
+    topic.messages.map((message) =>
+      createMessageItem(message, state.users, {
+        reported: reportedMessageIds.has(message.id),
+        currentUserId: state.viewer?.id || null,
+        blocked: (state.blockedUsers || []).some((user) => user.id === message.authorId),
+        hiddenBlockedQuoteAuthors,
+        readOnly: isReadOnlyTopic
+      })
+    )
   );
 
   const nextRenderState = createNextRenderedChatState(dom.messageStream, topic);
@@ -142,7 +150,10 @@ export function renderChat(state, dom) {
 }
 
 function syncTopicShareButton(topic, dom, isLoading) {
-  if (typeof HTMLButtonElement === "undefined" || !(dom.shareTopicButton instanceof HTMLButtonElement)) {
+  if (
+    typeof HTMLButtonElement === "undefined" ||
+    !(dom.shareTopicButton instanceof HTMLButtonElement)
+  ) {
     return;
   }
 
@@ -175,7 +186,11 @@ function syncTopicReportButton(topic, dom, isLoading, isReported) {
 }
 
 function getMessageBodyMeasuredScrollHeight(body) {
-  const openOverlays = Array.from(body.querySelectorAll(".message__action-menu:not([hidden]), .message__reaction-menu:not([hidden])"));
+  const openOverlays = Array.from(
+    body.querySelectorAll(
+      ".message__action-menu:not([hidden]), .message__reaction-menu:not([hidden])"
+    )
+  );
   openOverlays.forEach((overlay) => {
     overlay.hidden = true;
   });
@@ -209,7 +224,8 @@ function syncMessageCardHeights(messageStream) {
 }
 
 function ensureGuestComposerGate(dom) {
-  const gate = dom.messageForm?.parentElement?.querySelector?.("[data-guest-composer-gate]") || null;
+  const gate =
+    dom.messageForm?.parentElement?.querySelector?.("[data-guest-composer-gate]") || null;
   if (!gate || gate.dataset.bound === "true") {
     return gate;
   }
@@ -247,13 +263,19 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse", viewer =
   if (dom.messageForm) {
     dom.messageForm.hidden = isLoading || !canParticipate;
     dom.messageForm.classList.toggle("composer--topic-create", isCreatingTopic);
-    dom.messageForm.classList.toggle("composer--read-only", !isCreatingTopic && !isCommentableTopic);
+    dom.messageForm.classList.toggle(
+      "composer--read-only",
+      !isCreatingTopic && !isCommentableTopic
+    );
     dom.messageForm.dataset.topicStatus = topic?.status || "draft";
-    dom.messageForm.setAttribute("aria-label", isArchivedTopic
-      ? "Tema archivado disponible solo para lectura"
-      : isCreatingTopic
-        ? "Crear un tema"
-        : "Publicar un comentario");
+    dom.messageForm.setAttribute(
+      "aria-label",
+      isArchivedTopic
+        ? "Tema archivado disponible solo para lectura"
+        : isCreatingTopic
+          ? "Crear un tema"
+          : "Publicar un comentario"
+    );
   }
   if (dom.messageInput) {
     dom.messageInput.disabled = !isCreatingTopic && !isCommentableTopic;
@@ -265,27 +287,43 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse", viewer =
           ? "Tema archivado: solo lectura"
           : "Tema cerrado para comentarios";
     dom.messageInput.rows = isCreatingTopic ? 4 : 2;
-    dom.messageInput.setAttribute("aria-label", isCreatingTopic ? "Primer mensaje del nuevo tema" : "Comentario para el tema seleccionado");
+    dom.messageInput.setAttribute(
+      "aria-label",
+      isCreatingTopic ? "Primer mensaje del nuevo tema" : "Comentario para el tema seleccionado"
+    );
     syncComposerTextareaHeight(dom.messageInput);
   }
   if (submitButton) {
     submitButton.disabled = isLoading || (!isCreatingTopic && !isCommentableTopic);
     submitButton.setAttribute("aria-disabled", String(submitButton.disabled));
-    submitButton.setAttribute("aria-label", !isCreatingTopic && !isCommentableTopic
-      ? isArchivedTopic
-        ? "Tema archivado: no admite nuevos mensajes"
-        : "No se pueden enviar mensajes en este tema cerrado"
-      : isCreatingTopic
-        ? "Crear tema con el primer mensaje"
-        : "Enviar comentario al tema seleccionado");
+    submitButton.setAttribute(
+      "aria-label",
+      !isCreatingTopic && !isCommentableTopic
+        ? isArchivedTopic
+          ? "Tema archivado: no admite nuevos mensajes"
+          : "No se pueden enviar mensajes en este tema cerrado"
+        : isCreatingTopic
+          ? "Crear tema con el primer mensaje"
+          : "Enviar comentario al tema seleccionado"
+    );
   }
   if (submitLabel) {
-    submitLabel.textContent = !isCreatingTopic && !isCommentableTopic
-      ? isArchivedTopic ? "Archivado" : "Bloqueado"
-      : isCreatingTopic ? "Crear tema" : "Enviar";
+    submitLabel.textContent =
+      !isCreatingTopic && !isCommentableTopic
+        ? isArchivedTopic
+          ? "Archivado"
+          : "Bloqueado"
+        : isCreatingTopic
+          ? "Crear tema"
+          : "Enviar";
   } else if (submitButton) {
-    submitButton.textContent = !isCreatingTopic && !isCommentableTopic
-      ? isArchivedTopic ? "Archivado" : "Bloqueado"
-      : isCreatingTopic ? "Crear tema" : "Enviar";
+    submitButton.textContent =
+      !isCreatingTopic && !isCommentableTopic
+        ? isArchivedTopic
+          ? "Archivado"
+          : "Bloqueado"
+        : isCreatingTopic
+          ? "Crear tema"
+          : "Enviar";
   }
 }

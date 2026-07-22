@@ -631,8 +631,13 @@ html:not([data-theme="dark"]) #contactAdminButton .button-label {
   justify-content: center;
   flex: none;
   color: var(--social-color, currentColor);
-  background: color-mix(in srgb, var(--social-color, var(--text-soft)) 18%, var(--surface-strong) 82%);
-  border: 1px solid color-mix(in srgb, var(--social-color, var(--line-strong)) 34%, var(--line-strong) 66%);
+  background: color-mix(
+    in srgb,
+    var(--social-color, var(--text-soft)) 18%,
+    var(--surface-strong) 82%
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--social-color, var(--line-strong)) 34%, var(--line-strong) 66%);
   border-radius: 7px;
 }
 
@@ -1862,7 +1867,8 @@ html.is-desktop-viewport .panel--chat .message-stream {
 }
 
 #chatTitle.is-overflowing .chat-title__track {
-  animation: chat-title-marquee var(--chat-title-marquee-duration, 8s) ease-in-out infinite alternate;
+  animation: chat-title-marquee var(--chat-title-marquee-duration, 8s) ease-in-out infinite
+    alternate;
   will-change: transform;
 }
 
@@ -2099,7 +2105,9 @@ html.is-desktop-viewport .message-stream::-webkit-scrollbar-thumb {
   align-items: center;
   column-gap: 14px;
   padding: 11px 14px 12px;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .user-item--rising {
@@ -2605,7 +2613,6 @@ html[data-theme="dark"] .message--skeleton .message__skeleton-line::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 
 .user-item__action {
   display: inline-grid;
@@ -3349,7 +3356,6 @@ html[data-theme="light"] .message__avatar {
   top: auto;
   bottom: 8px;
 }
-
 
 .message__reaction-menu {
   top: 46px;
@@ -6361,7 +6367,9 @@ html.is-mobile-viewport .ranking-mode-list__label {
   opacity: 0;
   transform: translateY(-6px);
   pointer-events: none;
-  transition: opacity 180ms ease, transform 180ms ease;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .auth-modal__status[data-status-kind="off"] {
@@ -6695,7 +6703,10 @@ html.is-mobile-viewport .ranking-mode-list__label {
   color: var(--bg);
   background: var(--text);
   cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
 .auth-email-submit:hover,
@@ -6735,7 +6746,8 @@ html.is-mobile-viewport .ranking-mode-list__label {
 }
 
 @keyframes authButtonErrorShake {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateX(0);
   }
   20% {
@@ -6764,7 +6776,11 @@ html.is-mobile-viewport .ranking-mode-list__label {
   color: var(--text-soft);
   background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
   cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
 }
 
 .auth-resend-button:hover,
@@ -6863,7 +6879,11 @@ html.is-mobile-viewport .ranking-mode-list__label {
   margin-bottom: -14px;
   opacity: 0;
   pointer-events: none;
-  transition: height 220ms ease, min-height 220ms ease, margin-bottom 220ms ease, opacity 180ms ease;
+  transition:
+    height 220ms ease,
+    min-height 220ms ease,
+    margin-bottom 220ms ease,
+    opacity 180ms ease;
 }
 
 .auth-turnstile[data-turnstile-mode="silent"] {
@@ -6901,7 +6921,10 @@ html.is-mobile-viewport .ranking-mode-list__label {
   grid-template-rows: 1fr;
   opacity: 1;
   margin-bottom: 0;
-  transition: grid-template-rows 220ms ease, opacity 180ms ease, margin-bottom 220ms ease;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 180ms ease,
+    margin-bottom 220ms ease;
 }
 
 .auth-google-section.is-collapsed {
@@ -7148,7 +7171,6 @@ html.is-mobile-viewport .ranking-mode-list__label {
   font-size: 0.78rem;
   font-weight: 750;
 }
-
 
 .profile-modal__hint {
   max-width: 42ch;
@@ -7684,7 +7706,6 @@ html.is-mobile-viewport .ranking-mode-list__label {
   background: color-mix(in srgb, var(--accent) 24%, var(--surface-strong));
 }
 
-
 .profile-modal__social-edit svg {
   display: block;
   width: 14px;
@@ -7771,11 +7792,8 @@ html.is-mobile-viewport .ranking-mode-list__label {
     overflow-x: hidden;
     height: 100vh;
     height: 100dvh;
-    padding:
-      max(12px, env(safe-area-inset-top))
-      max(12px, env(safe-area-inset-right))
-      max(12px, env(safe-area-inset-bottom))
-      max(12px, env(safe-area-inset-left));
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
 
   .profile-modal {
@@ -7783,9 +7801,7 @@ html.is-mobile-viewport .ranking-mode-list__label {
     max-width: 100%;
     max-height: calc(100vh - 24px);
     max-height: calc(
-      100dvh
-      - max(12px, env(safe-area-inset-top))
-      - max(12px, env(safe-area-inset-bottom))
+      100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))
     );
   }
 
@@ -7908,12 +7924,32 @@ html.is-mobile-viewport .ranking-mode-list__label {
   aspect-ratio: 1;
   border: 1px solid var(--line-strong);
   background:
-    linear-gradient(45deg, color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 25%, transparent 25%),
-    linear-gradient(-45deg, color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 75%),
-    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 75%);
+    linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 25%,
+      transparent 25%
+    ),
+    linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 25%,
+      transparent 25%
+    ),
+    linear-gradient(
+      45deg,
+      transparent 75%,
+      color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 75%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 75%,
+      color-mix(in srgb, var(--surface-strong) 70%, var(--bg) 30%) 75%
+    );
   background-color: color-mix(in srgb, var(--surface-strong) 84%, var(--bg) 16%);
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
   background-size: 16px 16px;
   cursor: grab;
   touch-action: none;
@@ -8370,17 +8406,13 @@ html.is-mobile-viewport .ranking-mode-list__label {
   .public-profile-modal {
     height: calc(100vh - 24px);
     height: calc(
-      100dvh
-      - max(12px, env(safe-area-inset-top))
-      - max(12px, env(safe-area-inset-bottom))
+      100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))
     );
   }
 
   .public-profile-modal.is-guest-profile {
     max-height: calc(
-      100dvh
-      - max(12px, env(safe-area-inset-top))
-      - max(12px, env(safe-area-inset-bottom))
+      100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))
     );
   }
 
@@ -8572,7 +8604,10 @@ html.is-mobile-viewport .ranking-mode-list__label {
   text-align: left;
   background: transparent;
   cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
 .admin-panel__nav-button:hover,
@@ -8912,7 +8947,11 @@ html.is-mobile-viewport .ranking-mode-list__label {
   font-weight: 760;
   background: var(--bg);
   cursor: pointer;
-  transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
 .admin-panel__action:hover,
@@ -9551,7 +9590,10 @@ html.is-mobile-viewport #drawerRankingsSection .panel__body--drawer-rankings .pa
 
 /* Two arrows flanking the Global/Tema title flip the ranking scope, reusing the
    same nav-button styling as the mode-switch carousel below (proven centering). */
-html.is-mobile-viewport #drawerRankingsSection .panel__body--drawer-rankings .panel__header.ranking-scope-switch {
+html.is-mobile-viewport
+  #drawerRankingsSection
+  .panel__body--drawer-rankings
+  .panel__header.ranking-scope-switch {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) 2rem;
   align-items: center;
@@ -10022,7 +10064,6 @@ html.is-mobile-viewport #drawerRankingsSection .ranking-item__meta {
   }
 }
 
-
 @media (max-width: 360px) {
   html.is-mobile-viewport .panel__header--chat .chat-actions__report {
     min-width: 74px;
@@ -10478,7 +10519,6 @@ button.icon-button.profile-modal__close {
   color: var(--text-soft);
 }
 
-
 @media (max-width: 720px) {
   .notification-toasts {
     top: var(--notification-panel-top, 62px);
@@ -10831,7 +10871,6 @@ button.icon-button.profile-modal__close {
   }
 }
 
-
 /* Notification marker layout: one event SVG, then ordered actor thumbnails. */
 .notification-toast {
   grid-template-columns: 94px minmax(0, 1fr);
@@ -10981,7 +11020,6 @@ button.icon-button.profile-modal__close {
   }
 }
 
-
 /* Grouped notifications show only the latest actor avatar; names remain in text. */
 .notification-toast {
   grid-template-columns: 66px minmax(0, 1fr);
@@ -11034,7 +11072,9 @@ button.icon-button.profile-modal__close {
   border: 1px solid color-mix(in srgb, var(--line-strong) 84%, transparent);
   border-radius: 16px;
   background: var(--bg);
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22), 0 4px 14px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.22),
+    0 4px 14px rgba(0, 0, 0, 0.08);
   backdrop-filter: none;
   animation: notification-panel-in 160ms cubic-bezier(0.2, 0.72, 0.24, 1) both;
 }
@@ -11091,7 +11131,9 @@ button.icon-button.profile-modal__close {
   min-height: 74px;
   padding: 13px 38px 13px 16px;
   background: var(--bg);
-  transition: background-color 140ms ease, transform 140ms ease;
+  transition:
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
 .notification-toast + .notification-toast {
@@ -11292,10 +11334,15 @@ button.icon-button.profile-modal__close {
     border-radius: 999px;
     color: var(--text);
     background: color-mix(in srgb, var(--surface-strong) 94%, var(--bg) 6%);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.12);
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.2),
+      0 2px 8px rgba(0, 0, 0, 0.12);
     touch-action: none;
     user-select: none;
-    transition: transform 140ms ease, border-color 140ms ease, background-color 140ms ease;
+    transition:
+      transform 140ms ease,
+      border-color 140ms ease,
+      background-color 140ms ease;
   }
 
   html.is-mobile-viewport #notificationsButton[data-drag-position="true"] {
@@ -11364,7 +11411,6 @@ button.icon-button.profile-modal__close {
   }
 }
 
-
 /* Friend request badge follows the active palette too. */
 #friendRequestsButton[data-pending-friends]::after {
   color: var(--bg);
@@ -11373,7 +11419,6 @@ button.icon-button.profile-modal__close {
     0 0 0 2px var(--bg-soft),
     0 2px 7px rgba(0, 0, 0, 0.28);
 }
-
 
 /* Friend request panel polish: solid surface and clearly separated sections. */
 .friend-request-panel {
@@ -11841,9 +11886,7 @@ button.icon-button.profile-modal__close {
     width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
     max-height: calc(
-      100dvh
-      - max(12px, env(safe-area-inset-top))
-      - max(12px, env(safe-area-inset-bottom))
+      100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))
     );
   }
 }
@@ -11884,7 +11927,10 @@ button.icon-button.profile-modal__close {
   font-weight: 760;
   background: transparent;
   cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
 .settings-panel__nav-button:hover,
@@ -12012,7 +12058,9 @@ button.icon-button.profile-modal__close {
   border-radius: 999px;
   background: var(--surface-strong);
   cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .settings-switch__thumb {
@@ -12025,7 +12073,9 @@ button.icon-button.profile-modal__close {
   background: var(--text-soft);
   transform: translateY(-50%);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-  transition: left 0.18s ease, background 0.18s ease;
+  transition:
+    left 0.18s ease,
+    background 0.18s ease;
 }
 
 .settings-switch.is-on {
@@ -13119,7 +13169,10 @@ body.is-topic-share-open {
   font-size: 0.86rem;
   background: transparent;
   cursor: pointer;
-  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease;
 }
 
 .store-modal__tab:hover {
@@ -13189,7 +13242,10 @@ body.is-topic-share-open {
   border-radius: 14px;
   text-align: center;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
-  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .store-item:hover {

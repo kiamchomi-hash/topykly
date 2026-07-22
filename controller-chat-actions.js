@@ -1,6 +1,9 @@
 import { getSelectedTopic } from "./model.js";
 import { api, ApiError } from "./services/api.js?v=20260716-quality1";
-import { collectTopicNotifications, createNotificationStateUpdate } from "./ui/notifications.js?v=20260716-quality1";
+import {
+  collectTopicNotifications,
+  createNotificationStateUpdate
+} from "./ui/notifications.js?v=20260716-quality1";
 import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 import { composeReportReason } from "./report-reasons.js";
 
@@ -52,7 +55,9 @@ export function createChatActions({
         await action();
       } catch (error) {
         console.error(error);
-        showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
+        showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), {
+          kind: "error"
+        });
       } finally {
         const remainingMs = Math.max(0, refreshFeedbackMs - (Date.now() - startedAt));
         timer = setTimeout(() => {
@@ -177,7 +182,9 @@ export function createChatActions({
       await syncBackendPayload(() => apiClient.openTopic(topicId));
     } catch (error) {
       console.error(error);
-      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), {
+        kind: "error"
+      });
     }
   }
 
@@ -244,7 +251,9 @@ export function createChatActions({
       }
 
       console.error(error);
-      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), {
+        kind: "error"
+      });
     } finally {
       setComposerBusy(false);
       render();
@@ -269,7 +278,9 @@ export function createChatActions({
 
   async function refreshTopicsList() {
     await runTopicsListRefreshWithFeedback(async () => {
-      await syncBackendPayload(() => apiClient.refreshTopics(state.selectedTopicId), { reorder: true });
+      await syncBackendPayload(() => apiClient.refreshTopics(state.selectedTopicId), {
+        reorder: true
+      });
       render();
     });
   }
@@ -312,8 +323,12 @@ export function createChatActions({
 
     const previousTopics = state.topics;
     const reactionScrollState = getReactionScrollState(trigger);
-    const apiCall = reactionType === "dislike" ? apiClient.toggleMessageDislike : apiClient.toggleMessageLike;
-    const errorFallback = reactionType === "dislike" ? "No se pudo actualizar el dislike." : "No se pudo actualizar el like.";
+    const apiCall =
+      reactionType === "dislike" ? apiClient.toggleMessageDislike : apiClient.toggleMessageLike;
+    const errorFallback =
+      reactionType === "dislike"
+        ? "No se pudo actualizar el dislike."
+        : "No se pudo actualizar el like.";
 
     setReportTriggerState(trigger, true);
     dispatch(state, reducers.setMessageReactionPending, { messageId, pending: true });
@@ -344,7 +359,6 @@ export function createChatActions({
   function toggleMessageDislike(messageId, options = {}) {
     return toggleMessageReaction(messageId, "dislike", options);
   }
-
 
   function findMessageById(messageId) {
     for (const topic of state.topics || []) {
@@ -388,9 +402,7 @@ export function createChatActions({
     const preview = formatQuoteText(target.message.text);
     const quote = `> ${formatQuoteAuthor(author)}\n> ${preview}\n\n`;
     const existingText = input.value.trim();
-    const nextValue = existingText
-      ? `${quote}${existingText}`
-      : quote;
+    const nextValue = existingText ? `${quote}${existingText}` : quote;
     const maxLength = Number(input.maxLength);
     input.value = maxLength > 0 ? nextValue.slice(0, maxLength) : nextValue;
     const cursorPosition = Math.min(quote.length, input.value.length);
@@ -423,16 +435,15 @@ export function createChatActions({
   async function reportEntity(entityType, entityId, { trigger = null, reason = "" } = {}) {
     setReportTriggerState(trigger, true);
     try {
-      await syncBackendPayload(() => apiClient.reportEntity(
-        entityType,
-        entityId,
-        reason || "",
-        state.selectedTopicId
-      ));
+      await syncBackendPayload(() =>
+        apiClient.reportEntity(entityType, entityId, reason || "", state.selectedTopicId)
+      );
       render();
     } catch (error) {
       console.error(error);
-      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), { kind: "error" });
+      showFeedback?.(getActionErrorMessage(error, "No se pudo completar la accion."), {
+        kind: "error"
+      });
     } finally {
       setReportTriggerState(trigger, false);
       render();
@@ -440,7 +451,8 @@ export function createChatActions({
   }
 
   function openReportModal(entityType, entityId, { trigger = null } = {}) {
-    pendingReportTrigger = typeof HTMLElement !== "undefined" && trigger instanceof HTMLElement ? trigger : null;
+    pendingReportTrigger =
+      typeof HTMLElement !== "undefined" && trigger instanceof HTMLElement ? trigger : null;
     dispatch(state, reducers.setReportModalOpen, { isOpen: true, entityType, entityId });
     render();
     if (typeof requestAnimationFrame === "function") {
@@ -453,7 +465,11 @@ export function createChatActions({
   function closeReportModal() {
     const trigger = pendingReportTrigger;
     pendingReportTrigger = null;
-    dispatch(state, reducers.setReportModalOpen, { isOpen: false, entityType: null, entityId: null });
+    dispatch(state, reducers.setReportModalOpen, {
+      isOpen: false,
+      entityType: null,
+      entityId: null
+    });
     render();
     trigger?.focus?.();
   }

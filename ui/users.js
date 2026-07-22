@@ -18,7 +18,10 @@ export function selectOnlineUsers(state) {
 }
 
 function prefersReducedMotion() {
-  return typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+  return (
+    typeof window !== "undefined" &&
+    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)
+  );
 }
 
 function captureUserItemTops(targets) {
@@ -85,7 +88,9 @@ function getPreviousOrder(targets) {
     return [];
   }
 
-  return Array.from(source.children).map((child) => child.dataset?.id).filter(Boolean);
+  return Array.from(source.children)
+    .map((child) => child.dataset?.id)
+    .filter(Boolean);
 }
 
 function getUserMenuIdScope(target) {
@@ -212,13 +217,19 @@ export function renderUsers(state, dom) {
   if (leavingIds.size) {
     const source = targets.find((target) => target && target.children.length > 0);
     Array.from(source?.children || []).forEach((child) => {
-      if (child.dataset?.id && leavingIds.has(child.dataset.id) && child.classList.contains("user-item--leaving")) {
+      if (
+        child.dataset?.id &&
+        leavingIds.has(child.dataset.id) &&
+        child.classList.contains("user-item--leaving")
+      ) {
         alreadyLeavingIds.add(child.dataset.id);
       }
     });
   }
   const newlyLeavingIds = new Set([...leavingIds].filter((id) => !alreadyLeavingIds.has(id)));
-  const previousHeights = newlyLeavingIds.size ? captureUserItemHeights(targets, newlyLeavingIds) : null;
+  const previousHeights = newlyLeavingIds.size
+    ? captureUserItemHeights(targets, newlyLeavingIds)
+    : null;
 
   if (!leavingIds.size) {
     targets.forEach((target) => {

@@ -1,6 +1,11 @@
 import { getSelectedTopic } from "../model.js";
 import { filterDisplayText } from "../profanity-filter.js";
-import { getCurrentRankingLabel, getRankingOptions, renderRankingLabel, getScopeRankingLabel } from "./ranking-labels.js";
+import {
+  getCurrentRankingLabel,
+  getRankingOptions,
+  renderRankingLabel,
+  getScopeRankingLabel
+} from "./ranking-labels.js";
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
 const SITE_NAME = "TOPYKLY";
@@ -34,9 +39,9 @@ function syncChatTitleMarquee(title) {
   const nextDuration = `${durationSeconds.toFixed(2)}s`;
   const nextDistance = `${-overflowDistance}px`;
   if (
-    title.classList.contains("is-overflowing")
-    && track.style.getPropertyValue("--chat-title-marquee-duration") === nextDuration
-    && track.style.getPropertyValue("--chat-title-marquee-distance") === nextDistance
+    title.classList.contains("is-overflowing") &&
+    track.style.getPropertyValue("--chat-title-marquee-duration") === nextDuration &&
+    track.style.getPropertyValue("--chat-title-marquee-distance") === nextDistance
   ) {
     return;
   }

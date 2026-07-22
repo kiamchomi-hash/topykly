@@ -37,18 +37,47 @@ function syncLocationWithState(state) {
 
   const nextPath = getAppLocationPath(state);
   if (window.location.pathname !== nextPath) {
-    window.history.replaceState({}, "", `${nextPath}${window.location.search}${window.location.hash}`);
+    window.history.replaceState(
+      {},
+      "",
+      `${nextPath}${window.location.search}${window.location.hash}`
+    );
   }
 }
 
-export function createRenderers({ state, dom, actions, responsive, closeTimerRef, getTransitionDurationMs }) {
+export function createRenderers({
+  state,
+  dom,
+  actions,
+  responsive,
+  closeTimerRef,
+  getTransitionDurationMs
+}) {
   const secondaryRenderers = {
-    admin: { load: () => import("./ui/admin-panel.js?v=20260716-quality1"), exportName: "renderAdminPanel" },
-    palette: { load: () => import("./ui/palette-modal.js?v=20260716-secondary1"), exportName: "renderPaletteModal" },
-    profile: { load: () => import("./ui/profile-modal.js?v=20260716-quality1"), exportName: "renderProfileModal" },
-    publicProfile: { load: () => import("./ui/public-profile-modal.js?v=20260716-quality1"), exportName: "renderPublicProfileModal" },
-    report: { load: () => import("./ui/report-modal.js?v=20260716-quality1"), exportName: "renderReportModal" },
-    settings: { load: () => import("./ui/settings-modal.js?v=20260716-quality1"), exportName: "renderSettingsModal" },
+    admin: {
+      load: () => import("./ui/admin-panel.js?v=20260716-quality1"),
+      exportName: "renderAdminPanel"
+    },
+    palette: {
+      load: () => import("./ui/palette-modal.js?v=20260716-secondary1"),
+      exportName: "renderPaletteModal"
+    },
+    profile: {
+      load: () => import("./ui/profile-modal.js?v=20260716-quality1"),
+      exportName: "renderProfileModal"
+    },
+    publicProfile: {
+      load: () => import("./ui/public-profile-modal.js?v=20260716-quality1"),
+      exportName: "renderPublicProfileModal"
+    },
+    report: {
+      load: () => import("./ui/report-modal.js?v=20260716-quality1"),
+      exportName: "renderReportModal"
+    },
+    settings: {
+      load: () => import("./ui/settings-modal.js?v=20260716-quality1"),
+      exportName: "renderSettingsModal"
+    },
     store: { load: () => import("./ui/store-modal.js"), exportName: "renderStoreModal" }
   };
 
@@ -61,7 +90,8 @@ export function createRenderers({ state, dom, actions, responsive, closeTimerRef
       return;
     }
 
-    entry.promise = entry.load()
+    entry.promise = entry
+      .load()
       .then((module) => {
         entry.render = module[entry.exportName];
         entry.promise = null;

@@ -34,7 +34,8 @@ const TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS = 30 * 60_000;
 const MAX_HTTP_RATE_LIMIT_BUCKETS = 10_000;
 const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
 const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
-const COMPRESSIBLE_TYPE_PATTERN = /^(?:text\/|application\/(?:javascript|json|xml|manifest\+json)|image\/svg\+xml)/;
+const COMPRESSIBLE_TYPE_PATTERN =
+  /^(?:text\/|application\/(?:javascript|json|xml|manifest\+json)|image\/svg\+xml)/;
 // Por debajo de este tamano la compresion no compensa el overhead de cabeceras.
 const MIN_COMPRESSIBLE_BYTES = 1024;
 const BROTLI_QUALITY = 5;
@@ -110,8 +111,8 @@ function loadEnvFile(envPath) {
 
     let value = trimmed.slice(separatorIndex + 1).trim();
     if (
-      (value.startsWith("\"") && value.endsWith("\""))
-      || (value.startsWith("'") && value.endsWith("'"))
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
     ) {
       value = value.slice(1, -1);
     }
@@ -246,7 +247,7 @@ function negotiateBody(req, buffer, contentType, { compressedVariants = null } =
   if (!encoding) {
     return {
       body: buffer,
-      headers: { "Content-Length": buffer.length, "Vary": "Accept-Encoding" }
+      headers: { "Content-Length": buffer.length, Vary: "Accept-Encoding" }
     };
   }
 
@@ -261,7 +262,7 @@ function negotiateBody(req, buffer, contentType, { compressedVariants = null } =
     headers: {
       "Content-Length": encoded.length,
       "Content-Encoding": encoding,
-      "Vary": "Accept-Encoding"
+      Vary: "Accept-Encoding"
     }
   };
 }
@@ -303,7 +304,7 @@ function sendJson(res, statusCode, payload, { headers = {}, cookies = [] } = {})
 function sendRedirect(res, statusCode, location, { cookies = [] } = {}) {
   res.writeHead(statusCode, {
     ...getSecurityHeaders({ req: res.req }),
-    "Location": location,
+    Location: location,
     ...(cookies.length ? { "Set-Cookie": cookies } : {})
   });
   res.end();
@@ -314,12 +315,12 @@ function shouldPublishLiveChange(req, url) {
     return false;
   }
   if (
-    url.pathname === "/api/events"
-    || url.pathname === "/api/settings"
-    || url.pathname.endsWith("/follow")
-    || url.pathname.endsWith("/request-code")
-    || url.pathname.endsWith("/reset/request")
-    || url.pathname === "/api/auth/login"
+    url.pathname === "/api/events" ||
+    url.pathname === "/api/settings" ||
+    url.pathname.endsWith("/follow") ||
+    url.pathname.endsWith("/request-code") ||
+    url.pathname.endsWith("/reset/request") ||
+    url.pathname === "/api/auth/login"
   ) {
     return false;
   }
@@ -414,23 +415,36 @@ function readCookies(req) {
 }
 
 export function shouldTrustProxy(env = process.env) {
-  return [env.TOPYKLY_TRUST_PROXY, env.CHETREND_TRUST_PROXY]
-    .some((value) => ["1", "true", "yes"].includes(String(value || "").trim().toLowerCase()));
+  return [env.TOPYKLY_TRUST_PROXY, env.CHETREND_TRUST_PROXY].some((value) =>
+    ["1", "true", "yes"].includes(
+      String(value || "")
+        .trim()
+        .toLowerCase()
+    )
+  );
 }
 
 function getForwardedRequestIp(req) {
-  return String(req.headers["cf-connecting-ip"] || "").trim()
-    || String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return (
+    String(req.headers["cf-connecting-ip"] || "").trim() ||
+    String(req.headers["x-forwarded-for"] || "")
+      .split(",")[0]
+      .trim()
+  );
 }
 
 export function getRequestIp(req, env = process.env) {
-  const configuredProxyIps = String(env.TOPYKLY_TRUSTED_PROXY_IPS || env.CHETREND_TRUSTED_PROXY_IPS || "")
-    .split(",").map((value) => value.trim()).filter(Boolean);
-  const proxyIsAllowed = !configuredProxyIps.length || configuredProxyIps.includes(String(req.socket?.remoteAddress || "").trim());
+  const configuredProxyIps = String(
+    env.TOPYKLY_TRUSTED_PROXY_IPS || env.CHETREND_TRUSTED_PROXY_IPS || ""
+  )
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const proxyIsAllowed =
+    !configuredProxyIps.length ||
+    configuredProxyIps.includes(String(req.socket?.remoteAddress || "").trim());
   if (shouldTrustProxy(env) && proxyIsAllowed) {
-    return getForwardedRequestIp(req)
-      || req.socket.remoteAddress
-      || "";
+    return getForwardedRequestIp(req) || req.socket.remoteAddress || "";
   }
 
   return req.socket.remoteAddress || "";
@@ -471,9 +485,7 @@ function getRequestContext(req) {
   const cookies = readCookies(req);
 
   return {
-    sessionId: cookies.topykly_sid
-      || cookies.chetrend_sid
-      || "",
+    sessionId: cookies.topykly_sid || cookies.chetrend_sid || "",
     ipAddress: getRequestIp(req),
     cookies
   };
@@ -484,7 +496,9 @@ function normalizeSelectedTopicId(url) {
 }
 
 export function isLocalDevLoginAllowed(env = process.env) {
-  const explicitFlag = String(env.TOPYKLY_ALLOW_LOCAL_LOGIN || env.CHETREND_ALLOW_LOCAL_LOGIN || "").trim().toLowerCase();
+  const explicitFlag = String(env.TOPYKLY_ALLOW_LOCAL_LOGIN || env.CHETREND_ALLOW_LOCAL_LOGIN || "")
+    .trim()
+    .toLowerCase();
   return ["1", "true", "yes"].includes(explicitFlag);
 }
 
@@ -536,8 +550,10 @@ function isUnpublishedStaticPath(urlPathname) {
   }
 
   const segments = decoded.split(/[/\\]/).filter(Boolean);
-  return segments.length === 1
-    && UNPUBLISHED_STATIC_ROOT_FILES.has(String(segments[0] || "").toLowerCase());
+  return (
+    segments.length === 1 &&
+    UNPUBLISHED_STATIC_ROOT_FILES.has(String(segments[0] || "").toLowerCase())
+  );
 }
 
 function stripPrivateSessionPayload(payload) {
@@ -551,17 +567,15 @@ function stripPrivateSessionPayload(payload) {
 
 function sendBackendPayload(res, req, authService, statusCode, payload) {
   sendJson(res, statusCode, stripPrivateSessionPayload(payload), {
-    cookies: payload?.sessionId
-      ? [authService.createSessionCookie(req, payload.sessionId)]
-      : []
+    cookies: payload?.sessionId ? [authService.createSessionCookie(req, payload.sessionId)] : []
   });
 }
 
-async function deliverTopicActivityEmails(store, authService, {
-  topicId,
-  actorUserId,
-  actorName
-} = {}) {
+async function deliverTopicActivityEmails(
+  store,
+  authService,
+  { topicId, actorUserId, actorName } = {}
+) {
   if (!authService.isEmailConfigured()) {
     return;
   }
@@ -571,14 +585,18 @@ async function deliverTopicActivityEmails(store, authService, {
   }
 
   const origin = resolvePublicOrigin();
-  await Promise.allSettled(recipients.map((recipient) => authService.sendTopicActivityEmail({
-    email: recipient.email,
-    recipientName: recipient.name,
-    actorName,
-    topicTitle: recipient.topicTitle,
-    topicUrl: `${origin}${topicPath({ id: recipient.topicId, title: recipient.topicTitle })}`,
-    deliveryKey: `topic-activity-${recipient.topicId}-${recipient.userId}-${Math.floor(Date.now() / TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS)}`
-  })));
+  await Promise.allSettled(
+    recipients.map((recipient) =>
+      authService.sendTopicActivityEmail({
+        email: recipient.email,
+        recipientName: recipient.name,
+        actorName,
+        topicTitle: recipient.topicTitle,
+        topicUrl: `${origin}${topicPath({ id: recipient.topicId, title: recipient.topicTitle })}`,
+        deliveryKey: `topic-activity-${recipient.topicId}-${recipient.userId}-${Math.floor(Date.now() / TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS)}`
+      })
+    )
+  );
 }
 
 async function handleApiRequest(store, authService, liveEventHub, req, res, url) {
@@ -591,30 +609,48 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
     }
 
     if (req.method === "GET" && url.pathname === "/api/bootstrap") {
-      sendBackendPayload(res, req, authService, 200, store.bootstrap({
-        ...context,
-        selectedTopicId: normalizeSelectedTopicId(url),
-        profileNickname: url.searchParams.get("perfil") || null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.bootstrap({
+          ...context,
+          selectedTopicId: normalizeSelectedTopicId(url),
+          profileNickname: url.searchParams.get("perfil") || null
+        })
+      );
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/api/topics") {
-      sendBackendPayload(res, req, authService, 200, store.refresh({
-        ...context,
-        selectedTopicId: normalizeSelectedTopicId(url)
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.refresh({
+          ...context,
+          selectedTopicId: normalizeSelectedTopicId(url)
+        })
+      );
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/api/events") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 202, store.recordProductEvent({
-        ...context,
-        eventName: body.eventName,
-        routeGroup: body.routeGroup,
-        sourceGroup: body.sourceGroup
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        202,
+        store.recordProductEvent({
+          ...context,
+          eventName: body.eventName,
+          routeGroup: body.routeGroup,
+          sourceGroup: body.sourceGroup
+        })
+      );
       return;
     }
 
@@ -642,14 +678,24 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       }
 
       if (!isLocalDevLoginAllowed()) {
-        throw new ApiError(503, "AUTH_NOT_CONFIGURED", "La autenticacion externa no esta configurada.");
+        throw new ApiError(
+          503,
+          "AUTH_NOT_CONFIGURED",
+          "La autenticacion externa no esta configurada."
+        );
       }
 
-      sendBackendPayload(res, req, authService, 200, store.login({
-        ...context,
-        selectedTopicId: body.selectedTopicId ?? null,
-        rotateSession: true
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.login({
+          ...context,
+          selectedTopicId: body.selectedTopicId ?? null,
+          rotateSession: true
+        })
+      );
       return;
     }
 
@@ -659,13 +705,19 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         token: body.turnstileToken
       });
-      sendBackendPayload(res, req, authService, 200, store.loginWithPassword({
-        ...context,
-        email: body.email,
-        password: body.password,
-        selectedTopicId: body.selectedTopicId ?? null,
-        rotateSession: true
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.loginWithPassword({
+          ...context,
+          email: body.email,
+          password: body.password,
+          selectedTopicId: body.selectedTopicId ?? null,
+          rotateSession: true
+        })
+      );
       return;
     }
 
@@ -676,7 +728,11 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         token: body.turnstileToken
       });
       if (!authService.getStatus(req)?.emailCode?.configured) {
-        throw new ApiError(503, "RESEND_NOT_CONFIGURED", "La recuperacion por email todavia no esta configurada.");
+        throw new ApiError(
+          503,
+          "RESEND_NOT_CONFIGURED",
+          "La recuperacion por email todavia no esta configurada."
+        );
       }
       const challenge = store.createPasswordResetChallenge({
         email: body.email,
@@ -705,14 +761,20 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
 
     if (req.method === "POST" && url.pathname === "/api/auth/password/reset/confirm") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.verifyPasswordResetChallenge({
-        ...context,
-        challengeId: body.challengeId,
-        code: body.code,
-        newPassword: body.newPassword,
-        selectedTopicId: body.selectedTopicId ?? null,
-        rotateSession: true
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.verifyPasswordResetChallenge({
+          ...context,
+          challengeId: body.challengeId,
+          code: body.code,
+          newPassword: body.newPassword,
+          selectedTopicId: body.selectedTopicId ?? null,
+          rotateSession: true
+        })
+      );
       return;
     }
 
@@ -735,7 +797,11 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         expectedEmail: target.email
       });
       if (!linkResponse) {
-        throw new ApiError(503, "AUTH_NOT_CONFIGURED", "La autenticacion externa no esta configurada.");
+        throw new ApiError(
+          503,
+          "AUTH_NOT_CONFIGURED",
+          "La autenticacion externa no esta configurada."
+        );
       }
       sendJson(res, 200, linkResponse.payload, {
         cookies: linkResponse.cookies
@@ -775,13 +841,19 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
 
     if (req.method === "POST" && url.pathname === "/api/auth/email/verify-code") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.verifyEmailAuthChallenge({
-        ...context,
-        challengeId: body.challengeId,
-        code: body.code,
-        selectedTopicId: body.selectedTopicId ?? null,
-        rotateSession: true
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.verifyEmailAuthChallenge({
+          ...context,
+          challengeId: body.challengeId,
+          code: body.code,
+          selectedTopicId: body.selectedTopicId ?? null,
+          rotateSession: true
+        })
+      );
       return;
     }
 
@@ -794,62 +866,92 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
     }
     if (req.method === "POST" && url.pathname === "/api/auth/logout") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.logout({
-        ...context,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.logout({
+          ...context,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
 
     if (req.method === "PATCH" && url.pathname === "/api/profile") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.updateProfile({
-        ...context,
-        displayName: body.displayName,
-        username: body.username,
-        age: body.age,
-        acceptedTerms: body.acceptedTerms === true,
-        termsVersion: body.termsVersion,
-        description: body.description,
-        profileShowDescription: body.profileShowDescription !== false,
-        profileShowJoinedAt: body.profileShowJoinedAt !== false,
-        socialWhatsapp: body.socialWhatsapp,
-        socialInstagram: body.socialInstagram,
-        socialTiktok: body.socialTiktok,
-        socialFacebook: body.socialFacebook,
-        socialTwitter: body.socialTwitter,
-        socialDiscord: body.socialDiscord,
-        profileShowSocial: body.profileShowSocial !== false,
-        profileIndexable: typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
-        avatarDataUrl: body.avatarDataUrl,
-        removeAvatar: body.removeAvatar === true,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.updateProfile({
+          ...context,
+          displayName: body.displayName,
+          username: body.username,
+          age: body.age,
+          acceptedTerms: body.acceptedTerms === true,
+          termsVersion: body.termsVersion,
+          description: body.description,
+          profileShowDescription: body.profileShowDescription !== false,
+          profileShowJoinedAt: body.profileShowJoinedAt !== false,
+          socialWhatsapp: body.socialWhatsapp,
+          socialInstagram: body.socialInstagram,
+          socialTiktok: body.socialTiktok,
+          socialFacebook: body.socialFacebook,
+          socialTwitter: body.socialTwitter,
+          socialDiscord: body.socialDiscord,
+          profileShowSocial: body.profileShowSocial !== false,
+          profileIndexable:
+            typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
+          avatarDataUrl: body.avatarDataUrl,
+          removeAvatar: body.removeAvatar === true,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
 
     if (req.method === "PATCH" && url.pathname === "/api/settings") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.updateSettings({
-        ...context,
-        likesAnonymous: typeof body.likesAnonymous === "boolean" ? body.likesAnonymous : null,
-        filterProfanity: typeof body.filterProfanity === "boolean" ? body.filterProfanity : null,
-        notificationsFriendsOnly: typeof body.notificationsFriendsOnly === "boolean" ? body.notificationsFriendsOnly : null,
-        emailActivityEnabled: typeof body.emailActivityEnabled === "boolean" ? body.emailActivityEnabled : null,
-        slowMode: typeof body.slowMode === "boolean" ? body.slowMode : null,
-        profileIndexable: typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.updateSettings({
+          ...context,
+          likesAnonymous: typeof body.likesAnonymous === "boolean" ? body.likesAnonymous : null,
+          filterProfanity: typeof body.filterProfanity === "boolean" ? body.filterProfanity : null,
+          notificationsFriendsOnly:
+            typeof body.notificationsFriendsOnly === "boolean"
+              ? body.notificationsFriendsOnly
+              : null,
+          emailActivityEnabled:
+            typeof body.emailActivityEnabled === "boolean" ? body.emailActivityEnabled : null,
+          slowMode: typeof body.slowMode === "boolean" ? body.slowMode : null,
+          profileIndexable:
+            typeof body.profileIndexable === "boolean" ? body.profileIndexable : null,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/api/account/delete") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.deleteAccount({
-        ...context,
-        currentPassword: body.currentPassword,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.deleteAccount({
+          ...context,
+          currentPassword: body.currentPassword,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
 
@@ -861,26 +963,46 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
 
     if (req.method === "POST" && url.pathname === "/api/topics") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 201, store.createTopic({
-        ...context,
-        title: body.title,
-        text: body.text
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        201,
+        store.createTopic({
+          ...context,
+          title: body.title,
+          text: body.text
+        })
+      );
       return;
     }
 
-    if (req.method === "POST" && url.pathname.startsWith("/api/topics/") && url.pathname.endsWith("/follow")) {
+    if (
+      req.method === "POST" &&
+      url.pathname.startsWith("/api/topics/") &&
+      url.pathname.endsWith("/follow")
+    ) {
       const segments = url.pathname.split("/").filter(Boolean);
       const topicId = segments[2] || "";
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.followTopic(topicId, {
-        ...context,
-        selectedTopicId: body.selectedTopicId ?? topicId
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.followTopic(topicId, {
+          ...context,
+          selectedTopicId: body.selectedTopicId ?? topicId
+        })
+      );
       return;
     }
 
-    if (req.method === "POST" && url.pathname.startsWith("/api/topics/") && url.pathname.endsWith("/messages")) {
+    if (
+      req.method === "POST" &&
+      url.pathname.startsWith("/api/topics/") &&
+      url.pathname.endsWith("/messages")
+    ) {
       const segments = url.pathname.split("/").filter(Boolean);
       const topicId = segments[2] || "";
       const body = await readJsonBody(req);
@@ -899,28 +1021,49 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       return;
     }
 
-    if (req.method === "POST" && url.pathname.startsWith("/api/messages/") && (url.pathname.endsWith("/like") || url.pathname.endsWith("/dislike"))) {
+    if (
+      req.method === "POST" &&
+      url.pathname.startsWith("/api/messages/") &&
+      (url.pathname.endsWith("/like") || url.pathname.endsWith("/dislike"))
+    ) {
       const segments = url.pathname.split("/").filter(Boolean);
       const messageId = segments[2] || "";
       const body = await readJsonBody(req);
-      const action = url.pathname.endsWith("/dislike") ? "toggleMessageDislike" : "toggleMessageLike";
-      sendBackendPayload(res, req, authService, 200, store[action](messageId, {
-        ...context,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      const action = url.pathname.endsWith("/dislike")
+        ? "toggleMessageDislike"
+        : "toggleMessageLike";
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store[action](messageId, {
+          ...context,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/reports") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.reportEntity(body.entityType, body.entityId, {
-        ...context,
-        reason: body.reason,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.reportEntity(body.entityType, body.entityId, {
+          ...context,
+          reason: body.reason,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
 
-    if (["POST", "PATCH", "DELETE"].includes(req.method) && url.pathname.startsWith("/api/blocks/")) {
+    if (
+      ["POST", "PATCH", "DELETE"].includes(req.method) &&
+      url.pathname.startsWith("/api/blocks/")
+    ) {
       const userId = url.pathname.split("/").filter(Boolean)[2] || "";
       const body = await readJsonBody(req);
       const methodByHttpVerb = {
@@ -929,14 +1072,19 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         DELETE: "unblockUser"
       };
       const storeMethod = methodByHttpVerb[req.method];
-      sendBackendPayload(res, req, authService, 200, store[storeMethod](userId, {
-        ...context,
-        hideContent: body.hideContent !== false,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store[storeMethod](userId, {
+          ...context,
+          hideContent: body.hideContent !== false,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
-
 
     if (req.method === "POST" && url.pathname.startsWith("/api/friends/")) {
       const segments = url.pathname.split("/").filter(Boolean);
@@ -952,42 +1100,62 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       if (!storeMethod || typeof store[storeMethod] !== "function") {
         throw new ApiError(404, "NOT_FOUND", "Ruta API no encontrada.");
       }
-      sendBackendPayload(res, req, authService, 200, store[storeMethod](userId, {
-        ...context,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store[storeMethod](userId, {
+          ...context,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/admin/dashboard") {
-      sendJson(res, 200, store.getAdminDashboard({
-        ...context,
-        reportPage: url.searchParams.get("reportPage"),
-        reportLimit: url.searchParams.get("reportLimit"),
-        avatarPage: url.searchParams.get("avatarPage"),
-        avatarLimit: url.searchParams.get("avatarLimit")
-      }));
+      sendJson(
+        res,
+        200,
+        store.getAdminDashboard({
+          ...context,
+          reportPage: url.searchParams.get("reportPage"),
+          reportLimit: url.searchParams.get("reportLimit"),
+          avatarPage: url.searchParams.get("avatarPage"),
+          avatarLimit: url.searchParams.get("avatarLimit")
+        })
+      );
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/api/moderation/reports") {
-      sendJson(res, 200, store.listReports({
-        ...context,
-        reportPage: url.searchParams.get("reportPage"),
-        reportLimit: url.searchParams.get("reportLimit")
-      }));
+      sendJson(
+        res,
+        200,
+        store.listReports({
+          ...context,
+          reportPage: url.searchParams.get("reportPage"),
+          reportLimit: url.searchParams.get("reportLimit")
+        })
+      );
       return;
     }
 
     if (req.method === "POST" && url.pathname === "/api/moderation/actions") {
       const body = await readJsonBody(req);
-      sendBackendPayload(res, req, authService, 200, store.applyModerationAction(body.actionType, {
-        ...context,
-        targetType: body.targetType,
-        targetId: body.targetId,
-        reason: body.reason,
-        banHours: body.banHours,
-        selectedTopicId: body.selectedTopicId ?? null
-      }));
+      sendBackendPayload(
+        res,
+        req,
+        authService,
+        200,
+        store.applyModerationAction(body.actionType, {
+          ...context,
+          targetType: body.targetType,
+          targetId: body.targetId,
+          reason: body.reason,
+          banHours: body.banHours,
+          selectedTopicId: body.selectedTopicId ?? null
+        })
+      );
       return;
     }
 
@@ -997,10 +1165,14 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
     }
 
     if (req.method === "GET" && url.pathname === "/api/admin/analytics") {
-      sendJson(res, 200, store.getProductAnalyticsForViewer({
-        ...context,
-        days: url.searchParams.get("days")
-      }));
+      sendJson(
+        res,
+        200,
+        store.getProductAnalyticsForViewer({
+          ...context,
+          days: url.searchParams.get("days")
+        })
+      );
       return;
     }
 
@@ -1115,17 +1287,23 @@ function readPositiveNumber(value, fallback) {
 
 function resolveHttpRateLimitConfig(env = process.env) {
   return {
-    windowMs: readPositiveNumber(env.TOPYKLY_HTTP_RATE_LIMIT_WINDOW_MS || env.CHETREND_HTTP_RATE_LIMIT_WINDOW_MS, DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS),
-    max: readPositiveNumber(env.TOPYKLY_HTTP_RATE_LIMIT_MAX || env.CHETREND_HTTP_RATE_LIMIT_MAX, DEFAULT_HTTP_RATE_LIMIT_MAX),
-    authMax: readPositiveNumber(env.TOPYKLY_HTTP_AUTH_RATE_LIMIT_MAX || env.CHETREND_HTTP_AUTH_RATE_LIMIT_MAX, DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX)
+    windowMs: readPositiveNumber(
+      env.TOPYKLY_HTTP_RATE_LIMIT_WINDOW_MS || env.CHETREND_HTTP_RATE_LIMIT_WINDOW_MS,
+      DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS
+    ),
+    max: readPositiveNumber(
+      env.TOPYKLY_HTTP_RATE_LIMIT_MAX || env.CHETREND_HTTP_RATE_LIMIT_MAX,
+      DEFAULT_HTTP_RATE_LIMIT_MAX
+    ),
+    authMax: readPositiveNumber(
+      env.TOPYKLY_HTTP_AUTH_RATE_LIMIT_MAX || env.CHETREND_HTTP_AUTH_RATE_LIMIT_MAX,
+      DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX
+    )
   };
 }
 
 function getHttpRateLimitScope(url) {
-  if (
-    url.pathname === "/auth/oidc/callback"
-    || url.pathname.startsWith("/api/auth/")
-  ) {
+  if (url.pathname === "/auth/oidc/callback" || url.pathname.startsWith("/api/auth/")) {
     return "auth";
   }
 
@@ -1154,12 +1332,9 @@ function checkHttpRateLimit(buckets, req, url, config, nowMs = Date.now()) {
     return { allowed: false, retryAfterSeconds: 1 };
   }
   const existing = buckets.get(key);
-  const resetAt = existing?.resetAt && existing.resetAt > nowMs
-    ? existing.resetAt
-    : nowMs + config.windowMs;
-  const count = existing?.resetAt && existing.resetAt > nowMs
-    ? existing.count + 1
-    : 1;
+  const resetAt =
+    existing?.resetAt && existing.resetAt > nowMs ? existing.resetAt : nowMs + config.windowMs;
+  const count = existing?.resetAt && existing.resetAt > nowMs ? existing.count + 1 : 1;
 
   buckets.set(key, { count, resetAt });
 
@@ -1179,21 +1354,28 @@ function enforceHttpRateLimit(res, buckets, req, url, config) {
     return true;
   }
 
-  sendJson(res, 429, {
-    error: {
-      code: "RATE_LIMITED",
-      message: "Demasiadas solicitudes. Intenta nuevamente en unos segundos.",
-      retryAfterSeconds: result.retryAfterSeconds
+  sendJson(
+    res,
+    429,
+    {
+      error: {
+        code: "RATE_LIMITED",
+        message: "Demasiadas solicitudes. Intenta nuevamente en unos segundos.",
+        retryAfterSeconds: result.retryAfterSeconds
+      }
+    },
+    {
+      headers: {
+        "Retry-After": String(result.retryAfterSeconds)
+      }
     }
-  }, {
-    headers: {
-      "Retry-After": String(result.retryAfterSeconds)
-    }
-  });
+  );
   return false;
 }
 function resolveGuestCleanupIntervalMs(env = process.env) {
-  const rawValue = String(env.TOPYKLY_GUEST_CLEANUP_INTERVAL_MS || env.CHETREND_GUEST_CLEANUP_INTERVAL_MS || "").trim();
+  const rawValue = String(
+    env.TOPYKLY_GUEST_CLEANUP_INTERVAL_MS || env.CHETREND_GUEST_CLEANUP_INTERVAL_MS || ""
+  ).trim();
   if (!rawValue) {
     return DEFAULT_GUEST_CLEANUP_INTERVAL_MS;
   }
@@ -1205,9 +1387,17 @@ function resolveGuestCleanupIntervalMs(env = process.env) {
 function runGuestCleanup(store, log) {
   try {
     const result = store.cleanupInactiveGuests();
-    const deletedChallengeCount = result.deletedExpiredAuthChallenges + result.deletedExpiredPasswordResetChallenges;
-    if (result.deletedSessions || result.deletedGuestIpRateLimits || result.deletedRegisteredSessions || deletedChallengeCount) {
-      log(`privacy cleanup removed ${result.deletedSessions} guest sessions, ${result.deletedRegisteredSessions} registered sessions, ${result.deletedGuestIpRateLimits} rate-limit rows and ${deletedChallengeCount} expired auth challenges`);
+    const deletedChallengeCount =
+      result.deletedExpiredAuthChallenges + result.deletedExpiredPasswordResetChallenges;
+    if (
+      result.deletedSessions ||
+      result.deletedGuestIpRateLimits ||
+      result.deletedRegisteredSessions ||
+      deletedChallengeCount
+    ) {
+      log(
+        `privacy cleanup removed ${result.deletedSessions} guest sessions, ${result.deletedRegisteredSessions} registered sessions, ${result.deletedGuestIpRateLimits} rate-limit rows and ${deletedChallengeCount} expired auth challenges`
+      );
     }
   } catch (error) {
     log(`privacy cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -1228,7 +1418,9 @@ function runMessageReactionReset(store, log) {
   try {
     const result = store.resetDailyMessageReactions();
     if (result.reset) {
-      log(`message reactions reset for ${result.resetDay}: ${result.deletedLikes} likes and ${result.deletedDislikes} dislikes removed`);
+      log(
+        `message reactions reset for ${result.resetDay}: ${result.deletedLikes} likes and ${result.deletedDislikes} dislikes removed`
+      );
     }
   } catch (error) {
     log(`message reaction reset failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -1273,15 +1465,20 @@ const socialCardCache = new Map();
 // conjunto alcanza como clave y evita volver a invocar a sharp en cada visita.
 function socialCardFingerprint(topic, avatarBuffer) {
   const rootMessage = topic.messages?.find((message) => message.isRoot) || topic.messages?.[0];
-  return crypto.createHash("sha1").update(JSON.stringify([
-    topic.title,
-    topic.commentCount || 0,
-    topic.author?.name || "",
-    topic.author?.nickname || "",
-    topic.author?.avatarUrl || "",
-    rootMessage?.text || "",
-    avatarBuffer?.length || 0
-  ])).digest("base64url");
+  return crypto
+    .createHash("sha1")
+    .update(
+      JSON.stringify([
+        topic.title,
+        topic.commentCount || 0,
+        topic.author?.name || "",
+        topic.author?.nickname || "",
+        topic.author?.avatarUrl || "",
+        rootMessage?.text || "",
+        avatarBuffer?.length || 0
+      ])
+    )
+    .digest("base64url");
 }
 
 async function handleTopicSocialCardRequest(store, req, res, url) {
@@ -1319,18 +1516,23 @@ async function handleTopicSocialCardRequest(store, req, res, url) {
   let cached = socialCardCache.get(topic.id);
   if (!cached || cached.fingerprint !== fingerprint) {
     const image = await renderTopicSocialCard(topic, { avatarBuffer });
-    cached = rememberInBoundedCache(socialCardCache, topic.id, {
-      fingerprint,
-      image,
-      etag: computeEtag(image)
-    }, SOCIAL_CARD_CACHE_MAX_ENTRIES);
+    cached = rememberInBoundedCache(
+      socialCardCache,
+      topic.id,
+      {
+        fingerprint,
+        image,
+        etag: computeEtag(image)
+      },
+      SOCIAL_CARD_CACHE_MAX_ENTRIES
+    );
   }
 
   const baseHeaders = {
     ...getSecurityHeaders({ includeCsp: false, req }),
     "Content-Type": "image/png",
     "Cache-Control": "public, max-age=3600",
-    "ETag": cached.etag
+    ETag: cached.etag
   };
 
   if (etagMatches(req, cached.etag)) {
@@ -1352,29 +1554,36 @@ function buildSitemapXml(store) {
     { loc: `${origin}/terms.html` },
     { loc: `${origin}/privacy.html` }
   ];
-  store.getSeoTopicEntries()
+  store
+    .getSeoTopicEntries()
     .filter((topic) => !topic.isThin && !topic.isProblematic)
     .forEach((topic) => {
       entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
     });
-  store.getSeoArchivedTopicEntries()
+  store
+    .getSeoArchivedTopicEntries()
     .filter((topic) => !topic.isThin && !topic.isProblematic)
     .forEach((topic) => {
       entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
     });
   store.getSeoProfileEntries().forEach((profile) => {
-    entries.push({ loc: `${origin}/u/${encodeURIComponent(profile.nickname)}`, lastmod: profile.lastmod });
+    entries.push({
+      loc: `${origin}/u/${encodeURIComponent(profile.nickname)}`,
+      lastmod: profile.lastmod
+    });
   });
   return renderSitemap(entries);
 }
 
 function isSeoPagePath(pathname) {
-  return pathname === "/archivo"
-    || pathname === "/temas"
-    || pathname === "/tema"
-    || pathname.startsWith("/tema/")
-    || pathname === "/u"
-    || pathname.startsWith("/u/");
+  return (
+    pathname === "/archivo" ||
+    pathname === "/temas" ||
+    pathname === "/tema" ||
+    pathname.startsWith("/tema/") ||
+    pathname === "/u" ||
+    pathname.startsWith("/u/")
+  );
 }
 
 function handleSeoPageRequest(store, req, res, url) {
@@ -1384,7 +1593,10 @@ function handleSeoPageRequest(store, req, res, url) {
   }
 
   const userAgent = req.headers["user-agent"] || "";
-  const isBot = /googlebot|bingbot|yandex|baiduspider|duckduckbot|yahoo|twitterbot|facebookexternalhit|discordbot|slackbot|lighthouse|telegrambot|embedly|quora link preview|outbrain|vkshare|pinterest|slack-imgproxy/i.test(userAgent);
+  const isBot =
+    /googlebot|bingbot|yandex|baiduspider|duckduckbot|yahoo|twitterbot|facebookexternalhit|discordbot|slackbot|lighthouse|telegrambot|embedly|quora link preview|outbrain|vkshare|pinterest|slack-imgproxy/i.test(
+      userAgent
+    );
   const isBrowser = /mozilla|chrome|safari|firefox|edge|mobile/i.test(userAgent);
 
   if (isBrowser && !isBot) {
@@ -1427,22 +1639,34 @@ function handleSeoPageRequest(store, req, res, url) {
   }
 
   if (url.pathname === "/temas") {
-    sendHtml(res, req, 200, renderTopicsIndexPage(
-      store.getSeoTopicEntries().filter((topic) => !topic.isProblematic),
-      { origin }
-    ), {
-      "Cache-Control": "public, max-age=300"
-    });
+    sendHtml(
+      res,
+      req,
+      200,
+      renderTopicsIndexPage(
+        store.getSeoTopicEntries().filter((topic) => !topic.isProblematic),
+        { origin }
+      ),
+      {
+        "Cache-Control": "public, max-age=300"
+      }
+    );
     return;
   }
 
   if (url.pathname === "/archivo") {
-    sendHtml(res, req, 200, renderTopicsArchivePage(
-      store.getSeoArchivedTopicEntries().filter((topic) => !topic.isProblematic),
-      { origin }
-    ), {
-      "Cache-Control": "public, max-age=300"
-    });
+    sendHtml(
+      res,
+      req,
+      200,
+      renderTopicsArchivePage(
+        store.getSeoArchivedTopicEntries().filter((topic) => !topic.isProblematic),
+        { origin }
+      ),
+      {
+        "Cache-Control": "public, max-age=300"
+      }
+    );
     return;
   }
 
@@ -1554,13 +1778,18 @@ function readStaticFile(filePath) {
     return null;
   }
 
-  return rememberInBoundedCache(staticFileCache, filePath, {
-    raw,
-    mtimeMs: stats.mtimeMs,
-    size: stats.size,
-    etag: computeEtag(raw),
-    compressedVariants: new Map()
-  }, STATIC_CACHE_MAX_ENTRIES);
+  return rememberInBoundedCache(
+    staticFileCache,
+    filePath,
+    {
+      raw,
+      mtimeMs: stats.mtimeMs,
+      size: stats.size,
+      etag: computeEtag(raw),
+      compressedVariants: new Map()
+    },
+    STATIC_CACHE_MAX_ENTRIES
+  );
 }
 
 function handleStaticRequest(req, res, url, store) {
@@ -1578,9 +1807,8 @@ function handleStaticRequest(req, res, url, store) {
     return;
   }
 
-  const resolvedFilePath = url.pathname === "/favicon.ico"
-    ? path.join(root, "favicon.svg")
-    : filePath;
+  const resolvedFilePath =
+    url.pathname === "/favicon.ico" ? path.join(root, "favicon.svg") : filePath;
 
   const entry = readStaticFile(resolvedFilePath);
   if (!entry) {
@@ -1592,19 +1820,20 @@ function handleStaticRequest(req, res, url, store) {
   const contentType = mime[extension] || "application/octet-stream";
   // Solo las URL que ya traen ?v= pueden cachearse de forma indefinida: el resto
   // de los modulos se importa sin version y quedaria congelado tras un deploy.
-  const cacheControl = extension === ".html"
-    ? "no-store, max-age=0"
-    : url.searchParams.has("v")
-      ? IMMUTABLE_CACHE_CONTROL
-      : [".js", ".css"].includes(extension)
-        ? "public, max-age=300, must-revalidate"
-        : "public, max-age=3600";
+  const cacheControl =
+    extension === ".html"
+      ? "no-store, max-age=0"
+      : url.searchParams.has("v")
+        ? IMMUTABLE_CACHE_CONTROL
+        : [".js", ".css"].includes(extension)
+          ? "public, max-age=300, must-revalidate"
+          : "public, max-age=3600";
 
   const baseHeaders = {
     ...getSecurityHeaders({ includeCsp: extension === ".html", req }),
     "Content-Type": contentType,
     "Cache-Control": cacheControl,
-    "ETag": entry.etag
+    ETag: entry.etag
   };
 
   if (etagMatches(req, entry.etag)) {
@@ -1628,16 +1857,27 @@ export function startPreviewServer({
   liveEventRelay = null
 }) {
   loadEnvFile(path.join(root, ".env"));
-  const nodeEnv = String(process.env.NODE_ENV || "").trim().toLowerCase();
-  const sessionSecret = String(process.env.TOPYKLY_SESSION_SECRET || process.env.CHETREND_SESSION_SECRET || "").trim();
+  const nodeEnv = String(process.env.NODE_ENV || "")
+    .trim()
+    .toLowerCase();
+  const sessionSecret = String(
+    process.env.TOPYKLY_SESSION_SECRET || process.env.CHETREND_SESSION_SECRET || ""
+  ).trim();
   if (nodeEnv === "production" && !sessionSecret) {
     throw new Error("TOPYKLY_SESSION_SECRET es obligatorio cuando NODE_ENV=production.");
   }
-  if (isLocalDevLoginAllowed() && !["127.0.0.1", "::1", "localhost"].includes(String(host).trim().toLowerCase())) {
-    throw new Error("El login local sin contrasena solo puede habilitarse en una interfaz loopback.");
+  if (
+    isLocalDevLoginAllowed() &&
+    !["127.0.0.1", "::1", "localhost"].includes(String(host).trim().toLowerCase())
+  ) {
+    throw new Error(
+      "El login local sin contrasena solo puede habilitarse en una interfaz loopback."
+    );
   }
   if (isLocalDevLoginAllowed()) {
-    log("ADVERTENCIA: login local sin contraseña habilitado porque NODE_ENV no es \"production\". No usar esta configuración en producción.");
+    log(
+      'ADVERTENCIA: login local sin contraseña habilitado porque NODE_ENV no es "production". No usar esta configuración en producción.'
+    );
   }
   const store = createBackendStore({
     dbPath,
@@ -1648,25 +1888,28 @@ export function startPreviewServer({
     relay: liveEventRelay,
     log,
     getHeaders: (req) => getSecurityHeaders({ includeCsp: false, req }),
-    rejectCapacity: (res) => sendJson(res, 503, {
-      error: {
-        code: "LIVE_CAPACITY_REACHED",
-        message: "La sincronización en vivo está temporalmente ocupada."
-      }
-    })
+    rejectCapacity: (res) =>
+      sendJson(res, 503, {
+        error: {
+          code: "LIVE_CAPACITY_REACHED",
+          message: "La sincronización en vivo está temporalmente ocupada."
+        }
+      })
   });
   const httpRateLimitConfig = resolveHttpRateLimitConfig();
   const httpRateLimitBuckets = new Map();
   const sitemapCache = { xml: null, expiresAt: 0 };
   const guestCleanupIntervalMs = resolveGuestCleanupIntervalMs();
   const reactionResetCheckIntervalMs = resolveReactionResetCheckIntervalMs();
-  const guestCleanupTimer = guestCleanupIntervalMs > 0
-    ? setInterval(() => runGuestCleanup(store, log), guestCleanupIntervalMs)
-    : null;
+  const guestCleanupTimer =
+    guestCleanupIntervalMs > 0
+      ? setInterval(() => runGuestCleanup(store, log), guestCleanupIntervalMs)
+      : null;
   guestCleanupTimer?.unref?.();
-  const reactionResetTimer = reactionResetCheckIntervalMs > 0
-    ? setInterval(() => runMessageReactionReset(store, log), reactionResetCheckIntervalMs)
-    : null;
+  const reactionResetTimer =
+    reactionResetCheckIntervalMs > 0
+      ? setInterval(() => runMessageReactionReset(store, log), reactionResetCheckIntervalMs)
+      : null;
   reactionResetTimer?.unref?.();
   runGuestCleanup(store, log);
   runMessageReactionReset(store, log);

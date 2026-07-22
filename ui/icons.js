@@ -40,12 +40,7 @@ const iconPaths = {
  * Creates an SVG element with the given path and attributes.
  */
 export function createIcon(name, options = {}) {
-  const { 
-    viewBox = "0 0 24 24", 
-    strokeWidth = "1.8", 
-    className = "",
-    size = null
-  } = options;
+  const { viewBox = "0 0 24 24", strokeWidth = "1.8", className = "", size = null } = options;
 
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", viewBox);
@@ -55,11 +50,11 @@ export function createIcon(name, options = {}) {
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
-  
+
   if (className) {
     svg.classList.add(...className.split(" "));
   }
-  
+
   if (size) {
     svg.setAttribute("width", size);
     svg.setAttribute("height", size);
@@ -87,12 +82,16 @@ export function createAvatarIcon(className = "topic-item__avatar", avatarUrl = "
     container.appendChild(image);
     return container;
   }
-  
-  const svg = createIcon("avatar", { viewBox: "0 0 48 48", strokeWidth: "0", size: AVATAR_INTRINSIC_SIZE });
-  // Avatar uses fills for parts of the rect/circle/path logic in CSS 
-  // but the current JS sets them as elements. 
+
+  const svg = createIcon("avatar", {
+    viewBox: "0 0 48 48",
+    strokeWidth: "0",
+    size: AVATAR_INTRINSIC_SIZE
+  });
+  // Avatar uses fills for parts of the rect/circle/path logic in CSS
+  // but the current JS sets them as elements.
   // Let's refine the paths to be clean.
-  
+
   container.appendChild(svg);
   return container;
 }

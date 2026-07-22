@@ -14,9 +14,13 @@ function syncCustomPalettePicker(state, dom, option) {
   const pickerParent = dom.paletteModal.querySelector(".palette-modal__body") || dom.paletteModal;
   const themeMode = state.theme === "dark" ? "dark" : "light";
   const pickerConfigSignature = `theme:${themeMode}`;
-  const activePicker = typeof document !== "undefined" ? document.querySelector(".clr-picker.clr-open") : null;
+  const activePicker =
+    typeof document !== "undefined" ? document.querySelector(".clr-picker.clr-open") : null;
 
-  if (typeof document !== "undefined" && document.documentElement.dataset.customPickerOpen !== "true") {
+  if (
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.customPickerOpen !== "true"
+  ) {
     document.documentElement.dataset.customPickerOpen = "false";
   }
 
@@ -68,8 +72,8 @@ function isCustomPaletteEditing() {
 
   return Boolean(
     activeElement.closest("[data-custom-palette-hex]") ||
-      activeElement.closest("[data-custom-palette-picker]") ||
-      activeElement.closest(".clr-picker")
+    activeElement.closest("[data-custom-palette-picker]") ||
+    activeElement.closest(".clr-picker")
   );
 }
 
@@ -235,8 +239,14 @@ export function renderPaletteModal(state, dom) {
 
   const [defaultOption, ...remainingOptions] = PALETTE_OPTIONS;
   const customOption = buildCustomPaletteOption(state.customPaletteHex);
-  const defaultMarkup = createPaletteOptionMarkup(defaultOption, defaultOption.id === state.paletteId);
-  const customMarkup = createCustomPaletteMarkup(customOption, state.paletteId === CUSTOM_PALETTE_ID);
+  const defaultMarkup = createPaletteOptionMarkup(
+    defaultOption,
+    defaultOption.id === state.paletteId
+  );
+  const customMarkup = createCustomPaletteMarkup(
+    customOption,
+    state.paletteId === CUSTOM_PALETTE_ID
+  );
   const randomMarkup = createRandomPaletteMarkup();
   const remainingMarkup = remainingOptions
     .map((option) => createPaletteOptionMarkup(option, option.id === state.paletteId))

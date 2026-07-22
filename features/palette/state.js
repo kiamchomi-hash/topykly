@@ -53,8 +53,8 @@ export function isPaletteStateAction(action) {
 export function reducePaletteState(state, action) {
   switch (action.type) {
     case PALETTE_ACTION_TYPES.toggleTheme:
-      return { 
-        changed: true, 
+      return {
+        changed: true,
         theme: state.theme === "light" ? "dark" : "light",
         nextState: { ...state, theme: state.theme === "light" ? "dark" : "light" }
       };
@@ -63,18 +63,18 @@ export function reducePaletteState(state, action) {
       if (state.isPaletteModalOpen) {
         return { changed: false, reason: "already-open" };
       }
-      return { 
-        changed: true, 
-        nextState: { ...state, isPaletteModalOpen: true } 
+      return {
+        changed: true,
+        nextState: { ...state, isPaletteModalOpen: true }
       };
 
     case PALETTE_ACTION_TYPES.closeModal:
       if (!state.isPaletteModalOpen) {
         return { changed: false, reason: "already-closed" };
       }
-      return { 
-        changed: true, 
-        nextState: { ...state, isPaletteModalOpen: false } 
+      return {
+        changed: true,
+        nextState: { ...state, isPaletteModalOpen: false }
       };
 
     case PALETTE_ACTION_TYPES.selectPalette: {
@@ -88,8 +88,8 @@ export function reducePaletteState(state, action) {
         return { changed: false, reason: "same-palette" };
       }
 
-      return { 
-        changed: true, 
+      return {
+        changed: true,
         paletteId: nextPaletteId,
         nextState: { ...state, paletteId: nextPaletteId }
       };
@@ -100,8 +100,8 @@ export function reducePaletteState(state, action) {
         return { changed: false, reason: "already-custom" };
       }
 
-      return { 
-        changed: true, 
+      return {
+        changed: true,
         paletteId: CUSTOM_PALETTE_ID,
         nextState: { ...state, paletteId: CUSTOM_PALETTE_ID }
       };
@@ -112,8 +112,14 @@ export function reducePaletteState(state, action) {
         return { changed: false, reason: "invalid-hex" };
       }
 
-      const nextCustomPaletteHex = normalizeHexColor(parsedHex, state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
-      if (state.paletteId === CUSTOM_PALETTE_ID && state.customPaletteHex === nextCustomPaletteHex) {
+      const nextCustomPaletteHex = normalizeHexColor(
+        parsedHex,
+        state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX
+      );
+      if (
+        state.paletteId === CUSTOM_PALETTE_ID &&
+        state.customPaletteHex === nextCustomPaletteHex
+      ) {
         return { changed: false, reason: "same-hex" };
       }
 
@@ -121,10 +127,10 @@ export function reducePaletteState(state, action) {
         changed: true,
         paletteId: CUSTOM_PALETTE_ID,
         customPaletteHex: nextCustomPaletteHex,
-        nextState: { 
-          ...state, 
-          paletteId: CUSTOM_PALETTE_ID, 
-          customPaletteHex: nextCustomPaletteHex 
+        nextState: {
+          ...state,
+          paletteId: CUSTOM_PALETTE_ID,
+          customPaletteHex: nextCustomPaletteHex
         }
       };
     }

@@ -23,10 +23,7 @@ export function createTopicSkeleton() {
 
   const avatar = createProfileAvatar();
   const content = el("span", "topic-item__content");
-  content.append(
-    el("span", "topic-item__title"),
-    el("span", "topic-item__meta")
-  );
+  content.append(el("span", "topic-item__title"), el("span", "topic-item__meta"));
 
   button.append(avatar, content);
   return button;

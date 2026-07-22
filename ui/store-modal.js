@@ -69,9 +69,9 @@ export function renderStoreModal(state, dom) {
     return;
   }
 
-  dom.storeCategoryTabs.innerHTML = STORE_CATEGORIES
-    .map((candidate) => createTabMarkup(candidate, candidate.id === category.id))
-    .join("");
+  dom.storeCategoryTabs.innerHTML = STORE_CATEGORIES.map((candidate) =>
+    createTabMarkup(candidate, candidate.id === category.id)
+  ).join("");
 
   dom.storeItemGrid.className = `store-modal__grid store-modal__grid--${category.layout}`;
   dom.storeItemGrid.innerHTML = `

@@ -14,7 +14,9 @@ const dbConfig = resolveDbConfig(explicitDbPath);
 if (!shouldApply) {
   console.log(`Preparado para insertar hasta ${limit} temas editoriales en ${dbConfig.dbPath}.`);
   console.log("No se modificó la base. Repite el comando con --apply para confirmar.");
-  console.log("Cada tema nuevo puede archivar al tema activo más antiguo cuando ya existen 40 activos.");
+  console.log(
+    "Cada tema nuevo puede archivar al tema activo más antiguo cuando ya existen 40 activos."
+  );
   process.exit(0);
 }
 

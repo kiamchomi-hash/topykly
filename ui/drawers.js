@@ -49,11 +49,12 @@ export function openDrawer(side, dom, closeTimerRef, trigger = null) {
 
   drawer.hidden = false;
   if (side === "right") {
-    lastDrawerFocusOrigin = trigger instanceof HTMLElement
-      ? trigger
-      : document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
+    lastDrawerFocusOrigin =
+      trigger instanceof HTMLElement
+        ? trigger
+        : document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
   }
 
   window.clearTimeout(closeTimerRef.current);

@@ -324,9 +324,10 @@ export function injectCustomPaletteStylesheet(documentRef, customHex = DEFAULT_C
   }
 
   const cssText = buildCustomPaletteStylesheetCss(customHex);
-  let style = typeof documentRef.querySelector === "function"
-    ? documentRef.querySelector(`#${CUSTOM_PALETTE_STYLESHEET_ID}`)
-    : null;
+  let style =
+    typeof documentRef.querySelector === "function"
+      ? documentRef.querySelector(`#${CUSTOM_PALETTE_STYLESHEET_ID}`)
+      : null;
 
   if (style?.dataset?.paletteCssSignature === cssText) {
     return style;
@@ -353,9 +354,11 @@ function getResolvedPaletteOption(paletteId, customHex = DEFAULT_CUSTOM_PALETTE_
     return buildCustomPaletteOption(customHex);
   }
 
-  return PALETTE_OPTIONS.find((option) => option.id === (paletteId || DEFAULT_PALETTE_ID))
-    || PALETTE_OPTIONS.find((option) => option.id === DEFAULT_PALETTE_ID)
-    || PALETTE_OPTIONS[0];
+  return (
+    PALETTE_OPTIONS.find((option) => option.id === (paletteId || DEFAULT_PALETTE_ID)) ||
+    PALETTE_OPTIONS.find((option) => option.id === DEFAULT_PALETTE_ID) ||
+    PALETTE_OPTIONS[0]
+  );
 }
 
 export function getPalettePreview(theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
@@ -368,7 +371,8 @@ export function getActiveAccentColor(theme, paletteId, customHex = DEFAULT_CUSTO
     return getCustomPaletteVars(customHex, theme)["--accent"];
   }
 
-  return (PALETTE_THEME_COLORS[paletteId || DEFAULT_PALETTE_ID] || PALETTE_THEME_COLORS[DEFAULT_PALETTE_ID])[theme === "dark" ? "dark" : "light"].accent;
+  return (PALETTE_THEME_COLORS[paletteId || DEFAULT_PALETTE_ID] ||
+    PALETTE_THEME_COLORS[DEFAULT_PALETTE_ID])[theme === "dark" ? "dark" : "light"].accent;
 }
 
 export function getActiveTextColor(theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
@@ -376,7 +380,8 @@ export function getActiveTextColor(theme, paletteId, customHex = DEFAULT_CUSTOM_
     return getCustomPaletteVars(customHex, theme)["--text"];
   }
 
-  return (PALETTE_THEME_COLORS[paletteId || DEFAULT_PALETTE_ID] || PALETTE_THEME_COLORS[DEFAULT_PALETTE_ID])[theme === "dark" ? "dark" : "light"].text;
+  return (PALETTE_THEME_COLORS[paletteId || DEFAULT_PALETTE_ID] ||
+    PALETTE_THEME_COLORS[DEFAULT_PALETTE_ID])[theme === "dark" ? "dark" : "light"].text;
 }
 
 export function getFaviconDataUrl(theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
@@ -393,9 +398,7 @@ export function getFaviconDataUrl(theme, paletteId, customHex = DEFAULT_CUSTOM_P
     </svg>
   `.trim();
 
-  const encoded = encodeURIComponent(svg)
-    .replace(/'/g, "%27")
-    .replace(/"/g, "%22");
+  const encoded = encodeURIComponent(svg).replace(/'/g, "%27").replace(/"/g, "%22");
 
   return `data:image/svg+xml;charset=utf-8,${encoded}`;
 }
@@ -431,7 +434,12 @@ export function clearCustomPaletteVars(rootElement) {
   }
 }
 
-export function applyPaletteToDocument(rootElement, theme, paletteId, customHex = DEFAULT_CUSTOM_PALETTE_HEX) {
+export function applyPaletteToDocument(
+  rootElement,
+  theme,
+  paletteId,
+  customHex = DEFAULT_CUSTOM_PALETTE_HEX
+) {
   if (!rootElement) {
     return;
   }
@@ -439,7 +447,8 @@ export function applyPaletteToDocument(rootElement, theme, paletteId, customHex 
   rootElement.dataset.theme = theme;
   rootElement.dataset.palette = paletteId || DEFAULT_PALETTE_ID;
   clearCustomPaletteVars(rootElement);
-  const documentRef = rootElement.ownerDocument || (typeof document !== "undefined" ? document : null);
+  const documentRef =
+    rootElement.ownerDocument || (typeof document !== "undefined" ? document : null);
   injectCustomPaletteStylesheet(documentRef, customHex);
 }
 

@@ -122,15 +122,28 @@ export function renderProfileModal(state, dom) {
   const description = viewer.description || "";
   const showDescription = viewer.profileShowDescription !== false;
   const showJoinedAt = viewer.profileShowJoinedAt !== false;
-  if (dom.profileDescriptionInput && dom.profileDescriptionInput.dataset.renderedDescription !== description) {
+  if (
+    dom.profileDescriptionInput &&
+    dom.profileDescriptionInput.dataset.renderedDescription !== description
+  ) {
     dom.profileDescriptionInput.value = description;
     dom.profileDescriptionInput.dataset.renderedDescription = description;
   }
   if (dom.profileJoinedAtText) {
     dom.profileJoinedAtText.textContent = formatProfileJoinedDate(viewer.createdAt);
   }
-  setVisibilityButton(dom.profileDescriptionVisibilityButton, showDescription, "descripción", justOpened);
-  setVisibilityButton(dom.profileJoinedAtVisibilityButton, showJoinedAt, "fecha de registro", justOpened);
+  setVisibilityButton(
+    dom.profileDescriptionVisibilityButton,
+    showDescription,
+    "descripción",
+    justOpened
+  );
+  setVisibilityButton(
+    dom.profileJoinedAtVisibilityButton,
+    showJoinedAt,
+    "fecha de registro",
+    justOpened
+  );
 
   const showSocial = viewer.profileShowSocial !== false;
   setVisibilityButton(dom.profileSocialVisibilityButton, showSocial, "redes sociales", justOpened);
@@ -167,5 +180,8 @@ export function renderProfileModal(state, dom) {
   }
 
   const avatarRemoved = dom.profileAvatarInput?.dataset?.removeAvatar === "true";
-  setPreviewImage(dom.profileAvatarPreview, avatarRemoved ? "" : dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || avatarUrl);
+  setPreviewImage(
+    dom.profileAvatarPreview,
+    avatarRemoved ? "" : dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || avatarUrl
+  );
 }

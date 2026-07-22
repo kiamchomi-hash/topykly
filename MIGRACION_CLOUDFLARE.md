@@ -20,14 +20,14 @@ El proyecto actualmente depende de:
 
 ## Equivalencias en Cloudflare
 
-| Implementación actual en Render | Equivalente propuesto en Cloudflare |
-| --- | --- |
-| Servidor Node | Cloudflare Worker |
-| HTML, CSS, JavaScript e imágenes estáticas | Workers Static Assets |
-| SQLite local | Cloudflare D1 |
-| Avatares guardados en disco | Cloudflare R2 |
-| Tareas con `setInterval` | Cron Triggers |
-| Variables de entorno | Workers Secrets y variables |
+| Implementación actual en Render            | Equivalente propuesto en Cloudflare |
+| ------------------------------------------ | ----------------------------------- |
+| Servidor Node                              | Cloudflare Worker                   |
+| HTML, CSS, JavaScript e imágenes estáticas | Workers Static Assets               |
+| SQLite local                               | Cloudflare D1                       |
+| Avatares guardados en disco                | Cloudflare R2                       |
+| Tareas con `setInterval`                   | Cron Triggers                       |
+| Variables de entorno                       | Workers Secrets y variables         |
 
 No parece necesario introducir Durable Objects inicialmente. Se podrían evaluar más adelante si se incorporan conexiones en tiempo real, WebSockets o coordinación estricta entre solicitudes concurrentes.
 

@@ -2,7 +2,7 @@ const HTML_ESCAPES = new Map([
   ["&", "&amp;"],
   ["<", "&lt;"],
   [">", "&gt;"],
-  ["\"", "&quot;"],
+  ['"', "&quot;"],
   ["'", "&#39;"]
 ]);
 
@@ -48,7 +48,9 @@ function formatDate(isoDate) {
   }
 
   try {
-    return new Intl.DateTimeFormat("es", { day: "numeric", month: "long", year: "numeric" }).format(date);
+    return new Intl.DateTimeFormat("es", { day: "numeric", month: "long", year: "numeric" }).format(
+      date
+    );
   } catch {
     return date.toISOString().slice(0, 10);
   }
@@ -131,16 +133,22 @@ export function renderPageShell({
     ogImage ? `<meta property="og:image:type" content="image/png">` : "",
     ogImage ? `<meta property="og:image:width" content="${escapeHtml(ogImageWidth)}">` : "",
     ogImage ? `<meta property="og:image:height" content="${escapeHtml(ogImageHeight)}">` : "",
-    ogImage && ogImageAlt ? `<meta property="og:image:alt" content="${escapeHtml(ogImageAlt)}">` : "",
+    ogImage && ogImageAlt
+      ? `<meta property="og:image:alt" content="${escapeHtml(ogImageAlt)}">`
+      : "",
     `<meta name="twitter:card" content="${ogImage ? "summary_large_image" : "summary"}">`,
     `<meta name="twitter:title" content="${escapeHtml(title)}">`,
     description ? `<meta name="twitter:description" content="${escapeHtml(description)}">` : "",
     ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}">` : "",
-    ogImage && ogImageAlt ? `<meta name="twitter:image:alt" content="${escapeHtml(ogImageAlt)}">` : "",
+    ogImage && ogImageAlt
+      ? `<meta name="twitter:image:alt" content="${escapeHtml(ogImageAlt)}">`
+      : "",
     `<link rel="icon" href="/favicon.svg" type="image/svg+xml">`,
     `<style>${PAGE_STYLE}</style>`,
     jsonLd ? `<script type="application/ld+json">${serializeJsonLd(jsonLd)}</script>` : ""
-  ].filter(Boolean).join("\n    ");
+  ]
+    .filter(Boolean)
+    .join("\n    ");
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -164,12 +172,12 @@ export function renderPageShell({
 }
 
 function renderMessageBlock(message) {
-  const authorLabel = message.authorNickname && message.authorType === "registered"
-    ? `<a class="seo-message__author" href="/u/${escapeHtml(encodeURIComponent(message.authorNickname))}">${escapeHtml(message.authorName)}</a>`
-    : `<span class="seo-message__author">${escapeHtml(message.authorName)}</span>`;
-  const likesLabel = message.likes > 0
-    ? ` · ${message.likes === 1 ? "1 like" : `${message.likes} likes`}`
-    : "";
+  const authorLabel =
+    message.authorNickname && message.authorType === "registered"
+      ? `<a class="seo-message__author" href="/u/${escapeHtml(encodeURIComponent(message.authorNickname))}">${escapeHtml(message.authorName)}</a>`
+      : `<span class="seo-message__author">${escapeHtml(message.authorName)}</span>`;
+  const likesLabel =
+    message.likes > 0 ? ` · ${message.likes === 1 ? "1 like" : `${message.likes} likes`}` : "";
 
   return `<div class="seo-message${message.isRoot ? " seo-message--root" : ""}">
         <p>${escapeHtml(message.text)}</p>
@@ -180,7 +188,8 @@ function renderMessageBlock(message) {
 function buildTopicDescription(topic) {
   const rootText = topic.messages.find((message) => message.isRoot)?.text || "";
   const base = rootText || topic.title;
-  const commentLabel = topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
+  const commentLabel =
+    topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
   const summary = base.length > 150 ? `${base.slice(0, 147)}...` : base;
   return `${summary} — ${commentLabel} en TOPYKLY.`;
 }
@@ -216,9 +225,13 @@ export function renderTopicPage(topic, { origin }) {
     jsonLd.author.url = `${origin}/u/${encodeURIComponent(topic.author.nickname)}`;
   }
 
-  const commentLabel = topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
+  const commentLabel =
+    topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
   const relatedItems = (topic.relatedTopics || [])
-    .map((related) => `<li><a href="${escapeHtml(topicPath(related))}">${escapeHtml(related.title)}</a></li>`)
+    .map(
+      (related) =>
+        `<li><a href="${escapeHtml(topicPath(related))}">${escapeHtml(related.title)}</a></li>`
+    )
     .join("\n        ");
 
   const bodyHtml = `<article>
@@ -247,7 +260,8 @@ export function renderTopicPage(topic, { origin }) {
 export function renderTopicsIndexPage(topics, { origin }) {
   const items = topics
     .map((topic) => {
-      const commentLabel = topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
+      const commentLabel =
+        topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
       return `<li>
           <a href="${escapeHtml(topicPath(topic))}">${escapeHtml(topic.title)}</a>
           <span class="seo-item-meta">${escapeHtml(commentLabel)} · última actividad ${escapeHtml(formatDate(topic.lastActivityAt))}</span>
@@ -263,7 +277,8 @@ export function renderTopicsIndexPage(topics, { origin }) {
 
   return renderPageShell({
     title: "Temas activos — TOPYKLY",
-    description: "Lista de temas activos en TOPYKLY, la comunidad para conversar por temas, descubrir rankings y conectar con usuarios.",
+    description:
+      "Lista de temas activos en TOPYKLY, la comunidad para conversar por temas, descubrir rankings y conectar con usuarios.",
     canonicalUrl: `${origin}/temas`,
     jsonLd: {
       "@context": "https://schema.org",
@@ -278,7 +293,8 @@ export function renderTopicsIndexPage(topics, { origin }) {
 export function renderTopicsArchivePage(topics, { origin }) {
   const items = topics
     .map((topic) => {
-      const commentLabel = topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
+      const commentLabel =
+        topic.commentCount === 1 ? "1 comentario" : `${topic.commentCount} comentarios`;
       return `<li>
           <a href="${escapeHtml(topicPath(topic))}">${escapeHtml(topic.title)}</a>
           <span class="seo-item-meta">${escapeHtml(commentLabel)} · archivado ${escapeHtml(formatDate(topic.lastActivityAt))}</span>
@@ -294,7 +310,8 @@ export function renderTopicsArchivePage(topics, { origin }) {
 
   return renderPageShell({
     title: "Temas archivados — TOPYKLY",
-    description: "Archivo de conversaciones en español de TOPYKLY, disponibles para lectura y consulta mediante su enlace permanente.",
+    description:
+      "Archivo de conversaciones en español de TOPYKLY, disponibles para lectura y consulta mediante su enlace permanente.",
     canonicalUrl: `${origin}/archivo`,
     jsonLd: {
       "@context": "https://schema.org",
@@ -326,14 +343,20 @@ export function renderProfilePage(profile, { origin }) {
     stats.push(`${profile.postCount === 1 ? "1 tema" : `${profile.postCount} temas`}`);
   }
   if (Number.isFinite(profile.commentCount)) {
-    stats.push(`${profile.commentCount === 1 ? "1 comentario" : `${profile.commentCount} comentarios`}`);
+    stats.push(
+      `${profile.commentCount === 1 ? "1 comentario" : `${profile.commentCount} comentarios`}`
+    );
   }
   if (Number.isFinite(profile.likeCount)) {
-    stats.push(`${profile.likeCount === 1 ? "1 like recibido" : `${profile.likeCount} likes recibidos`}`);
+    stats.push(
+      `${profile.likeCount === 1 ? "1 like recibido" : `${profile.likeCount} likes recibidos`}`
+    );
   }
 
   const topicItems = (profile.recentTopics || [])
-    .map((topic) => `<li><a href="${escapeHtml(topicPath(topic))}">${escapeHtml(topic.title)}</a></li>`)
+    .map(
+      (topic) => `<li><a href="${escapeHtml(topicPath(topic))}">${escapeHtml(topic.title)}</a></li>`
+    )
     .join("\n        ");
 
   const bodyHtml = `<article>
@@ -374,7 +397,9 @@ export function renderNotFoundPage() {
 export function renderSitemap(entries) {
   const urls = entries
     .map((entry) => {
-      const lastmod = entry.lastmod ? `\n    <lastmod>${escapeHtml(new Date(entry.lastmod).toISOString())}</lastmod>` : "";
+      const lastmod = entry.lastmod
+        ? `\n    <lastmod>${escapeHtml(new Date(entry.lastmod).toISOString())}</lastmod>`
+        : "";
       return `  <url>\n    <loc>${escapeHtml(entry.loc)}</loc>${lastmod}\n  </url>`;
     })
     .join("\n");

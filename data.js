@@ -240,14 +240,93 @@ export const topicSeedData = [
 // que no representan personas reales para no confundir contenido inicial con
 // testimonios de la comunidad.
 export const initialUsers = [
-  { id: "u1", name: "Guías TOPYKLY", nickname: "guias_topykly", role: "Cuenta editorial", score: 142, description: "Perfil editorial ficticio de TOPYKLY. Publica guías prácticas para iniciar conversaciones; no representa a una persona real." },
-  { id: "u2", name: "Vida práctica", nickname: "vida_practica", role: "Cuenta editorial", score: 129, description: "Perfil editorial ficticio de TOPYKLY sobre organización, hogar y hábitos cotidianos." },
-  { id: "u3", name: "Tecnología simple", nickname: "tecnologia_simple", role: "Cuenta editorial", score: 117, description: "Perfil editorial ficticio de TOPYKLY. Explica tecnología cotidiana con lenguaje claro." },
-  { id: "u4", name: "Casa en orden", nickname: "casa_en_orden", role: "Cuenta editorial", score: 103, description: "Perfil editorial ficticio de TOPYKLY con ideas de organización y mantenimiento del hogar." },
-  { id: "u5", name: "Aprender mejor", nickname: "aprender_mejor", role: "Cuenta editorial", score: 98, description: "Perfil editorial ficticio de TOPYKLY dedicado al estudio, la lectura y el aprendizaje continuo." },
-  { id: "u6", name: "Pausa saludable", nickname: "pausa_saludable", role: "Cuenta editorial", score: 91, description: "Perfil editorial ficticio de TOPYKLY con conversaciones generales de bienestar; no ofrece consejo médico." },
-  { id: "u7", name: "Cocina cotidiana", nickname: "cocina_cotidiana", role: "Cuenta editorial", score: 84, description: "Perfil editorial ficticio de TOPYKLY sobre cocina simple, planificación y aprovechamiento de ingredientes." },
-  { id: "u8", name: "Trabajo claro", nickname: "trabajo_claro", role: "Cuenta editorial", score: 80, description: "Perfil editorial ficticio de TOPYKLY con recursos generales para estudiar y trabajar mejor." },
-  { id: "u9", name: "Viajar liviano", nickname: "viajar_liviano", role: "Cuenta editorial", score: 77, description: "Perfil editorial ficticio de TOPYKLY con listas e ideas para viajes breves y organizados." },
-  { id: "u10", name: "Comunidad TOPYKLY", nickname: "comunidad_topykly", role: "Cuenta editorial", score: 73, description: "Perfil editorial ficticio que ayuda a abrir debates útiles dentro de TOPYKLY." }
+  {
+    id: "u1",
+    name: "Guías TOPYKLY",
+    nickname: "guias_topykly",
+    role: "Cuenta editorial",
+    score: 142,
+    description:
+      "Perfil editorial ficticio de TOPYKLY. Publica guías prácticas para iniciar conversaciones; no representa a una persona real."
+  },
+  {
+    id: "u2",
+    name: "Vida práctica",
+    nickname: "vida_practica",
+    role: "Cuenta editorial",
+    score: 129,
+    description:
+      "Perfil editorial ficticio de TOPYKLY sobre organización, hogar y hábitos cotidianos."
+  },
+  {
+    id: "u3",
+    name: "Tecnología simple",
+    nickname: "tecnologia_simple",
+    role: "Cuenta editorial",
+    score: 117,
+    description:
+      "Perfil editorial ficticio de TOPYKLY. Explica tecnología cotidiana con lenguaje claro."
+  },
+  {
+    id: "u4",
+    name: "Casa en orden",
+    nickname: "casa_en_orden",
+    role: "Cuenta editorial",
+    score: 103,
+    description:
+      "Perfil editorial ficticio de TOPYKLY con ideas de organización y mantenimiento del hogar."
+  },
+  {
+    id: "u5",
+    name: "Aprender mejor",
+    nickname: "aprender_mejor",
+    role: "Cuenta editorial",
+    score: 98,
+    description:
+      "Perfil editorial ficticio de TOPYKLY dedicado al estudio, la lectura y el aprendizaje continuo."
+  },
+  {
+    id: "u6",
+    name: "Pausa saludable",
+    nickname: "pausa_saludable",
+    role: "Cuenta editorial",
+    score: 91,
+    description:
+      "Perfil editorial ficticio de TOPYKLY con conversaciones generales de bienestar; no ofrece consejo médico."
+  },
+  {
+    id: "u7",
+    name: "Cocina cotidiana",
+    nickname: "cocina_cotidiana",
+    role: "Cuenta editorial",
+    score: 84,
+    description:
+      "Perfil editorial ficticio de TOPYKLY sobre cocina simple, planificación y aprovechamiento de ingredientes."
+  },
+  {
+    id: "u8",
+    name: "Trabajo claro",
+    nickname: "trabajo_claro",
+    role: "Cuenta editorial",
+    score: 80,
+    description:
+      "Perfil editorial ficticio de TOPYKLY con recursos generales para estudiar y trabajar mejor."
+  },
+  {
+    id: "u9",
+    name: "Viajar liviano",
+    nickname: "viajar_liviano",
+    role: "Cuenta editorial",
+    score: 77,
+    description:
+      "Perfil editorial ficticio de TOPYKLY con listas e ideas para viajes breves y organizados."
+  },
+  {
+    id: "u10",
+    name: "Comunidad TOPYKLY",
+    nickname: "comunidad_topykly",
+    role: "Cuenta editorial",
+    score: 73,
+    description: "Perfil editorial ficticio que ayuda a abrir debates útiles dentro de TOPYKLY."
+  }
 ];

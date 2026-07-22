@@ -28,7 +28,8 @@ export function selectChatViewModel(state, { isMobileViewport = false } = {}) {
     messages: topic
       ? topic.messages.map((message) => ({
           kind: message.kind,
-          author: message.kind === "system" ? "Sistema" : getUserNameById(state.users, message.authorId),
+          author:
+            message.kind === "system" ? "Sistema" : getUserNameById(state.users, message.authorId),
           timeText: formatMessageTime(message.timestamp),
           text: message.text
         }))

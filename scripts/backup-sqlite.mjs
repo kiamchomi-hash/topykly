@@ -26,16 +26,13 @@ function escapeSqliteString(value) {
 
 export function resolveBackupConfig({ dbPath = null, backupDir = null, env = process.env } = {}) {
   const resolvedDbPath = path.resolve(
-    dbPath
-      || env.TOPYKLY_DB_PATH
-      || env.CHETREND_DB_PATH
-      || DEFAULT_DB_PATH
+    dbPath || env.TOPYKLY_DB_PATH || env.CHETREND_DB_PATH || DEFAULT_DB_PATH
   );
   const resolvedBackupDir = path.resolve(
-    backupDir
-      || env.TOPYKLY_BACKUP_DIR
-      || env.CHETREND_BACKUP_DIR
-      || path.join(path.dirname(resolvedDbPath), "backups")
+    backupDir ||
+      env.TOPYKLY_BACKUP_DIR ||
+      env.CHETREND_BACKUP_DIR ||
+      path.join(path.dirname(resolvedDbPath), "backups")
   );
 
   return {
@@ -44,7 +41,12 @@ export function resolveBackupConfig({ dbPath = null, backupDir = null, env = pro
   };
 }
 
-export function backupSqliteDatabase({ dbPath = null, backupDir = null, now = new Date(), env = process.env } = {}) {
+export function backupSqliteDatabase({
+  dbPath = null,
+  backupDir = null,
+  now = new Date(),
+  env = process.env
+} = {}) {
   const config = resolveBackupConfig({ dbPath, backupDir, env });
   if (!existsSync(config.dbPath)) {
     throw new Error(`SQLite database not found: ${config.dbPath}`);
@@ -68,13 +70,15 @@ export function backupSqliteDatabase({ dbPath = null, backupDir = null, now = ne
 }
 
 function printHelp() {
-  console.log([
-    "Usage: node scripts/backup-sqlite.mjs [--db path] [--out-dir path]",
-    "",
-    "Defaults:",
-    "  DB: TOPYKLY_DB_PATH, CHETREND_DB_PATH, or .data/topykly.sqlite",
-    "  Output: TOPYKLY_BACKUP_DIR, CHETREND_BACKUP_DIR, or <db-dir>/backups"
-  ].join("\n"));
+  console.log(
+    [
+      "Usage: node scripts/backup-sqlite.mjs [--db path] [--out-dir path]",
+      "",
+      "Defaults:",
+      "  DB: TOPYKLY_DB_PATH, CHETREND_DB_PATH, or .data/topykly.sqlite",
+      "  Output: TOPYKLY_BACKUP_DIR, CHETREND_BACKUP_DIR, or <db-dir>/backups"
+    ].join("\n")
+  );
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -18,7 +18,7 @@ export function renderChatPanel(state, dom) {
   }
 
   dom.messageStream.hidden = !viewModel.showStream;
-  
+
   if (!viewModel.showStream) {
     dom.messageStream.innerHTML = "";
     return;

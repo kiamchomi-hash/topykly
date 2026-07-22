@@ -54,7 +54,11 @@ export function renderTitleBar(state, dom) {
     syncScopeTabs(container, viewModel.rankingScope);
   });
 
-  renderRankingModeOptions(dom.rankingModeList, viewModel.rankingOptions, viewModel.currentAriaLabel);
+  renderRankingModeOptions(
+    dom.rankingModeList,
+    viewModel.rankingOptions,
+    viewModel.currentAriaLabel
+  );
 }
 
 function syncScopeTabs(container, scope) {

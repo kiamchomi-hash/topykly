@@ -1,4 +1,10 @@
-import { createMessage, createTopic, getSelectedTopic, trimMessages, limitTopics } from "../../model.js";
+import {
+  createMessage,
+  createTopic,
+  getSelectedTopic,
+  trimMessages,
+  limitTopics
+} from "../../model.js";
 
 const CHAT_ACTION_TYPES = {
   startComposer: "chat/startComposer",
@@ -34,9 +40,9 @@ export function isChatStateAction(action) {
 export function reduceChatState(state, action) {
   switch (action.type) {
     case CHAT_ACTION_TYPES.startComposer:
-      return { 
-        changed: true, 
-        nextState: { ...state, selectedTopicId: null } 
+      return {
+        changed: true,
+        nextState: { ...state, selectedTopicId: null }
       };
 
     case CHAT_ACTION_TYPES.submitComposerMessage: {
@@ -48,7 +54,7 @@ export function reduceChatState(state, action) {
 
       const selectedTopicId = state.selectedTopicId;
       const topics = state.topics;
-      
+
       // Case: Creating a NEW topic
       if (!selectedTopicId || !topics.byId[selectedTopicId]) {
         if (!title) {
@@ -56,21 +62,21 @@ export function reduceChatState(state, action) {
         }
 
         const createdTopic = createTopic(state.currentUserId, title, text);
-        
+
         const newById = { ...topics.byId, [createdTopic.id]: createdTopic };
         let newAllIds = [createdTopic.id, ...topics.allIds];
-        
+
         // Enforce limit
         if (newAllIds.length > VISIBLE_TOPICS_LIMIT) {
           const removedId = newAllIds.pop();
           delete newById[removedId];
         }
 
-        return { 
-          changed: true, 
+        return {
+          changed: true,
           createdTopicId: createdTopic.id,
-          nextState: { 
-            ...state, 
+          nextState: {
+            ...state,
             selectedTopicId: createdTopic.id,
             topics: { byId: newById, allIds: newAllIds }
           }
@@ -79,19 +85,22 @@ export function reduceChatState(state, action) {
 
       // Case: Commenting on an EXISTING topic
       const topic = topics.byId[selectedTopicId];
-      const newMessages = trimMessages([...topic.messages, createMessage(state.currentUserId, text, 0)], 30);
-      
+      const newMessages = trimMessages(
+        [...topic.messages, createMessage(state.currentUserId, text, 0)],
+        30
+      );
+
       const updatedTopic = { ...topic, messages: newMessages };
       const newById = { ...topics.byId, [selectedTopicId]: updatedTopic };
-      
+
       // Move topic to the top of the list (re-ranking)
-      const newAllIds = [selectedTopicId, ...topics.allIds.filter(id => id !== selectedTopicId)];
-      
-      return { 
-        changed: true, 
+      const newAllIds = [selectedTopicId, ...topics.allIds.filter((id) => id !== selectedTopicId)];
+
+      return {
+        changed: true,
         topicId: selectedTopicId,
-        nextState: { 
-          ...state, 
+        nextState: {
+          ...state,
           refreshCount: state.refreshCount + 1,
           topics: { byId: newById, allIds: newAllIds }
         }
@@ -103,8 +112,8 @@ export function reduceChatState(state, action) {
         return { changed: false, reason: "missing-topic" };
       }
 
-      return { 
-        changed: true, 
+      return {
+        changed: true,
         nextState: { ...state, refreshCount: state.refreshCount + 1 }
       };
     }

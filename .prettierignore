@@ -1,5 +1,6 @@
 .git/
 .agents/
+.claude/
 .playwright-cli/
 .playwright-mcp/
 node_modules/

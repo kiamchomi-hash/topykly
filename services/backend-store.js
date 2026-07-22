@@ -118,9 +118,8 @@ const EXTRA_TOPIC_SEEDS = [
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const FALLBACK_DB_PATH = path.join(__dirname, "..", ".data", "topykly.sqlite");
-const DEFAULT_DB_PATH = process.env.TOPYKLY_DB_PATH
-  || process.env.CHETREND_DB_PATH
-  || FALLBACK_DB_PATH;
+const DEFAULT_DB_PATH =
+  process.env.TOPYKLY_DB_PATH || process.env.CHETREND_DB_PATH || FALLBACK_DB_PATH;
 const DEFAULT_REGISTERED_ROLE = "Registrado";
 const ADMIN_ROLE = "Admin";
 const MODERATOR_ROLE = "Moderacion";
@@ -160,7 +159,8 @@ function resolveDbConfig(explicitDbPath = null, env = process.env) {
     dbPath: FALLBACK_DB_PATH,
     dbPathSource: "default",
     storageConfigured: false,
-    storageWarning: "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
+    storageWarning:
+      "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
   };
 }
 
@@ -202,7 +202,9 @@ class ApiError extends Error {
 }
 
 function normalizeTopicTitle(value) {
-  return String(value || "").trim().replace(/\s+/g, " ");
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function normalizeMessageText(value) {
@@ -214,24 +216,34 @@ function normalizeIpAddress(value) {
 }
 
 function normalizeUserDisplayName(value, fallback = "Usuario") {
-  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
   return (normalized || fallback).slice(0, 80);
 }
 
 function normalizeRequiredDisplayName(value) {
-  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
   if (!normalized) {
     throw new ApiError(400, "VALIDATION_ERROR", "Ingresa un nombre visible.");
   }
   if (normalized.length > DISPLAY_NAME_MAX_LENGTH) {
-    throw new ApiError(400, "VALIDATION_ERROR", `El nombre visible no puede superar ${DISPLAY_NAME_MAX_LENGTH} caracteres.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `El nombre visible no puede superar ${DISPLAY_NAME_MAX_LENGTH} caracteres.`
+    );
   }
 
   return normalized;
 }
 
 function normalizeOptionalEmail(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   return normalized || null;
 }
 
@@ -247,7 +259,11 @@ function normalizeRequiredEmail(value) {
 function normalizeRegistrationAge(value) {
   const age = Number(value);
   if (!Number.isInteger(age) || age < MINIMUM_REGISTRATION_AGE || age > 120) {
-    throw new ApiError(400, "INVALID_AGE", `Debes tener al menos ${MINIMUM_REGISTRATION_AGE} anos para crear una cuenta.`);
+    throw new ApiError(
+      400,
+      "INVALID_AGE",
+      `Debes tener al menos ${MINIMUM_REGISTRATION_AGE} anos para crear una cuenta.`
+    );
   }
 
   return age;
@@ -255,7 +271,11 @@ function normalizeRegistrationAge(value) {
 
 function assertTermsAccepted(acceptedTerms, termsVersion) {
   if (acceptedTerms !== true || termsVersion !== TERMS_VERSION) {
-    throw new ApiError(400, "TERMS_REQUIRED", "Debes aceptar los Terminos y Condiciones para crear una cuenta.");
+    throw new ApiError(
+      400,
+      "TERMS_REQUIRED",
+      "Debes aceptar los Terminos y Condiciones para crear una cuenta."
+    );
   }
 }
 
@@ -274,18 +294,24 @@ function codesMatch(actualHash, expectedHash) {
 
 function getAuthChallengeSecret() {
   const configuredSecret = String(
-    process.env.TOPYKLY_AUTH_CHALLENGE_SECRET
-    || process.env.TOPYKLY_SESSION_SECRET
-    || process.env.CHETREND_SESSION_SECRET
-    || ""
+    process.env.TOPYKLY_AUTH_CHALLENGE_SECRET ||
+      process.env.TOPYKLY_SESSION_SECRET ||
+      process.env.CHETREND_SESSION_SECRET ||
+      ""
   ).trim();
   if (configuredSecret) {
     return configuredSecret;
   }
 
-  const runtimeEnvironment = String(process.env.NODE_ENV || "").trim().toLowerCase();
+  const runtimeEnvironment = String(process.env.NODE_ENV || "")
+    .trim()
+    .toLowerCase();
   if (runtimeEnvironment === "production") {
-    throw new ApiError(503, "AUTH_CHALLENGE_NOT_CONFIGURED", "La recuperacion de cuenta no esta configurada.");
+    throw new ApiError(
+      503,
+      "AUTH_CHALLENGE_NOT_CONFIGURED",
+      "La recuperacion de cuenta no esta configurada."
+    );
   }
   return LOCAL_AUTH_CHALLENGE_SECRET;
 }
@@ -304,10 +330,18 @@ function hashPasswordResetCode(challengeId, code) {
 function normalizeNickname(value) {
   const normalized = String(value || "").trim();
   if (normalized.length < NICKNAME_MIN_LENGTH || normalized.length > NICKNAME_MAX_LENGTH) {
-    throw new ApiError(400, "VALIDATION_ERROR", `El nickname debe tener entre ${NICKNAME_MIN_LENGTH} y ${NICKNAME_MAX_LENGTH} caracteres.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `El nickname debe tener entre ${NICKNAME_MIN_LENGTH} y ${NICKNAME_MAX_LENGTH} caracteres.`
+    );
   }
   if (!/^[A-Za-z0-9_.-]+$/.test(normalized)) {
-    throw new ApiError(400, "VALIDATION_ERROR", "El nickname solo puede usar letras, numeros, punto, guion y guion bajo. Usa _ en lugar de espacios.");
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "El nickname solo puede usar letras, numeros, punto, guion y guion bajo. Usa _ en lugar de espacios."
+    );
   }
   if (!/^[A-Za-z]/.test(normalized)) {
     throw new ApiError(400, "VALIDATION_ERROR", "El nickname debe empezar con una letra.");
@@ -317,7 +351,9 @@ function normalizeNickname(value) {
 }
 
 function normalizeUniqueNameKey(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function normalizeNicknameKey(value) {
@@ -325,47 +361,77 @@ function normalizeNicknameKey(value) {
 }
 
 function normalizeProfileDescription(value) {
-  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
   if (normalized.length > PROFILE_DESCRIPTION_MAX_LENGTH) {
-    throw new ApiError(400, "VALIDATION_ERROR", `La descripcion no puede superar ${PROFILE_DESCRIPTION_MAX_LENGTH} caracteres.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `La descripcion no puede superar ${PROFILE_DESCRIPTION_MAX_LENGTH} caracteres.`
+    );
   }
 
   return normalized;
 }
 
 function normalizeSocialHandle(value, label) {
-  const normalized = String(value || "").trim().replace(/\s+/g, "");
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s+/g, "");
   if (!normalized) {
     return "";
   }
 
   if (normalized.length > SOCIAL_HANDLE_MAX_LENGTH) {
-    throw new ApiError(400, "VALIDATION_ERROR", `El usuario de ${label} no puede superar ${SOCIAL_HANDLE_MAX_LENGTH} caracteres.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `El usuario de ${label} no puede superar ${SOCIAL_HANDLE_MAX_LENGTH} caracteres.`
+    );
   }
 
   if (/[\/\\]|:\/\/|^javascript:|^data:|[\x00-\x1f]/i.test(normalized)) {
-    throw new ApiError(400, "VALIDATION_ERROR", `El usuario de ${label} contiene caracteres no permitidos.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `El usuario de ${label} contiene caracteres no permitidos.`
+    );
   }
 
   if (!/^[A-Za-z0-9_.\-@+]+$/.test(normalized)) {
-    throw new ApiError(400, "VALIDATION_ERROR", `El usuario de ${label} solo puede usar letras, numeros, punto, guion y guion bajo.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `El usuario de ${label} solo puede usar letras, numeros, punto, guion y guion bajo.`
+    );
   }
 
   return normalized.replace(/^@/, "");
 }
 
 function normalizeSocialWhatsapp(value) {
-  const normalized = String(value || "").trim().replace(/[\s()-]/g, "");
+  const normalized = String(value || "")
+    .trim()
+    .replace(/[\s()-]/g, "");
   if (!normalized) {
     return "";
   }
 
   if (normalized.length > SOCIAL_HANDLE_MAX_LENGTH) {
-    throw new ApiError(400, "VALIDATION_ERROR", `El numero de WhatsApp no puede superar ${SOCIAL_HANDLE_MAX_LENGTH} caracteres.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `El numero de WhatsApp no puede superar ${SOCIAL_HANDLE_MAX_LENGTH} caracteres.`
+    );
   }
 
   if (!/^\+?[0-9]+$/.test(normalized)) {
-    throw new ApiError(400, "VALIDATION_ERROR", "El numero de WhatsApp solo puede tener digitos y un + inicial.");
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "El numero de WhatsApp solo puede tener digitos y un + inicial."
+    );
   }
 
   return normalized;
@@ -374,7 +440,11 @@ function normalizeSocialWhatsapp(value) {
 function validatePassword(value) {
   const password = String(value || "");
   if (password.length < PASSWORD_MIN_LENGTH) {
-    throw new ApiError(400, "VALIDATION_ERROR", `La contrasena debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`);
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      `La contrasena debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`
+    );
   }
   if (password.length > 256) {
     throw new ApiError(400, "VALIDATION_ERROR", "La contrasena excede el maximo permitido.");
@@ -397,9 +467,11 @@ function verifyPassword(password, storedHash) {
 
   const expectedBuffer = Buffer.from(expected, "base64url");
   const actualBuffer = crypto.scryptSync(String(password || ""), salt, expectedBuffer.length);
-  return expectedBuffer.length === actualBuffer.length && crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+  return (
+    expectedBuffer.length === actualBuffer.length &&
+    crypto.timingSafeEqual(expectedBuffer, actualBuffer)
+  );
 }
-
 
 function normalizeOptionalUrl(value) {
   const normalized = String(value || "").trim();
@@ -446,16 +518,27 @@ function estimateBase64DecodedBytes(value) {
 
 function hasImageSignature(buffer, mimeType) {
   if (mimeType === "image/png") {
-    return buffer.length < 8 || buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    return (
+      buffer.length < 8 ||
+      buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    );
   }
   if (mimeType === "image/jpeg") {
     return buffer.length < 8 || buffer.subarray(0, 3).equals(Buffer.from([255, 216, 255]));
   }
   if (mimeType === "image/gif") {
-    return buffer.length < 6 || buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a";
+    return (
+      buffer.length < 6 ||
+      buffer.subarray(0, 6).toString("ascii") === "GIF87a" ||
+      buffer.subarray(0, 6).toString("ascii") === "GIF89a"
+    );
   }
   if (mimeType === "image/webp") {
-    return buffer.length < 12 || buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+    return (
+      buffer.length < 12 ||
+      (buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+        buffer.subarray(8, 12).toString("ascii") === "WEBP")
+    );
   }
   return false;
 }
@@ -468,12 +551,19 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
 
   const match = normalized.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/);
   if (!match) {
-    throw new ApiError(400, "VALIDATION_ERROR", "La foto debe ser una imagen PNG, JPG, WebP o GIF valida.");
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "La foto debe ser una imagen PNG, JPG, WebP o GIF valida."
+    );
   }
 
   const mimeType = match[1];
   const payload = match[2];
-  if (payload.length > AVATAR_UPLOAD_MAX_BASE64_BYTES || estimateBase64DecodedBytes(payload) > AVATAR_UPLOAD_MAX_BYTES) {
+  if (
+    payload.length > AVATAR_UPLOAD_MAX_BASE64_BYTES ||
+    estimateBase64DecodedBytes(payload) > AVATAR_UPLOAD_MAX_BYTES
+  ) {
     throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 2 MB.");
   }
 
@@ -486,7 +576,11 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
     throw new ApiError(400, "VALIDATION_ERROR", "La foto no puede superar 2 MB.");
   }
   if (!hasImageSignature(avatarBuffer, mimeType)) {
-    throw new ApiError(400, "VALIDATION_ERROR", "El contenido de la foto no coincide con su formato.");
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "El contenido de la foto no coincide con su formato."
+    );
   }
 
   const extension = AVATAR_UPLOAD_EXTENSIONS.get(mimeType);
@@ -513,12 +607,16 @@ function cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl) {
     return;
   }
 
-  const reference = db.prepare(`
+  const reference = db
+    .prepare(
+      `
     SELECT id
     FROM users
     WHERE avatar_url = ? OR avatar_pending_url = ?
     LIMIT 1
-  `).get(normalized, normalized);
+  `
+    )
+    .get(normalized, normalized);
   if (reference) {
     return;
   }
@@ -567,7 +665,9 @@ function getMessageReactionResetDay(now = new Date()) {
 function resetDailyMessageReactionsIfNeeded(db, now = new Date()) {
   const resetDay = getMessageReactionResetDay(now);
   const nowIso = (now instanceof Date ? now : new Date(now)).toISOString();
-  const row = db.prepare("SELECT value FROM app_metadata WHERE key = ?").get(MESSAGE_REACTION_RESET_META_KEY);
+  const row = db
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(MESSAGE_REACTION_RESET_META_KEY);
 
   if (!row) {
     db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
@@ -663,7 +763,11 @@ function withTransaction(db, task) {
   }
 }
 
-function normalizePositiveInteger(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
+function normalizePositiveInteger(
+  value,
+  fallback,
+  { min = 1, max = Number.MAX_SAFE_INTEGER } = {}
+) {
   const parsed = Number.parseInt(String(value ?? "").trim(), 10);
   if (!Number.isFinite(parsed)) {
     return fallback;
@@ -1136,7 +1240,9 @@ function ensureColumn(db, tableName, columnName, columnDefinition) {
 
 function rollConnectedHoursIfNeeded(db, nowIso) {
   const resetDay = getMessageReactionResetDay(nowIso);
-  const row = db.prepare("SELECT value FROM app_metadata WHERE key = ?").get(PRESENCE_RESET_META_KEY);
+  const row = db
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(PRESENCE_RESET_META_KEY);
 
   if (!row) {
     db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
@@ -1151,7 +1257,9 @@ function rollConnectedHoursIfNeeded(db, nowIso) {
     return;
   }
 
-  db.prepare("UPDATE users SET connected_seconds_24h = connected_seconds_today, connected_seconds_today = 0").run();
+  db.prepare(
+    "UPDATE users SET connected_seconds_24h = connected_seconds_today, connected_seconds_today = 0"
+  ).run();
   db.prepare("UPDATE app_metadata SET value = ?, updated_at = ? WHERE key = ?").run(
     resetDay,
     nowIso,
@@ -1173,12 +1281,14 @@ function accumulatePresence(db, userId, previousUpdatedAtIso, nowIso) {
     return;
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE users
     SET total_connected_seconds = total_connected_seconds + ?,
         connected_seconds_today = connected_seconds_today + ?
     WHERE id = ?
-  `).run(elapsedSeconds, elapsedSeconds, userId);
+  `
+  ).run(elapsedSeconds, elapsedSeconds, userId);
 }
 
 function seedUsers(db) {
@@ -1254,17 +1364,27 @@ function seedTopics(db) {
 
     let lastMessageId = 0;
     const rootText = `${normalizeTopicTitle(title)}. ${normalizeMessageText(subtitle)}`;
-    const rootResult = insertMessage.run(topicId, authorId, rootText, 1 + (topicIndex % 4), 1, createdAt);
+    const rootResult = insertMessage.run(
+      topicId,
+      authorId,
+      rootText,
+      1 + (topicIndex % 4),
+      1,
+      createdAt
+    );
     lastMessageId = Number(rootResult.lastInsertRowid);
     let lastActivityAt = createdAt;
     let subtitlePreview = summarizeText(rootText);
 
-    const replies = Array.isArray(seededReplies) && seededReplies.length
-      ? seededReplies
-      : Array.from({ length: 5 }, (_, replyIndex) => [
-        `Respuesta ${replyIndex + 1} en ${normalizeTopicTitle(title)}.`,
-        `Sigue la conversacion del tema ${topicIndex + 1}.`
-      ].join(" "));
+    const replies =
+      Array.isArray(seededReplies) && seededReplies.length
+        ? seededReplies
+        : Array.from({ length: 5 }, (_, replyIndex) =>
+            [
+              `Respuesta ${replyIndex + 1} en ${normalizeTopicTitle(title)}.`,
+              `Sigue la conversacion del tema ${topicIndex + 1}.`
+            ].join(" ")
+          );
 
     replies.forEach((replyText, replyIndex) => {
       const replyAuthorId = users[(topicIndex + replyIndex + 1) % users.length];
@@ -1289,7 +1409,9 @@ function seedTopics(db) {
 }
 
 function shouldSeedDemoData(env = process.env, fallback = true) {
-  const rawValue = String(env.TOPYKLY_SEED_DEMO_DATA || env.CHETREND_SEED_DEMO_DATA || "").trim().toLowerCase();
+  const rawValue = String(env.TOPYKLY_SEED_DEMO_DATA || env.CHETREND_SEED_DEMO_DATA || "")
+    .trim()
+    .toLowerCase();
   if (["1", "true", "yes", "demo"].includes(rawValue)) {
     return true;
   }
@@ -1300,7 +1422,9 @@ function shouldSeedDemoData(env = process.env, fallback = true) {
   return fallback;
 }
 function seedFakeFriendRequests(db) {
-  const countRow = db.prepare("SELECT COUNT(*) AS count FROM users WHERE id LIKE 'fake-user-%'").get();
+  const countRow = db
+    .prepare("SELECT COUNT(*) AS count FROM users WHERE id LIKE 'fake-user-%'")
+    .get();
   if ((countRow?.count ?? 0) > 0) {
     return;
   }
@@ -1338,17 +1462,24 @@ function seedDatabase(db, { includeFakeFriendRequests = true } = {}) {
   seedUsers(db);
   seedTopics(db);
 
-  const isRunningTests = process.argv[1] && (process.argv[1].endsWith("run.mjs") || process.argv[1].includes("tests"));
+  const isRunningTests =
+    process.argv[1] && (process.argv[1].endsWith("run.mjs") || process.argv[1].includes("tests"));
   if (includeFakeFriendRequests && !isRunningTests) {
     seedFakeFriendRequests(db);
   }
 }
 
 function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
-  const limit = normalizePositiveInteger(requestedLimit, 5, { min: 1, max: editorialTopicSeedData.length });
-  const entries = editorialTopicSeedData.slice(0, limit)
+  const limit = normalizePositiveInteger(requestedLimit, 5, {
+    min: 1,
+    max: editorialTopicSeedData.length
+  });
+  const entries = editorialTopicSeedData
+    .slice(0, limit)
     .map((entry, index) => ({ entry, index }))
-    .filter(({ entry }) => !db.prepare("SELECT 1 FROM topics WHERE title = ? LIMIT 1").get(entry[0]));
+    .filter(
+      ({ entry }) => !db.prepare("SELECT 1 FROM topics WHERE title = ? LIMIT 1").get(entry[0])
+    );
 
   if (!entries.length) {
     return { requested: limit, insertedTopics: 0, insertedUsers: 0, archivedTopicIds: [] };
@@ -1367,19 +1498,31 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
   initialUsers.forEach((user) => {
     const nickname = normalizeNickname(user.nickname);
     const nicknameKey = normalizeUniqueNameKey(nickname);
-    const existingByNickname = db.prepare("SELECT id, role FROM users WHERE nickname_norm = ? LIMIT 1").get(nicknameKey);
+    const existingByNickname = db
+      .prepare("SELECT id, role FROM users WHERE nickname_norm = ? LIMIT 1")
+      .get(nicknameKey);
     if (existingByNickname) {
       if (existingByNickname.role !== "Cuenta editorial") {
-        throw new ApiError(409, "EDITORIAL_NICKNAME_CONFLICT", `El usuario @${nickname} ya existe y no es una cuenta editorial.`);
+        throw new ApiError(
+          409,
+          "EDITORIAL_NICKNAME_CONFLICT",
+          `El usuario @${nickname} ya existe y no es una cuenta editorial.`
+        );
       }
       editorialUserIds.set(user.id, existingByNickname.id);
       return;
     }
 
     const editorialUserId = `editorial-${user.id}`;
-    const existingById = db.prepare("SELECT nickname FROM users WHERE id = ? LIMIT 1").get(editorialUserId);
+    const existingById = db
+      .prepare("SELECT nickname FROM users WHERE id = ? LIMIT 1")
+      .get(editorialUserId);
     if (existingById) {
-      throw new ApiError(409, "EDITORIAL_USER_ID_CONFLICT", `El id editorial ${editorialUserId} ya está ocupado.`);
+      throw new ApiError(
+        409,
+        "EDITORIAL_USER_ID_CONFLICT",
+        `El id editorial ${editorialUserId} ya está ocupado.`
+      );
     }
 
     insertUser.run(
@@ -1413,55 +1556,82 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     WHERE id = ?
   `);
 
-  entries.forEach(({ entry: [title, subtitle, replies = [], requestedAuthorId = null], index }, insertionIndex) => {
-    const normalizedTitle = normalizeTopicTitle(title);
-    const titleHash = crypto.createHash("sha256").update(normalizedTitle).digest("hex").slice(0, 16);
-    const topicId = `editorial-topic-${titleHash}`;
-    const existingId = db.prepare("SELECT title FROM topics WHERE id = ? LIMIT 1").get(topicId);
-    if (existingId) {
-      throw new ApiError(409, "EDITORIAL_TOPIC_ID_CONFLICT", `El id editorial ${topicId} ya está ocupado.`);
-    }
+  entries.forEach(
+    (
+      { entry: [title, subtitle, replies = [], requestedAuthorId = null], index },
+      insertionIndex
+    ) => {
+      const normalizedTitle = normalizeTopicTitle(title);
+      const titleHash = crypto
+        .createHash("sha256")
+        .update(normalizedTitle)
+        .digest("hex")
+        .slice(0, 16);
+      const topicId = `editorial-topic-${titleHash}`;
+      const existingId = db.prepare("SELECT title FROM topics WHERE id = ? LIMIT 1").get(topicId);
+      if (existingId) {
+        throw new ApiError(
+          409,
+          "EDITORIAL_TOPIC_ID_CONFLICT",
+          `El id editorial ${topicId} ya está ocupado.`
+        );
+      }
 
-    const authorSeed = initialUsers.find((user) => user.id === requestedAuthorId)
-      || initialUsers[index % initialUsers.length];
-    const authorId = editorialUserIds.get(authorSeed.id);
-    const createdAt = createIsoTimestamp(insertionIndex * 4, Date.now() - entries.length * 10 * 60_000);
-    const rootText = `${normalizedTitle}. ${normalizeMessageText(subtitle)}`;
-    insertTopic.run(
-      topicId,
-      normalizedTitle,
-      summarizeText(rootText),
-      authorId,
-      TOPIC_STATUS_ACTIVE,
-      createdAt,
-      createdAt,
-      createdAt
-    );
-
-    const rootResult = insertMessage.run(topicId, authorId, rootText, 1 + (index % 4), 1, createdAt);
-    let lastMessageId = Number(rootResult.lastInsertRowid);
-    let lastActivityAt = createdAt;
-    let subtitlePreview = summarizeText(rootText);
-
-    replies.forEach((replyText, replyIndex) => {
-      const replyAuthorSeed = initialUsers[(index + replyIndex + 1) % initialUsers.length];
-      const replyAuthorId = editorialUserIds.get(replyAuthorSeed.id);
-      const replyCreatedAt = createIsoTimestamp(insertionIndex * 4 + replyIndex + 1, Date.now() - entries.length * 10 * 60_000);
-      const replyResult = insertMessage.run(
-        topicId,
-        replyAuthorId,
-        normalizeMessageText(replyText),
-        1 + ((index + replyIndex) % 5),
-        0,
-        replyCreatedAt
+      const authorSeed =
+        initialUsers.find((user) => user.id === requestedAuthorId) ||
+        initialUsers[index % initialUsers.length];
+      const authorId = editorialUserIds.get(authorSeed.id);
+      const createdAt = createIsoTimestamp(
+        insertionIndex * 4,
+        Date.now() - entries.length * 10 * 60_000
       );
-      lastMessageId = Number(replyResult.lastInsertRowid);
-      lastActivityAt = replyCreatedAt;
-      subtitlePreview = summarizeText(replyText);
-    });
+      const rootText = `${normalizedTitle}. ${normalizeMessageText(subtitle)}`;
+      insertTopic.run(
+        topicId,
+        normalizedTitle,
+        summarizeText(rootText),
+        authorId,
+        TOPIC_STATUS_ACTIVE,
+        createdAt,
+        createdAt,
+        createdAt
+      );
 
-    updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
-  });
+      const rootResult = insertMessage.run(
+        topicId,
+        authorId,
+        rootText,
+        1 + (index % 4),
+        1,
+        createdAt
+      );
+      let lastMessageId = Number(rootResult.lastInsertRowid);
+      let lastActivityAt = createdAt;
+      let subtitlePreview = summarizeText(rootText);
+
+      replies.forEach((replyText, replyIndex) => {
+        const replyAuthorSeed = initialUsers[(index + replyIndex + 1) % initialUsers.length];
+        const replyAuthorId = editorialUserIds.get(replyAuthorSeed.id);
+        const replyCreatedAt = createIsoTimestamp(
+          insertionIndex * 4 + replyIndex + 1,
+          Date.now() - entries.length * 10 * 60_000
+        );
+        const replyResult = insertMessage.run(
+          topicId,
+          replyAuthorId,
+          normalizeMessageText(replyText),
+          1 + ((index + replyIndex) % 5),
+          0,
+          replyCreatedAt
+        );
+        lastMessageId = Number(replyResult.lastInsertRowid);
+        lastActivityAt = replyCreatedAt;
+        subtitlePreview = summarizeText(replyText);
+      });
+
+      updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
+    }
+  );
 
   rebuildActiveTopicRanks(db);
   const archivedTopicIds = [...activeTopicIdsBefore].filter((topicId) => {
@@ -1481,46 +1651,63 @@ function purgeDemoData(db) {
   const demoUserIds = initialUsers.map((user) => user.id);
   const demoTopicIds = getSeedTopicEntries().map((_, index) => `topic-${index + 1}`);
   const demoMessageIds = demoTopicIds.length
-    ? db.prepare(`
+    ? db
+        .prepare(
+          `
       SELECT id
       FROM messages
       WHERE topic_id IN (${demoTopicIds.map(() => "?").join(", ")})
-    `).all(...demoTopicIds).map((row) => String(row.id))
+    `
+        )
+        .all(...demoTopicIds)
+        .map((row) => String(row.id))
     : [];
 
   if (demoTopicIds.length) {
-    db.prepare(`
+    db.prepare(
+      `
       DELETE FROM reports
       WHERE entity_type = 'topic' AND entity_id IN (${demoTopicIds.map(() => "?").join(", ")})
-    `).run(...demoTopicIds);
-    db.prepare(`
+    `
+    ).run(...demoTopicIds);
+    db.prepare(
+      `
       DELETE FROM topics
       WHERE id IN (${demoTopicIds.map(() => "?").join(", ")})
-    `).run(...demoTopicIds);
+    `
+    ).run(...demoTopicIds);
   }
 
   if (demoMessageIds.length) {
-    db.prepare(`
+    db.prepare(
+      `
       DELETE FROM reports
       WHERE entity_type = 'message' AND entity_id IN (${demoMessageIds.map(() => "?").join(", ")})
-    `).run(...demoMessageIds);
+    `
+    ).run(...demoMessageIds);
   }
 
   if (demoUserIds.length) {
-    db.prepare(`
+    db.prepare(
+      `
       DELETE FROM reports
       WHERE entity_type = 'user' AND entity_id IN (${demoUserIds.map(() => "?").join(", ")})
-    `).run(...demoUserIds);
-    db.prepare(`
+    `
+    ).run(...demoUserIds);
+    db.prepare(
+      `
       DELETE FROM sessions
       WHERE user_id IN (${demoUserIds.map(() => "?").join(", ")})
-    `).run(...demoUserIds);
-    db.prepare(`
+    `
+    ).run(...demoUserIds);
+    db.prepare(
+      `
       DELETE FROM users
       WHERE id IN (${demoUserIds.map(() => "?").join(", ")})
         AND NOT EXISTS (SELECT 1 FROM topics WHERE topics.author_id = users.id)
         AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.author_id = users.id)
-    `).run(...demoUserIds);
+    `
+    ).run(...demoUserIds);
   }
 
   rebuildActiveTopicRanks(db);
@@ -1529,15 +1716,15 @@ function purgeDemoData(db) {
 function mapViewerRow(row, sessionRow) {
   const viewerType = row?.type === "registered" ? "registered" : "guest";
   const rateLimits = getRateLimitConfig(viewerType);
-  const lastTopicAt = viewerType === "registered"
-    ? row?.last_topic_at ?? null
-    : sessionRow?.last_topic_at ?? null;
-  const lastMessageAt = viewerType === "registered"
-    ? row?.last_message_at ?? null
-    : sessionRow?.last_message_at ?? null;
-  const displayName = viewerType === "guest"
-    ? sessionRow?.guest_label || row.name
-    : row.name;
+  const lastTopicAt =
+    viewerType === "registered"
+      ? (row?.last_topic_at ?? null)
+      : (sessionRow?.last_topic_at ?? null);
+  const lastMessageAt =
+    viewerType === "registered"
+      ? (row?.last_message_at ?? null)
+      : (sessionRow?.last_message_at ?? null);
+  const displayName = viewerType === "guest" ? sessionRow?.guest_label || row.name : row.name;
   return {
     id: row.id,
     type: viewerType,
@@ -1574,7 +1761,9 @@ function mapViewerRow(row, sessionRow) {
     profileSuggestedAvatarUrl: row.profile_suggested_avatar_url ?? null,
     authProvider: row.auth_provider ?? null,
     hasPassword: viewerType === "registered" && Boolean(row.password_hash),
-    canLinkGoogle: viewerType === "registered" && Boolean(row.password_hash && row.email && !row.auth_provider && !row.auth_subject),
+    canLinkGoogle:
+      viewerType === "registered" &&
+      Boolean(row.password_hash && row.email && !row.auth_provider && !row.auth_subject),
     rateLimits: {
       createTopicMs: rateLimits.createTopicMs,
       postMessageMs: rateLimits.postMessageMs,
@@ -1599,9 +1788,10 @@ function createTransientGuestName(sessionId) {
 
 function createTransientGuestContext(sessionId, ipAddress = "") {
   const name = createTransientGuestName(sessionId);
-  const safeSessionLabel = String(sessionId || "")
-    .replace(/[^A-Za-z0-9_-]/g, "")
-    .slice(0, 48) || "anon";
+  const safeSessionLabel =
+    String(sessionId || "")
+      .replace(/[^A-Za-z0-9_-]/g, "")
+      .slice(0, 48) || "anon";
   const viewerRow = {
     id: `guest-preview-${safeSessionLabel}`,
     name,
@@ -1623,12 +1813,14 @@ function createTransientGuestContext(sessionId, ipAddress = "") {
 function getOrCreateGuestUser(db) {
   const nowIso = new Date().toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO users (id, name, type, role, score, status, created_at, updated_at)
     VALUES (?, ?, 'guest', 'Invitado', 0, 'active', ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       updated_at = excluded.updated_at
-  `).run(SHARED_GUEST_USER_ID, GUEST_DISPLAY_NAME, nowIso, nowIso);
+  `
+  ).run(SHARED_GUEST_USER_ID, GUEST_DISPLAY_NAME, nowIso, nowIso);
 
   return db.prepare("SELECT * FROM users WHERE id = ?").get(SHARED_GUEST_USER_ID);
 }
@@ -1637,18 +1829,30 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
   const expiresBeforeIso = new Date(nowMs - GUEST_SESSION_TTL_MS).toISOString();
   const registeredExpiresBeforeIso = new Date(nowMs - REGISTERED_SESSION_TTL_MS).toISOString();
   const nowIso = new Date(nowMs).toISOString();
-  const perIpOffset = keepSessionId ? Math.max(0, GUEST_SESSION_MAX_PER_IP - 1) : GUEST_SESSION_MAX_PER_IP;
-  const totalOffset = keepSessionId ? Math.max(0, GUEST_SESSION_MAX_TOTAL - 1) : GUEST_SESSION_MAX_TOTAL;
+  const perIpOffset = keepSessionId
+    ? Math.max(0, GUEST_SESSION_MAX_PER_IP - 1)
+    : GUEST_SESSION_MAX_PER_IP;
+  const totalOffset = keepSessionId
+    ? Math.max(0, GUEST_SESSION_MAX_TOTAL - 1)
+    : GUEST_SESSION_MAX_TOTAL;
   let deletedSessions = 0;
 
-  deletedSessions += db.prepare(`
+  deletedSessions +=
+    db
+      .prepare(
+        `
     DELETE FROM sessions
     WHERE auth_mode = 'guest' AND updated_at < ? AND id <> ?
-  `).run(expiresBeforeIso, keepSessionId).changes ?? 0;
+  `
+      )
+      .run(expiresBeforeIso, keepSessionId).changes ?? 0;
 
   const normalizedIpAddress = normalizeIpAddress(ipAddress);
   if (normalizedIpAddress) {
-    deletedSessions += db.prepare(`
+    deletedSessions +=
+      db
+        .prepare(
+          `
       DELETE FROM sessions
       WHERE id IN (
         SELECT id
@@ -1657,10 +1861,15 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
         ORDER BY updated_at DESC, created_at DESC, id DESC
         LIMIT -1 OFFSET ?
       )
-    `).run(normalizedIpAddress, keepSessionId, perIpOffset).changes ?? 0;
+    `
+        )
+        .run(normalizedIpAddress, keepSessionId, perIpOffset).changes ?? 0;
   }
 
-  deletedSessions += db.prepare(`
+  deletedSessions +=
+    db
+      .prepare(
+        `
     DELETE FROM sessions
     WHERE id IN (
       SELECT id
@@ -1669,27 +1878,49 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
       ORDER BY updated_at DESC, created_at DESC, id DESC
       LIMIT -1 OFFSET ?
     )
-  `).run(keepSessionId, totalOffset).changes ?? 0;
+  `
+      )
+      .run(keepSessionId, totalOffset).changes ?? 0;
 
-  const deletedGuestIpRateLimits = db.prepare(`
+  const deletedGuestIpRateLimits =
+    db
+      .prepare(
+        `
     DELETE FROM guest_ip_rate_limits
     WHERE updated_at < ?
-  `).run(expiresBeforeIso).changes ?? 0;
+  `
+      )
+      .run(expiresBeforeIso).changes ?? 0;
 
-  const deletedRegisteredSessions = db.prepare(`
+  const deletedRegisteredSessions =
+    db
+      .prepare(
+        `
     DELETE FROM sessions
     WHERE auth_mode = 'registered' AND updated_at < ? AND id <> ?
-  `).run(registeredExpiresBeforeIso, keepSessionId).changes ?? 0;
+  `
+      )
+      .run(registeredExpiresBeforeIso, keepSessionId).changes ?? 0;
 
-  const deletedExpiredAuthChallenges = db.prepare(`
+  const deletedExpiredAuthChallenges =
+    db
+      .prepare(
+        `
     DELETE FROM auth_email_challenges
     WHERE expires_at <= ?
-  `).run(nowIso).changes ?? 0;
+  `
+      )
+      .run(nowIso).changes ?? 0;
 
-  const deletedExpiredPasswordResetChallenges = db.prepare(`
+  const deletedExpiredPasswordResetChallenges =
+    db
+      .prepare(
+        `
     DELETE FROM password_reset_challenges
     WHERE expires_at <= ?
-  `).run(nowIso).changes ?? 0;
+  `
+      )
+      .run(nowIso).changes ?? 0;
 
   return {
     deletedSessions,
@@ -1703,10 +1934,18 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
 function getRegisteredViewerRow(db, userId = REGISTERED_USER_ID) {
   const viewerRow = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   if (!viewerRow) {
-    throw new ApiError(500, "REGISTERED_VIEWER_MISSING", "No se encontro el usuario registrado inicial.");
+    throw new ApiError(
+      500,
+      "REGISTERED_VIEWER_MISSING",
+      "No se encontro el usuario registrado inicial."
+    );
   }
   if (viewerRow.type !== "registered") {
-    throw new ApiError(400, "INVALID_REGISTERED_VIEWER", "El usuario solicitado no es un usuario registrado.");
+    throw new ApiError(
+      400,
+      "INVALID_REGISTERED_VIEWER",
+      "El usuario solicitado no es un usuario registrado."
+    );
   }
 
   return viewerRow;
@@ -1741,22 +1980,27 @@ function invalidatePreviousSession(db, previousSessionId, nextSessionId) {
 function createGuestSession(db, sessionId, ipAddress, nowIso, existingSessionRow = null) {
   const resolvedIpAddress = normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "");
   const guestRow = getOrCreateGuestUser(db);
-  const guestLabel = existingSessionRow?.auth_mode === "guest" && existingSessionRow.guest_label
-    ? existingSessionRow.guest_label
-    : createGuestName();
+  const guestLabel =
+    existingSessionRow?.auth_mode === "guest" && existingSessionRow.guest_label
+      ? existingSessionRow.guest_label
+      : createGuestName();
 
   if (existingSessionRow) {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE sessions
       SET user_id = ?, auth_mode = 'guest', guest_label = ?, last_ip = ?, last_topic_at = NULL, last_message_at = NULL, updated_at = ?
       WHERE id = ?
-    `).run(guestRow.id, guestLabel, resolvedIpAddress, nowIso, sessionId);
+    `
+    ).run(guestRow.id, guestLabel, resolvedIpAddress, nowIso, sessionId);
   } else {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO sessions (
         id, user_id, auth_mode, guest_label, last_ip, last_topic_at, last_message_at, created_at, updated_at
       ) VALUES (?, ?, 'guest', ?, ?, NULL, NULL, ?, ?)
-    `).run(sessionId, guestRow.id, guestLabel, resolvedIpAddress, nowIso, nowIso);
+    `
+    ).run(sessionId, guestRow.id, guestLabel, resolvedIpAddress, nowIso, nowIso);
   }
 
   pruneGuestSessions(db, resolvedIpAddress, new Date(nowIso).getTime(), sessionId);
@@ -1770,16 +2014,25 @@ function createGuestSession(db, sessionId, ipAddress, nowIso, existingSessionRow
   };
 }
 
-function createRegisteredSession(db, sessionId, ipAddress, nowIso, existingSessionRow = null, userId = REGISTERED_USER_ID) {
+function createRegisteredSession(
+  db,
+  sessionId,
+  ipAddress,
+  nowIso,
+  existingSessionRow = null,
+  userId = REGISTERED_USER_ID
+) {
   const registeredViewerRow = getRegisteredViewerRow(db, userId);
   const resolvedIpAddress = normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "");
 
   if (existingSessionRow?.id === sessionId) {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE sessions
       SET user_id = ?, auth_mode = 'registered', guest_label = NULL, last_ip = ?, last_topic_at = ?, last_message_at = ?, updated_at = ?
       WHERE id = ?
-    `).run(
+    `
+    ).run(
       registeredViewerRow.id,
       resolvedIpAddress,
       registeredViewerRow.last_topic_at ?? null,
@@ -1788,11 +2041,13 @@ function createRegisteredSession(db, sessionId, ipAddress, nowIso, existingSessi
       sessionId
     );
   } else {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO sessions (
         id, user_id, auth_mode, guest_label, last_ip, last_topic_at, last_message_at, created_at, updated_at
       ) VALUES (?, ?, 'registered', NULL, ?, ?, ?, ?, ?)
-    `).run(
+    `
+    ).run(
       sessionId,
       registeredViewerRow.id,
       resolvedIpAddress,
@@ -1813,7 +2068,10 @@ function createRegisteredSession(db, sessionId, ipAddress, nowIso, existingSessi
   };
 }
 
-function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", persistGuest = false }) {
+function resolveViewer(
+  db,
+  { sessionId, authMode = "guest", ipAddress = "", persistGuest = false }
+) {
   const normalizedSessionId = ensureViewerSessionId(sessionId);
   const fallbackAuthMode = authMode === "registered" ? "registered" : "guest";
   const nowIso = new Date().toISOString();
@@ -1833,14 +2091,23 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", pers
 
   accumulatePresence(db, sessionRow.user_id, sessionRow.updated_at, nowIso);
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE sessions
     SET last_ip = ?, updated_at = ?
     WHERE id = ?
-  `).run(resolvedIpAddress, nowIso, normalizedSessionId);
+  `
+  ).run(resolvedIpAddress, nowIso, normalizedSessionId);
 
   if (sessionRow.auth_mode === "registered") {
-    return createRegisteredSession(db, normalizedSessionId, resolvedIpAddress, nowIso, sessionRow, sessionRow.user_id || REGISTERED_USER_ID);
+    return createRegisteredSession(
+      db,
+      normalizedSessionId,
+      resolvedIpAddress,
+      nowIso,
+      sessionRow,
+      sessionRow.user_id || REGISTERED_USER_ID
+    );
   }
 
   let viewerRow = db.prepare("SELECT * FROM users WHERE id = ?").get(sessionRow.user_id);
@@ -1860,11 +2127,17 @@ function resolveViewer(db, { sessionId, authMode = "guest", ipAddress = "", pers
 
 function getFrontendUsers(db, viewerId, profileUserIds = []) {
   const friendshipStatusByUserId = arguments[3] instanceof Map ? arguments[3] : new Map();
-  const extraUserIds = [...new Set(profileUserIds.filter((userId) => userId && userId !== viewerId))];
-  const extraUserFilter = extraUserIds.length ? ` OR users.id IN (${extraUserIds.map(() => "?").join(", ")})` : "";
+  const extraUserIds = [
+    ...new Set(profileUserIds.filter((userId) => userId && userId !== viewerId))
+  ];
+  const extraUserFilter = extraUserIds.length
+    ? ` OR users.id IN (${extraUserIds.map(() => "?").join(", ")})`
+    : "";
   const nowMs = Date.now();
 
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT
       users.id, users.name, users.nickname, users.type, users.role, users.score, users.description,
       users.profile_show_description AS profileShowDescription,
@@ -1909,7 +2182,9 @@ function getFrontendUsers(db, viewerId, profileUserIds = []) {
       users.connected_seconds_24h DESC,
       users.created_at ASC
     LIMIT 80
-  `).all(viewerId, ...extraUserIds);
+  `
+    )
+    .all(viewerId, ...extraUserIds);
 
   return rows.map((user) => {
     const { lastSeenAt, ...rest } = user;
@@ -1934,17 +2209,21 @@ function getFrontendUsers(db, viewerId, profileUserIds = []) {
       avatarPendingUrl: isViewer ? (user.avatarPendingUrl ?? null) : null,
       avatarReviewStatus: isViewer ? (user.avatarReviewStatus ?? null) : null,
       profilePending: isViewer ? Boolean(user.profilePending) : false,
-      online: Boolean(lastSeenAt) && nowMs - new Date(lastSeenAt).getTime() <= PRESENCE_ONLINE_WINDOW_MS,
+      online:
+        Boolean(lastSeenAt) && nowMs - new Date(lastSeenAt).getTime() <= PRESENCE_ONLINE_WINDOW_MS,
       profileShowDescription: showDescription,
       profileShowJoinedAt: showJoinedAt,
       profileShowSocial: showSocial,
-      friendshipStatus: user.id === viewerId ? "self" : friendshipStatusByUserId.get(user.id) || "none"
+      friendshipStatus:
+        user.id === viewerId ? "self" : friendshipStatusByUserId.get(user.id) || "none"
     };
   });
 }
 
 function hydrateTopicMessages(db, topicId, viewerId = null) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT
       messages.id,
       messages.topic_id,
@@ -1978,22 +2257,25 @@ function hydrateTopicMessages(db, topicId, viewerId = null) {
     LEFT JOIN message_dislikes ON message_dislikes.message_id = messages.id AND message_dislikes.user_id = ?
     WHERE messages.topic_id = ?
     ORDER BY messages.id ASC
-  `).all(viewerId || "", viewerId || "", topicId).map((row) => ({
-    id: `message-${row.id}`,
-    topicId: row.topic_id,
-    authorId: row.author_id,
-    text: row.text,
-    kind: row.kind,
-    likes: row.likes,
-    dislikes: row.dislikes,
-    isRoot: Boolean(row.is_root),
-    likedByViewer: Boolean(row.liked_by_viewer),
-    dislikedByViewer: Boolean(row.disliked_by_viewer),
-    lastLikeById: row.last_like_by_id ?? null,
-    lastLikeByName: row.last_like_by_name ?? null,
-    createdAt: row.created_at,
-    timestamp: row.created_at
-  }));
+  `
+    )
+    .all(viewerId || "", viewerId || "", topicId)
+    .map((row) => ({
+      id: `message-${row.id}`,
+      topicId: row.topic_id,
+      authorId: row.author_id,
+      text: row.text,
+      kind: row.kind,
+      likes: row.likes,
+      dislikes: row.dislikes,
+      isRoot: Boolean(row.is_root),
+      likedByViewer: Boolean(row.liked_by_viewer),
+      dislikedByViewer: Boolean(row.disliked_by_viewer),
+      lastLikeById: row.last_like_by_id ?? null,
+      lastLikeByName: row.last_like_by_name ?? null,
+      createdAt: row.created_at,
+      timestamp: row.created_at
+    }));
 }
 
 function formatBackendCommentCount(count) {
@@ -2023,8 +2305,11 @@ function mapRankingRows(rows, { emptyTitle, emptyMeta, formatMeta, currentUserId
 }
 
 function getBackendPostRankingEntries(db, metric = "comments") {
-  const rows = metric === "likes"
-    ? db.prepare(`
+  const rows =
+    metric === "likes"
+      ? db
+          .prepare(
+            `
       SELECT topics.id, topics.title, COALESCE(SUM(messages.likes), 0) AS count
       FROM topics
       JOIN messages ON messages.topic_id = topics.id AND messages.kind = 'user'
@@ -2033,8 +2318,12 @@ function getBackendPostRankingEntries(db, metric = "comments") {
       HAVING count > 0
       ORDER BY count DESC, topics.last_activity_at DESC, topics.created_at DESC
       LIMIT 10
-    `).all(TOPIC_STATUS_EXPELLED)
-    : db.prepare(`
+    `
+          )
+          .all(TOPIC_STATUS_EXPELLED)
+      : db
+          .prepare(
+            `
       SELECT topics.id, topics.title, COUNT(messages.id) AS count
       FROM topics
       JOIN messages ON messages.topic_id = topics.id AND messages.kind = 'user'
@@ -2043,20 +2332,31 @@ function getBackendPostRankingEntries(db, metric = "comments") {
       HAVING count > 0
       ORDER BY count DESC, topics.last_activity_at DESC, topics.created_at DESC
       LIMIT 10
-    `).all(TOPIC_STATUS_EXPELLED);
+    `
+          )
+          .all(TOPIC_STATUS_EXPELLED);
 
   return mapRankingRows(rows, {
     emptyTitle: metric === "likes" ? "Sin likes" : "Sin comentarios",
-    emptyMeta: metric === "likes" ? "Los likes apareceran cuando usuarios reales voten." : "Los temas apareceran cuando usuarios reales publiquen.",
+    emptyMeta:
+      metric === "likes"
+        ? "Los likes apareceran cuando usuarios reales voten."
+        : "Los temas apareceran cuando usuarios reales publiquen.",
     formatMeta: metric === "likes" ? formatBackendLikeCount : formatBackendCommentCount
   });
 }
 
-function getBackendUserRankingEntries(db, { metric = "comments", selectedTopicId = null, currentUserId = null } = {}) {
+function getBackendUserRankingEntries(
+  db,
+  { metric = "comments", selectedTopicId = null, currentUserId = null } = {}
+) {
   const topicFilter = selectedTopicId ? "AND messages.topic_id = ?" : "";
   const params = selectedTopicId ? [selectedTopicId] : [];
-  const rows = metric === "likes"
-    ? db.prepare(`
+  const rows =
+    metric === "likes"
+      ? db
+          .prepare(
+            `
       SELECT users.id, users.name AS title, COALESCE(SUM(messages.likes), 0) AS count
       FROM messages
       JOIN users ON users.id = messages.author_id
@@ -2070,8 +2370,12 @@ function getBackendUserRankingEntries(db, { metric = "comments", selectedTopicId
       HAVING count > 0
       ORDER BY count DESC, users.created_at ASC
       LIMIT 10
-    `).all(...params)
-    : db.prepare(`
+    `
+          )
+          .all(...params)
+      : db
+          .prepare(
+            `
       SELECT users.id, users.name AS title, COUNT(messages.id) AS count
       FROM messages
       JOIN users ON users.id = messages.author_id
@@ -2085,11 +2389,16 @@ function getBackendUserRankingEntries(db, { metric = "comments", selectedTopicId
       HAVING count > 0
       ORDER BY count DESC, users.created_at ASC
       LIMIT 10
-    `).all(...params);
+    `
+          )
+          .all(...params);
 
   return mapRankingRows(rows, {
     emptyTitle: metric === "likes" ? "Sin likes" : "Sin comentarios",
-    emptyMeta: metric === "likes" ? "Los likes apareceran cuando usuarios reales voten." : "Los usuarios apareceran cuando empiecen a comentar.",
+    emptyMeta:
+      metric === "likes"
+        ? "Los likes apareceran cuando usuarios reales voten."
+        : "Los usuarios apareceran cuando empiecen a comentar.",
     formatMeta: metric === "likes" ? formatBackendLikeCount : formatBackendCommentCount,
     currentUserId
   });
@@ -2103,24 +2412,42 @@ function buildBackendRankings(db, context, selectedTopicId = null) {
         likes: getBackendPostRankingEntries(db, "likes")
       },
       users: {
-        comments: getBackendUserRankingEntries(db, { metric: "comments", currentUserId: context.viewer.id }),
-        likes: getBackendUserRankingEntries(db, { metric: "likes", currentUserId: context.viewer.id })
+        comments: getBackendUserRankingEntries(db, {
+          metric: "comments",
+          currentUserId: context.viewer.id
+        }),
+        likes: getBackendUserRankingEntries(db, {
+          metric: "likes",
+          currentUserId: context.viewer.id
+        })
       }
     },
     topic: {
       users: {
         comments: selectedTopicId
-          ? getBackendUserRankingEntries(db, { metric: "comments", selectedTopicId, currentUserId: context.viewer.id })
+          ? getBackendUserRankingEntries(db, {
+              metric: "comments",
+              selectedTopicId,
+              currentUserId: context.viewer.id
+            })
           : emptyRankingEntry("Sin tema", "Selecciona un tema para ver su actividad real."),
         likes: selectedTopicId
-          ? getBackendUserRankingEntries(db, { metric: "likes", selectedTopicId, currentUserId: context.viewer.id })
+          ? getBackendUserRankingEntries(db, {
+              metric: "likes",
+              selectedTopicId,
+              currentUserId: context.viewer.id
+            })
           : emptyRankingEntry("Sin tema", "Selecciona un tema para ver su actividad real.")
       }
     }
   };
 }
 function hydrateTopic(db, row, { forceVisible = null, viewerId = null } = {}) {
-  const isVisible = forceVisible ?? (row.status !== TOPIC_STATUS_EXPELLED && row.active_rank !== null && row.active_rank < VISIBLE_TOPIC_LIMIT);
+  const isVisible =
+    forceVisible ??
+    (row.status !== TOPIC_STATUS_EXPELLED &&
+      row.active_rank !== null &&
+      row.active_rank < VISIBLE_TOPIC_LIMIT);
 
   return {
     id: row.id,
@@ -2132,7 +2459,9 @@ function hydrateTopic(db, row, { forceVisible = null, viewerId = null } = {}) {
     activeRank: row.active_rank,
     isVisible,
     visible: isVisible,
-    messageCount: db.prepare("SELECT COUNT(*) AS count FROM messages WHERE topic_id = ?").get(row.id)?.count ?? 0,
+    messageCount:
+      db.prepare("SELECT COUNT(*) AS count FROM messages WHERE topic_id = ?").get(row.id)?.count ??
+      0,
     lastActivityAt: row.last_activity_at,
     createdAt: row.created_at,
     messages: hydrateTopicMessages(db, row.id, viewerId)
@@ -2140,7 +2469,9 @@ function hydrateTopic(db, row, { forceVisible = null, viewerId = null } = {}) {
 }
 
 function getOrderedActiveTopicRows(db) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT *
     FROM topics
     WHERE status IN (?, ?)
@@ -2149,7 +2480,9 @@ function getOrderedActiveTopicRows(db) {
       last_message_id DESC,
       created_at DESC,
       id DESC
-  `).all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, TOPIC_STATUS_PINNED);
+  `
+    )
+    .all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, TOPIC_STATUS_PINNED);
 }
 
 function rebuildActiveTopicRanks(db) {
@@ -2173,21 +2506,27 @@ function rebuildActiveTopicRanks(db) {
     expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
   });
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE topics
     SET active_rank = NULL
     WHERE status = ?
-  `).run(TOPIC_STATUS_BLOCKED);
+  `
+  ).run(TOPIC_STATUS_BLOCKED);
 }
 
 function getActiveTopicsForFrontend(db) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT *
     FROM topics
     WHERE status IN (?, ?)
     ORDER BY active_rank ASC
     LIMIT ?
-  `).all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT);
+  `
+    )
+    .all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT);
 }
 
 function getFriendshipUserSummary(row) {
@@ -2210,7 +2549,9 @@ function getFriendshipsForFrontend(db, viewerId) {
     return empty;
   }
 
-  const incoming = db.prepare(`
+  const incoming = db
+    .prepare(
+      `
     SELECT users.id, users.name, users.nickname, users.avatar_url
     FROM friend_requests
     JOIN users ON users.id = friend_requests.requester_id
@@ -2219,9 +2560,14 @@ function getFriendshipsForFrontend(db, viewerId) {
       AND users.status = 'active'
     ORDER BY friend_requests.updated_at DESC, friend_requests.id DESC
     LIMIT 50
-  `).all(viewerId).map(getFriendshipUserSummary);
+  `
+    )
+    .all(viewerId)
+    .map(getFriendshipUserSummary);
 
-  const outgoing = db.prepare(`
+  const outgoing = db
+    .prepare(
+      `
     SELECT users.id, users.name, users.nickname, users.avatar_url
     FROM friend_requests
     JOIN users ON users.id = friend_requests.addressee_id
@@ -2230,10 +2576,15 @@ function getFriendshipsForFrontend(db, viewerId) {
       AND users.status = 'active'
     ORDER BY friend_requests.updated_at DESC, friend_requests.id DESC
     LIMIT 50
-  `).all(viewerId).map(getFriendshipUserSummary);
+  `
+    )
+    .all(viewerId)
+    .map(getFriendshipUserSummary);
 
   const nowMs = Date.now();
-  const friends = db.prepare(`
+  const friends = db
+    .prepare(
+      `
     SELECT users.id, users.name, users.nickname, users.avatar_url, presence.last_seen_at
     FROM friend_requests
     JOIN users ON users.id = CASE
@@ -2248,10 +2599,15 @@ function getFriendshipsForFrontend(db, viewerId) {
       AND users.status = 'active'
     ORDER BY friend_requests.updated_at DESC, users.name ASC
     LIMIT 80
-  `).all(viewerId, viewerId, viewerId).map((row) => ({
-    ...getFriendshipUserSummary(row),
-    online: Boolean(row.last_seen_at) && nowMs - new Date(row.last_seen_at).getTime() <= PRESENCE_ONLINE_WINDOW_MS
-  }));
+  `
+    )
+    .all(viewerId, viewerId, viewerId)
+    .map((row) => ({
+      ...getFriendshipUserSummary(row),
+      online:
+        Boolean(row.last_seen_at) &&
+        nowMs - new Date(row.last_seen_at).getTime() <= PRESENCE_ONLINE_WINDOW_MS
+    }));
 
   return { incoming, outgoing, friends };
 }
@@ -2269,7 +2625,9 @@ function getBlockedUsersForFrontend(db, viewerId) {
     return [];
   }
 
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT
       users.id,
       users.name,
@@ -2282,29 +2640,43 @@ function getBlockedUsersForFrontend(db, viewerId) {
     WHERE user_blocks.blocker_id = ?
       AND users.type = 'registered'
     ORDER BY user_blocks.updated_at DESC, users.name ASC
-  `).all(viewerId).map((user) => ({
-    ...user,
-    hideContent: user.hideContent === 1
-  }));
+  `
+    )
+    .all(viewerId)
+    .map((user) => ({
+      ...user,
+      hideContent: user.hideContent === 1
+    }));
 }
 
 function getHiddenBlockedUserIds(db, viewerId) {
-  return new Set(db.prepare(`
+  return new Set(
+    db
+      .prepare(
+        `
     SELECT blocked_id
     FROM user_blocks
     WHERE blocker_id = ? AND hide_content = 1
-  `).all(viewerId).map((row) => row.blocked_id));
+  `
+      )
+      .all(viewerId)
+      .map((row) => row.blocked_id)
+  );
 }
 
 function getFriendRequestBetween(db, leftUserId, rightUserId) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT *
     FROM friend_requests
     WHERE (requester_id = ? AND addressee_id = ?)
        OR (requester_id = ? AND addressee_id = ?)
     ORDER BY updated_at DESC, id DESC
     LIMIT 1
-  `).get(leftUserId, rightUserId, rightUserId, leftUserId);
+  `
+    )
+    .get(leftUserId, rightUserId, rightUserId, leftUserId);
 }
 
 function assertFriendTarget(db, viewerId, targetUserId) {
@@ -2355,13 +2727,19 @@ function assertBlockTarget(db, viewerId, targetUserId) {
 }
 
 function usersBlockEachOther(db, leftUserId, rightUserId) {
-  return Boolean(db.prepare(`
+  return Boolean(
+    db
+      .prepare(
+        `
     SELECT 1
     FROM user_blocks
     WHERE (blocker_id = ? AND blocked_id = ?)
        OR (blocker_id = ? AND blocked_id = ?)
     LIMIT 1
-  `).get(leftUserId, rightUserId, rightUserId, leftUserId));
+  `
+      )
+      .get(leftUserId, rightUserId, rightUserId, leftUserId)
+  );
 }
 
 function isTopicSeoProblematic(db, topicId, title = "", messages = null) {
@@ -2376,7 +2754,10 @@ function isTopicSeoProblematic(db, topicId, title = "", messages = null) {
     return true;
   }
 
-  return Boolean(db.prepare(`
+  return Boolean(
+    db
+      .prepare(
+        `
     SELECT 1
     FROM reports
     WHERE status = ?
@@ -2392,13 +2773,18 @@ function isTopicSeoProblematic(db, topicId, title = "", messages = null) {
         )
       )
     LIMIT 1
-  `).get(REPORT_STATUS_OPEN, String(topicId || ""), String(topicId || "")));
+  `
+      )
+      .get(REPORT_STATUS_OPEN, String(topicId || ""), String(topicId || ""))
+  );
 }
 
 function isSeoTopicRowProblematic(row) {
-  return hasProfanity(row.title)
-    || hasProfanity(row.seo_message_text || "")
-    || Boolean(row.has_open_report);
+  return (
+    hasProfanity(row.title) ||
+    hasProfanity(row.seo_message_text || "") ||
+    Boolean(row.has_open_report)
+  );
 }
 
 function followTopicForRegisteredViewer(db, context, topicId, nowIso = new Date().toISOString()) {
@@ -2406,11 +2792,13 @@ function followTopicForRegisteredViewer(db, context, topicId, nowIso = new Date(
     return;
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO topic_follows (user_id, topic_id, created_at, updated_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id, topic_id) DO UPDATE SET updated_at = excluded.updated_at
-  `).run(context.viewer.id, topicId, nowIso, nowIso);
+  `
+  ).run(context.viewer.id, topicId, nowIso, nowIso);
 }
 
 function getFollowedTopicIds(db, viewerId) {
@@ -2418,16 +2806,24 @@ function getFollowedTopicIds(db, viewerId) {
     return [];
   }
 
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT topic_id
     FROM topic_follows
     WHERE user_id = ?
     ORDER BY updated_at DESC
-  `).all(viewerId).map((row) => row.topic_id);
+  `
+    )
+    .all(viewerId)
+    .map((row) => row.topic_id);
 }
 
 function normalizeProductRouteGroup(value) {
-  const pathname = String(value || "/").trim().split("?")[0].split("#")[0];
+  const pathname = String(value || "/")
+    .trim()
+    .split("?")[0]
+    .split("#")[0];
   if (pathname.startsWith("/tema/")) {
     return "/tema";
   }
@@ -2441,51 +2837,79 @@ function normalizeProductRouteGroup(value) {
 }
 
 function normalizeProductSourceGroup(value) {
-  const normalized = String(value || "direct").trim().toLowerCase();
-  const allowedSources = new Set(["direct", "internal", "search", "social", "email", "campaign", "referral"]);
+  const normalized = String(value || "direct")
+    .trim()
+    .toLowerCase();
+  const allowedSources = new Set([
+    "direct",
+    "internal",
+    "search",
+    "social",
+    "email",
+    "campaign",
+    "referral"
+  ]);
   return allowedSources.has(normalized) ? normalized : "referral";
 }
 
 function getProductAnalyticsSalt(db) {
-  const existing = db.prepare("SELECT value FROM app_metadata WHERE key = ?")
+  const existing = db
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(PRODUCT_ANALYTICS_SALT_META_KEY);
   if (existing?.value) {
     return existing.value;
   }
 
   const salt = crypto.randomBytes(32).toString("base64url");
-  db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)")
-    .run(PRODUCT_ANALYTICS_SALT_META_KEY, salt, new Date().toISOString());
+  db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
+    PRODUCT_ANALYTICS_SALT_META_KEY,
+    salt,
+    new Date().toISOString()
+  );
   return salt;
 }
 
 function getProductAnalyticsSubjectKey(db, context) {
-  const identity = context.viewer.type === "registered"
-    ? `registered:${context.viewer.id}`
-    : `guest:${context.sessionId}`;
-  return crypto.createHmac("sha256", getProductAnalyticsSalt(db))
+  const identity =
+    context.viewer.type === "registered"
+      ? `registered:${context.viewer.id}`
+      : `guest:${context.sessionId}`;
+  return crypto
+    .createHmac("sha256", getProductAnalyticsSalt(db))
     .update(identity)
     .digest("base64url");
 }
 
 function pruneProductAnalyticsIfNeeded(db, now = new Date()) {
   const today = now.toISOString().slice(0, 10);
-  const lastPrune = db.prepare("SELECT value FROM app_metadata WHERE key = ?")
+  const lastPrune = db
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(PRODUCT_ANALYTICS_PRUNE_META_KEY);
   if (lastPrune?.value === today) {
     return;
   }
 
-  const cutoff = new Date(now.getTime() - PRODUCT_ANALYTICS_RETENTION_DAYS * 24 * 60 * 60_000).toISOString();
+  const cutoff = new Date(
+    now.getTime() - PRODUCT_ANALYTICS_RETENTION_DAYS * 24 * 60 * 60_000
+  ).toISOString();
   db.prepare("DELETE FROM product_events WHERE created_at < ?").run(cutoff);
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO app_metadata (key, value, updated_at)
     VALUES (?, ?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-  `).run(PRODUCT_ANALYTICS_PRUNE_META_KEY, today, now.toISOString());
+  `
+  ).run(PRODUCT_ANALYTICS_PRUNE_META_KEY, today, now.toISOString());
 }
 
-function recordProductEvent(db, context, eventName, routeGroup = "/", sourceGroup = "direct", now = new Date()) {
+function recordProductEvent(
+  db,
+  context,
+  eventName,
+  routeGroup = "/",
+  sourceGroup = "direct",
+  now = new Date()
+) {
   const normalizedEventName = String(eventName || "").trim();
   if (!PRODUCT_EVENT_NAMES.has(normalizedEventName)) {
     throw new ApiError(400, "INVALID_PRODUCT_EVENT", "El evento de producto no es válido.");
@@ -2499,28 +2923,43 @@ function recordProductEvent(db, context, eventName, routeGroup = "/", sourceGrou
   let returnVisitRecorded = false;
 
   if (normalizedEventName === "page_view") {
-    const previousVisit = db.prepare(`
+    const previousVisit = db
+      .prepare(
+        `
       SELECT created_at
       FROM product_events
       WHERE subject_key = ? AND event_name = 'page_view'
       ORDER BY id DESC
       LIMIT 1
-    `).get(subjectKey);
+    `
+      )
+      .get(subjectKey);
     const previousVisitMs = Date.parse(previousVisit?.created_at || "");
-    returnVisitRecorded = Number.isFinite(previousVisitMs)
-      && now.getTime() - previousVisitMs >= 12 * 60 * 60_000;
+    returnVisitRecorded =
+      Number.isFinite(previousVisitMs) && now.getTime() - previousVisitMs >= 12 * 60 * 60_000;
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, source_group, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(subjectKey, context.viewer.type, normalizedEventName, normalizedRouteGroup, normalizedSourceGroup, createdAt);
+  `
+  ).run(
+    subjectKey,
+    context.viewer.type,
+    normalizedEventName,
+    normalizedRouteGroup,
+    normalizedSourceGroup,
+    createdAt
+  );
 
   if (returnVisitRecorded) {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, source_group, created_at)
       VALUES (?, ?, 'return_visit', ?, ?, ?)
-    `).run(subjectKey, context.viewer.type, normalizedRouteGroup, normalizedSourceGroup, createdAt);
+    `
+    ).run(subjectKey, context.viewer.type, normalizedRouteGroup, normalizedSourceGroup, createdAt);
   }
 
   return { accepted: true, returnVisitRecorded };
@@ -2531,12 +2970,16 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
 
   const blockedUsers = getBlockedUsersForFrontend(db, context.viewer.id);
   const hiddenBlockedUserIds = getHiddenBlockedUserIds(db, context.viewer.id);
-  const activeTopicRows = getActiveTopicsForFrontend(db)
-    .filter((row) => !hiddenBlockedUserIds.has(row.author_id));
+  const activeTopicRows = getActiveTopicsForFrontend(db).filter(
+    (row) => !hiddenBlockedUserIds.has(row.author_id)
+  );
   const topicIds = new Set(activeTopicRows.map((row) => row.id));
   const hideBlockedMessages = (topic) => {
-    const messages = topic.messages.filter((message) => !hiddenBlockedUserIds.has(message.authorId));
-    const lastVisibleMessage = [...messages].reverse().find((message) => message.kind === "user") || null;
+    const messages = topic.messages.filter(
+      (message) => !hiddenBlockedUserIds.has(message.authorId)
+    );
+    const lastVisibleMessage =
+      [...messages].reverse().find((message) => message.kind === "user") || null;
     return {
       ...topic,
       subtitle: lastVisibleMessage?.text || "",
@@ -2545,20 +2988,27 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     };
   };
   const topics = activeTopicRows
-    .map((row, index) => hydrateTopic(db, row, {
-      forceVisible: index < VISIBLE_TOPIC_LIMIT,
-      viewerId: context.viewer.id
-    }))
+    .map((row, index) =>
+      hydrateTopic(db, row, {
+        forceVisible: index < VISIBLE_TOPIC_LIMIT,
+        viewerId: context.viewer.id
+      })
+    )
     .map(hideBlockedMessages);
   const reportSnapshot = getReportSnapshot(db, context.sessionId);
   const friendships = getFriendshipsForFrontend(db, context.viewer.id);
   const friendshipStatusByUserId = getFriendshipStatusByUserId(friendships);
-  let resolvedSelectedTopicId = selectedTopicId && topicIds.has(selectedTopicId) ? selectedTopicId : null;
+  let resolvedSelectedTopicId =
+    selectedTopicId && topicIds.has(selectedTopicId) ? selectedTopicId : null;
 
   if (selectedTopicId && !topicIds.has(selectedTopicId)) {
     const selectedRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(selectedTopicId);
     if (selectedRow && !hiddenBlockedUserIds.has(selectedRow.author_id)) {
-      topics.push(hideBlockedMessages(hydrateTopic(db, selectedRow, { forceVisible: false, viewerId: context.viewer.id })));
+      topics.push(
+        hideBlockedMessages(
+          hydrateTopic(db, selectedRow, { forceVisible: false, viewerId: context.viewer.id })
+        )
+      );
       resolvedSelectedTopicId = selectedTopicId;
     }
   }
@@ -2570,9 +3020,11 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   profileUserIds.push(...blockedUsers.map((user) => user.id));
 
   if (profileNickname) {
-    const sharedProfileRow = db.prepare(
-      "SELECT id FROM users WHERE nickname_norm = ? AND type = 'registered' AND status = 'active'"
-    ).get(normalizeUniqueNameKey(profileNickname));
+    const sharedProfileRow = db
+      .prepare(
+        "SELECT id FROM users WHERE nickname_norm = ? AND type = 'registered' AND status = 'active'"
+      )
+      .get(normalizeUniqueNameKey(profileNickname));
     if (sharedProfileRow) {
       profileUserIds.push(sharedProfileRow.id);
     }
@@ -2580,17 +3032,27 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
 
   let pendingModerationCount = 0;
   if (context.viewer.isAdmin) {
-    const reportsCount = db.prepare(`
+    const reportsCount =
+      db
+        .prepare(
+          `
       SELECT COUNT(*) AS count
       FROM reports
       WHERE status = ?
-    `).get(REPORT_STATUS_OPEN)?.count ?? 0;
+    `
+        )
+        .get(REPORT_STATUS_OPEN)?.count ?? 0;
 
-    const avatarsCount = db.prepare(`
+    const avatarsCount =
+      db
+        .prepare(
+          `
       SELECT COUNT(*) AS count
       FROM users
       WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
-    `).get()?.count ?? 0;
+    `
+        )
+        .get()?.count ?? 0;
 
     pendingModerationCount = reportsCount + avatarsCount;
   }
@@ -2600,13 +3062,13 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     viewer: context.viewer,
     users: getFrontendUsers(db, context.viewer.id, profileUserIds).map((user) => ({
       ...user,
-      friendshipStatus: user.id === context.viewer.id ? "self" : friendshipStatusByUserId.get(user.id) || "none"
+      friendshipStatus:
+        user.id === context.viewer.id ? "self" : friendshipStatusByUserId.get(user.id) || "none"
     })),
     friendships,
     blockedUsers,
-    followedTopicIds: context.viewer.type === "registered"
-      ? getFollowedTopicIds(db, context.viewer.id)
-      : [],
+    followedTopicIds:
+      context.viewer.type === "registered" ? getFollowedTopicIds(db, context.viewer.id) : [],
     topics,
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,
@@ -2619,9 +3081,10 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
 function assertRateLimit(lastAtIso, viewerType, fieldName) {
   const now = Date.now();
   const limits = getRateLimitConfig(viewerType);
-  const config = fieldName === "last_topic_at"
-    ? { waitMs: limits.createTopicMs, kind: "create-topic" }
-    : { waitMs: limits.postMessageMs, kind: "comment" };
+  const config =
+    fieldName === "last_topic_at"
+      ? { waitMs: limits.createTopicMs, kind: "create-topic" }
+      : { waitMs: limits.postMessageMs, kind: "comment" };
 
   if (!lastAtIso) {
     return;
@@ -2630,10 +3093,15 @@ function assertRateLimit(lastAtIso, viewerType, fieldName) {
   const nextAllowedAt = new Date(lastAtIso).getTime() + config.waitMs;
   if (nextAllowedAt > now) {
     const retryAfterSeconds = computeRetryAfterSeconds(nextAllowedAt, now);
-    throw new ApiError(429, "RATE_LIMITED", createRateLimitMessage(config.kind, retryAfterSeconds), {
-      retryAfterSeconds,
-      rateLimitKind: config.kind
-    });
+    throw new ApiError(
+      429,
+      "RATE_LIMITED",
+      createRateLimitMessage(config.kind, retryAfterSeconds),
+      {
+        retryAfterSeconds,
+        rateLimitKind: config.kind
+      }
+    );
   }
 }
 
@@ -2642,13 +3110,17 @@ function assertConsecutiveCommentRateLimit(db, context, topicId) {
     return;
   }
 
-  const latestComment = db.prepare(`
+  const latestComment = db
+    .prepare(
+      `
     SELECT author_id, created_at
     FROM messages
     WHERE topic_id = ? AND kind = 'user' AND is_root = 0
     ORDER BY id DESC
     LIMIT 1
-  `).get(topicId);
+  `
+    )
+    .get(topicId);
 
   if (!latestComment || latestComment.author_id !== context.viewer.id) {
     return;
@@ -2658,10 +3130,15 @@ function assertConsecutiveCommentRateLimit(db, context, topicId) {
   const nextAllowedAt = new Date(latestComment.created_at).getTime() + CONSECUTIVE_COMMENT_DELAY_MS;
   if (nextAllowedAt > now) {
     const retryAfterSeconds = computeRetryAfterSeconds(nextAllowedAt, now);
-    throw new ApiError(429, "RATE_LIMITED", createRateLimitMessage("consecutive-comment", retryAfterSeconds), {
-      retryAfterSeconds,
-      rateLimitKind: "consecutive-comment"
-    });
+    throw new ApiError(
+      429,
+      "RATE_LIMITED",
+      createRateLimitMessage("consecutive-comment", retryAfterSeconds),
+      {
+        retryAfterSeconds,
+        rateLimitKind: "consecutive-comment"
+      }
+    );
   }
 }
 
@@ -2671,12 +3148,16 @@ function getGuestIpActivityAt(db, context, fieldName) {
     return null;
   }
 
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT ${fieldName} AS last_at
     FROM guest_ip_rate_limits
     WHERE ip_address = ?
     LIMIT 1
-  `).get(ipAddress);
+  `
+    )
+    .get(ipAddress);
 
   return row?.last_at ?? null;
 }
@@ -2691,30 +3172,36 @@ function getContextActivityAt(db, context, fieldName) {
 
 function updateViewerActivity(db, context, fieldName) {
   const nowIso = new Date().toISOString();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE sessions
     SET ${fieldName} = ?, updated_at = ?
     WHERE id = ?
-  `).run(nowIso, nowIso, context.sessionId);
+  `
+  ).run(nowIso, nowIso, context.sessionId);
 
   if (context.viewer.type === "registered") {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE users
       SET ${fieldName} = ?, updated_at = ?
       WHERE id = ?
-    `).run(nowIso, nowIso, context.viewer.id);
+    `
+    ).run(nowIso, nowIso, context.viewer.id);
     return;
   }
 
   const ipAddress = getEffectiveContextIpAddress(context);
   if (ipAddress) {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO guest_ip_rate_limits (ip_address, ${fieldName}, created_at, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(ip_address) DO UPDATE SET
         ${fieldName} = excluded.${fieldName},
         updated_at = excluded.updated_at
-    `).run(ipAddress, nowIso, nowIso, nowIso);
+    `
+    ).run(ipAddress, nowIso, nowIso, nowIso);
   }
 }
 
@@ -2755,15 +3242,20 @@ function validateMessageInput(text) {
 
 function validateReportReason(reason, entityType) {
   const normalizedReason = normalizeMessageText(reason);
-  const fallbackReason = entityType === "message"
-    ? "Reporte rapido sobre mensaje."
-    : entityType === "user"
-      ? "Reporte rapido sobre usuario."
-      : "Reporte rapido sobre tema.";
+  const fallbackReason =
+    entityType === "message"
+      ? "Reporte rapido sobre mensaje."
+      : entityType === "user"
+        ? "Reporte rapido sobre usuario."
+        : "Reporte rapido sobre tema.";
   const finalReason = normalizedReason || fallbackReason;
 
   if (finalReason.length > REPORT_REASON_MAX_LENGTH) {
-    throw new ApiError(400, "VALIDATION_ERROR", "El motivo del reporte excede el maximo permitido.");
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "El motivo del reporte excede el maximo permitido."
+    );
   }
 
   return finalReason;
@@ -2808,12 +3300,16 @@ function getEffectiveContextIpAddress(context) {
 }
 
 function assertContextNotBlocked(db, context) {
-  const blockedSession = db.prepare(`
+  const blockedSession = db
+    .prepare(
+      `
     SELECT session_id
     FROM blocked_sessions
     WHERE session_id = ?
     LIMIT 1
-  `).get(context.sessionId);
+  `
+    )
+    .get(context.sessionId);
   if (blockedSession) {
     throw new ApiError(403, "SESSION_BLOCKED", "Esta sesion no puede participar en esta etapa.");
   }
@@ -2823,12 +3319,16 @@ function assertContextNotBlocked(db, context) {
     return;
   }
 
-  const blockedIp = db.prepare(`
+  const blockedIp = db
+    .prepare(
+      `
     SELECT ip_address
     FROM blocked_ips
     WHERE ip_address = ?
     LIMIT 1
-  `).get(effectiveIpAddress);
+  `
+    )
+    .get(effectiveIpAddress);
   if (blockedIp) {
     throw new ApiError(403, "IP_BLOCKED", "Esta IP no puede participar en esta etapa.");
   }
@@ -2839,7 +3339,11 @@ function assertProfileReady(context) {
     return;
   }
 
-  throw new ApiError(403, "PROFILE_REQUIRED", "Completa tu perfil antes de participar como usuario registrado.");
+  throw new ApiError(
+    403,
+    "PROFILE_REQUIRED",
+    "Completa tu perfil antes de participar como usuario registrado."
+  );
 }
 
 function assertContextCanParticipate(db, context) {
@@ -2851,7 +3355,11 @@ function assertContextCanParticipate(db, context) {
 function assertRegisteredContextCanPost(db, context) {
   assertContextCanParticipate(db, context);
   if (context.viewer.type !== "registered") {
-    throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para crear temas o comentar.");
+    throw new ApiError(
+      403,
+      "LOGIN_REQUIRED",
+      "Hace falta iniciar sesion para crear temas o comentar."
+    );
   }
 }
 
@@ -2876,38 +3384,60 @@ function normalizeMessageLikeId(messageId) {
 
 function assertLikeableMessage(db, messageId) {
   const normalizedMessageId = normalizeMessageLikeId(messageId);
-  const messageRow = db.prepare(`
+  const messageRow = db
+    .prepare(
+      `
     SELECT messages.id, messages.topic_id, messages.kind, topics.status AS topic_status
     FROM messages
     JOIN topics ON topics.id = messages.topic_id
     WHERE messages.id = ?
     LIMIT 1
-  `).get(normalizedMessageId);
+  `
+    )
+    .get(normalizedMessageId);
   if (!messageRow) {
     throw new ApiError(404, "NOT_FOUND", "Mensaje no encontrado.");
   }
   if (messageRow.kind === "system") {
     throw new ApiError(409, "INVALID_LIKE_TARGET", "Este mensaje no acepta likes.");
   }
-  if (messageRow.topic_status === TOPIC_STATUS_EXPELLED || messageRow.topic_status === TOPIC_STATUS_BLOCKED) {
-    throw new ApiError(409, "TOPIC_EXPELLED_OR_BLOCKED", "Este tema archivado es solo de lectura.", {
-      topicStatus: messageRow.topic_status
-    });
+  if (
+    messageRow.topic_status === TOPIC_STATUS_EXPELLED ||
+    messageRow.topic_status === TOPIC_STATUS_BLOCKED
+  ) {
+    throw new ApiError(
+      409,
+      "TOPIC_EXPELLED_OR_BLOCKED",
+      "Este tema archivado es solo de lectura.",
+      {
+        topicStatus: messageRow.topic_status
+      }
+    );
   }
 
   return messageRow;
 }
 
 function refreshMessageReactionCounts(db, messageId) {
-  const likes = db.prepare("SELECT COUNT(*) AS count FROM message_likes WHERE message_id = ?").get(messageId)?.count ?? 0;
-  const dislikes = db.prepare("SELECT COUNT(*) AS count FROM message_dislikes WHERE message_id = ?").get(messageId)?.count ?? 0;
-  db.prepare("UPDATE messages SET likes = ?, dislikes = ? WHERE id = ?").run(likes, dislikes, messageId);
+  const likes =
+    db.prepare("SELECT COUNT(*) AS count FROM message_likes WHERE message_id = ?").get(messageId)
+      ?.count ?? 0;
+  const dislikes =
+    db.prepare("SELECT COUNT(*) AS count FROM message_dislikes WHERE message_id = ?").get(messageId)
+      ?.count ?? 0;
+  db.prepare("UPDATE messages SET likes = ?, dislikes = ? WHERE id = ?").run(
+    likes,
+    dislikes,
+    messageId
+  );
   return { likes, dislikes };
 }
 
 function recordMessageReaction(db, messageRow, userId, reactionType) {
   const tableName = reactionType === "dislike" ? "message_dislikes" : "message_likes";
-  const existingReaction = db.prepare(`
+  const existingReaction = db
+    .prepare(
+      `
     SELECT 'like' AS reaction_type
     FROM message_likes
     WHERE message_id = ? AND user_id = ?
@@ -2916,16 +3446,24 @@ function recordMessageReaction(db, messageRow, userId, reactionType) {
     FROM message_dislikes
     WHERE message_id = ? AND user_id = ?
     LIMIT 1
-  `).get(messageRow.id, userId, messageRow.id, userId);
+  `
+    )
+    .get(messageRow.id, userId, messageRow.id, userId);
 
   if (existingReaction) {
-    throw new ApiError(409, "MESSAGE_REACTION_LOCKED", "Ya reaccionaste a este comentario. Podras hacerlo de nuevo despues del reinicio diario.");
+    throw new ApiError(
+      409,
+      "MESSAGE_REACTION_LOCKED",
+      "Ya reaccionaste a este comentario. Podras hacerlo de nuevo despues del reinicio diario."
+    );
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO ${tableName} (message_id, user_id, created_at)
     VALUES (?, ?, ?)
-  `).run(messageRow.id, userId, new Date().toISOString());
+  `
+  ).run(messageRow.id, userId, new Date().toISOString());
 
   refreshMessageReactionCounts(db, messageRow.id);
 }
@@ -2944,12 +3482,16 @@ function assertExistingUser(db, userId) {
 }
 
 function assertNicknameAvailable(db, nicknameKey, userId = null) {
-  const existing = db.prepare(`
+  const existing = db
+    .prepare(
+      `
     SELECT id
     FROM users
     WHERE nickname_norm = ?
     LIMIT 1
-  `).get(nicknameKey);
+  `
+    )
+    .get(nicknameKey);
   if (existing && existing.id !== userId) {
     throw new ApiError(409, "NICKNAME_TAKEN", "Ese nickname ya esta en uso.");
   }
@@ -2975,7 +3517,9 @@ function normalizeGeneratedNicknameBase(value) {
 function createAvailableNickname(db, preferredValue, userId) {
   const baseNickname = normalizeGeneratedNicknameBase(preferredValue);
   const baseKey = normalizeNicknameKey(baseNickname);
-  const existingBase = db.prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1").get(baseKey);
+  const existingBase = db
+    .prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1")
+    .get(baseKey);
   if (!existingBase || existingBase.id === userId) {
     return baseNickname;
   }
@@ -2989,7 +3533,8 @@ function createAvailableNickname(db, preferredValue, userId) {
     const suffix = `_${digest.slice(0, 5)}${attempt || ""}`;
     const prefixLength = NICKNAME_MAX_LENGTH - suffix.length;
     const candidate = normalizeNickname(`${baseNickname.slice(0, prefixLength)}${suffix}`);
-    const existing = db.prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1")
+    const existing = db
+      .prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1")
       .get(normalizeNicknameKey(candidate));
     if (!existing || existing.id === userId) {
       return candidate;
@@ -3000,14 +3545,18 @@ function createAvailableNickname(db, preferredValue, userId) {
 }
 
 function backfillRegisteredNicknames(db) {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT id, name, nickname
     FROM users
     WHERE type = 'registered'
       AND profile_pending = 0
       AND (nickname IS NULL OR nickname = '' OR nickname_norm IS NULL OR nickname_norm = '')
     ORDER BY created_at ASC, id ASC
-  `).all();
+  `
+    )
+    .all();
 
   const updateNickname = db.prepare(`
     UPDATE users
@@ -3021,7 +3570,8 @@ function backfillRegisteredNicknames(db) {
   });
 }
 function backfillVerifiedPasswordEmails(db) {
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE users
     SET email_verified_at = terms_accepted_at
     WHERE type = 'registered'
@@ -3030,43 +3580,54 @@ function backfillVerifiedPasswordEmails(db) {
       AND email_verified_at IS NULL
       AND terms_accepted_at IS NOT NULL
       AND terms_version = ?
-  `).run(TERMS_VERSION);
+  `
+  ).run(TERMS_VERSION);
 }
 
-
-
 function getPasswordUserByEmail(db, email) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT *
     FROM users
     WHERE email = ? AND password_hash IS NOT NULL
     LIMIT 1
-  `).get(email);
+  `
+    )
+    .get(email);
 }
 
 function getRegisteredUserByEmail(db, email) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT *
     FROM users
     WHERE email = ? AND type = 'registered'
     ORDER BY created_at ASC
     LIMIT 1
-  `).get(email);
+  `
+    )
+    .get(email);
 }
 
-function insertPasswordUser(db, {
-  email,
-  passwordHash,
-  nickname,
-  displayName = null,
-  age = null,
-  termsVersion = null,
-  emailVerified = false,
-  nowIso
-}) {
+function insertPasswordUser(
+  db,
+  {
+    email,
+    passwordHash,
+    nickname,
+    displayName = null,
+    age = null,
+    termsVersion = null,
+    emailVerified = false,
+    nowIso
+  }
+) {
   const normalizedEmail = normalizeRequiredEmail(email);
   const normalizedNickname = normalizeNickname(nickname);
-  const normalizedDisplayName = displayName === null ? normalizedNickname : normalizeRequiredDisplayName(displayName);
+  const normalizedDisplayName =
+    displayName === null ? normalizedNickname : normalizeRequiredDisplayName(displayName);
   const nicknameKey = normalizeNicknameKey(normalizedNickname);
   if (getRegisteredUserByEmail(db, normalizedEmail)) {
     throw new ApiError(409, "EMAIL_TAKEN", "Ese email ya tiene cuenta.");
@@ -3075,13 +3636,15 @@ function insertPasswordUser(db, {
 
   const userId = `user-${crypto.randomUUID()}`;
   const isMinorRegistration = Number.isInteger(age) && age < 18;
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO users (
       id, name, nickname, nickname_norm, type, role, score, status, email, email_verified_at, password_hash,
       registration_age, terms_accepted_at, terms_version, profile_pending, profile_indexable,
       notifications_friends_only, created_at, updated_at
     ) VALUES (?, ?, ?, ?, 'registered', ?, 0, 'active', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
-  `).run(
+  `
+  ).run(
     userId,
     normalizedDisplayName,
     normalizedNickname,
@@ -3131,15 +3694,10 @@ function resolvePreservedSuggestedDisplayName(nextValue, currentValue = null) {
   return normalized || currentValue || null;
 }
 
-function getOrCreateAuthenticatedUser(db, {
-  authProvider,
-  authSubject,
-  email,
-  emailVerified = false,
-  displayName,
-  avatarUrl,
-  nowIso
-}) {
+function getOrCreateAuthenticatedUser(
+  db,
+  { authProvider, authSubject, email, emailVerified = false, displayName, avatarUrl, nowIso }
+) {
   const normalizedProvider = String(authProvider || "").trim();
   const normalizedSubject = String(authSubject || "").trim();
 
@@ -3148,12 +3706,16 @@ function getOrCreateAuthenticatedUser(db, {
   }
 
   const normalizedSuggestedAvatarUrl = normalizeAvatarUrl(avatarUrl, { discardInvalid: true });
-  const existingUser = db.prepare(`
+  const existingUser = db
+    .prepare(
+      `
     SELECT *
     FROM users
     WHERE auth_provider = ? AND auth_subject = ?
     LIMIT 1
-  `).get(normalizedProvider, normalizedSubject);
+  `
+    )
+    .get(normalizedProvider, normalizedSubject);
 
   if (existingUser && emailVerified !== true) {
     const nextSuggestedDisplayName = resolvePreservedSuggestedDisplayName(
@@ -3164,16 +3726,22 @@ function getOrCreateAuthenticatedUser(db, {
       normalizedSuggestedAvatarUrl,
       existingUser.profile_suggested_avatar_url
     );
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE users
       SET profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
       WHERE id = ?
-    `).run(nextSuggestedDisplayName, nextSuggestedAvatarUrl, nowIso, existingUser.id);
+    `
+    ).run(nextSuggestedDisplayName, nextSuggestedAvatarUrl, nowIso, existingUser.id);
     return db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
   }
 
   if (emailVerified !== true) {
-    throw new ApiError(403, "OIDC_EMAIL_NOT_VERIFIED", "Google no confirmo que el email de la cuenta este verificado.");
+    throw new ApiError(
+      403,
+      "OIDC_EMAIL_NOT_VERIFIED",
+      "Google no confirmo que el email de la cuenta este verificado."
+    );
   }
 
   const normalizedEmail = normalizeRequiredEmail(email);
@@ -3182,12 +3750,16 @@ function getOrCreateAuthenticatedUser(db, {
     normalizedEmail.split("@")[0]
   );
   const resolvedRole = isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE;
-  const matchingEmailUsers = db.prepare(`
+  const matchingEmailUsers = db
+    .prepare(
+      `
     SELECT *
     FROM users
     WHERE email = ? AND type = 'registered'
     ORDER BY CASE WHEN email_verified_at IS NOT NULL THEN 0 ELSE 1 END, created_at ASC
-  `).all(normalizedEmail);
+  `
+    )
+    .all(normalizedEmail);
 
   if (existingUser) {
     if (matchingEmailUsers.some((candidate) => candidate.id !== existingUser.id)) {
@@ -3202,15 +3774,20 @@ function getOrCreateAuthenticatedUser(db, {
       normalizedSuggestedAvatarUrl,
       existingUser.profile_suggested_avatar_url
     );
-    const nextRole = resolvedRole === ADMIN_ROLE || isModeratorRole(existingUser.role || "")
-      ? (resolvedRole === ADMIN_ROLE ? ADMIN_ROLE : existingUser.role)
-      : DEFAULT_REGISTERED_ROLE;
-    db.prepare(`
+    const nextRole =
+      resolvedRole === ADMIN_ROLE || isModeratorRole(existingUser.role || "")
+        ? resolvedRole === ADMIN_ROLE
+          ? ADMIN_ROLE
+          : existingUser.role
+        : DEFAULT_REGISTERED_ROLE;
+    db.prepare(
+      `
       UPDATE users
       SET role = ?, email = ?, email_verified_at = COALESCE(email_verified_at, ?),
           profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
       WHERE id = ?
-    `).run(
+    `
+    ).run(
       nextRole,
       normalizedEmail,
       nowIso,
@@ -3223,7 +3800,11 @@ function getOrCreateAuthenticatedUser(db, {
   }
 
   if (matchingEmailUsers.length > 1) {
-    throw new ApiError(409, "AUTH_EMAIL_CONFLICT", "Ese email esta asociado a mas de una cuenta. Contacta a soporte.");
+    throw new ApiError(
+      409,
+      "AUTH_EMAIL_CONFLICT",
+      "Ese email esta asociado a mas de una cuenta. Contacta a soporte."
+    );
   }
 
   const existingEmailUser = matchingEmailUsers[0] || null;
@@ -3236,35 +3817,39 @@ function getOrCreateAuthenticatedUser(db, {
       );
     }
     if (existingEmailUser.auth_provider || existingEmailUser.auth_subject) {
-      throw new ApiError(409, "AUTH_EMAIL_CONFLICT", "Ese email ya esta vinculado a otra identidad.");
+      throw new ApiError(
+        409,
+        "AUTH_EMAIL_CONFLICT",
+        "Ese email ya esta vinculado a otra identidad."
+      );
     }
 
-    const nextRole = resolvedRole === ADMIN_ROLE || isModeratorRole(existingEmailUser.role || "")
-      ? (resolvedRole === ADMIN_ROLE ? ADMIN_ROLE : existingEmailUser.role)
-      : DEFAULT_REGISTERED_ROLE;
-    db.prepare(`
+    const nextRole =
+      resolvedRole === ADMIN_ROLE || isModeratorRole(existingEmailUser.role || "")
+        ? resolvedRole === ADMIN_ROLE
+          ? ADMIN_ROLE
+          : existingEmailUser.role
+        : DEFAULT_REGISTERED_ROLE;
+    db.prepare(
+      `
       UPDATE users
       SET role = ?, auth_provider = ?, auth_subject = ?, email_verified_at = COALESCE(email_verified_at, ?),
           updated_at = ?
       WHERE id = ?
-    `).run(
-      nextRole,
-      normalizedProvider,
-      normalizedSubject,
-      nowIso,
-      nowIso,
-      existingEmailUser.id
-    );
+    `
+    ).run(nextRole, normalizedProvider, normalizedSubject, nowIso, nowIso, existingEmailUser.id);
     return db.prepare("SELECT * FROM users WHERE id = ?").get(existingEmailUser.id);
   }
 
   const userId = `user-${crypto.randomUUID()}`;
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO users (
       id, name, type, role, score, status, auth_provider, auth_subject, email, email_verified_at, avatar_url,
       profile_pending, profile_suggested_name, profile_suggested_avatar_url, created_at, updated_at
     ) VALUES (?, 'Usuario', 'registered', ?, 0, 'active', ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?)
-  `).run(
+  `
+  ).run(
     userId,
     resolvedRole,
     normalizedProvider,
@@ -3290,12 +3875,16 @@ function assertReportableEntity(db, entityType, entityId) {
 
   if (entityType === "message") {
     const normalizedMessageId = normalizeMessageEntityId(entityId);
-    const messageRow = db.prepare(`
+    const messageRow = db
+      .prepare(
+        `
       SELECT id, topic_id
       FROM messages
       WHERE id = ?
       LIMIT 1
-    `).get(normalizedMessageId);
+    `
+      )
+      .get(normalizedMessageId);
     if (!messageRow) {
       throw new ApiError(404, "NOT_FOUND", "Mensaje no encontrado.");
     }
@@ -3319,25 +3908,29 @@ function assertReportableEntity(db, entityType, entityId) {
 }
 
 function insertOrUpdateBlockedSession(db, { sessionId, actorUserId, reason, createdAt }) {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO blocked_sessions (session_id, actor_user_id, reason, created_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
       actor_user_id = excluded.actor_user_id,
       reason = excluded.reason,
       created_at = excluded.created_at
-  `).run(sessionId, actorUserId, reason, createdAt);
+  `
+  ).run(sessionId, actorUserId, reason, createdAt);
 }
 
 function insertOrUpdateBlockedIp(db, { ipAddress, actorUserId, reason, createdAt }) {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO blocked_ips (ip_address, actor_user_id, reason, created_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(ip_address) DO UPDATE SET
       actor_user_id = excluded.actor_user_id,
       reason = excluded.reason,
       created_at = excluded.created_at
-  `).run(ipAddress, actorUserId, reason, createdAt);
+  `
+  ).run(ipAddress, actorUserId, reason, createdAt);
 }
 
 function assertModerator(viewerRow) {
@@ -3347,12 +3940,16 @@ function assertModerator(viewerRow) {
 }
 
 function getReportSnapshot(db, sessionId) {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT entity_type, entity_id
     FROM reports
     WHERE reporter_session_id = ? AND status = ?
     ORDER BY id DESC
-  `).all(sessionId, REPORT_STATUS_OPEN);
+  `
+    )
+    .all(sessionId, REPORT_STATUS_OPEN);
 
   const reportedTopicIds = [];
   const reportedMessageIds = [];
@@ -3374,19 +3971,16 @@ function getReportSnapshot(db, sessionId) {
   };
 }
 
-function recordModerationAction(db, {
-  actionType,
-  targetType,
-  targetId,
-  actorUserId,
-  reason = "",
-  metadataJson = "{}",
-  createdAt
-}) {
-  db.prepare(`
+function recordModerationAction(
+  db,
+  { actionType, targetType, targetId, actorUserId, reason = "", metadataJson = "{}", createdAt }
+) {
+  db.prepare(
+    `
     INSERT INTO moderation_actions (action_type, target_type, target_id, actor_user_id, reason, metadata_json, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(actionType, targetType, targetId, actorUserId, reason, metadataJson, createdAt);
+  `
+  ).run(actionType, targetType, targetId, actorUserId, reason, metadataJson, createdAt);
 }
 
 function parseModerationMetadata(metadataJson) {
@@ -3399,12 +3993,16 @@ function parseModerationMetadata(metadataJson) {
 }
 
 function getUserSanctionHistory(db, userId) {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT id, action_type, reason, metadata_json, created_at
     FROM moderation_actions
     WHERE target_type = 'user' AND target_id = ? AND action_type IN ('expel_user', 'restore_user')
     ORDER BY id ASC
-  `).all(userId);
+  `
+    )
+    .all(userId);
   const restoredIds = new Set();
 
   rows.forEach((row) => {
@@ -3448,10 +4046,9 @@ function getUserSanctionSummary(db, userId) {
   const next = getNextProgressiveSanction(db, userId);
   const userRow = db.prepare("SELECT status, banned_until FROM users WHERE id = ?").get(userId);
   const active = Boolean(
-    userRow && (
-      userRow.status === USER_STATUS_EXPELLED ||
-      (userRow.banned_until && new Date(userRow.banned_until).getTime() > Date.now())
-    )
+    userRow &&
+    (userRow.status === USER_STATUS_EXPELLED ||
+      (userRow.banned_until && new Date(userRow.banned_until).getTime() > Date.now()))
   );
   return {
     active,
@@ -3464,56 +4061,69 @@ function getUserSanctionSummary(db, userId) {
 
 function listActiveSanctions(db) {
   const nowIso = new Date().toISOString();
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT id, name, status, banned_until
     FROM users
     WHERE type = 'registered'
       AND (status = ? OR (banned_until IS NOT NULL AND banned_until > ?))
     ORDER BY updated_at DESC, id ASC
-  `).all(USER_STATUS_EXPELLED, nowIso).map((row) => {
-    const history = getUserSanctionHistory(db, row.id);
-    const active = history.activeSanction;
-    const metadata = active?.metadata || {};
-    return {
-      userId: row.id,
-      name: row.name,
-      kind: row.status === USER_STATUS_EXPELLED ? "permanent" : "temporary",
-      bannedUntil: row.banned_until || null,
-      sanctionId: active?.id || null,
-      stage: Number(metadata.stage) || null,
-      label: metadata.label || (row.status === USER_STATUS_EXPELLED ? "Permanente" : "Temporal"),
-      reason: active?.reason || "",
-      appliedAt: active?.createdAt || null
-    };
-  });
+  `
+    )
+    .all(USER_STATUS_EXPELLED, nowIso)
+    .map((row) => {
+      const history = getUserSanctionHistory(db, row.id);
+      const active = history.activeSanction;
+      const metadata = active?.metadata || {};
+      return {
+        userId: row.id,
+        name: row.name,
+        kind: row.status === USER_STATUS_EXPELLED ? "permanent" : "temporary",
+        bannedUntil: row.banned_until || null,
+        sanctionId: active?.id || null,
+        stage: Number(metadata.stage) || null,
+        label: metadata.label || (row.status === USER_STATUS_EXPELLED ? "Permanente" : "Temporal"),
+        reason: active?.reason || "",
+        appliedAt: active?.createdAt || null
+      };
+    });
 }
 
 function resolveReportsForEntity(db, entityType, entityId, resolvedAt) {
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE reports
     SET status = ?, resolved_at = ?
     WHERE entity_type = ? AND entity_id = ? AND status = ?
-  `).run(REPORT_STATUS_RESOLVED, resolvedAt, entityType, entityId, REPORT_STATUS_OPEN);
+  `
+  ).run(REPORT_STATUS_RESOLVED, resolvedAt, entityType, entityId, REPORT_STATUS_OPEN);
 }
 
 function recalculateTopicActivity(db, topicId, updatedAt) {
-  const latestMessage = db.prepare(`
+  const latestMessage = db
+    .prepare(
+      `
     SELECT id, text, created_at
     FROM messages
     WHERE topic_id = ?
     ORDER BY id DESC
     LIMIT 1
-  `).get(topicId);
+  `
+    )
+    .get(topicId);
 
   if (!latestMessage) {
     throw new ApiError(409, "INVALID_TOPIC_STATE", "El tema no puede quedar sin mensajes.");
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE topics
     SET subtitle = ?, last_message_id = ?, last_activity_at = ?, updated_at = ?
     WHERE id = ?
-  `).run(
+  `
+  ).run(
     summarizeText(latestMessage.text),
     Number(latestMessage.id),
     latestMessage.created_at,
@@ -3524,26 +4134,36 @@ function recalculateTopicActivity(db, topicId, updatedAt) {
 
 function listPendingAvatars(db, options = {}) {
   const pagination = normalizePaginationOptions(options, ADMIN_AVATAR_PAGE_SIZE);
-  const total = db.prepare(`
+  const total =
+    db
+      .prepare(
+        `
     SELECT COUNT(*) AS count
     FROM users
     WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
-  `).get()?.count ?? 0;
-  const items = db.prepare(`
+  `
+      )
+      .get()?.count ?? 0;
+  const items = db
+    .prepare(
+      `
     SELECT id, name, email, avatar_pending_url, avatar_review_status, updated_at
     FROM users
     WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
     ORDER BY updated_at DESC, created_at DESC
     LIMIT ? OFFSET ?
-  `).all(pagination.limit, pagination.offset).map((row) => ({
-    userId: row.id,
-    name: row.name,
-    email: row.email ?? null,
-    description: row.description ?? "",
-    avatarPendingUrl: row.avatar_pending_url,
-    avatarReviewStatus: row.avatar_review_status || "pending",
-    updatedAt: row.updated_at
-  }));
+  `
+    )
+    .all(pagination.limit, pagination.offset)
+    .map((row) => ({
+      userId: row.id,
+      name: row.name,
+      email: row.email ?? null,
+      description: row.description ?? "",
+      avatarPendingUrl: row.avatar_pending_url,
+      avatarReviewStatus: row.avatar_review_status || "pending",
+      updatedAt: row.updated_at
+    }));
 
   return {
     items,
@@ -3552,13 +4172,16 @@ function listPendingAvatars(db, options = {}) {
 }
 
 function attachReportTargets(db, items) {
-  const messageIds = items.filter((item) => item.entityType === "message").map((item) => item.entityId);
+  const messageIds = items
+    .filter((item) => item.entityType === "message")
+    .map((item) => item.entityId);
   const topicIds = items.filter((item) => item.entityType === "topic").map((item) => item.entityId);
   const userIds = items.filter((item) => item.entityType === "user").map((item) => item.entityId);
 
   const messageTargets = new Map();
   if (messageIds.length) {
-    db.prepare(`
+    db.prepare(
+      `
       SELECT
         messages.id,
         messages.text,
@@ -3570,51 +4193,62 @@ function attachReportTargets(db, items) {
       LEFT JOIN users ON users.id = messages.author_id
       LEFT JOIN topics ON topics.id = messages.topic_id
       WHERE messages.id IN (${messageIds.map(() => "?").join(", ")})
-    `).all(...messageIds).forEach((row) => {
-      messageTargets.set(String(row.id), {
-        kind: "message",
-        text: row.text,
-        authorId: row.author_id,
-        authorName: row.author_name || "Usuario eliminado",
-        topicId: row.topic_id,
-        topicTitle: row.topic_title || "Tema eliminado",
-        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
+    `
+    )
+      .all(...messageIds)
+      .forEach((row) => {
+        messageTargets.set(String(row.id), {
+          kind: "message",
+          text: row.text,
+          authorId: row.author_id,
+          authorName: row.author_name || "Usuario eliminado",
+          topicId: row.topic_id,
+          topicTitle: row.topic_title || "Tema eliminado",
+          sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
+        });
       });
-    });
   }
 
   const topicTargets = new Map();
   if (topicIds.length) {
-    db.prepare(`
+    db.prepare(
+      `
       SELECT topics.id, topics.title, topics.author_id, users.name AS author_name
       FROM topics
       LEFT JOIN users ON users.id = topics.author_id
       WHERE topics.id IN (${topicIds.map(() => "?").join(", ")})
-    `).all(...topicIds).forEach((row) => {
-      topicTargets.set(String(row.id), {
-        kind: "topic",
-        title: row.title || "Tema eliminado",
-        authorId: row.author_id,
-        authorName: row.author_name || "Usuario eliminado",
-        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
+    `
+    )
+      .all(...topicIds)
+      .forEach((row) => {
+        topicTargets.set(String(row.id), {
+          kind: "topic",
+          title: row.title || "Tema eliminado",
+          authorId: row.author_id,
+          authorName: row.author_name || "Usuario eliminado",
+          sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
+        });
       });
-    });
   }
 
   const userTargets = new Map();
   if (userIds.length) {
-    db.prepare(`
+    db.prepare(
+      `
       SELECT id, name, status
       FROM users
       WHERE id IN (${userIds.map(() => "?").join(", ")})
-    `).all(...userIds).forEach((row) => {
-      userTargets.set(String(row.id), {
-        kind: "user",
-        name: row.name || "Usuario eliminado",
-        status: row.status,
-        sanction: getUserSanctionSummary(db, row.id)
+    `
+    )
+      .all(...userIds)
+      .forEach((row) => {
+        userTargets.set(String(row.id), {
+          kind: "user",
+          name: row.name || "Usuario eliminado",
+          status: row.status,
+          sanction: getUserSanctionSummary(db, row.id)
+        });
       });
-    });
   }
 
   return items.map((item) => {
@@ -3633,12 +4267,19 @@ function attachReportTargets(db, items) {
 
 function listOpenReports(db, options = {}) {
   const pagination = normalizePaginationOptions(options, ADMIN_REPORT_PAGE_SIZE);
-  const total = db.prepare(`
+  const total =
+    db
+      .prepare(
+        `
     SELECT COUNT(*) AS count
     FROM reports
     WHERE status = ?
-  `).get(REPORT_STATUS_OPEN)?.count ?? 0;
-  const items = db.prepare(`
+  `
+      )
+      .get(REPORT_STATUS_OPEN)?.count ?? 0;
+  const items = db
+    .prepare(
+      `
     SELECT
       reports.id,
       reports.entity_type,
@@ -3653,16 +4294,19 @@ function listOpenReports(db, options = {}) {
     WHERE reports.status = ?
     ORDER BY reports.created_at DESC, reports.id DESC
     LIMIT ? OFFSET ?
-  `).all(REPORT_STATUS_OPEN, pagination.limit, pagination.offset).map((row) => ({
-    id: row.id,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
-    reason: row.reason,
-    createdAt: row.created_at,
-    reporterSessionId: row.reporter_session_id,
-    reporterUserId: row.reporter_user_id,
-    reporterName: row.reporter_name || "Anonimo"
-  }));
+  `
+    )
+    .all(REPORT_STATUS_OPEN, pagination.limit, pagination.offset)
+    .map((row) => ({
+      id: row.id,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      reason: row.reason,
+      createdAt: row.created_at,
+      reporterSessionId: row.reporter_session_id,
+      reporterUserId: row.reporter_user_id,
+      reporterName: row.reporter_name || "Anonimo"
+    }));
 
   return {
     items: attachReportTargets(db, items),
@@ -3671,13 +4315,17 @@ function listOpenReports(db, options = {}) {
 }
 
 function trimTopicReplies(db, topicId) {
-  const overflowRows = db.prepare(`
+  const overflowRows = db
+    .prepare(
+      `
     SELECT id
     FROM messages
     WHERE topic_id = ? AND is_root = 0
     ORDER BY id DESC
     LIMIT -1 OFFSET ?
-  `).all(topicId, TOPIC_REPLY_LIMIT);
+  `
+    )
+    .all(topicId, TOPIC_REPLY_LIMIT);
 
   if (!overflowRows.length) {
     return;
@@ -3697,7 +4345,9 @@ function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new D
 
   const cutoff = new Date(now.getTime() - TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS).toISOString();
   const nowIso = now.toISOString();
-  const recipients = db.prepare(`
+  const recipients = db
+    .prepare(
+      `
     SELECT users.id, users.name, users.email
     FROM topic_follows
     JOIN users ON users.id = topic_follows.user_id
@@ -3720,7 +4370,9 @@ function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new D
       )
     ORDER BY topic_follows.created_at ASC
     LIMIT 100
-  `).all(topic.id, actorUserId, cutoff, actorUserId, actorUserId);
+  `
+    )
+    .all(topic.id, actorUserId, cutoff, actorUserId, actorUserId);
 
   const claim = db.prepare(`
     INSERT INTO topic_email_deliveries (user_id, topic_id, last_sent_at)
@@ -3741,7 +4393,9 @@ function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new D
 function buildProductAnalyticsReport(db, days = 30) {
   const normalizedDays = Math.max(1, Math.min(90, Number.parseInt(days, 10) || 30));
   const cutoff = new Date(Date.now() - normalizedDays * 24 * 60 * 60_000).toISOString();
-  const events = db.prepare(`
+  const events = db
+    .prepare(
+      `
     SELECT
       event_name AS eventName,
       COUNT(*) AS total,
@@ -3750,12 +4404,17 @@ function buildProductAnalyticsReport(db, days = 30) {
     WHERE created_at >= ?
     GROUP BY event_name
     ORDER BY total DESC, event_name ASC
-  `).all(cutoff).map((row) => ({
-    eventName: row.eventName,
-    total: Number(row.total ?? 0),
-    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-  }));
-  const daily = db.prepare(`
+  `
+    )
+    .all(cutoff)
+    .map((row) => ({
+      eventName: row.eventName,
+      total: Number(row.total ?? 0),
+      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+    }));
+  const daily = db
+    .prepare(
+      `
     SELECT
       substr(created_at, 1, 10) AS day,
       event_name AS eventName,
@@ -3765,13 +4424,18 @@ function buildProductAnalyticsReport(db, days = 30) {
     WHERE created_at >= ?
     GROUP BY day, event_name
     ORDER BY day ASC, event_name ASC
-  `).all(cutoff).map((row) => ({
-    day: row.day,
-    eventName: row.eventName,
-    total: Number(row.total ?? 0),
-    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-  }));
-  const routes = db.prepare(`
+  `
+    )
+    .all(cutoff)
+    .map((row) => ({
+      day: row.day,
+      eventName: row.eventName,
+      total: Number(row.total ?? 0),
+      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+    }));
+  const routes = db
+    .prepare(
+      `
     SELECT
       route_group AS routeGroup,
       COUNT(*) AS total,
@@ -3780,12 +4444,17 @@ function buildProductAnalyticsReport(db, days = 30) {
     WHERE created_at >= ? AND event_name = 'page_view'
     GROUP BY route_group
     ORDER BY total DESC, route_group ASC
-  `).all(cutoff).map((row) => ({
-    routeGroup: row.routeGroup,
-    total: Number(row.total ?? 0),
-    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-  }));
-  const sources = db.prepare(`
+  `
+    )
+    .all(cutoff)
+    .map((row) => ({
+      routeGroup: row.routeGroup,
+      total: Number(row.total ?? 0),
+      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+    }));
+  const sources = db
+    .prepare(
+      `
     SELECT
       source_group AS sourceGroup,
       COUNT(*) AS total,
@@ -3794,12 +4463,17 @@ function buildProductAnalyticsReport(db, days = 30) {
     WHERE created_at >= ? AND event_name = 'page_view'
     GROUP BY source_group
     ORDER BY total DESC, source_group ASC
-  `).all(cutoff).map((row) => ({
-    sourceGroup: row.sourceGroup,
-    total: Number(row.total ?? 0),
-    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-  }));
-  const cohorts = db.prepare(`
+  `
+    )
+    .all(cutoff)
+    .map((row) => ({
+      sourceGroup: row.sourceGroup,
+      total: Number(row.total ?? 0),
+      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+    }));
+  const cohorts = db
+    .prepare(
+      `
     WITH first_visits AS (
       SELECT subject_key, MIN(created_at) AS first_at
       FROM product_events
@@ -3820,17 +4494,22 @@ function buildProductAnalyticsReport(db, days = 30) {
     WHERE first_at >= ?
     GROUP BY cohortDay
     ORDER BY cohortDay ASC
-  `).all(cutoff).map((row) => ({
-    cohortDay: row.cohortDay,
-    visitors: Number(row.visitors ?? 0),
-    returnedVisitors: Number(row.returnedVisitors ?? 0)
-  }));
+  `
+    )
+    .all(cutoff)
+    .map((row) => ({
+      cohortDay: row.cohortDay,
+      visitors: Number(row.visitors ?? 0),
+      returnedVisitors: Number(row.returnedVisitors ?? 0)
+    }));
   // Retention split by acquisition source: answers whether search-sourced
   // visitors come back at a different rate than direct/social ones — the signal
   // that couples the SEO loop with the product loop. A subject's source is the
   // source_group of its first page_view; SQLite returns that bare column from
   // the same row as MIN(created_at) because there is exactly one min aggregate.
-  const retentionBySource = db.prepare(`
+  const retentionBySource = db
+    .prepare(
+      `
     WITH first_visits AS (
       SELECT
         subject_key,
@@ -3854,11 +4533,14 @@ function buildProductAnalyticsReport(db, days = 30) {
     WHERE first_visits.first_at >= ?
     GROUP BY first_source
     ORDER BY visitors DESC, sourceGroup ASC
-  `).all(cutoff).map((row) => ({
-    sourceGroup: row.sourceGroup,
-    visitors: Number(row.visitors ?? 0),
-    returnedVisitors: Number(row.returnedVisitors ?? 0)
-  }));
+  `
+    )
+    .all(cutoff)
+    .map((row) => ({
+      sourceGroup: row.sourceGroup,
+      visitors: Number(row.visitors ?? 0),
+      returnedVisitors: Number(row.returnedVisitors ?? 0)
+    }));
 
   return {
     days: normalizedDays,
@@ -3884,30 +4566,47 @@ function assertCommentableTopic(row) {
   }
 }
 
-function createStoredEmailAuthChallenge(db, {
-  email,
-  nickname = "",
-  age = null,
-  acceptedTerms = false,
-  termsVersion = null,
-  password,
-  nowMs = Date.now()
-} = {}) {
+function createStoredEmailAuthChallenge(
+  db,
+  {
+    email,
+    nickname = "",
+    age = null,
+    acceptedTerms = false,
+    termsVersion = null,
+    password,
+    nowMs = Date.now()
+  } = {}
+) {
   const normalizedEmail = normalizeRequiredEmail(email);
   const nowIso = new Date(nowMs).toISOString();
-  const recentChallenge = db.prepare(`
+  const recentChallenge = db
+    .prepare(
+      `
     SELECT created_at
     FROM auth_email_challenges
     WHERE email = ? AND consumed_at IS NULL
     ORDER BY created_at DESC
     LIMIT 1
-  `).get(normalizedEmail);
+  `
+    )
+    .get(normalizedEmail);
   const recentCreatedAtMs = Date.parse(recentChallenge?.created_at || "");
-  if (Number.isFinite(recentCreatedAtMs) && nowMs - recentCreatedAtMs < EMAIL_AUTH_RESEND_DELAY_MS) {
-    const retryAfterSeconds = Math.ceil((EMAIL_AUTH_RESEND_DELAY_MS - (nowMs - recentCreatedAtMs)) / 1000);
-    throw new ApiError(429, "EMAIL_CODE_RATE_LIMITED", `Espera ${retryAfterSeconds} segundos antes de pedir otro codigo.`, {
-      retryAfterSeconds
-    });
+  if (
+    Number.isFinite(recentCreatedAtMs) &&
+    nowMs - recentCreatedAtMs < EMAIL_AUTH_RESEND_DELAY_MS
+  ) {
+    const retryAfterSeconds = Math.ceil(
+      (EMAIL_AUTH_RESEND_DELAY_MS - (nowMs - recentCreatedAtMs)) / 1000
+    );
+    throw new ApiError(
+      429,
+      "EMAIL_CODE_RATE_LIMITED",
+      `Espera ${retryAfterSeconds} segundos antes de pedir otro codigo.`,
+      {
+        retryAfterSeconds
+      }
+    );
   }
 
   const normalizedNickname = normalizeNickname(nickname);
@@ -3920,20 +4619,24 @@ function createStoredEmailAuthChallenge(db, {
   }
   assertNicknameAvailable(db, normalizeNicknameKey(normalizedNickname));
 
-  db.prepare(`
+  db.prepare(
+    `
     DELETE FROM auth_email_challenges
     WHERE expires_at <= ? OR consumed_at IS NOT NULL
-  `).run(nowIso);
+  `
+  ).run(nowIso);
 
   const challengeId = `email-code-${crypto.randomUUID()}`;
   const code = String(crypto.randomInt(100000, 1_000_000));
   const expiresAt = new Date(nowMs + EMAIL_AUTH_CODE_TTL_MS).toISOString();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO auth_email_challenges (
       id, email, intent, code_hash, nickname, age, terms_version, password_hash,
       expires_at, attempts, max_attempts, consumed_at, created_at
     ) VALUES (?, ?, 'register', ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)
-  `).run(
+  `
+  ).run(
     challengeId,
     normalizedEmail,
     hashEmailAuthCode(challengeId, code),
@@ -3955,40 +4658,65 @@ function createStoredEmailAuthChallenge(db, {
   };
 }
 
-function verifyStoredEmailAuthChallenge(db, {
-  challengeId,
-  code,
-  sessionId,
-  selectedTopicId = null,
-  ipAddress = "",
-  rotateSession = false,
-  nowMs = Date.now()
-} = {}) {
+function verifyStoredEmailAuthChallenge(
+  db,
+  {
+    challengeId,
+    code,
+    sessionId,
+    selectedTopicId = null,
+    ipAddress = "",
+    rotateSession = false,
+    nowMs = Date.now()
+  } = {}
+) {
   const normalizedChallengeId = String(challengeId || "").trim();
   const normalizedCode = String(code || "").trim();
   if (!normalizedChallengeId || !/^\d{6}$/.test(normalizedCode)) {
-    throw new ApiError(400, "INVALID_EMAIL_CODE", "Ingresa el codigo de 6 digitos que recibiste por email.");
+    throw new ApiError(
+      400,
+      "INVALID_EMAIL_CODE",
+      "Ingresa el codigo de 6 digitos que recibiste por email."
+    );
   }
 
   const result = withTransaction(db, () => {
-    const challenge = db.prepare(`
+    const challenge = db
+      .prepare(
+        `
       SELECT * FROM auth_email_challenges WHERE id = ? LIMIT 1
-    `).get(normalizedChallengeId);
+    `
+      )
+      .get(normalizedChallengeId);
     const nowIso = new Date(nowMs).toISOString();
     if (!challenge || challenge.consumed_at) {
-      return { error: new ApiError(400, "INVALID_EMAIL_CODE", "El codigo no es valido o ya fue usado.") };
+      return {
+        error: new ApiError(400, "INVALID_EMAIL_CODE", "El codigo no es valido o ya fue usado.")
+      };
     }
     if (Date.parse(challenge.expires_at) <= nowMs) {
-      return { error: new ApiError(410, "EMAIL_CODE_EXPIRED", "El codigo vencio. Solicita uno nuevo.") };
+      return {
+        error: new ApiError(410, "EMAIL_CODE_EXPIRED", "El codigo vencio. Solicita uno nuevo.")
+      };
     }
     if (challenge.attempts >= challenge.max_attempts) {
-      return { error: new ApiError(429, "EMAIL_CODE_ATTEMPTS_EXCEEDED", "Superaste los intentos permitidos. Solicita un codigo nuevo.") };
+      return {
+        error: new ApiError(
+          429,
+          "EMAIL_CODE_ATTEMPTS_EXCEEDED",
+          "Superaste los intentos permitidos. Solicita un codigo nuevo."
+        )
+      };
     }
 
     const actualHash = hashEmailAuthCode(normalizedChallengeId, normalizedCode);
     if (!codesMatch(actualHash, challenge.code_hash)) {
-      db.prepare("UPDATE auth_email_challenges SET attempts = attempts + 1 WHERE id = ?").run(normalizedChallengeId);
-      return { error: new ApiError(401, "INVALID_EMAIL_CODE", "El codigo ingresado no es correcto.") };
+      db.prepare("UPDATE auth_email_challenges SET attempts = attempts + 1 WHERE id = ?").run(
+        normalizedChallengeId
+      );
+      return {
+        error: new ApiError(401, "INVALID_EMAIL_CODE", "El codigo ingresado no es correcto.")
+      };
     }
 
     const normalizedSessionId = ensureViewerSessionId(sessionId);
@@ -4008,9 +4736,21 @@ function verifyStoredEmailAuthChallenge(db, {
       nowIso
     });
 
-    db.prepare("UPDATE auth_email_challenges SET consumed_at = ? WHERE id = ?").run(nowIso, normalizedChallengeId);
-    const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
-    const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+    db.prepare("UPDATE auth_email_challenges SET consumed_at = ? WHERE id = ?").run(
+      nowIso,
+      normalizedChallengeId
+    );
+    const nextSessionId = rotateSession
+      ? createRotatedSessionId(normalizedSessionId)
+      : normalizedSessionId;
+    const context = createRegisteredSession(
+      db,
+      nextSessionId,
+      ipAddress,
+      nowIso,
+      existingSessionRow,
+      viewerRow.id
+    );
     invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
     return { payload: buildFrontendPayload(db, context, selectedTopicId) };
   });
@@ -4021,11 +4761,10 @@ function verifyStoredEmailAuthChallenge(db, {
   return result.payload;
 }
 
-function createStoredPasswordResetChallenge(db, {
-  email,
-  ipAddress = "",
-  nowMs = Date.now()
-} = {}) {
+function createStoredPasswordResetChallenge(
+  db,
+  { email, ipAddress = "", nowMs = Date.now() } = {}
+) {
   const normalizedEmail = normalizeRequiredEmail(email);
   const normalizedIpAddress = normalizeIpAddress(ipAddress) || "unknown";
   const emailKey = createPrivateLookupKey("password-reset-email", normalizedEmail);
@@ -4034,34 +4773,52 @@ function createStoredPasswordResetChallenge(db, {
   const rateWindowStartIso = new Date(nowMs - PASSWORD_RESET_RATE_WINDOW_MS).toISOString();
   const expiresAt = new Date(nowMs + PASSWORD_RESET_CODE_TTL_MS).toISOString();
 
-  db.prepare(`
+  db.prepare(
+    `
     DELETE FROM password_reset_challenges
     WHERE created_at < ? AND (expires_at <= ? OR consumed_at IS NOT NULL)
-  `).run(rateWindowStartIso, nowIso);
+  `
+  ).run(rateWindowStartIso, nowIso);
 
-  const recentChallenge = db.prepare(`
+  const recentChallenge = db
+    .prepare(
+      `
     SELECT created_at
     FROM password_reset_challenges
     WHERE email_key = ? AND consumed_at IS NULL
     ORDER BY created_at DESC
     LIMIT 1
-  `).get(emailKey);
+  `
+    )
+    .get(emailKey);
   const recentCreatedAtMs = Date.parse(recentChallenge?.created_at || "");
-  const emailHourlyCount = db.prepare(`
+  const emailHourlyCount =
+    db
+      .prepare(
+        `
     SELECT COUNT(*) AS count
     FROM password_reset_challenges
     WHERE email_key = ? AND created_at >= ?
-  `).get(emailKey, rateWindowStartIso)?.count ?? 0;
-  const ipHourlyCount = db.prepare(`
+  `
+      )
+      .get(emailKey, rateWindowStartIso)?.count ?? 0;
+  const ipHourlyCount =
+    db
+      .prepare(
+        `
     SELECT COUNT(*) AS count
     FROM password_reset_challenges
     WHERE request_ip_key = ? AND created_at >= ?
-  `).get(requestIpKey, rateWindowStartIso)?.count ?? 0;
-  const resendLimited = Number.isFinite(recentCreatedAtMs)
-    && nowMs - recentCreatedAtMs < PASSWORD_RESET_RESEND_DELAY_MS;
-  const rateLimited = resendLimited
-    || emailHourlyCount >= PASSWORD_RESET_EMAIL_HOURLY_MAX
-    || ipHourlyCount >= PASSWORD_RESET_IP_HOURLY_MAX;
+  `
+      )
+      .get(requestIpKey, rateWindowStartIso)?.count ?? 0;
+  const resendLimited =
+    Number.isFinite(recentCreatedAtMs) &&
+    nowMs - recentCreatedAtMs < PASSWORD_RESET_RESEND_DELAY_MS;
+  const rateLimited =
+    resendLimited ||
+    emailHourlyCount >= PASSWORD_RESET_EMAIL_HOURLY_MAX ||
+    ipHourlyCount >= PASSWORD_RESET_IP_HOURLY_MAX;
 
   if (rateLimited) {
     return {
@@ -4074,30 +4831,39 @@ function createStoredPasswordResetChallenge(db, {
     };
   }
 
-  const matchingUsers = db.prepare(`
+  const matchingUsers = db
+    .prepare(
+      `
     SELECT *
     FROM users
     WHERE email = ? AND type = 'registered'
     ORDER BY created_at ASC, id ASC
-  `).all(normalizedEmail);
-  const targetUser = matchingUsers.length === 1
-    && (matchingUsers[0].password_hash || matchingUsers[0].email_verified_at)
-    ? matchingUsers[0]
-    : null;
+  `
+    )
+    .all(normalizedEmail);
+  const targetUser =
+    matchingUsers.length === 1 &&
+    (matchingUsers[0].password_hash || matchingUsers[0].email_verified_at)
+      ? matchingUsers[0]
+      : null;
   const challengeId = `password-reset-${crypto.randomUUID()}`;
   const code = String(crypto.randomInt(100000, 1_000_000));
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE password_reset_challenges
     SET consumed_at = ?
     WHERE email_key = ? AND consumed_at IS NULL
-  `).run(nowIso, emailKey);
-  db.prepare(`
+  `
+  ).run(nowIso, emailKey);
+  db.prepare(
+    `
     INSERT INTO password_reset_challenges (
       id, user_id, email_key, request_ip_key, code_hash, expires_at,
       attempts, max_attempts, consumed_at, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)
-  `).run(
+  `
+  ).run(
     challengeId,
     targetUser?.id ?? null,
     emailKey,
@@ -4118,52 +4884,103 @@ function createStoredPasswordResetChallenge(db, {
   };
 }
 
-function verifyStoredPasswordResetChallenge(db, {
-  challengeId,
-  code,
-  newPassword,
-  sessionId,
-  selectedTopicId = null,
-  ipAddress = "",
-  rotateSession = true,
-  nowMs = Date.now()
-} = {}) {
+function verifyStoredPasswordResetChallenge(
+  db,
+  {
+    challengeId,
+    code,
+    newPassword,
+    sessionId,
+    selectedTopicId = null,
+    ipAddress = "",
+    rotateSession = true,
+    nowMs = Date.now()
+  } = {}
+) {
   const normalizedChallengeId = String(challengeId || "").trim();
   const normalizedCode = String(code || "").trim();
   if (!normalizedChallengeId || !/^\d{6}$/.test(normalizedCode)) {
-    throw new ApiError(400, "INVALID_PASSWORD_RESET_CODE", "Ingresa el codigo de 6 digitos que recibiste por email.");
+    throw new ApiError(
+      400,
+      "INVALID_PASSWORD_RESET_CODE",
+      "Ingresa el codigo de 6 digitos que recibiste por email."
+    );
   }
 
   const result = withTransaction(db, () => {
-    const challenge = db.prepare(`
+    const challenge = db
+      .prepare(
+        `
       SELECT * FROM password_reset_challenges WHERE id = ? LIMIT 1
-    `).get(normalizedChallengeId);
+    `
+      )
+      .get(normalizedChallengeId);
     const nowIso = new Date(nowMs).toISOString();
     if (!challenge || challenge.consumed_at) {
-      return { error: new ApiError(400, "INVALID_PASSWORD_RESET_CODE", "El codigo no es valido o ya fue usado.") };
+      return {
+        error: new ApiError(
+          400,
+          "INVALID_PASSWORD_RESET_CODE",
+          "El codigo no es valido o ya fue usado."
+        )
+      };
     }
     if (Date.parse(challenge.expires_at) <= nowMs) {
-      return { error: new ApiError(410, "PASSWORD_RESET_CODE_EXPIRED", "El codigo vencio. Solicita uno nuevo.") };
+      return {
+        error: new ApiError(
+          410,
+          "PASSWORD_RESET_CODE_EXPIRED",
+          "El codigo vencio. Solicita uno nuevo."
+        )
+      };
     }
     if (challenge.attempts >= challenge.max_attempts) {
-      return { error: new ApiError(429, "PASSWORD_RESET_ATTEMPTS_EXCEEDED", "Superaste los intentos permitidos. Solicita un codigo nuevo.") };
+      return {
+        error: new ApiError(
+          429,
+          "PASSWORD_RESET_ATTEMPTS_EXCEEDED",
+          "Superaste los intentos permitidos. Solicita un codigo nuevo."
+        )
+      };
     }
 
     const actualHash = hashPasswordResetCode(normalizedChallengeId, normalizedCode);
     if (!codesMatch(actualHash, challenge.code_hash) || !challenge.user_id) {
-      db.prepare("UPDATE password_reset_challenges SET attempts = attempts + 1 WHERE id = ?").run(normalizedChallengeId);
-      return { error: new ApiError(401, "INVALID_PASSWORD_RESET_CODE", "El codigo ingresado no es correcto.") };
+      db.prepare("UPDATE password_reset_challenges SET attempts = attempts + 1 WHERE id = ?").run(
+        normalizedChallengeId
+      );
+      return {
+        error: new ApiError(
+          401,
+          "INVALID_PASSWORD_RESET_CODE",
+          "El codigo ingresado no es correcto."
+        )
+      };
     }
 
-    const userRow = db.prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1").get(challenge.user_id);
+    const userRow = db
+      .prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1")
+      .get(challenge.user_id);
     const expectedEmailKey = userRow?.email
       ? createPrivateLookupKey("password-reset-email", normalizeRequiredEmail(userRow.email))
       : "";
     const matchingEmailUsers = userRow?.email
-      ? db.prepare("SELECT id FROM users WHERE email = ? AND type = 'registered'").all(userRow.email)
+      ? db
+          .prepare("SELECT id FROM users WHERE email = ? AND type = 'registered'")
+          .all(userRow.email)
       : [];
-    if (!userRow || !codesMatch(expectedEmailKey, challenge.email_key) || matchingEmailUsers.length !== 1) {
-      return { error: new ApiError(409, "PASSWORD_RESET_CONFLICT", "No se pudo recuperar esta cuenta de forma segura.") };
+    if (
+      !userRow ||
+      !codesMatch(expectedEmailKey, challenge.email_key) ||
+      matchingEmailUsers.length !== 1
+    ) {
+      return {
+        error: new ApiError(
+          409,
+          "PASSWORD_RESET_CONFLICT",
+          "No se pudo recuperar esta cuenta de forma segura."
+        )
+      };
     }
 
     const nextPasswordHash = hashPassword(validatePassword(newPassword));
@@ -4176,20 +4993,28 @@ function verifyStoredPasswordResetChallenge(db, {
     });
     const nextRole = isAdminEmail(userRow.email)
       ? ADMIN_ROLE
-      : (isModeratorRole(userRow.role || "") ? userRow.role : DEFAULT_REGISTERED_ROLE);
-    db.prepare(`
+      : isModeratorRole(userRow.role || "")
+        ? userRow.role
+        : DEFAULT_REGISTERED_ROLE;
+    db.prepare(
+      `
       UPDATE users
       SET password_hash = ?, email_verified_at = COALESCE(email_verified_at, ?), role = ?, updated_at = ?
       WHERE id = ?
-    `).run(nextPasswordHash, nowIso, nextRole, nowIso, userRow.id);
-    db.prepare(`
+    `
+    ).run(nextPasswordHash, nowIso, nextRole, nowIso, userRow.id);
+    db.prepare(
+      `
       UPDATE password_reset_challenges
       SET consumed_at = ?
       WHERE user_id = ? AND consumed_at IS NULL
-    `).run(nowIso, userRow.id);
+    `
+    ).run(nowIso, userRow.id);
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userRow.id);
 
-    const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
+    const nextSessionId = rotateSession
+      ? createRotatedSessionId(normalizedSessionId)
+      : normalizedSessionId;
     const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, null, userRow.id);
     invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
     return { payload: buildFrontendPayload(db, context, selectedTopicId) };
@@ -4205,11 +5030,23 @@ function getIdentityLinkTarget(db, { sessionId, authMode, ipAddress = "", passwo
   const context = resolveViewer(db, { sessionId, authMode, ipAddress });
   assertContextNotBlocked(db, context);
   assertViewerCanParticipate(context.viewerRow);
-  if (context.viewer.type !== "registered" || !context.viewerRow.password_hash || !context.viewerRow.email) {
-    throw new ApiError(403, "ACCOUNT_LINK_NOT_AVAILABLE", "Esta cuenta no se puede vincular con Google.");
+  if (
+    context.viewer.type !== "registered" ||
+    !context.viewerRow.password_hash ||
+    !context.viewerRow.email
+  ) {
+    throw new ApiError(
+      403,
+      "ACCOUNT_LINK_NOT_AVAILABLE",
+      "Esta cuenta no se puede vincular con Google."
+    );
   }
   if (context.viewerRow.auth_provider || context.viewerRow.auth_subject) {
-    throw new ApiError(409, "ACCOUNT_ALREADY_LINKED", "Esta cuenta ya esta vinculada con un proveedor externo.");
+    throw new ApiError(
+      409,
+      "ACCOUNT_ALREADY_LINKED",
+      "Esta cuenta ya esta vinculada con un proveedor externo."
+    );
   }
   if (!verifyPassword(password, context.viewerRow.password_hash)) {
     throw new ApiError(401, "INVALID_CREDENTIALS", "La contrasena actual no es correcta.");
@@ -4221,22 +5058,29 @@ function getIdentityLinkTarget(db, { sessionId, authMode, ipAddress = "", passwo
   };
 }
 
-function linkIdentityToCurrentUser(db, {
-  sessionId,
-  sourceSessionId,
-  targetUserId,
-  expectedEmail,
-  selectedTopicId = null,
-  ipAddress = "",
-  authProvider,
-  authSubject,
-  email,
-  emailVerified = false
-} = {}) {
+function linkIdentityToCurrentUser(
+  db,
+  {
+    sessionId,
+    sourceSessionId,
+    targetUserId,
+    expectedEmail,
+    selectedTopicId = null,
+    ipAddress = "",
+    authProvider,
+    authSubject,
+    email,
+    emailVerified = false
+  } = {}
+) {
   const normalizedProvider = String(authProvider || "").trim();
   const normalizedSubject = String(authSubject || "").trim();
   if (!normalizedProvider || !normalizedSubject || emailVerified !== true) {
-    throw new ApiError(403, "INVALID_ACCOUNT_LINK_IDENTITY", "Google no confirmo una identidad verificable.");
+    throw new ApiError(
+      403,
+      "INVALID_ACCOUNT_LINK_IDENTITY",
+      "Google no confirmo una identidad verificable."
+    );
   }
 
   const normalizedSourceSessionId = ensureViewerSessionId(sourceSessionId);
@@ -4244,17 +5088,25 @@ function linkIdentityToCurrentUser(db, {
   const normalizedExpectedEmail = normalizeRequiredEmail(expectedEmail);
   const normalizedIdentityEmail = normalizeRequiredEmail(email);
   if (normalizedIdentityEmail !== normalizedExpectedEmail) {
-    throw new ApiError(409, "ACCOUNT_LINK_EMAIL_MISMATCH", "La cuenta de Google debe usar el mismo email.");
+    throw new ApiError(
+      409,
+      "ACCOUNT_LINK_EMAIL_MISMATCH",
+      "La cuenta de Google debe usar el mismo email."
+    );
   }
 
   return withTransaction(db, () => {
     const sourceSessionRow = readSessionRow(db, normalizedSourceSessionId);
     if (
-      !sourceSessionRow
-      || sourceSessionRow.auth_mode !== "registered"
-      || sourceSessionRow.user_id !== String(targetUserId || "")
+      !sourceSessionRow ||
+      sourceSessionRow.auth_mode !== "registered" ||
+      sourceSessionRow.user_id !== String(targetUserId || "")
     ) {
-      throw new ApiError(401, "ACCOUNT_LINK_SESSION_EXPIRED", "La sesion para vincular la cuenta vencio. Intentalo de nuevo.");
+      throw new ApiError(
+        401,
+        "ACCOUNT_LINK_SESSION_EXPIRED",
+        "La sesion para vincular la cuenta vencio. Intentalo de nuevo."
+      );
     }
     assertContextNotBlocked(db, {
       sessionId: normalizedSourceSessionId,
@@ -4262,38 +5114,72 @@ function linkIdentityToCurrentUser(db, {
       ipAddress: normalizeIpAddress(ipAddress || sourceSessionRow.last_ip || "")
     });
 
-    const targetUser = db.prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1").get(targetUserId);
-    if (!targetUser || !targetUser.password_hash || normalizeOptionalEmail(targetUser.email) !== normalizedExpectedEmail) {
-      throw new ApiError(409, "ACCOUNT_LINK_TARGET_CHANGED", "La cuenta existente ya no coincide con la solicitud.");
+    const targetUser = db
+      .prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1")
+      .get(targetUserId);
+    if (
+      !targetUser ||
+      !targetUser.password_hash ||
+      normalizeOptionalEmail(targetUser.email) !== normalizedExpectedEmail
+    ) {
+      throw new ApiError(
+        409,
+        "ACCOUNT_LINK_TARGET_CHANGED",
+        "La cuenta existente ya no coincide con la solicitud."
+      );
     }
     assertViewerCanParticipate(targetUser);
     if (targetUser.auth_provider || targetUser.auth_subject) {
-      throw new ApiError(409, "ACCOUNT_ALREADY_LINKED", "Esta cuenta ya esta vinculada con un proveedor externo.");
+      throw new ApiError(
+        409,
+        "ACCOUNT_ALREADY_LINKED",
+        "Esta cuenta ya esta vinculada con un proveedor externo."
+      );
     }
 
-    const identityOwner = db.prepare(`
+    const identityOwner = db
+      .prepare(
+        `
       SELECT id FROM users WHERE auth_provider = ? AND auth_subject = ? LIMIT 1
-    `).get(normalizedProvider, normalizedSubject);
+    `
+      )
+      .get(normalizedProvider, normalizedSubject);
     if (identityOwner && identityOwner.id !== targetUser.id) {
-      throw new ApiError(409, "AUTH_IDENTITY_TAKEN", "Esa identidad de Google ya pertenece a otra cuenta.");
+      throw new ApiError(
+        409,
+        "AUTH_IDENTITY_TAKEN",
+        "Esa identidad de Google ya pertenece a otra cuenta."
+      );
     }
-    const emailOwners = db.prepare(`
+    const emailOwners = db
+      .prepare(
+        `
       SELECT id FROM users WHERE email = ? AND type = 'registered'
-    `).all(normalizedExpectedEmail);
+    `
+      )
+      .all(normalizedExpectedEmail);
     if (emailOwners.length !== 1 || emailOwners[0].id !== targetUser.id) {
-      throw new ApiError(409, "AUTH_EMAIL_CONFLICT", "Ese email esta asociado a mas de una cuenta.");
+      throw new ApiError(
+        409,
+        "AUTH_EMAIL_CONFLICT",
+        "Ese email esta asociado a mas de una cuenta."
+      );
     }
 
     const nowIso = new Date().toISOString();
     const nextRole = isAdminEmail(normalizedExpectedEmail)
       ? ADMIN_ROLE
-      : (isModeratorRole(targetUser.role || "") ? targetUser.role : DEFAULT_REGISTERED_ROLE);
-    db.prepare(`
+      : isModeratorRole(targetUser.role || "")
+        ? targetUser.role
+        : DEFAULT_REGISTERED_ROLE;
+    db.prepare(
+      `
       UPDATE users
       SET auth_provider = ?, auth_subject = ?, email_verified_at = COALESCE(email_verified_at, ?),
           role = ?, updated_at = ?
       WHERE id = ?
-    `).run(normalizedProvider, normalizedSubject, nowIso, nextRole, nowIso, targetUser.id);
+    `
+    ).run(normalizedProvider, normalizedSubject, nowIso, nextRole, nowIso, targetUser.id);
 
     const context = createRegisteredSession(
       db,
@@ -4308,7 +5194,11 @@ function linkIdentityToCurrentUser(db, {
   });
 }
 
-export function createBackendStore({ dbPath = null, seedDemoData = true, includeFakeFriendRequests = true } = {}) {
+export function createBackendStore({
+  dbPath = null,
+  seedDemoData = true,
+  includeFakeFriendRequests = true
+} = {}) {
   const dbConfig = resolveDbConfig(dbPath);
   const resolvedDbPath = dbConfig.dbPath;
   const storageDir = path.dirname(resolvedDbPath);
@@ -4351,9 +5241,11 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
       return withTransaction(db, () => createStoredPasswordResetChallenge(db, options));
     },
     discardPasswordResetChallenge(challengeId) {
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE password_reset_challenges SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL
-      `).run(new Date().toISOString(), String(challengeId || ""));
+      `
+      ).run(new Date().toISOString(), String(challengeId || ""));
     },
     verifyPasswordResetChallenge(options = {}) {
       return verifyStoredPasswordResetChallenge(db, options);
@@ -4364,7 +5256,15 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
     completeIdentityLink(options = {}) {
       return linkIdentityToCurrentUser(db, options);
     },
-    registerWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, nickname, rotateSession = false } = {}) {
+    registerWithPassword({
+      sessionId,
+      selectedTopicId = null,
+      ipAddress = "",
+      email,
+      password,
+      nickname,
+      rotateSession = false
+    } = {}) {
       return withTransaction(db, () => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
@@ -4375,13 +5275,29 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
         const viewerRow = createPasswordUser(db, { email, password, nickname, nowIso });
-        const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
-        const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        const nextSessionId = rotateSession
+          ? createRotatedSessionId(normalizedSessionId)
+          : normalizedSessionId;
+        const context = createRegisteredSession(
+          db,
+          nextSessionId,
+          ipAddress,
+          nowIso,
+          existingSessionRow,
+          viewerRow.id
+        );
         invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    loginWithPassword({ sessionId, selectedTopicId = null, ipAddress = "", email, password, rotateSession = false } = {}) {
+    loginWithPassword({
+      sessionId,
+      selectedTopicId = null,
+      ipAddress = "",
+      email,
+      password,
+      rotateSession = false
+    } = {}) {
       return withTransaction(db, () => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
@@ -4392,12 +5308,28 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
         const viewerRow = getAuthenticatedPasswordUser(db, { email, password });
-        const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
-        const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        const nextSessionId = rotateSession
+          ? createRotatedSessionId(normalizedSessionId)
+          : normalizedSessionId;
+        const context = createRegisteredSession(
+          db,
+          nextSessionId,
+          ipAddress,
+          nowIso,
+          existingSessionRow,
+          viewerRow.id
+        );
         invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
-    },    login({ sessionId, selectedTopicId = null, ipAddress = "", userId = REGISTERED_USER_ID, rotateSession = false } = {}) {
+    },
+    login({
+      sessionId,
+      selectedTopicId = null,
+      ipAddress = "",
+      userId = REGISTERED_USER_ID,
+      rotateSession = false
+    } = {}) {
       return withTransaction(db, () => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
@@ -4407,8 +5339,17 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           sessionRow: existingSessionRow,
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
-        const nextSessionId = rotateSession ? createRotatedSessionId(normalizedSessionId) : normalizedSessionId;
-        const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, existingSessionRow, userId);
+        const nextSessionId = rotateSession
+          ? createRotatedSessionId(normalizedSessionId)
+          : normalizedSessionId;
+        const context = createRegisteredSession(
+          db,
+          nextSessionId,
+          ipAddress,
+          nowIso,
+          existingSessionRow,
+          userId
+        );
         invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
@@ -4446,7 +5387,14 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           nowIso
         });
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
-        const context = createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow, viewerRow.id);
+        const context = createRegisteredSession(
+          db,
+          normalizedSessionId,
+          ipAddress,
+          nowIso,
+          existingSessionRow,
+          viewerRow.id
+        );
         invalidatePreviousSession(db, normalizedSourceSessionId, normalizedSessionId);
         return buildFrontendPayload(db, context, selectedTopicId);
       });
@@ -4456,38 +5404,84 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
-        const context = createGuestSession(db, normalizedSessionId, ipAddress, nowIso, existingSessionRow);
+        const context = createGuestSession(
+          db,
+          normalizedSessionId,
+          ipAddress,
+          nowIso,
+          existingSessionRow
+        );
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({ sessionId, authMode, displayName = null, username = null, age = null, acceptedTerms = false, termsVersion = null, description = "", profileShowDescription = true, profileShowJoinedAt = true, socialWhatsapp = "", socialInstagram = "", socialTiktok = "", socialFacebook = "", socialTwitter = "", socialDiscord = "", profileShowSocial = true, profileIndexable = null, avatarDataUrl = null, removeAvatar = false, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateProfile({
+      sessionId,
+      authMode,
+      displayName = null,
+      username = null,
+      age = null,
+      acceptedTerms = false,
+      termsVersion = null,
+      description = "",
+      profileShowDescription = true,
+      profileShowJoinedAt = true,
+      socialWhatsapp = "",
+      socialInstagram = "",
+      socialTiktok = "",
+      socialFacebook = "",
+      socialTwitter = "",
+      socialDiscord = "",
+      profileShowSocial = true,
+      profileIndexable = null,
+      avatarDataUrl = null,
+      removeAvatar = false,
+      selectedTopicId = null,
+      ipAddress = ""
+    } = {}) {
       return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
         assertContextNotBlocked(db, context);
         if (context.viewer.type !== "registered") {
-          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para editar el perfil.");
+          throw new ApiError(
+            403,
+            "LOGIN_REQUIRED",
+            "Hace falta iniciar sesion para editar el perfil."
+          );
         }
 
-        const normalizedDisplayName = normalizeRequiredDisplayName(displayName || context.viewer.displayName || "Usuario");
+        const normalizedDisplayName = normalizeRequiredDisplayName(
+          displayName || context.viewer.displayName || "Usuario"
+        );
         const currentUsername = context.viewer.nickname || null;
-        const normalizedUsername = username === null
-          ? currentUsername
-          : normalizeNickname(username);
+        const normalizedUsername =
+          username === null ? currentUsername : normalizeNickname(username);
         if (!normalizedUsername) {
-          throw new ApiError(400, "USERNAME_REQUIRED", "Elige un username unico para completar tu perfil.");
+          throw new ApiError(
+            400,
+            "USERNAME_REQUIRED",
+            "Elige un username unico para completar tu perfil."
+          );
         }
 
         const normalizedUsernameKey = normalizeNicknameKey(normalizedUsername);
         const currentUsernameKey = currentUsername ? normalizeNicknameKey(currentUsername) : null;
-        if (currentUsernameKey && currentUsernameKey !== normalizedUsernameKey && !context.viewer.profilePending) {
-          throw new ApiError(409, "USERNAME_IMMUTABLE", "El username no se puede cambiar despues de completar el perfil.");
+        if (
+          currentUsernameKey &&
+          currentUsernameKey !== normalizedUsernameKey &&
+          !context.viewer.profilePending
+        ) {
+          throw new ApiError(
+            409,
+            "USERNAME_IMMUTABLE",
+            "El username no se puede cambiar despues de completar el perfil."
+          );
         }
         assertNicknameAvailable(db, normalizedUsernameKey, context.viewer.id);
         const completingProfile = context.viewer.profilePending;
         const normalizedRegistrationAge = completingProfile
           ? normalizeRegistrationAge(age)
-          : context.viewerRow.registration_age ?? null;
+          : (context.viewerRow.registration_age ?? null);
         if (completingProfile) {
           assertTermsAccepted(acceptedTerms, termsVersion);
         }
@@ -4499,30 +5493,43 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         const normalizedSocialTwitter = normalizeSocialHandle(socialTwitter, "Twitter/X");
         const normalizedSocialDiscord = normalizeSocialHandle(socialDiscord, "Discord");
         const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
-        const normalizedAvatarDataUrl = removeAvatar ? null : storeAvatarDataUrl(avatarDataUrl, avatarStorageDir);
+        const normalizedAvatarDataUrl = removeAvatar
+          ? null
+          : storeAvatarDataUrl(avatarDataUrl, avatarStorageDir);
         const nowIso = new Date().toISOString();
-        const nextAvatarUrl = removeAvatar ? null : context.viewer.avatarUrl ?? null;
+        const nextAvatarUrl = removeAvatar ? null : (context.viewer.avatarUrl ?? null);
         const nextPendingUrl = removeAvatar
           ? null
-          : normalizedAvatarDataUrl ?? context.viewer.avatarPendingUrl ?? null;
+          : (normalizedAvatarDataUrl ?? context.viewer.avatarPendingUrl ?? null);
         const nextReviewStatus = removeAvatar
           ? null
           : normalizedAvatarDataUrl
             ? "pending"
-            : context.viewer.avatarReviewStatus ?? null;
-        const nextTermsAcceptedAt = completingProfile ? nowIso : context.viewerRow.terms_accepted_at ?? null;
-        const nextTermsVersion = completingProfile ? termsVersion : context.viewerRow.terms_version ?? null;
+            : (context.viewer.avatarReviewStatus ?? null);
+        const nextTermsAcceptedAt = completingProfile
+          ? nowIso
+          : (context.viewerRow.terms_accepted_at ?? null);
+        const nextTermsVersion = completingProfile
+          ? termsVersion
+          : (context.viewerRow.terms_version ?? null);
         const completingMinorProfile = completingProfile && normalizedRegistrationAge < 18;
         const nextProfileIndexable = completingMinorProfile
           ? 0
           : profileIndexable === null
-            ? (context.viewerRow.profile_indexable !== 0 ? 1 : 0)
-            : (profileIndexable === false ? 0 : 1);
+            ? context.viewerRow.profile_indexable !== 0
+              ? 1
+              : 0
+            : profileIndexable === false
+              ? 0
+              : 1;
         const nextNotificationsFriendsOnly = completingMinorProfile
           ? 1
-          : (context.viewerRow.notifications_friends_only === 1 ? 1 : 0);
+          : context.viewerRow.notifications_friends_only === 1
+            ? 1
+            : 0;
 
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE users
           SET name = ?, nickname = ?, nickname_norm = ?, description = ?, profile_show_description = ?, profile_show_joined_at = ?,
               social_whatsapp = ?, social_instagram = ?, social_tiktok = ?, social_facebook = ?, social_twitter = ?, social_discord = ?, profile_show_social = ?,
@@ -4531,7 +5538,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
               registration_age = ?, terms_accepted_at = ?, terms_version = ?,
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
-        `).run(
+        `
+        ).run(
           normalizedDisplayName,
           normalizedUsername,
           normalizedUsernameKey,
@@ -4573,33 +5581,55 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    updateSettings({ sessionId, authMode, likesAnonymous = null, filterProfanity = null, notificationsFriendsOnly = null, emailActivityEnabled = null, slowMode = null, profileIndexable = null, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateSettings({
+      sessionId,
+      authMode,
+      likesAnonymous = null,
+      filterProfanity = null,
+      notificationsFriendsOnly = null,
+      emailActivityEnabled = null,
+      slowMode = null,
+      profileIndexable = null,
+      selectedTopicId = null,
+      ipAddress = ""
+    } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
         assertContextNotBlocked(db, context);
         if (context.viewer.type !== "registered") {
-          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para cambiar la configuracion.");
+          throw new ApiError(
+            403,
+            "LOGIN_REQUIRED",
+            "Hace falta iniciar sesion para cambiar la configuracion."
+          );
         }
 
-        const nextLikesAnonymous = likesAnonymous === null ? context.viewer.likesAnonymous : likesAnonymous === true;
-        const nextFilterProfanity = filterProfanity === null ? context.viewer.filterProfanity : filterProfanity === true;
-        const nextNotificationsFriendsOnly = notificationsFriendsOnly === null
-          ? context.viewer.notificationsFriendsOnly
-          : notificationsFriendsOnly === true;
-        const nextEmailActivityEnabled = emailActivityEnabled === null
-          ? context.viewer.emailActivityEnabled
-          : emailActivityEnabled === true;
+        const nextLikesAnonymous =
+          likesAnonymous === null ? context.viewer.likesAnonymous : likesAnonymous === true;
+        const nextFilterProfanity =
+          filterProfanity === null ? context.viewer.filterProfanity : filterProfanity === true;
+        const nextNotificationsFriendsOnly =
+          notificationsFriendsOnly === null
+            ? context.viewer.notificationsFriendsOnly
+            : notificationsFriendsOnly === true;
+        const nextEmailActivityEnabled =
+          emailActivityEnabled === null
+            ? context.viewer.emailActivityEnabled
+            : emailActivityEnabled === true;
         const nextSlowMode = slowMode === null ? context.viewer.slowMode : slowMode === true;
-        const nextProfileIndexable = profileIndexable === null
-          ? context.viewerRow.profile_indexable !== 0
-          : profileIndexable === true;
+        const nextProfileIndexable =
+          profileIndexable === null
+            ? context.viewerRow.profile_indexable !== 0
+            : profileIndexable === true;
 
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE users
           SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, email_activity_enabled = ?, slow_mode = ?, profile_indexable = ?, updated_at = ?
           WHERE id = ?
-        `).run(
+        `
+        ).run(
           nextLikesAnonymous ? 1 : 0,
           nextFilterProfanity ? 1 : 0,
           nextNotificationsFriendsOnly ? 1 : 0,
@@ -4618,20 +5648,41 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    deleteAccount({ sessionId, authMode, currentPassword = "", selectedTopicId = null, ipAddress = "" } = {}) {
+    deleteAccount({
+      sessionId,
+      authMode,
+      currentPassword = "",
+      selectedTopicId = null,
+      ipAddress = ""
+    } = {}) {
       return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         if (context.viewer.type !== "registered") {
-          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para eliminar la cuenta.");
+          throw new ApiError(
+            403,
+            "LOGIN_REQUIRED",
+            "Hace falta iniciar sesion para eliminar la cuenta."
+          );
         }
         if (context.viewerRow.password_hash) {
           if (!verifyPassword(currentPassword, context.viewerRow.password_hash)) {
-            throw new ApiError(401, "REAUTH_REQUIRED", "Confirma tu contrasena antes de eliminar la cuenta.");
+            throw new ApiError(
+              401,
+              "REAUTH_REQUIRED",
+              "Confirma tu contrasena antes de eliminar la cuenta."
+            );
           }
         } else {
           const sessionCreatedAt = Date.parse(context.sessionRow?.created_at || "");
-          if (!Number.isFinite(sessionCreatedAt) || Date.now() - sessionCreatedAt > ACCOUNT_REAUTH_WINDOW_MS) {
-            throw new ApiError(401, "REAUTH_REQUIRED", "Vuelve a iniciar sesion antes de eliminar la cuenta.");
+          if (
+            !Number.isFinite(sessionCreatedAt) ||
+            Date.now() - sessionCreatedAt > ACCOUNT_REAUTH_WINDOW_MS
+          ) {
+            throw new ApiError(
+              401,
+              "REAUTH_REQUIRED",
+              "Vuelve a iniciar sesion antes de eliminar la cuenta."
+            );
           }
         }
 
@@ -4639,14 +5690,21 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         const nowIso = new Date().toISOString();
         const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
 
-        db.prepare("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?").run(userId, userId);
-        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?").run(userId, userId);
+        db.prepare("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?").run(
+          userId,
+          userId
+        );
+        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?").run(
+          userId,
+          userId
+        );
         db.prepare("DELETE FROM topic_follows WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM topic_email_deliveries WHERE user_id = ?").run(userId);
         db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
 
         // Los mensajes y temas quedan (tienen FK al usuario); la fila se anonimiza y desactiva.
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE users
           SET name = 'Usuario eliminado', nickname = NULL, nickname_norm = NULL,
               email = NULL, email_verified_at = NULL, auth_provider = NULL, auth_subject = NULL, password_hash = NULL,
@@ -4657,7 +5715,8 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
               registration_age = NULL,
               role = '', status = 'deleted', updated_at = ?
           WHERE id = ?
-        `).run(nowIso, userId);
+        `
+        ).run(nowIso, userId);
 
         scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, previousAvatarUrls);
 
@@ -4665,7 +5724,13 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, guestContext, selectedTopicId);
       });
     },
-    bootstrap({ sessionId, authMode, selectedTopicId = null, ipAddress = "", profileNickname = null } = {}) {
+    bootstrap({
+      sessionId,
+      authMode,
+      selectedTopicId = null,
+      ipAddress = "",
+      profileNickname = null
+    } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         return buildFrontendPayload(db, context, selectedTopicId, profileNickname);
@@ -4695,7 +5760,11 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         if (context.viewer.type !== "registered") {
-          throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesión para seguir conversaciones.");
+          throw new ApiError(
+            403,
+            "LOGIN_REQUIRED",
+            "Hace falta iniciar sesión para seguir conversaciones."
+          );
         }
         const row = db.prepare("SELECT id FROM topics WHERE id = ?").get(String(topicId || ""));
         if (!row) {
@@ -4715,11 +5784,13 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         const topicId = `topic-${crypto.randomUUID()}`;
         const nowIso = new Date().toISOString();
 
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO topics (
             id, title, subtitle, author_id, status, active_rank, last_message_id, last_activity_at, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
-        `).run(
+        `
+        ).run(
           topicId,
           normalizedTitle,
           summarizeText(normalizedText),
@@ -4730,16 +5801,28 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           nowIso
         );
 
-        const messageResult = db.prepare(`
+        const messageResult = db
+          .prepare(
+            `
           INSERT INTO messages (topic_id, author_id, text, kind, likes, is_root, created_at)
           VALUES (?, ?, ?, 'user', 0, 1, ?)
-        `).run(topicId, context.viewer.id, normalizedText, nowIso);
+        `
+          )
+          .run(topicId, context.viewer.id, normalizedText, nowIso);
 
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE topics
           SET subtitle = ?, last_message_id = ?, last_activity_at = ?, updated_at = ?
           WHERE id = ?
-        `).run(summarizeText(normalizedText), Number(messageResult.lastInsertRowid), nowIso, nowIso, topicId);
+        `
+        ).run(
+          summarizeText(normalizedText),
+          Number(messageResult.lastInsertRowid),
+          nowIso,
+          nowIso,
+          topicId
+        );
 
         rebuildActiveTopicRanks(db);
         updateViewerActivity(db, context, "last_topic_at");
@@ -4765,17 +5848,23 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         assertRateLimit(lastMessageAt, context.viewer.type, "last_message_at");
 
         const nowIso = new Date().toISOString();
-        const messageResult = db.prepare(`
+        const messageResult = db
+          .prepare(
+            `
           INSERT INTO messages (topic_id, author_id, text, kind, likes, is_root, created_at)
           VALUES (?, ?, ?, 'user', 0, 0, ?)
-        `).run(topicId, context.viewer.id, normalizedText, nowIso);
+        `
+          )
+          .run(topicId, context.viewer.id, normalizedText, nowIso);
 
         trimTopicReplies(db, topicId);
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE topics
           SET subtitle = ?, last_message_id = ?, last_activity_at = ?, updated_at = ?
           WHERE id = ?
-        `).run(
+        `
+        ).run(
           summarizeText(normalizedText),
           Number(messageResult.lastInsertRowid),
           nowIso,
@@ -4795,7 +5884,10 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, refreshedContext, topicId);
       });
     },
-    toggleMessageLike(messageId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    toggleMessageLike(
+      messageId,
+      { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertContextCanParticipate(db, context);
@@ -4809,7 +5901,10 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
       });
     },
-    toggleMessageDislike(messageId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    toggleMessageDislike(
+      messageId,
+      { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertContextCanParticipate(db, context);
@@ -4823,46 +5918,68 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
       });
     },
-    blockUser(targetUserId, { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}) {
+    blockUser(
+      targetUserId,
+      { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredBlockContext(db, context);
         const target = assertBlockTarget(db, context.viewer.id, targetUserId);
         const nowIso = new Date().toISOString();
 
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO user_blocks (blocker_id, blocked_id, hide_content, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(blocker_id, blocked_id) DO UPDATE SET
             hide_content = excluded.hide_content,
             updated_at = excluded.updated_at
-        `).run(context.viewer.id, target.id, hideContent === false ? 0 : 1, nowIso, nowIso);
-        db.prepare(`
+        `
+        ).run(context.viewer.id, target.id, hideContent === false ? 0 : 1, nowIso, nowIso);
+        db.prepare(
+          `
           DELETE FROM friend_requests
           WHERE (requester_id = ? AND addressee_id = ?)
              OR (requester_id = ? AND addressee_id = ?)
-        `).run(context.viewer.id, target.id, target.id, context.viewer.id);
+        `
+        ).run(context.viewer.id, target.id, target.id, context.viewer.id);
 
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateBlockedUser(targetUserId, { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}) {
+    updateBlockedUser(
+      targetUserId,
+      { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredBlockContext(db, context);
         const target = assertBlockTarget(db, context.viewer.id, targetUserId);
-        const result = db.prepare(`
+        const result = db
+          .prepare(
+            `
           UPDATE user_blocks
           SET hide_content = ?, updated_at = ?
           WHERE blocker_id = ? AND blocked_id = ?
-        `).run(hideContent === false ? 0 : 1, new Date().toISOString(), context.viewer.id, target.id);
+        `
+          )
+          .run(
+            hideContent === false ? 0 : 1,
+            new Date().toISOString(),
+            context.viewer.id,
+            target.id
+          );
         if (!result.changes) {
           throw new ApiError(404, "NOT_FOUND", "El usuario no esta bloqueado.");
         }
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    unblockUser(targetUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    unblockUser(
+      targetUserId,
+      { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredBlockContext(db, context);
@@ -4870,65 +5987,87 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (!normalizedTargetUserId) {
           throw new ApiError(400, "VALIDATION_ERROR", "Selecciona un usuario para desbloquear.");
         }
-        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?")
-          .run(context.viewer.id, normalizedTargetUserId);
+        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?").run(
+          context.viewer.id,
+          normalizedTargetUserId
+        );
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    sendFriendRequest(targetUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    sendFriendRequest(
+      targetUserId,
+      { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredFriendContext(db, context);
         const target = assertFriendTarget(db, context.viewer.id, targetUserId);
         if (usersBlockEachOther(db, context.viewer.id, target.id)) {
-          throw new ApiError(409, "USER_BLOCKED", "No se puede enviar una solicitud de amistad a este usuario.");
+          throw new ApiError(
+            409,
+            "USER_BLOCKED",
+            "No se puede enviar una solicitud de amistad a este usuario."
+          );
         }
         const nowIso = new Date().toISOString();
         const existing = getFriendRequestBetween(db, context.viewer.id, target.id);
 
         if (!existing) {
-          db.prepare(`
+          db.prepare(
+            `
             INSERT INTO friend_requests (requester_id, addressee_id, status, created_at, updated_at)
             VALUES (?, ?, 'pending', ?, ?)
-          `).run(context.viewer.id, target.id, nowIso, nowIso);
+          `
+          ).run(context.viewer.id, target.id, nowIso, nowIso);
           return buildFrontendPayload(db, context, selectedTopicId);
         }
 
-        if (existing.status === 'accepted') {
+        if (existing.status === "accepted") {
           return buildFrontendPayload(db, context, selectedTopicId);
         }
 
-        if (existing.status === 'pending' && existing.addressee_id === context.viewer.id) {
-          db.prepare(`
+        if (existing.status === "pending" && existing.addressee_id === context.viewer.id) {
+          db.prepare(
+            `
             UPDATE friend_requests
             SET status = 'accepted', updated_at = ?
             WHERE id = ?
-          `).run(nowIso, existing.id);
+          `
+          ).run(nowIso, existing.id);
           return buildFrontendPayload(db, context, selectedTopicId);
         }
 
-        if (existing.status === 'rejected') {
-          db.prepare(`
+        if (existing.status === "rejected") {
+          db.prepare(
+            `
             UPDATE friend_requests
             SET requester_id = ?, addressee_id = ?, status = 'pending', updated_at = ?
             WHERE id = ?
-          `).run(context.viewer.id, target.id, nowIso, existing.id);
+          `
+          ).run(context.viewer.id, target.id, nowIso, existing.id);
         }
 
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    acceptFriendRequest(requesterUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    acceptFriendRequest(
+      requesterUserId,
+      { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredFriendContext(db, context);
         const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
         const nowIso = new Date().toISOString();
-        const result = db.prepare(`
+        const result = db
+          .prepare(
+            `
           UPDATE friend_requests
           SET status = 'accepted', updated_at = ?
           WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'
-        `).run(nowIso, requester.id, context.viewer.id);
+        `
+          )
+          .run(nowIso, requester.id, context.viewer.id);
 
         if (!result.changes) {
           throw new ApiError(404, "NOT_FOUND", "Solicitud de amistad no encontrada.");
@@ -4937,17 +6076,24 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    rejectFriendRequest(requesterUserId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+    rejectFriendRequest(
+      requesterUserId,
+      { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredFriendContext(db, context);
         const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
         const nowIso = new Date().toISOString();
-        const result = db.prepare(`
+        const result = db
+          .prepare(
+            `
           UPDATE friend_requests
           SET status = 'rejected', updated_at = ?
           WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'
-        `).run(nowIso, requester.id, context.viewer.id);
+        `
+          )
+          .run(nowIso, requester.id, context.viewer.id);
 
         if (!result.changes) {
           throw new ApiError(404, "NOT_FOUND", "Solicitud de amistad no encontrada.");
@@ -4955,31 +6101,39 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
 
         return buildFrontendPayload(db, context, selectedTopicId);
       });
-    },    reportEntity(entityType, entityId, { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}) {
+    },
+    reportEntity(
+      entityType,
+      entityId,
+      { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}
+    ) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);
-        const normalizedEntityType = entityType === "message"
-          ? "message"
-          : entityType === "user"
-            ? "user"
-            : "topic";
+        const normalizedEntityType =
+          entityType === "message" ? "message" : entityType === "user" ? "user" : "topic";
         const target = assertReportableEntity(db, normalizedEntityType, entityId);
         const normalizedReason = validateReportReason(reason, target.entityType);
 
-        const existingReport = db.prepare(`
+        const existingReport = db
+          .prepare(
+            `
           SELECT id
           FROM reports
           WHERE reporter_session_id = ? AND entity_type = ? AND entity_id = ? AND status = ?
           LIMIT 1
-        `).get(context.sessionId, target.entityType, target.entityId, REPORT_STATUS_OPEN);
+        `
+          )
+          .get(context.sessionId, target.entityType, target.entityId, REPORT_STATUS_OPEN);
 
         if (!existingReport) {
-          db.prepare(`
+          db.prepare(
+            `
             INSERT INTO reports (
               entity_type, entity_id, reason, reporter_session_id, reporter_user_id, status, resolved_at, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
-          `).run(
+          `
+          ).run(
             target.entityType,
             target.entityId,
             normalizedReason,
@@ -4990,15 +6144,22 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           );
         }
 
-        const reportSelectedTopicId = target.entityType === "topic"
-          ? target.entityId
-          : target.entityType === "message"
-            ? selectedTopicId || target.topicId
-          : selectedTopicId;
+        const reportSelectedTopicId =
+          target.entityType === "topic"
+            ? target.entityId
+            : target.entityType === "message"
+              ? selectedTopicId || target.topicId
+              : selectedTopicId;
         return buildFrontendPayload(db, context, reportSelectedTopicId);
       });
     },
-    listReports({ sessionId, authMode, ipAddress = "", reportPage = 1, reportLimit = ADMIN_REPORT_PAGE_SIZE } = {}) {
+    listReports({
+      sessionId,
+      authMode,
+      ipAddress = "",
+      reportPage = 1,
+      reportLimit = ADMIN_REPORT_PAGE_SIZE
+    } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
@@ -5034,16 +6195,19 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         };
       });
     },
-    applyModerationAction(actionType, {
-      sessionId,
-      authMode,
-      targetType,
-      targetId,
-      reason = "",
-      banHours = null,
-      selectedTopicId = null,
-      ipAddress = ""
-    } = {}) {
+    applyModerationAction(
+      actionType,
+      {
+        sessionId,
+        authMode,
+        targetType,
+        targetId,
+        reason = "",
+        banHours = null,
+        selectedTopicId = null,
+        ipAddress = ""
+      } = {}
+    ) {
       return withTransaction(db, (afterCommit) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
@@ -5054,11 +6218,13 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (normalizedActionType === "block_topic") {
           const normalizedTopicId = assertExistingTopic(db, targetId).id;
 
-          db.prepare(`
+          db.prepare(
+            `
             UPDATE topics
             SET status = ?, active_rank = NULL, updated_at = ?
             WHERE id = ?
-          `).run(TOPIC_STATUS_BLOCKED, nowIso, normalizedTopicId);
+          `
+          ).run(TOPIC_STATUS_BLOCKED, nowIso, normalizedTopicId);
           resolveReportsForEntity(db, "topic", normalizedTopicId, nowIso);
           recordModerationAction(db, {
             actionType: normalizedActionType,
@@ -5075,14 +6241,20 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (normalizedActionType === "pin_topic") {
           const topicRow = assertExistingTopic(db, targetId);
           if (topicRow.status === TOPIC_STATUS_BLOCKED) {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Un tema bloqueado no se fija en esta etapa.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "Un tema bloqueado no se fija en esta etapa."
+            );
           }
 
-          db.prepare(`
+          db.prepare(
+            `
             UPDATE topics
             SET status = ?, updated_at = ?
             WHERE id = ?
-          `).run(TOPIC_STATUS_PINNED, nowIso, topicRow.id);
+          `
+          ).run(TOPIC_STATUS_PINNED, nowIso, topicRow.id);
           rebuildActiveTopicRanks(db);
           recordModerationAction(db, {
             actionType: normalizedActionType,
@@ -5098,16 +6270,24 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
 
         if (normalizedActionType === "delete_message") {
           const normalizedMessageId = normalizeMessageEntityId(targetId);
-          const messageRow = db.prepare(`
+          const messageRow = db
+            .prepare(
+              `
             SELECT id, topic_id, is_root
             FROM messages
             WHERE id = ?
-          `).get(normalizedMessageId);
+          `
+            )
+            .get(normalizedMessageId);
           if (!messageRow) {
             throw new ApiError(404, "NOT_FOUND", "Mensaje no encontrado.");
           }
           if (Boolean(messageRow.is_root)) {
-            throw new ApiError(409, "ROOT_MESSAGE_IMMUTABLE", "El mensaje raiz no se elimina en esta etapa.");
+            throw new ApiError(
+              409,
+              "ROOT_MESSAGE_IMMUTABLE",
+              "El mensaje raiz no se elimina en esta etapa."
+            );
           }
 
           db.prepare("DELETE FROM messages WHERE id = ?").run(normalizedMessageId);
@@ -5131,11 +6311,16 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           if (!["message", "topic", "user"].includes(normalizedTargetType)) {
             throw new ApiError(400, "INVALID_MODERATION_TARGET", "Tipo de reporte no soportado.");
           }
-          const normalizedTargetId = normalizedTargetType === "message"
-            ? normalizeMessageEntityId(targetId)
-            : String(targetId || "").trim();
+          const normalizedTargetId =
+            normalizedTargetType === "message"
+              ? normalizeMessageEntityId(targetId)
+              : String(targetId || "").trim();
           if (!normalizedTargetId) {
-            throw new ApiError(400, "INVALID_MODERATION_TARGET", "El objetivo del reporte es obligatorio.");
+            throw new ApiError(
+              400,
+              "INVALID_MODERATION_TARGET",
+              "El objetivo del reporte es obligatorio."
+            );
           }
           resolveReportsForEntity(db, normalizedTargetType, normalizedTargetId, nowIso);
           recordModerationAction(db, {
@@ -5154,16 +6339,28 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           const userRow = assertExistingUser(db, targetId);
           const normalizedUserId = userRow.id;
           if (userRow.type !== "registered") {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Solo se expulsa a usuarios registrados en esta etapa.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "Solo se expulsa a usuarios registrados en esta etapa."
+            );
           }
           if (canModerate(userRow)) {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "No se puede sancionar a otro moderador desde esta cola.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "No se puede sancionar a otro moderador desde esta cola."
+            );
           }
           const hasActiveTemporaryBan = Boolean(
             userRow.banned_until && new Date(userRow.banned_until).getTime() > Date.now()
           );
           if (userRow.status === USER_STATUS_EXPELLED || hasActiveTemporaryBan) {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario ya tiene una sancion activa.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "Este usuario ya tiene una sancion activa."
+            );
           }
 
           let bannedUntil = null;
@@ -5179,7 +6376,11 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
             resolvedBanHours = nextSanction.hours === null ? "permanent" : nextSanction.hours;
           }
 
-          if (resolvedBanHours !== null && resolvedBanHours !== "permanent" && resolvedBanHours !== "") {
+          if (
+            resolvedBanHours !== null &&
+            resolvedBanHours !== "permanent" &&
+            resolvedBanHours !== ""
+          ) {
             const hours = Number(resolvedBanHours);
             if (Number.isFinite(hours) && hours > 0) {
               const date = new Date(nowIso);
@@ -5190,18 +6391,22 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
             }
           }
 
-          db.prepare(`
+          db.prepare(
+            `
             UPDATE users
             SET status = ?, banned_until = ?, updated_at = ?
             WHERE id = ?
-          `).run(status, bannedUntil, nowIso, normalizedUserId);
+          `
+          ).run(status, bannedUntil, nowIso, normalizedUserId);
           resolveReportsForEntity(db, "user", normalizedUserId, nowIso);
           recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
             targetId: normalizedUserId,
             actorUserId: context.viewer.id,
-            reason: normalizedReason || (bannedUntil ? `Suspension por ${sanctionLabel}` : "Ban permanente"),
+            reason:
+              normalizedReason ||
+              (bannedUntil ? `Suspension por ${sanctionLabel}` : "Ban permanente"),
             metadataJson: JSON.stringify({
               stage: sanctionStage,
               label: sanctionLabel,
@@ -5218,21 +6423,31 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (normalizedActionType === "restore_user") {
           const userRow = assertExistingUser(db, targetId);
           if (userRow.type !== "registered") {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Solo se restituyen usuarios registrados.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "Solo se restituyen usuarios registrados."
+            );
           }
           const hasActiveTemporaryBan = Boolean(
             userRow.banned_until && new Date(userRow.banned_until).getTime() > Date.now()
           );
           if (userRow.status !== USER_STATUS_EXPELLED && !hasActiveTemporaryBan) {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario no tiene una sancion activa.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "Este usuario no tiene una sancion activa."
+            );
           }
 
           const activeSanction = getUserSanctionHistory(db, userRow.id).activeSanction;
-          db.prepare(`
+          db.prepare(
+            `
             UPDATE users
             SET status = ?, banned_until = NULL, updated_at = ?
             WHERE id = ?
-          `).run(USER_STATUS_ACTIVE, nowIso, userRow.id);
+          `
+          ).run(USER_STATUS_ACTIVE, nowIso, userRow.id);
           recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
@@ -5253,19 +6468,27 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (normalizedActionType === "approve_avatar") {
           const userRow = assertExistingUser(db, targetId);
           if (userRow.type !== "registered" || !userRow.avatar_pending_url) {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario no tiene una foto pendiente.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "Este usuario no tiene una foto pendiente."
+            );
           }
 
-          db.prepare(`
+          db.prepare(
+            `
             UPDATE users
             SET avatar_url = ?, avatar_pending_url = NULL, avatar_review_status = 'approved', updated_at = ?
             WHERE id = ?
-          `).run(userRow.avatar_pending_url, nowIso, userRow.id);
+          `
+          ).run(userRow.avatar_pending_url, nowIso, userRow.id);
           scheduleStoredAvatarCleanup(
             afterCommit,
             db,
             avatarStorageDir,
-            userRow.avatar_url && userRow.avatar_url !== userRow.avatar_pending_url ? [userRow.avatar_url] : []
+            userRow.avatar_url && userRow.avatar_url !== userRow.avatar_pending_url
+              ? [userRow.avatar_url]
+              : []
           );
           recordModerationAction(db, {
             actionType: normalizedActionType,
@@ -5282,15 +6505,23 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (normalizedActionType === "reject_avatar") {
           const userRow = assertExistingUser(db, targetId);
           if (userRow.type !== "registered" || !userRow.avatar_pending_url) {
-            throw new ApiError(409, "INVALID_MODERATION_TARGET", "Este usuario no tiene una foto pendiente.");
+            throw new ApiError(
+              409,
+              "INVALID_MODERATION_TARGET",
+              "Este usuario no tiene una foto pendiente."
+            );
           }
 
-          db.prepare(`
+          db.prepare(
+            `
             UPDATE users
             SET avatar_pending_url = NULL, avatar_review_status = 'rejected', updated_at = ?
             WHERE id = ?
-          `).run(nowIso, userRow.id);
-          scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, [userRow.avatar_pending_url]);
+          `
+          ).run(nowIso, userRow.id);
+          scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, [
+            userRow.avatar_pending_url
+          ]);
           recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
@@ -5305,7 +6536,11 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         if (normalizedActionType === "block_session") {
           const normalizedSessionId = String(targetId || "").trim();
           if (!normalizedSessionId) {
-            throw new ApiError(400, "INVALID_MODERATION_TARGET", "La sesion objetivo es obligatoria.");
+            throw new ApiError(
+              400,
+              "INVALID_MODERATION_TARGET",
+              "La sesion objetivo es obligatoria."
+            );
           }
 
           const sessionRow = readSessionRow(db, normalizedSessionId);
@@ -5359,19 +6594,25 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           const normalizedTargetType = String(targetType || "").trim();
           const target = assertReportableEntity(db, normalizedTargetType, targetId);
           const reportReason = validateReportReason(normalizedReason, target.entityType);
-          const existingModeratorReport = db.prepare(`
+          const existingModeratorReport = db
+            .prepare(
+              `
             SELECT id
             FROM reports
             WHERE reporter_session_id IS NULL AND reporter_user_id = ? AND entity_type = ? AND entity_id = ? AND status = ?
             LIMIT 1
-          `).get(context.viewer.id, target.entityType, target.entityId, REPORT_STATUS_OPEN);
+          `
+            )
+            .get(context.viewer.id, target.entityType, target.entityId, REPORT_STATUS_OPEN);
 
           if (!existingModeratorReport) {
-            db.prepare(`
+            db.prepare(
+              `
               INSERT INTO reports (
                 entity_type, entity_id, reason, reporter_session_id, reporter_user_id, status, resolved_at, created_at
               ) VALUES (?, ?, ?, NULL, ?, ?, NULL, ?)
-            `).run(
+            `
+            ).run(
               target.entityType,
               target.entityId,
               reportReason,
@@ -5390,11 +6631,12 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
             createdAt: nowIso
           });
 
-          const nextSelectedTopicId = target.entityType === "topic"
-            ? target.entityId
-            : target.entityType === "message"
-              ? selectedTopicId || target.topicId
-              : selectedTopicId;
+          const nextSelectedTopicId =
+            target.entityType === "topic"
+              ? target.entityId
+              : target.entityType === "message"
+                ? selectedTopicId || target.topicId
+                : selectedTopicId;
           return buildFrontendPayload(db, context, nextSelectedTopicId);
         }
 
@@ -5403,7 +6645,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
     },
     // Lecturas para las páginas SEO server-rendered: nunca crean sesiones ni escriben.
     getSeoTopicEntries() {
-      return db.prepare(`
+      return db
+        .prepare(
+          `
         SELECT
           topics.id,
           topics.title,
@@ -5440,17 +6684,22 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         WHERE topics.status IN (?, ?)
         ORDER BY topics.active_rank ASC
         LIMIT ?
-      `).all(REPORT_STATUS_OPEN, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT).map((row) => ({
-        id: row.id,
-        title: row.title,
-        lastActivityAt: row.last_activity_at,
-        commentCount: Number(row.comment_count ?? 0),
-        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
-        isProblematic: isSeoTopicRowProblematic(row)
-      }));
+      `
+        )
+        .all(REPORT_STATUS_OPEN, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT)
+        .map((row) => ({
+          id: row.id,
+          title: row.title,
+          lastActivityAt: row.last_activity_at,
+          commentCount: Number(row.comment_count ?? 0),
+          isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
+          isProblematic: isSeoTopicRowProblematic(row)
+        }));
     },
     getSeoArchivedTopicEntries() {
-      return db.prepare(`
+      return db
+        .prepare(
+          `
         SELECT
           topics.id,
           topics.title,
@@ -5487,15 +6736,18 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         WHERE topics.status = ?
         ORDER BY topics.last_activity_at DESC, topics.created_at DESC
         LIMIT 5000
-      `).all(REPORT_STATUS_OPEN, TOPIC_STATUS_EXPELLED).map((row) => ({
-        id: row.id,
-        title: row.title,
-        lastActivityAt: row.last_activity_at,
-        commentCount: Number(row.comment_count ?? 0),
-        isArchived: true,
-        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
-        isProblematic: isSeoTopicRowProblematic(row)
-      }));
+      `
+        )
+        .all(REPORT_STATUS_OPEN, TOPIC_STATUS_EXPELLED)
+        .map((row) => ({
+          id: row.id,
+          title: row.title,
+          lastActivityAt: row.last_activity_at,
+          commentCount: Number(row.comment_count ?? 0),
+          isArchived: true,
+          isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
+          isProblematic: isSeoTopicRowProblematic(row)
+        }));
     },
     getTopicPageData(topicId) {
       const normalizedId = String(topicId || "").trim();
@@ -5506,9 +6758,12 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         throw new ApiError(404, "TOPIC_NOT_FOUND", "Tema no encontrado.");
       }
 
-      const authorRow = db.prepare("SELECT name, nickname, type, avatar_url FROM users WHERE id = ?")
+      const authorRow = db
+        .prepare("SELECT name, nickname, type, avatar_url FROM users WHERE id = ?")
         .get(topicRow.author_id);
-      const messages = db.prepare(`
+      const messages = db
+        .prepare(
+          `
         SELECT
           messages.text,
           messages.kind,
@@ -5522,17 +6777,22 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         JOIN users ON users.id = messages.author_id
         WHERE messages.topic_id = ?
         ORDER BY messages.id ASC
-      `).all(normalizedId).map((row) => ({
-        text: row.text,
-        kind: row.kind,
-        likes: Number(row.likes ?? 0),
-        isRoot: Boolean(row.is_root),
-        createdAt: row.created_at,
-        authorName: row.author_name,
-        authorNickname: row.author_nickname ?? null,
-        authorType: row.author_type
-      }));
-      const commentCount = messages.filter((message) => message.kind === "user" && !message.isRoot).length;
+      `
+        )
+        .all(normalizedId)
+        .map((row) => ({
+          text: row.text,
+          kind: row.kind,
+          likes: Number(row.likes ?? 0),
+          isRoot: Boolean(row.is_root),
+          createdAt: row.created_at,
+          authorName: row.author_name,
+          authorNickname: row.author_nickname ?? null,
+          authorType: row.author_type
+        }));
+      const commentCount = messages.filter(
+        (message) => message.kind === "user" && !message.isRoot
+      ).length;
       const likeCount = messages.reduce((total, message) => total + message.likes, 0);
       const isProblematic = isTopicSeoProblematic(db, normalizedId, topicRow.title, messages);
       const relatedTopics = this.getSeoTopicEntries()
@@ -5565,30 +6825,42 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
     getPublicProfileByNickname(nickname) {
       const key = normalizeUniqueNameKey(nickname);
       const row = key
-        ? db.prepare(`
+        ? db
+            .prepare(
+              `
           SELECT id, name, nickname, role, description, created_at, updated_at, avatar_url,
                  profile_show_description, profile_show_joined_at, profile_indexable
           FROM users
           WHERE nickname_norm = ? AND type = 'registered' AND status = 'active'
-        `).get(key)
+        `
+            )
+            .get(key)
         : null;
       if (!row) {
         throw new ApiError(404, "PROFILE_NOT_FOUND", "Perfil no encontrado.");
       }
 
-      const stats = db.prepare(`
+      const stats = db
+        .prepare(
+          `
         SELECT
           (SELECT COUNT(*) FROM topics WHERE author_id = ? AND status != 'blocked') AS post_count,
           (SELECT COUNT(*) FROM messages WHERE author_id = ? AND kind = 'user' AND is_root = 0) AS comment_count,
           (SELECT COALESCE(SUM(likes), 0) FROM messages WHERE author_id = ? AND kind = 'user') AS like_count
-      `).get(row.id, row.id, row.id);
-      const recentTopics = db.prepare(`
+      `
+        )
+        .get(row.id, row.id, row.id);
+      const recentTopics = db
+        .prepare(
+          `
         SELECT id, title
         FROM topics
         WHERE author_id = ? AND status IN (?, ?)
         ORDER BY created_at DESC
         LIMIT 5
-      `).all(row.id, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED);
+      `
+        )
+        .all(row.id, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED);
       const postCount = Number(stats?.post_count ?? 0);
       const commentCount = Number(stats?.comment_count ?? 0);
       const hasActivity = postCount > 0 || commentCount > 0;
@@ -5609,7 +6881,9 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
       };
     },
     getSeoProfileEntries() {
-      return db.prepare(`
+      return db
+        .prepare(
+          `
         SELECT users.nickname, users.updated_at, users.created_at
         FROM users
         WHERE users.type = 'registered'
@@ -5628,10 +6902,13 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
           )
         ORDER BY users.created_at ASC
         LIMIT 500
-      `).all().map((row) => ({
-        nickname: row.nickname,
-        lastmod: row.updated_at ?? row.created_at ?? null
-      }));
+      `
+        )
+        .all()
+        .map((row) => ({
+          nickname: row.nickname,
+          lastmod: row.updated_at ?? row.created_at ?? null
+        }));
     },
     getDiagnosticsForViewer({ sessionId, authMode, ipAddress = "" } = {}) {
       return withTransaction(db, () => {
@@ -5640,7 +6917,14 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
         return this.getDiagnostics();
       });
     },
-    recordProductEvent({ sessionId, authMode, eventName, routeGroup = "/", sourceGroup = "direct", ipAddress = "" } = {}) {
+    recordProductEvent({
+      sessionId,
+      authMode,
+      eventName,
+      routeGroup = "/",
+      sourceGroup = "direct",
+      ipAddress = ""
+    } = {}) {
       return withTransaction(db, () => {
         const context = resolveViewer(db, {
           sessionId,
@@ -5662,22 +6946,25 @@ export function createBackendStore({ dbPath = null, seedDemoData = true, include
       });
     },
     claimTopicActivityEmailRecipients(topicId, actorUserId) {
-      return withTransaction(db, () => claimTopicActivityEmailRecipients(
-        db,
-        String(topicId || ""),
-        String(actorUserId || "")
-      ));
+      return withTransaction(db, () =>
+        claimTopicActivityEmailRecipients(db, String(topicId || ""), String(actorUserId || ""))
+      );
     },
     getDiagnostics() {
       const topics = db.prepare("SELECT COUNT(*) AS count FROM topics").get()?.count ?? 0;
       const messages = db.prepare("SELECT COUNT(*) AS count FROM messages").get()?.count ?? 0;
       const users = db.prepare("SELECT COUNT(*) AS count FROM users").get()?.count ?? 0;
       const sessions = db.prepare("SELECT COUNT(*) AS count FROM sessions").get()?.count ?? 0;
-      const reports = db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = ?").get(REPORT_STATUS_OPEN)?.count ?? 0;
-      const blockedSessions = db.prepare("SELECT COUNT(*) AS count FROM blocked_sessions").get()?.count ?? 0;
+      const reports =
+        db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = ?").get(REPORT_STATUS_OPEN)
+          ?.count ?? 0;
+      const blockedSessions =
+        db.prepare("SELECT COUNT(*) AS count FROM blocked_sessions").get()?.count ?? 0;
       const blockedIps = db.prepare("SELECT COUNT(*) AS count FROM blocked_ips").get()?.count ?? 0;
-      const topicFollows = db.prepare("SELECT COUNT(*) AS count FROM topic_follows").get()?.count ?? 0;
-      const productEvents = db.prepare("SELECT COUNT(*) AS count FROM product_events").get()?.count ?? 0;
+      const topicFollows =
+        db.prepare("SELECT COUNT(*) AS count FROM topic_follows").get()?.count ?? 0;
+      const productEvents =
+        db.prepare("SELECT COUNT(*) AS count FROM product_events").get()?.count ?? 0;
       return {
         dbPath: resolvedDbPath,
         dbPathSource: dbConfig.dbPathSource,

@@ -39,7 +39,10 @@ function createUserActionButton(label, kind) {
 }
 
 export function createUserItem(user) {
-  const node = el("article", `user-item${user.isCurrent ? " is-current" : ""}${user.isActive ? " is-active" : ""}`);
+  const node = el(
+    "article",
+    `user-item${user.isCurrent ? " is-current" : ""}${user.isActive ? " is-active" : ""}`
+  );
   node.dataset.id = user.id;
   node.tabIndex = 0;
   node.setAttribute("role", "button");

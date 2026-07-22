@@ -247,20 +247,24 @@ async function continueWithGoogle(event) {
   }
 }
 
-document.addEventListener("click", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  if (target?.closest("#authButton, #authBannerLoginButton, #authBannerRegisterButton")) {
-    if (globalThis.__topyklyAuthControllerReady) {
+document.addEventListener(
+  "click",
+  (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("#authButton, #authBannerLoginButton, #authBannerRegisterButton")) {
+      if (globalThis.__topyklyAuthControllerReady) {
+        return;
+      }
+      void openAuthModal(event);
       return;
     }
-    void openAuthModal(event);
-    return;
-  }
 
-  if (target?.closest("#authGoogleButton")) {
-    if (globalThis.__topyklyAuthControllerReady) {
-      return;
+    if (target?.closest("#authGoogleButton")) {
+      if (globalThis.__topyklyAuthControllerReady) {
+        return;
+      }
+      void continueWithGoogle(event);
     }
-    void continueWithGoogle(event);
-  }
-}, true);
+  },
+  true
+);

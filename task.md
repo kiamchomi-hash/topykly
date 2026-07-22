@@ -263,7 +263,6 @@ Este proyecto toma inspiracion de decisiones de producto, navegacion y UI vistas
 - Reducir dependencia exclusiva de reportes manuales.
 - Medir si la moderacion preventiva mejora calidad del feed y tiempo de respuesta.
 
-
 ## Preparacion deploy TOPYKLY
 
 - Apuntar Cloudflare DNS del dominio final al VPS.
@@ -275,6 +274,7 @@ Este proyecto toma inspiracion de decisiones de producto, navegacion y UI vistas
 ## Proxima sesion - Funcionamiento y usuarios
 
 Estado al cierre:
+
 - TOPYKLY esta online en `https://topykly.com` y `https://www.topykly.com`.
 - Render esta conectado al repo `kiamchomi-hash/topykly`.
 - Se corrigio el envio de mensajes: el composer ahora envia y la ruta `/api/topics/:id/messages` usa el topic id correcto.
@@ -282,6 +282,7 @@ Estado al cierre:
 - Se agrego QA automatizado: `npm run qa`, `tests/smoke.mjs` y GitHub Actions `.github/workflows/qa.yml`.
 
 Pendientes pedidos por Matias:
+
 - Ajustar login real: al tocar `Iniciar sesion`, ocultar ese boton o dejarlo en estado pendiente y mostrar claramente el estado de sesion; despues del callback exitoso deben aparecer `Cerrar sesion`, `Perfil`, `Tienda` y herramientas privadas.
 - Despues de Google OAuth no usar directamente los datos publicos de Gmail como identidad final visible. Mostrar una ventana flotante de onboarding/perfil para elegir nombre de usuario y confirmar o cambiar avatar antes de participar como registrado.
 - Estandarizar usuarios anonimos para que se llamen `*topy`, con sufijo numerico pegado si hace falta distinguir sesiones, por ejemplo `*topy24`.
@@ -292,6 +293,7 @@ Pendientes pedidos por Matias:
 - Antes de tocar produccion, cubrir estos flujos con tests automaticos.
 
 Orden recomendado:
+
 1. Cambiar generacion/nombre de invitados en backend y tests.
 2. Definir modelo minimo de perfil para avatar de usuario registrado.
 3. Agregar endpoint y UI para cambiar avatar.

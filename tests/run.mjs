@@ -1018,8 +1018,14 @@ await (async () => {
     );
     assert.equal(formatMessageTime(yesterday, "es-AR", now), "Ene 1");
     assert.equal(formatMessageTime(olderDay, "es-AR", now), "Abr 13");
-    assert.equal(formatRelativeActivityTime(new Date(now.getTime() - 32 * 60_000), now), "hace 32 min");
-    assert.equal(formatRelativeActivityTime(new Date(now.getTime() - 5 * 60 * 60_000), now), "hace 5 h");
+    assert.equal(
+      formatRelativeActivityTime(new Date(now.getTime() - 32 * 60_000), now),
+      "hace 32 min"
+    );
+    assert.equal(
+      formatRelativeActivityTime(new Date(now.getTime() - 5 * 60 * 60_000), now),
+      "hace 5 h"
+    );
     assert.equal(formatProfileJoinedDate(joinedAt), "Registro: 02/01/26");
     assert.deepEqual(formatJoinedDateParts(joinedAt), ["02", "01", "2026"]);
     assert.equal(formatMessageTime(""), "");
@@ -1108,9 +1114,18 @@ await (async () => {
         "drawerUserList"
       );
       const mainMenu = findUserNode(mainUserItem, (node) => node.className === "user-item__menu");
-      const drawerMenu = findUserNode(drawerUserItem, (node) => node.className === "user-item__menu");
-      const mainTrigger = findUserNode(mainUserItem, (node) => node.className === "user-item__trigger");
-      const drawerTrigger = findUserNode(drawerUserItem, (node) => node.className === "user-item__trigger");
+      const drawerMenu = findUserNode(
+        drawerUserItem,
+        (node) => node.className === "user-item__menu"
+      );
+      const mainTrigger = findUserNode(
+        mainUserItem,
+        (node) => node.className === "user-item__trigger"
+      );
+      const drawerTrigger = findUserNode(
+        drawerUserItem,
+        (node) => node.className === "user-item__trigger"
+      );
 
       assert.equal(mainMenu.id, "user-action-menu-userList-u2");
       assert.equal(drawerMenu.id, "user-action-menu-drawerUserList-u2");
@@ -1510,10 +1525,7 @@ await (async () => {
     const styles = await read("styles.css");
 
     assert.match(notificationSource, /createLazyMascot\("notification-panel__empty-mascot"\)/);
-    assert.match(
-      friendRequestSource,
-      /createLazyMascot\("friend-request-panel__empty-mascot"\)/
-    );
+    assert.match(friendRequestSource, /createLazyMascot\("friend-request-panel__empty-mascot"\)/);
     assert.doesNotMatch(notificationSource, /^import .*mascot\.js/m);
     assert.doesNotMatch(friendRequestSource, /^import .*mascot\.js/m);
     assert.match(notificationSource, /import\("\.\/mascot\.js\?v=20260716-quality1"\)/);
@@ -4930,11 +4942,17 @@ await (async () => {
     const actions = createChatActions({
       state,
       dom: {
-        authButton: { click() { authClicks += 1; } },
+        authButton: {
+          click() {
+            authClicks += 1;
+          }
+        },
         messageInput: { value: "Mensaje" }
       },
       render() {},
-      showFeedback(message) { feedback.push(message); }
+      showFeedback(message) {
+        feedback.push(message);
+      }
     });
 
     actions.createNewTopic();
@@ -5676,7 +5694,7 @@ await (async () => {
     assert.match(palettePickerEvents, /hexInputTarget\.focus\(\);/);
     assert.match(topbarActionEvents, /function isCustomPickerEventTarget/);
     assert.match(palettePickerEvents, /function isCustomPickerEventTarget/);
-    assert.match(topbarActionEvents, /document\.addEventListener\("pointerdown",/);
+    assert.match(topbarActionEvents, /document\.addEventListener\(\s*"pointerdown",/);
     assert.match(
       topbarActionEvents,
       /pickerPointerStartedInside = isCustomPickerEventTarget\(event\.target\);/
@@ -5820,16 +5838,25 @@ await (async () => {
       styles,
       /html\.is-mobile-viewport\[data-auth-state="logged-out"\] \.topbar\s*\{\s*top:\s*var\(--auth-banner-offset, 0px\);\s*grid-template-columns:\s*78px minmax\(0, 1fr\) 78px;/
     );
-    assert.match(styles, /html\.is-mobile-viewport\[data-auth-state\] #authButton\s*\{\s*display:\s*none;/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport\[data-auth-state\] #authButton\s*\{\s*display:\s*none;/
+    );
 
-    assert.match(topbarActionEvents, /openAuthModal\(\{ mode: "login", trigger: dom\.authBannerLoginButton \}\)/);
+    assert.match(
+      topbarActionEvents,
+      /openAuthModal\(\{ mode: "login", trigger: dom\.authBannerLoginButton \}\)/
+    );
     assert.match(
       topbarActionEvents,
       /openAuthModal\(\{ mode: "register", trigger: dom\.authBannerRegisterButton \}\)/
     );
 
     assert.match(responsive, /"--auth-banner-offset"/);
-    assert.match(responsive, /"--topbar-offset",\s*`\$\{Math\.ceil\(topbar\.getBoundingClientRect\(\)\.bottom\)\}px`/);
+    assert.match(
+      responsive,
+      /"--topbar-offset",\s*`\$\{Math\.ceil\(topbar\.getBoundingClientRect\(\)\.bottom\)\}px`/
+    );
   });
 
   await test("mobile exposes notifications as a safe-area floating action", async () => {
@@ -6484,7 +6511,9 @@ await (async () => {
         liveEventRelay: {
           subscribe(handler) {
             relaySubscriber = handler;
-            return () => { relaySubscriber = null; };
+            return () => {
+              relaySubscriber = null;
+            };
           },
           publish(event) {
             relayedEvents.push(event);
@@ -7212,7 +7241,9 @@ await (async () => {
       assert.equal(profileHtml.includes(`<meta name="robots" content="index,follow">`), true);
       assert.equal(profileHtml.includes(`"@type":"ProfilePage"`), true);
       assert.equal(
-        profileHtml.includes(`<link rel="canonical" href="https://www.topykly.com/u/Perfil_publico">`),
+        profileHtml.includes(
+          `<link rel="canonical" href="https://www.topykly.com/u/Perfil_publico">`
+        ),
         true
       );
       assert.equal(profileHtml.includes(`href="/?perfil=Perfil_publico"`), true);
@@ -10304,7 +10335,7 @@ await (async () => {
     assert.match(previewServer, /TOPYKLY_ALLOW_LOCAL_LOGIN/);
     assert.match(previewServer, /AUTH_NOT_CONFIGURED/);
     assert.match(previewServer, /function enforceHttpRateLimit\(res, buckets, req, url, config\)/);
-    assert.match(previewServer, /sendJson\(res, 429/);
+    assert.match(previewServer, /sendJson\(\s*res,\s*429/);
     assert.match(backendStore, /created_at AS createdAt/);
     assert.match(backendStore, /profile_show_description AS profileShowDescription/);
     assert.match(backendStore, /profile_show_joined_at AS profileShowJoinedAt/);
@@ -10341,10 +10372,7 @@ await (async () => {
     assert.match(html, /<link rel="canonical" href="https:\/\/www\.topykly\.com\/" \/>/);
     assert.match(html, /<meta property="og:url" content="https:\/\/www\.topykly\.com\/" \/>/);
     assert.match(html, /<main id="main-content" class="workspace" aria-label="Chat social">/);
-    assert.match(
-      html,
-      /<h1 class="sr-only">TOPYKLY: conversaciones por temas en español<\/h1>/
-    );
+    assert.match(html, /<h1 class="sr-only">TOPYKLY: conversaciones por temas en español<\/h1>/);
     assert.match(html, /class="topbar__title" role="img" aria-label="TOPYKLY"/);
     assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
     assert.match(html, /class="brand-mark__trend">KLY<\/span>/);
@@ -10494,7 +10522,7 @@ await (async () => {
     );
     assert.match(
       themeBootstrap,
-      /localStorage\.getItem\("topykly-palette"\) \|\| localStorage\.getItem\("chetrend-palette"\) \|\| "default"/
+      /localStorage\.getItem\("topykly-palette"\)\s*\|\|\s*localStorage\.getItem\("chetrend-palette"\)\s*\|\|\s*"default"/
     );
     assert.match(themeBootstrap, /const authState = "pending";/);
     assert.match(themeBootstrap, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
@@ -10595,7 +10623,7 @@ await (async () => {
       styles,
       /@keyframes chat-title-marquee\s*\{[\s\S]*translateX\(var\(--chat-title-marquee-distance\)\)/
     );
-    assert.match(styles, /#chatTitle\.is-overflowing[\s\S]*animation:[^;]*infinite alternate;/);
+    assert.match(styles, /#chatTitle\.is-overflowing[\s\S]*animation:[^;]*infinite\s+alternate;/);
     assert.doesNotMatch(styles, /prefers-reduced-motion:[\s\S]{0,400}#chatTitle\.is-overflowing/);
     assert.match(styles, /\.topic-item\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
     assert.match(
@@ -11888,7 +11916,7 @@ await (async () => {
     assert.match(publicProfileModal, /profileShowJoinedAt/);
     assert.match(
       publicProfileModal,
-      /const publicAvatarUrl = isCurrentUser \? user\.avatarPendingUrl \|\| user\.avatarUrl \|\| "" : user\.avatarUrl \|\| "";/
+      /const publicAvatarUrl = isCurrentUser\s*\?\s*user\.avatarPendingUrl \|\| user\.avatarUrl \|\| ""\s*:\s*user\.avatarUrl \|\| "";/
     );
     assert.match(publicProfileModal, /getRecentUserCafes/);
     assert.match(publicProfileModal, /isTopicAvailable/);
@@ -11909,7 +11937,10 @@ await (async () => {
       publicProfileModal,
       /const confirming = canBlock && Boolean\(state\.publicProfileBlockConfirming\)/
     );
-    assert.match(publicProfileModal, /isUnblocking \? "Desbloquear cuenta" : "Bloquear cuenta"/);
+    assert.match(
+      publicProfileModal,
+      /isUnblocking\s*\?\s*"Desbloquear cuenta"\s*:\s*"Bloquear cuenta"/
+    );
     assert.match(publicProfileModal, /dataset\.blockAction = isUnblocking \? "unblock" : "block"/);
     assert.match(html, /id="publicProfileBlockButton"[\s\S]*id="publicProfileReportButton"/);
     assert.match(html, /id="publicProfileBlockPrompt"[\s\S]*id="publicProfileBlockChoice"/);
@@ -11988,7 +12019,7 @@ await (async () => {
     assert.match(eventsModule, /body\.insertBefore\(menu, body\.firstChild\)/);
     assert.match(
       eventsModule,
-      /if \(insideMessageActionMenu instanceof HTMLElement && dispatchMessageActionClick\(event\.target\)\) \{/
+      /if \(\s*insideMessageActionMenu instanceof HTMLElement &&\s*dispatchMessageActionClick\(event\.target\)\s*\) \{/
     );
     assert.match(eventsModule, /export function bindPageEvents/);
     assert.match(eventsModule, /Coloris\.close/);
@@ -12099,7 +12130,7 @@ await (async () => {
     assert.match(topbarActionEvents, /window\.matchMedia\("\(max-width: 960px\)"\)\.matches/);
     assert.match(
       topbarActionEvents,
-      /handlers\.state\?\.viewer[\s\S]*\? \(isLoggedIn\(\) \? "logged-in" : "logged-out"\)[\s\S]*: "pending"/
+      /handlers\.state\?\.viewer[\s\S]*?isLoggedIn\(\)[\s\S]*?"logged-in"[\s\S]*?"logged-out"[\s\S]*?"pending"/
     );
     assert.match(
       topbarActionEvents,
@@ -12109,19 +12140,25 @@ await (async () => {
     assert.match(topbarActionEvents, /dom\.authTools\.hidden = !loggedIn/);
     assert.match(topbarActionEvents, /setLoggedIn/);
     assert.match(topbarActionEvents, /addListener\(dom\.authButton,\s*"click"/);
-    assert.match(topbarActionEvents, /dom\.authButton\.hidden = !authResolved \|\| \(isMobile && loggedIn\)/);
+    assert.match(
+      topbarActionEvents,
+      /dom\.authButton\.hidden = !authResolved \|\| \(isMobile && loggedIn\)/
+    );
     assert.match(
       topbarActionEvents,
       /authLabel = loggedIn[\s\S]*"Cerrar sesión"[\s\S]*"Iniciar sesión"/
     );
     assert.match(topbarActionEvents, /target\.dataset\.mobileTopbarAction === "auth"/);
     assert.match(topbarActionEvents, /function setLogoutConfirmationOpen/);
-    assert.match(topbarActionEvents, /addListener\(dom\.logoutConfirmSubmitButton, "click", confirmLogout\)/);
+    assert.match(
+      topbarActionEvents,
+      /addListener\(dom\.logoutConfirmSubmitButton, "click", confirmLogout\)/
+    );
     assert.doesNotMatch(topbarActionEvents, /Toca de nuevo para cerrar sesión/);
     assert.match(topbarActionEvents, /function validateAuthEmailFields/);
     assert.match(
       topbarActionEvents,
-      /dom\.authPasswordForm\.dataset\.authMode = isAccountLink \? "link" : isRecovery \? "recovery" : authPasswordMode/
+      /dom\.authPasswordForm\.dataset\.authMode = isAccountLink\s*\?\s*"link"\s*:\s*isRecovery\s*\?\s*"recovery"\s*:\s*authPasswordMode/
     );
     assert.match(topbarActionEvents, /dom\.authPasswordForm\.dataset\.authStep =/);
     assert.match(topbarActionEvents, /handlers\.requestEmailAuthCode/);
@@ -12148,7 +12185,7 @@ await (async () => {
     assert.match(topbarActionEvents, /Ingresa el código de 6 dígitos que te enviamos por email/);
     assert.match(
       topbarActionEvents,
-      /const authModalTitle = authOidcCompletion[\s\S]*?"Completa tu registro"[\s\S]*?"Recuperar contraseña"[\s\S]*?"Vincular con Google"[\s\S]*?"Regístrate" : "Iniciar Sesión"/
+      /const authModalTitle = authOidcCompletion[\s\S]*?"Completa tu registro"[\s\S]*?"Recuperar contraseña"[\s\S]*?"Vincular con Google"[\s\S]*?"Regístrate"\s*:\s*"Iniciar Sesión"/
     );
     assert.match(topbarActionEvents, /requestLogoutConfirmation\(target\)/);
     assert.match(topbarActionEvents, /data-mobile-topbar-action/);
@@ -12186,19 +12223,14 @@ await (async () => {
       [1, 3, 5].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16));
     const mixSrgb = (foreground, background, foregroundRatio) =>
       foreground.map(
-        (channel, index) =>
-          channel * foregroundRatio + background[index] * (1 - foregroundRatio)
+        (channel, index) => channel * foregroundRatio + background[index] * (1 - foregroundRatio)
       );
     const linearize = (channel) => {
       const normalized = channel / 255;
-      return normalized <= 0.04045
-        ? normalized / 12.92
-        : ((normalized + 0.055) / 1.055) ** 2.4;
+      return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
     };
     const luminance = (rgb) =>
-      0.2126 * linearize(rgb[0]) +
-      0.7152 * linearize(rgb[1]) +
-      0.0722 * linearize(rgb[2]);
+      0.2126 * linearize(rgb[0]) + 0.7152 * linearize(rgb[1]) + 0.0722 * linearize(rgb[2]);
     const contrastRatio = (foreground, background) => {
       const lighter = Math.max(luminance(foreground), luminance(background));
       const darker = Math.min(luminance(foreground), luminance(background));
@@ -12374,7 +12406,8 @@ await (async () => {
       renderSource,
       /querySelectorAll\?\.\("\[data-settings-section\]"\)[\s\S]*?aria-selected[\s\S]*?querySelectorAll\?\.\("\[data-settings-panel\]"\)[\s\S]*?panel\.hidden/
     );
-    const activeRule = stylesSource.match(/\.settings-panel__nav-button\.is-active\s*\{([^}]*)\}/)?.[1] || "";
+    const activeRule =
+      stylesSource.match(/\.settings-panel__nav-button\.is-active\s*\{([^}]*)\}/)?.[1] || "";
     assert.notEqual(activeRule, "");
     assert.doesNotMatch(activeRule, /border-left|inset\s+\d+px\s+0\s+0/);
     assert.match(
@@ -12765,26 +12798,27 @@ await (async () => {
         });
         assert.equal(optedIn.viewer.emailActivityEnabled, true);
         assert.equal(
-          store.bootstrap({
-            sessionId: "session-follow-reader",
-            selectedTopicId: topic.id
-          }).followedTopicIds.includes(topic.id),
+          store
+            .bootstrap({
+              sessionId: "session-follow-reader",
+              selectedTopicId: topic.id
+            })
+            .followedTopicIds.includes(topic.id),
           true
         );
 
         const recipients = store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id);
         assert.deepEqual(
           recipients.map(({ userId, email, topicId }) => ({ userId, email, topicId })),
-          [{
-            userId: reader.viewer.id,
-            email: "follow-reader@example.com",
-            topicId: topic.id
-          }]
+          [
+            {
+              userId: reader.viewer.id,
+              email: "follow-reader@example.com",
+              topicId: topic.id
+            }
+          ]
         );
-        assert.deepEqual(
-          store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id),
-          []
-        );
+        assert.deepEqual(store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id), []);
       },
       { seedDemoData: false }
     );
@@ -12829,16 +12863,20 @@ await (async () => {
       assert.equal(counts.page_view.uniqueSubjects, 1);
       assert.equal(counts.topic_open.total, 1);
       assert.equal(counts.auth_open.total, 1);
-      assert.deepEqual(report.routes, [{
-        routeGroup: "/tema",
-        total: 1,
-        uniqueSubjects: 1
-      }]);
-      assert.deepEqual(report.sources, [{
-        sourceGroup: "social",
-        total: 1,
-        uniqueSubjects: 1
-      }]);
+      assert.deepEqual(report.routes, [
+        {
+          routeGroup: "/tema",
+          total: 1,
+          uniqueSubjects: 1
+        }
+      ]);
+      assert.deepEqual(report.sources, [
+        {
+          sourceGroup: "social",
+          total: 1,
+          uniqueSubjects: 1
+        }
+      ]);
       assert.equal(report.cohorts.length, 1);
       assert.equal(report.cohorts[0].visitors, 1);
       const dashboard = store.getAdminDashboard({

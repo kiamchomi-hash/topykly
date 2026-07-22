@@ -40,7 +40,9 @@ function getUnreadTopicIdsAfterHydration(state, payload) {
     const previousLastMessage = getLastUserMessage(previousTopic);
     const nextLastMessage = getLastUserMessage(topic);
     const messageCountIncreased = getUserMessageCount(topic) > getUserMessageCount(previousTopic);
-    const lastMessageChanged = Boolean(nextLastMessage && previousLastMessage?.id !== nextLastMessage.id);
+    const lastMessageChanged = Boolean(
+      nextLastMessage && previousLastMessage?.id !== nextLastMessage.id
+    );
     if (!nextLastMessage || (!lastMessageChanged && !messageCountIncreased)) {
       return;
     }
@@ -114,7 +116,9 @@ function reorderTopicsToMatchPreviousPositions(previousTopics, nextTopics) {
 
 function buildHydratedState(state, payload, topics) {
   const nextSelectedTopicId = resolveHydratedSelectedTopicId(state, payload);
-  const nextActiveConnectedUserId = payload.users.some((user) => user.id === state.activeConnectedUserId)
+  const nextActiveConnectedUserId = payload.users.some(
+    (user) => user.id === state.activeConnectedUserId
+  )
     ? state.activeConnectedUserId
     : null;
   // Mantiene abierto el modal de perfil aunque el payload de refresco ya no
@@ -124,14 +128,13 @@ function buildHydratedState(state, payload, topics) {
   const previousProfileUser = payloadHasProfileUser
     ? null
     : (state.users ?? []).find((user) => user.id === state.publicProfileUserId) || null;
-  const nextPublicProfileUserId = payloadHasProfileUser || previousProfileUser
-    ? state.publicProfileUserId
-    : null;
+  const nextPublicProfileUserId =
+    payloadHasProfileUser || previousProfileUser ? state.publicProfileUserId : null;
   const nextUsers = previousProfileUser ? [...payload.users, previousProfileUser] : payload.users;
   const nextTopicIds = new Set(payload.topics.map((topic) => topic.id));
   const followedTopicIds = Array.isArray(payload.followedTopicIds)
     ? payload.followedTopicIds
-    : state.followedTopicIds ?? [];
+    : (state.followedTopicIds ?? []);
 
   return {
     ...state,
@@ -140,11 +143,12 @@ function buildHydratedState(state, payload, topics) {
     reportedTopicIds: payload.reportedTopicIds ?? state.reportedTopicIds ?? [],
     reportedMessageIds: payload.reportedMessageIds ?? state.reportedMessageIds ?? [],
     rankings: payload.rankings ?? state.rankings ?? null,
-    friendships: payload.friendships ?? state.friendships ?? {
-      incoming: [],
-      outgoing: [],
-      friends: []
-    },
+    friendships: payload.friendships ??
+      state.friendships ?? {
+        incoming: [],
+        outgoing: [],
+        friends: []
+      },
     blockedUsers: payload.blockedUsers ?? state.blockedUsers ?? [],
     users: nextUsers,
     topics,
@@ -163,11 +167,12 @@ export const reducers = {
   // Same as hydrateFromBackend but keeps the topics list in its current on-screen
   // order instead of adopting the backend's order, so background live-polling
   // updates message counts/unread state without reshuffling the topics list.
-  mergeLiveTopics: (state, payload) => buildHydratedState(
-    state,
-    payload,
-    reorderTopicsToMatchPreviousPositions(state.topics, payload.topics)
-  ),
+  mergeLiveTopics: (state, payload) =>
+    buildHydratedState(
+      state,
+      payload,
+      reorderTopicsToMatchPreviousPositions(state.topics, payload.topics)
+    ),
 
   setTheme: (state, theme) => ({
     ...state,
@@ -186,7 +191,7 @@ export const reducers = {
     unreadTopicIds: (state.unreadTopicIds ?? []).filter((topicId) => topicId !== selectedTopicId),
     followedTopicIds: selectedTopicId
       ? [...new Set([...(state.followedTopicIds ?? []), selectedTopicId])]
-      : state.followedTopicIds ?? [],
+      : (state.followedTopicIds ?? []),
     // Reset message flow state if needed
     activeConnectedUserId: null
   }),
@@ -231,7 +236,7 @@ export const reducers = {
     topics: reviveTopicWithMessage(state.topics, topicId, message),
     followedTopicIds: topicId
       ? [...new Set([...(state.followedTopicIds ?? []), topicId])]
-      : state.followedTopicIds ?? []
+      : (state.followedTopicIds ?? [])
   }),
 
   applyMessageReaction: (state, { messageId, reactionType }) => ({
@@ -299,10 +304,12 @@ export const reducers = {
 
   markTopicRead: (state, topicId) => ({
     ...state,
-    unreadTopicIds: (state.unreadTopicIds ?? []).filter((unreadTopicId) => unreadTopicId !== topicId),
+    unreadTopicIds: (state.unreadTopicIds ?? []).filter(
+      (unreadTopicId) => unreadTopicId !== topicId
+    ),
     followedTopicIds: topicId
       ? [...new Set([...(state.followedTopicIds ?? []), topicId])]
-      : state.followedTopicIds ?? []
+      : (state.followedTopicIds ?? [])
   }),
 
   incrementRefreshCount: (state) => ({
@@ -377,9 +384,9 @@ export const reducers = {
     ...state,
     isNotificationsPanelOpen,
     notifications: isNotificationsPanelOpen
-      ? (state.notifications ?? []).map((notification) => notification.seen
-        ? notification
-        : { ...notification, seen: true })
+      ? (state.notifications ?? []).map((notification) =>
+          notification.seen ? notification : { ...notification, seen: true }
+        )
       : state.notifications
   }),
 
@@ -396,10 +403,14 @@ export const reducers = {
   setAdminDashboard: (state, adminDashboard) => {
     const avatarCount = Number.isFinite(adminDashboard.avatarPagination?.total)
       ? adminDashboard.avatarPagination.total
-      : Array.isArray(adminDashboard.pendingAvatars) ? adminDashboard.pendingAvatars.length : 0;
+      : Array.isArray(adminDashboard.pendingAvatars)
+        ? adminDashboard.pendingAvatars.length
+        : 0;
     const reportCount = Number.isFinite(adminDashboard.reportPagination?.total)
       ? adminDashboard.reportPagination.total
-      : Array.isArray(adminDashboard.reports) ? adminDashboard.reports.length : 0;
+      : Array.isArray(adminDashboard.reports)
+        ? adminDashboard.reports.length
+        : 0;
     const pendingModerationCount = avatarCount + reportCount;
 
     return {
@@ -432,19 +443,26 @@ export const reducers = {
 
   dismissNotification: (state, notificationId) => ({
     ...state,
-    notifications: (state.notifications ?? []).filter((notification) => notification.id !== notificationId)
+    notifications: (state.notifications ?? []).filter(
+      (notification) => notification.id !== notificationId
+    )
   }),
 
   markNotificationRead: (state, notificationIds) => {
-    const ids = new Set(String(notificationIds || "").split(",").map((id) => id.trim()).filter(Boolean));
+    const ids = new Set(
+      String(notificationIds || "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    );
     if (!ids.size) {
       return state;
     }
     return {
       ...state,
-      notifications: (state.notifications ?? []).map((notification) => ids.has(notification.id)
-        ? { ...notification, read: true, seen: true }
-        : notification)
+      notifications: (state.notifications ?? []).map((notification) =>
+        ids.has(notification.id) ? { ...notification, read: true, seen: true } : notification
+      )
     };
   },
 
@@ -463,7 +481,7 @@ export function dispatch(state, reducer, payload) {
   const reducerName = reducer.name || "anonymous";
   const prevState = { ...state };
   const nextState = reducer(state, payload);
-  
+
   Object.assign(state, nextState);
 
   // Simple DX Logger

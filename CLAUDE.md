@@ -46,6 +46,7 @@ Key REST endpoints (`/api/...`): `bootstrap`, `topics`, `topics/:id`, `topics/:i
 ### Auth
 
 Cookie-based sessions (`topykly_sid`, HttpOnly, 30-day TTL), three mechanisms:
+
 1. **Guest**: anonymous `*topyNN` identities, auto-created, more rate-limited than registered users.
 2. **Google OIDC**: PKCE flow via `services/auth-service.js`, signed HMAC flow cookie (`topykly_auth_flow`), backend exchange in `/auth/oidc/callback`.
 3. **Email + password**: `loginWithPassword` (email/password, no code) and registration via `requestEmailAuthCode`/`verifyEmailAuthCode` — the register form collects nickname/email/age/password/terms, `requestEmailAuthCode` stores a scrypt-hashed password on the pending challenge (10-min TTL, SHA-256 hashed codes, delivered via Resend, 5-attempt max) and only creates the account once `verifyEmailAuthCode` confirms the code; the email code is a one-time registration confirmation, not a login mechanism. `registerWithPassword` (direct, no email confirmation) still exists on the backend/API for lower-level use but isn't called by the auth modal. Cloudflare Turnstile gates login/register-request when configured.

@@ -104,21 +104,24 @@ function shouldPreserveOpenOverlayState(existing, incoming) {
   }
 
   return Boolean(
-    existing.dataset.messageMenu
-      || existing.dataset.messageReactionMenu
-      || existing.dataset.userMenu
+    existing.dataset.messageMenu ||
+    existing.dataset.messageReactionMenu ||
+    existing.dataset.userMenu
   );
 }
 
 function shouldPreserveExpandedTriggerState(existing, incoming) {
-  if (existing.getAttribute("aria-expanded") !== "true" || incoming.getAttribute("aria-expanded") !== "false") {
+  if (
+    existing.getAttribute("aria-expanded") !== "true" ||
+    incoming.getAttribute("aria-expanded") !== "false"
+  ) {
     return false;
   }
 
   return Boolean(
-    existing.dataset.messageMenuTrigger
-      || existing.dataset.messageReactionTrigger
-      || existing.dataset.userMenuTrigger
+    existing.dataset.messageMenuTrigger ||
+    existing.dataset.messageReactionTrigger ||
+    existing.dataset.userMenuTrigger
   );
 }
 
@@ -154,7 +157,11 @@ function shouldPreserveMessageLayoutStyle(existing, attribute) {
 }
 
 function syncElementProperties(existing, incoming) {
-  if ("value" in existing && document.activeElement !== existing && existing.value !== incoming.value) {
+  if (
+    "value" in existing &&
+    document.activeElement !== existing &&
+    existing.value !== incoming.value
+  ) {
     existing.value = incoming.value;
   }
 

@@ -32,7 +32,11 @@ export function renderRankingsPanel(state, dom) {
 
   if (viewModel.showTopicEmpty) {
     showRankingEmpty(dom, viewModel.emptyMarkup);
-    renderIntoTargets([dom.rankingList, dom.drawerRankingList], "scroll-list ranking-list", () => []);
+    renderIntoTargets(
+      [dom.rankingList, dom.drawerRankingList],
+      "scroll-list ranking-list",
+      () => []
+    );
     return;
   }
 

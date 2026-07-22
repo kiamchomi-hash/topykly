@@ -5,7 +5,11 @@ import { createActionHandlers } from "./controller-actions.js?v=20260716-quality
 import { createResponsiveHelpers } from "./controller-responsive.js";
 import { createRenderers } from "./controller-render.js?v=20260716-quality1";
 import { closeTimerRef, dom, state } from "./app-store.js";
-import { applyStoredTheme, createBackToTopicsHandler, createResizeHandler } from "./controller-runtime.js";
+import {
+  applyStoredTheme,
+  createBackToTopicsHandler,
+  createResizeHandler
+} from "./controller-runtime.js";
 import { dispatch, reducers } from "./store-logic.js?v=20260709-topicrace1";
 import { syncRankingListHeights } from "./ui/ranking-panel-state.js";
 import { getTransitionDurationMs } from "./ui/transition-utils.js";
@@ -27,7 +31,9 @@ const LIVE_STREAM_SAFETY_INTERVAL_MS = 120000;
 const FAKE_SOCIAL_PARAM_VALUES = new Set(["1", "true", "yes", "demo"]);
 
 function isLocalDevelopmentHost(hostname) {
-  const normalized = String(hostname || "").trim().toLowerCase();
+  const normalized = String(hostname || "")
+    .trim()
+    .toLowerCase();
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "[::1]";
 }
 
@@ -48,13 +54,20 @@ function readBootstrapLocationParams() {
     publicProfileNickname: url.searchParams.get("perfil") || null,
     authError: url.searchParams.get("authError") || null,
     authAction: url.searchParams.get("authAction") || null,
-    fakeSocial: isLocalDevelopmentHost(url.hostname)
-      && FAKE_SOCIAL_PARAM_VALUES.has(String(url.searchParams.get("fakeSocial") || "").trim().toLowerCase())
+    fakeSocial:
+      isLocalDevelopmentHost(url.hostname) &&
+      FAKE_SOCIAL_PARAM_VALUES.has(
+        String(url.searchParams.get("fakeSocial") || "")
+          .trim()
+          .toLowerCase()
+      )
   };
 }
 
 export function getAuthErrorFeedbackMessage(authError) {
-  const code = String(authError || "").trim().toLowerCase();
+  const code = String(authError || "")
+    .trim()
+    .toLowerCase();
   if (!code) {
     return "No se pudo completar el inicio de sesion.";
   }
@@ -130,7 +143,10 @@ function createFakeSocialPreview(payload, now = Date.now()) {
         profilePending: false
       }
     : payload.viewer;
-  const previewTopics = Array.from({ length: 3 }, (_, index) => topics[index % Math.max(topics.length, 1)]).filter(Boolean);
+  const previewTopics = Array.from(
+    { length: 3 },
+    (_, index) => topics[index % Math.max(topics.length, 1)]
+  ).filter(Boolean);
   const fallbackActors = ["Mora", "Leo", "Iara", "Nico", "Cami", "Santi", "Valen", "Juli", "Tomi"];
   const fakeActors = Array.from({ length: 9 }, (_, index) => {
     const user = candidates[index] || users[index] || null;
@@ -206,7 +222,10 @@ function createFakeSocialPreview(payload, now = Date.now()) {
       users: users.map((user) => ({
         ...user,
         online: true,
-        friendshipStatus: user.id === viewer?.id ? "self" : statusByUserId.get(user.id) || user.friendshipStatus || "none"
+        friendshipStatus:
+          user.id === viewer?.id
+            ? "self"
+            : statusByUserId.get(user.id) || user.friendshipStatus || "none"
       })),
       friendships
     },
@@ -228,7 +247,10 @@ function createFakeSocialApiClient(baseApi, stateRef) {
         return { viewer: stateRef.viewer, users, topics, friendships: stateRef.friendships };
       }
 
-      const actor = users.find((user) => user.id !== viewerId) || { id: "fake-refresh-user", name: "Usuario fake" };
+      const actor = users.find((user) => user.id !== viewerId) || {
+        id: "fake-refresh-user",
+        name: "Usuario fake"
+      };
       const createdAt = new Date(Date.now()).toISOString();
       const comment = {
         id: `fake-refresh-comment-${refreshCommentCount}`,
@@ -240,14 +262,17 @@ function createFakeSocialApiClient(baseApi, stateRef) {
         createdAt,
         timestamp: createdAt
       };
-      const nextTopics = topics.map((topic) => topic.id === targetTopic.id
-        ? {
-            ...topic,
-            messages: [...(topic.messages || []), comment],
-            subtitle: comment.text,
-            commentCount: (topic.commentCount || Math.max(0, (topic.messages || []).length - 1)) + 1
-          }
-        : topic);
+      const nextTopics = topics.map((topic) =>
+        topic.id === targetTopic.id
+          ? {
+              ...topic,
+              messages: [...(topic.messages || []), comment],
+              subtitle: comment.text,
+              commentCount:
+                (topic.commentCount || Math.max(0, (topic.messages || []).length - 1)) + 1
+            }
+          : topic
+      );
 
       return {
         viewer: stateRef.viewer,
@@ -261,13 +286,16 @@ function createFakeSocialApiClient(baseApi, stateRef) {
 }
 
 function openSharedPublicProfile(nickname) {
-  const nicknameKey = String(nickname || "").trim().toLowerCase();
+  const nicknameKey = String(nickname || "")
+    .trim()
+    .toLowerCase();
   if (!nicknameKey) {
     return;
   }
 
   const profileUser = state.users.find(
-    (user) => user.type === "registered" && String(user.nickname || "").toLowerCase() === nicknameKey
+    (user) =>
+      user.type === "registered" && String(user.nickname || "").toLowerCase() === nicknameKey
   );
   if (profileUser) {
     dispatch(state, reducers.setPublicProfileUser, profileUser.id);
@@ -279,9 +307,16 @@ function openSharedPublicProfile(nickname) {
   }
 }
 
-async function hydrateInitialData(render, initialSelectedTopicId = null, { fakeSocial = false, publicProfileNickname = null } = {}) {
+async function hydrateInitialData(
+  render,
+  initialSelectedTopicId = null,
+  { fakeSocial = false, publicProfileNickname = null } = {}
+) {
   try {
-    const payload = await api.fetchInitialData(initialSelectedTopicId ?? state.selectedTopicId, publicProfileNickname);
+    const payload = await api.fetchInitialData(
+      initialSelectedTopicId ?? state.selectedTopicId,
+      publicProfileNickname
+    );
     const preview = fakeSocial ? createFakeSocialPreview(payload) : null;
     const nextPayload = preview?.payload || payload;
     dispatch(state, reducers.hydrateFromBackend, nextPayload);
@@ -520,7 +555,8 @@ export function bootstrap() {
     renderRef,
     syncResponsiveView: responsive.syncResponsiveView,
     isMobileViewport: responsive.isMobileViewport,
-    closeDrawers: () => closeDrawers(dom, responsive.isMobileViewport, getTransitionDurationMs, closeTimerRef),
+    closeDrawers: () =>
+      closeDrawers(dom, responsive.isMobileViewport, getTransitionDurationMs, closeTimerRef),
     apiClient: bootstrapLocationParams.fakeSocial ? createFakeSocialApiClient(api, state) : api,
     onLiveSyncPreferenceChange: () => liveTopicSyncRef.current?.reschedule()
   });
@@ -636,7 +672,9 @@ export function bootstrap() {
   });
 
   if (bootstrapLocationParams.authError) {
-    actions.showFeedback(getAuthErrorFeedbackMessage(bootstrapLocationParams.authError), { kind: "error" });
+    actions.showFeedback(getAuthErrorFeedbackMessage(bootstrapLocationParams.authError), {
+      kind: "error"
+    });
   }
   if (bootstrapLocationParams.authAction === "google-linked") {
     actions.showFeedback("Cuenta de Google vinculada correctamente.");

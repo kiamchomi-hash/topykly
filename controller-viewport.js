@@ -6,10 +6,16 @@ export function createBackToTopicsHandler(state, responsive, render) {
   };
 }
 
-export function createResizeHandler({ responsive, render, actions, syncRankingListHeights = () => {} }) {
+export function createResizeHandler({
+  responsive,
+  render,
+  actions,
+  syncRankingListHeights = () => {}
+}) {
   return function handleResize() {
     const root = typeof document !== "undefined" ? document.documentElement : null;
-    const wasMobile = root?.classList?.contains("is-mobile-viewport") ?? responsive.isMobileViewport();
+    const wasMobile =
+      root?.classList?.contains("is-mobile-viewport") ?? responsive.isMobileViewport();
     const isMobile = responsive.syncResponsiveView();
     responsive.updateLayoutMetrics();
     if (wasMobile && !isMobile) {

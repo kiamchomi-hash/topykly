@@ -232,10 +232,12 @@ export const api = {
   },
 
   async loginWithPassword({ email, password, selectedTopicId = null, turnstileToken = "" } = {}) {
-    return normalizeBackendPayload(await readApiPayload("/api/auth/password/login", {
-      method: "POST",
-      body: { email, password, selectedTopicId, turnstileToken }
-    }));
+    return normalizeBackendPayload(
+      await readApiPayload("/api/auth/password/login", {
+        method: "POST",
+        body: { email, password, selectedTopicId, turnstileToken }
+      })
+    );
   },
 
   async requestEmailAuthCode({
@@ -261,10 +263,12 @@ export const api = {
     });
   },
   async verifyEmailAuthCode({ challengeId, code, selectedTopicId = null } = {}) {
-    return normalizeBackendPayload(await readApiPayload("/api/auth/email/verify-code", {
-      method: "POST",
-      body: { challengeId, code, selectedTopicId }
-    }));
+    return normalizeBackendPayload(
+      await readApiPayload("/api/auth/email/verify-code", {
+        method: "POST",
+        body: { challengeId, code, selectedTopicId }
+      })
+    );
   },
 
   async requestPasswordResetCode({ email, turnstileToken = "" } = {}) {
@@ -275,10 +279,12 @@ export const api = {
   },
 
   async confirmPasswordReset({ challengeId, code, newPassword, selectedTopicId = null } = {}) {
-    return normalizeBackendPayload(await readApiPayload("/api/auth/password/reset/confirm", {
-      method: "POST",
-      body: { challengeId, code, newPassword, selectedTopicId }
-    }));
+    return normalizeBackendPayload(
+      await readApiPayload("/api/auth/password/reset/confirm", {
+        method: "POST",
+        body: { challengeId, code, newPassword, selectedTopicId }
+      })
+    );
   },
 
   async startAccountLink({ password, selectedTopicId = null, turnstileToken = "" } = {}) {
@@ -396,8 +402,8 @@ export const api = {
   },
 
   async trackProductEvent(eventName, routeGroup = null) {
-    const resolvedRouteGroup = routeGroup
-      ?? (typeof window !== "undefined" ? window.location.pathname : "/");
+    const resolvedRouteGroup =
+      routeGroup ?? (typeof window !== "undefined" ? window.location.pathname : "/");
     return readApiPayload("/api/events", {
       method: "POST",
       body: { eventName, routeGroup: resolvedRouteGroup, sourceGroup: getProductSourceGroup() }
@@ -500,7 +506,14 @@ export const api = {
     };
   },
 
-  async applyModerationAction(actionType, targetType, targetId, reason = "", selectedTopicId = null, banHours = null) {
+  async applyModerationAction(
+    actionType,
+    targetType,
+    targetId,
+    reason = "",
+    selectedTopicId = null,
+    banHours = null
+  ) {
     return request("/api/moderation/actions", {
       method: "POST",
       body: {

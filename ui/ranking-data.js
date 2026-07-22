@@ -1,6 +1,14 @@
 import { formatCommentCount, getActiveTopics, getSelectedTopic } from "../model.js";
 
-function buildRankingEntries(counts, users, currentUserId, emptyTitle, emptyMeta, limit, formatMeta) {
+function buildRankingEntries(
+  counts,
+  users,
+  currentUserId,
+  emptyTitle,
+  emptyMeta,
+  limit,
+  formatMeta
+) {
   const entries = [...counts.entries()]
     .map(([authorId, count]) => ({
       id: authorId,
@@ -108,9 +116,17 @@ function getScopedTopics(topics, selectedTopicId, scope) {
   return selectedTopic ? [selectedTopic] : [];
 }
 
-export function buildPostRankingEntries(topics, users, currentUserId, metric = "comments", selectedTopicId = null, scope = "global") {
+export function buildPostRankingEntries(
+  topics,
+  users,
+  currentUserId,
+  metric = "comments",
+  selectedTopicId = null,
+  scope = "global"
+) {
   const scopedTopics = getScopedTopics(topics, selectedTopicId, scope);
-  const counts = metric === "likes" ? countTopicLikes(scopedTopics) : countTopicComments(scopedTopics);
+  const counts =
+    metric === "likes" ? countTopicLikes(scopedTopics) : countTopicComments(scopedTopics);
   const limit = scope === "topic" ? 10 : 10;
   return buildTopicRankingEntries(
     scopedTopics,
@@ -124,9 +140,17 @@ export function buildPostRankingEntries(topics, users, currentUserId, metric = "
   );
 }
 
-export function buildUserRankingEntries(topics, users, currentUserId, metric = "comments", selectedTopicId = null, scope = "global") {
+export function buildUserRankingEntries(
+  topics,
+  users,
+  currentUserId,
+  metric = "comments",
+  selectedTopicId = null,
+  scope = "global"
+) {
   const scopedTopics = getScopedTopics(topics, selectedTopicId, scope);
-  const counts = metric === "likes" ? countUserLikes(scopedTopics) : countUserComments(scopedTopics);
+  const counts =
+    metric === "likes" ? countUserLikes(scopedTopics) : countUserComments(scopedTopics);
   const limit = scope === "topic" ? 10 : 10;
   return buildRankingEntries(
     counts,

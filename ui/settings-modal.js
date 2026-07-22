@@ -10,7 +10,9 @@ const SETTING_TOGGLE_KEYS = {
 const SETTINGS_SECTIONS = new Set(["privacy", "experience", "blocks", "account"]);
 
 function syncSettingsSection(state, dom) {
-  const activeSection = SETTINGS_SECTIONS.has(state.settingsSection) ? state.settingsSection : "privacy";
+  const activeSection = SETTINGS_SECTIONS.has(state.settingsSection)
+    ? state.settingsSection
+    : "privacy";
   dom.settingsModal?.querySelectorAll?.("[data-settings-section]").forEach((button) => {
     const isActive = button.dataset.settingsSection === activeSection;
     button.classList.toggle("is-active", isActive);
@@ -48,7 +50,9 @@ function createBlockedUserRow(user, pendingUserId) {
     image.height = 40;
     avatar.append(image);
   } else {
-    avatar.textContent = String(user.name || "U").charAt(0).toUpperCase();
+    avatar.textContent = String(user.name || "U")
+      .charAt(0)
+      .toUpperCase();
   }
 
   const identity = document.createElement("div");
@@ -96,14 +100,16 @@ function renderBlockedUsers(state, dom) {
   }
 
   const blockedUsers = Array.isArray(state.blockedUsers) ? state.blockedUsers : [];
-  const renderKey = JSON.stringify(blockedUsers.map((user) => [
-    user.id,
-    user.name,
-    user.nickname,
-    user.avatarUrl,
-    Boolean(user.hideContent),
-    state.blockedUserActionPending === user.id
-  ]));
+  const renderKey = JSON.stringify(
+    blockedUsers.map((user) => [
+      user.id,
+      user.name,
+      user.nickname,
+      user.avatarUrl,
+      Boolean(user.hideContent),
+      state.blockedUserActionPending === user.id
+    ])
+  );
   if (dom.settingsBlockedUsers.dataset.renderedBlockedUsers === renderKey) {
     return;
   }
@@ -143,7 +149,11 @@ export function renderSettingsModal(state, dom) {
   syncSettingsSection(state, dom);
   const pending = Boolean(state.settingsUpdatePending);
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.likesAnonymous], viewer.likesAnonymous, pending);
-  syncSettingToggle(dom[SETTING_TOGGLE_KEYS.profileIndexable], viewer.profileIndexable !== false, pending);
+  syncSettingToggle(
+    dom[SETTING_TOGGLE_KEYS.profileIndexable],
+    viewer.profileIndexable !== false,
+    pending
+  );
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.filterProfanity], viewer.filterProfanity, pending);
   syncSettingToggle(dom[SETTING_TOGGLE_KEYS.slowMode], viewer.slowMode, pending);
   syncSettingToggle(

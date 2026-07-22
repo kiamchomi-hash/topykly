@@ -26,9 +26,14 @@ export function applyStoredTheme(state) {
   let rootCustomPalette = null;
 
   if (hasStorage) {
-    rootTheme = localStorage.getItem(STORAGE_KEYS.theme) || localStorage.getItem(LEGACY_STORAGE_KEYS.theme);
-    rootPalette = localStorage.getItem(STORAGE_KEYS.palette) || localStorage.getItem(LEGACY_STORAGE_KEYS.palette);
-    rootCustomPalette = localStorage.getItem(STORAGE_KEYS.customPalette) || localStorage.getItem(LEGACY_STORAGE_KEYS.customPalette);
+    rootTheme =
+      localStorage.getItem(STORAGE_KEYS.theme) || localStorage.getItem(LEGACY_STORAGE_KEYS.theme);
+    rootPalette =
+      localStorage.getItem(STORAGE_KEYS.palette) ||
+      localStorage.getItem(LEGACY_STORAGE_KEYS.palette);
+    rootCustomPalette =
+      localStorage.getItem(STORAGE_KEYS.customPalette) ||
+      localStorage.getItem(LEGACY_STORAGE_KEYS.customPalette);
   }
 
   state.theme = rootTheme === "dark" || rootTheme === "light" ? rootTheme : DEFAULT_THEME;

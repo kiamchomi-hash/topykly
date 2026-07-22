@@ -7,7 +7,14 @@ export function formatCommentCount(count) {
   return count === 1 ? "1 comentario" : `${count} comentarios`;
 }
 
-export function createMessage(authorId, text, minutesAgo, kind = "user", now = Date.now(), isRoot = false) {
+export function createMessage(
+  authorId,
+  text,
+  minutesAgo,
+  kind = "user",
+  now = Date.now(),
+  isRoot = false
+) {
   return {
     id: crypto.randomUUID(),
     authorId,
@@ -87,17 +94,26 @@ export function buildTopics(topicSeedData, users, now = Date.now()) {
   ];
 
   const topics = topicSeedData.map(([title, subtitle], index) => {
-    const topicAuthorId = authorIds[topicAuthorPattern[index % topicAuthorPattern.length] % authorIds.length];
+    const topicAuthorId =
+      authorIds[topicAuthorPattern[index % topicAuthorPattern.length] % authorIds.length];
     const messageCount = 10;
     const minutesAgo = [48, 44, 39, 34, 29, 24, 19, 14, 9, 4];
 
     const messages = Array.from({ length: messageCount }, (_, messageIndex) => {
       const authorId = authorIds[(index + messageIndex) % authorIds.length];
-      const textFactory = messageTemplates[messageIndex] ?? messageTemplates[messageTemplates.length - 1];
+      const textFactory =
+        messageTemplates[messageIndex] ?? messageTemplates[messageTemplates.length - 1];
       const text = multilinePreviewMap.has(messageIndex)
         ? createMultilinePreviewMessage(title, index, multilinePreviewMap.get(messageIndex))
         : textFactory(title, subtitle, index);
-      const message = createMessage(authorId, text, minutesAgo[messageIndex] ?? 1, "user", now, messageIndex === 0);
+      const message = createMessage(
+        authorId,
+        text,
+        minutesAgo[messageIndex] ?? 1,
+        "user",
+        now,
+        messageIndex === 0
+      );
       const authorIndex = authorIndexById.get(message.authorId) ?? 0;
       message.likes = 1 + ((index * 3 + messageIndex + authorIndex) % 5);
       return message;
@@ -141,9 +157,7 @@ export function trimMessages(messages, limit = TOPIC_TOTAL_MESSAGE_LIMIT) {
 
 export function appendMessageToTopic(topic, message, limit = TOPIC_TOTAL_MESSAGE_LIMIT) {
   const messages = trimMessages([...topic.messages, message], limit);
-  const subtitle = message.kind === "user"
-    ? summarizeTopicMessage(message.text)
-    : topic.subtitle;
+  const subtitle = message.kind === "user" ? summarizeTopicMessage(message.text) : topic.subtitle;
 
   return {
     ...topic,
@@ -159,9 +173,10 @@ export function prepareTopicFeed(
 ) {
   return topics.slice(0, activeLimit).map((topic, index) => {
     const visible = index < visibleLimit;
-    const status = topic.status === "blocked" || topic.status === "pinned" || topic.status === "expelled"
-      ? topic.status
-      : "active";
+    const status =
+      topic.status === "blocked" || topic.status === "pinned" || topic.status === "expelled"
+        ? topic.status
+        : "active";
     const nextVisible = status === "expelled" ? false : visible;
     return topic.visible === nextVisible && topic.status === status
       ? topic

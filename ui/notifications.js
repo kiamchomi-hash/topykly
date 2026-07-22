@@ -12,11 +12,13 @@ function createLazyMascot(className) {
   placeholder.className = `topykly-mascot ${className}`;
   placeholder.setAttribute("aria-hidden", "true");
 
-  void import("./mascot.js?v=20260716-quality1").then(({ createTopyklyMascot }) => {
-    placeholder.replaceWith?.(createTopyklyMascot(className, documentRef));
-  }).catch(() => {
-    placeholder.remove?.();
-  });
+  void import("./mascot.js?v=20260716-quality1")
+    .then(({ createTopyklyMascot }) => {
+      placeholder.replaceWith?.(createTopyklyMascot(className, documentRef));
+    })
+    .catch(() => {
+      placeholder.remove?.();
+    });
 
   return placeholder;
 }
@@ -55,7 +57,6 @@ function didRootLikeIncrease(previousTopic, topic) {
   return Boolean(previousRoot && nextRoot && (nextRoot.likes ?? 0) > (previousRoot.likes ?? 0));
 }
 
-
 function getViewerMentionTokens(state, payload) {
   const viewer = payload.viewer ?? state.viewer;
   const viewerUser = payload.users?.find?.((user) => user.id === viewer?.id) ?? null;
@@ -63,9 +64,7 @@ function getViewerMentionTokens(state, payload) {
   const legacyNames = username
     ? []
     : [viewer?.name, viewer?.displayName, viewerUser?.name, viewerUser?.displayName];
-  return [viewer?.id, username, ...legacyNames]
-    .map(normalizeToken)
-    .filter(Boolean);
+  return [viewer?.id, username, ...legacyNames].map(normalizeToken).filter(Boolean);
 }
 
 function messageMentionsViewer(message, mentionTokens) {
@@ -80,7 +79,6 @@ function messageMentionsViewer(message, mentionTokens) {
     return mentionPattern.test(normalized);
   });
 }
-
 
 function getMessageIdentity(message) {
   return String(message?.id || "");
@@ -145,18 +143,22 @@ function uniqueActors(actors) {
 function getNotificationActors(notification) {
   const actors = Array.isArray(notification.actors) ? notification.actors : [];
   if (actors.length) {
-    return uniqueActors(actors.map((actor) => ({
-      id: actor.id || actor.name || "",
-      name: actor.name || "Alguien",
-      avatarUrl: actor.avatarUrl || null
-    })));
+    return uniqueActors(
+      actors.map((actor) => ({
+        id: actor.id || actor.name || "",
+        name: actor.name || "Alguien",
+        avatarUrl: actor.avatarUrl || null
+      }))
+    );
   }
 
-  return [{
-    id: notification.actorId || notification.actorName || notification.id,
-    name: notification.actorName || "Alguien",
-    avatarUrl: notification.actorAvatarUrl || null
-  }];
+  return [
+    {
+      id: notification.actorId || notification.actorName || notification.id,
+      name: notification.actorName || "Alguien",
+      avatarUrl: notification.actorAvatarUrl || null
+    }
+  ];
 }
 
 function formatActorList(names, totalCount) {
@@ -192,14 +194,18 @@ export function groupNotificationsForDisplay(notifications) {
       return;
     }
 
-    const targetId = notification.targetMessageId || notification.messageTargetId || notification.messageId;
+    const targetId =
+      notification.targetMessageId || notification.messageTargetId || notification.messageId;
     const key = `${notification.kind}:${notification.topicId}:${targetId}`;
     const actors = getNotificationActors(notification);
     const existing = groups.get(key);
     if (existing) {
       existing.notificationIds.push(notification.id);
       existing.actors = uniqueActors([...existing.actors, ...actors]);
-      existing.totalCount = Math.max(existing.totalCount, notification.totalCount || existing.actors.length);
+      existing.totalCount = Math.max(
+        existing.totalCount,
+        notification.totalCount || existing.actors.length
+      );
       existing.createdAt = Math.max(existing.createdAt || 0, notification.createdAt || 0);
       existing.read = existing.read && Boolean(notification.read);
       existing.body = formatGroupedActivityBody(existing);
@@ -213,7 +219,12 @@ export function groupNotificationsForDisplay(notifications) {
       targetMessageId: targetId,
       actors,
       totalCount: Math.max(notification.totalCount || 0, actors.length),
-      title: notification.kind === "post-comment" ? "Comentarios en tu posteo" : notification.kind === "comment-like" ? "Likes en tu comentario" : "Likes en tu posteo",
+      title:
+        notification.kind === "post-comment"
+          ? "Comentarios en tu posteo"
+          : notification.kind === "comment-like"
+            ? "Likes en tu comentario"
+            : "Likes en tu posteo",
       read: Boolean(notification.read)
     };
     group.body = formatGroupedActivityBody(group);
@@ -224,12 +235,27 @@ export function groupNotificationsForDisplay(notifications) {
   return displayItems.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
-function collectLikeNotifications({ previousTopic, topic, viewerId, users, notifiedMessageIds, now, suppressRootPostLike = false }) {
-  const previousMessages = new Map((previousTopic.messages || []).map((message) => [getMessageIdentity(message), message]));
+function collectLikeNotifications({
+  previousTopic,
+  topic,
+  viewerId,
+  users,
+  notifiedMessageIds,
+  now,
+  suppressRootPostLike = false
+}) {
+  const previousMessages = new Map(
+    (previousTopic.messages || []).map((message) => [getMessageIdentity(message), message])
+  );
   return (topic.messages || []).flatMap((message) => {
     const messageId = getMessageIdentity(message);
     const previousMessage = previousMessages.get(messageId);
-    if (!messageId || !previousMessage || message.authorId !== viewerId || notifiedMessageIds.has(`like-${messageId}-${message.likes || 0}`)) {
+    if (
+      !messageId ||
+      !previousMessage ||
+      message.authorId !== viewerId ||
+      notifiedMessageIds.has(`like-${messageId}-${message.likes || 0}`)
+    ) {
       return [];
     }
 
@@ -242,9 +268,9 @@ function collectLikeNotifications({ previousTopic, topic, viewerId, users, notif
     const knownLikerIsViewer = Boolean(
       message.lastLikeById && String(message.lastLikeById) === String(viewerId)
     );
-    const viewerLikeAdded = knownLikerIsViewer || Boolean(
-      message.likedByViewer === true && previousMessage.likedByViewer !== true
-    );
+    const viewerLikeAdded =
+      knownLikerIsViewer ||
+      Boolean(message.likedByViewer === true && previousMessage.likedByViewer !== true);
     const delta = nextLikes - previousLikes;
     const externalDelta = delta - (viewerLikeAdded ? 1 : 0);
     if (externalDelta <= 0) {
@@ -256,32 +282,41 @@ function collectLikeNotifications({ previousTopic, topic, viewerId, users, notif
     }
 
     const kind = message.isRoot ? "post-like" : "comment-like";
-    const knownLiker = externalDelta === 1 && delta === 1 && message.lastLikeByName && !knownLikerIsViewer
-      ? { id: message.lastLikeById || message.lastLikeByName, name: message.lastLikeByName, avatarUrl: null }
-      : null;
+    const knownLiker =
+      externalDelta === 1 && delta === 1 && message.lastLikeByName && !knownLikerIsViewer
+        ? {
+            id: message.lastLikeById || message.lastLikeByName,
+            name: message.lastLikeByName,
+            avatarUrl: null
+          }
+        : null;
     const totalCount = Math.max(
       externalDelta,
       nextLikes - (message.likedByViewer === true || knownLikerIsViewer ? 1 : 0)
     );
-    return [{
-      id: `toast-${kind}-${messageId}-${nextLikes}`,
-      kind,
-      topicId: topic.id,
-      messageId: `like-${messageId}-${nextLikes}`,
-      targetMessageId: messageId,
-      totalCount,
-      actors: [knownLiker || { name: "Alguien", avatarUrl: null }],
-      title: getNotificationTitle(kind),
-      body: knownLiker
-        ? `${knownLiker.name} le dio like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`
-        : `${externalDelta === 1 ? "Alguien dio" : `${externalDelta} personas dieron`} like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`,
-      topicTitle: topic.title || "Tema",
-      createdAt: now
-    }];
+    return [
+      {
+        id: `toast-${kind}-${messageId}-${nextLikes}`,
+        kind,
+        topicId: topic.id,
+        messageId: `like-${messageId}-${nextLikes}`,
+        targetMessageId: messageId,
+        totalCount,
+        actors: [knownLiker || { name: "Alguien", avatarUrl: null }],
+        title: getNotificationTitle(kind),
+        body: knownLiker
+          ? `${knownLiker.name} le dio like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`
+          : `${externalDelta === 1 ? "Alguien dio" : `${externalDelta} personas dieron`} like a ${message.isRoot ? "tu posteo" : "tu comentario"}.`,
+        topicTitle: topic.title || "Tema",
+        createdAt: now
+      }
+    ];
   });
 }
 function truncatePreview(text) {
-  const normalized = filterDisplayText(String(text || "")).replace(/\s+/g, " ").trim();
+  const normalized = filterDisplayText(String(text || ""))
+    .replace(/\s+/g, " ")
+    .trim();
   if (normalized.length <= MESSAGE_PREVIEW_LIMIT) {
     return normalized;
   }
@@ -320,7 +355,9 @@ export function collectTopicNotifications(state, payload, now = Date.now()) {
       messageCountIncreased &&
       didRootLikeIncrease(previousTopic, topic)
     );
-    const lastMessageChanged = Boolean(nextLastMessage && previousLastMessage?.id !== nextLastMessage.id);
+    const lastMessageChanged = Boolean(
+      nextLastMessage && previousLastMessage?.id !== nextLastMessage.id
+    );
     const likeNotifications = collectLikeNotifications({
       previousTopic,
       topic,
@@ -328,7 +365,8 @@ export function collectTopicNotifications(state, payload, now = Date.now()) {
       users,
       notifiedMessageIds,
       now,
-      suppressRootPostLike: topic.authorId === viewerId && messageCountIncreased && !firstCommentCountsAsPostLike
+      suppressRootPostLike:
+        topic.authorId === viewerId && messageCountIncreased && !firstCommentCountsAsPostLike
     });
 
     if (!nextLastMessage || (!lastMessageChanged && !messageCountIncreased)) {
@@ -339,30 +377,46 @@ export function collectTopicNotifications(state, payload, now = Date.now()) {
       return likeNotifications;
     }
 
-    const kind = getMessageKindForNotification(topic, nextLastMessage, viewerId, mentionTokens, followedTopicIds);
+    const kind = getMessageKindForNotification(
+      topic,
+      nextLastMessage,
+      viewerId,
+      mentionTokens,
+      followedTopicIds
+    );
     if (!kind || (kind === "post-comment" && firstCommentCountsAsPostLike)) {
       return likeNotifications;
     }
 
     const author = users.find((user) => user.id === nextLastMessage.authorId) || null;
     const authorName = author?.name || getUserName(users, nextLastMessage.authorId);
-    return [{
-      id: `toast-${kind}-${nextLastMessage.id}`,
-      kind,
-      topicId: topic.id,
-      messageId: nextLastMessage.id,
-      targetMessageId: kind === "post-comment" ? topic.messages?.[0]?.id || `${topic.id}-root` : nextLastMessage.id,
-      actors: [{ id: nextLastMessage.authorId, name: authorName, avatarUrl: author?.avatarUrl || null }],
-      totalCount: 1,
-      title: getNotificationTitle(kind),
-      body: `${authorName}: ${truncatePreview(nextLastMessage.text)}`,
-      topicTitle: topic.title || "Tema",
-      createdAt: now
-    }, ...likeNotifications];
+    return [
+      {
+        id: `toast-${kind}-${nextLastMessage.id}`,
+        kind,
+        topicId: topic.id,
+        messageId: nextLastMessage.id,
+        targetMessageId:
+          kind === "post-comment"
+            ? topic.messages?.[0]?.id || `${topic.id}-root`
+            : nextLastMessage.id,
+        actors: [
+          { id: nextLastMessage.authorId, name: authorName, avatarUrl: author?.avatarUrl || null }
+        ],
+        totalCount: 1,
+        title: getNotificationTitle(kind),
+        body: `${authorName}: ${truncatePreview(nextLastMessage.text)}`,
+        topicTitle: topic.title || "Tema",
+        createdAt: now
+      },
+      ...likeNotifications
+    ];
   });
 }
 export function filterNotificationsForFriends(notifications, friendships) {
-  const friendIds = new Set((friendships?.friends || []).map((friend) => friend.id).filter(Boolean));
+  const friendIds = new Set(
+    (friendships?.friends || []).map((friend) => friend.id).filter(Boolean)
+  );
   return notifications.filter((notification) => {
     const actors = Array.isArray(notification.actors) ? notification.actors : [];
     return actors.some((actor) => actor.id && friendIds.has(actor.id));
@@ -426,7 +480,8 @@ function positionNotificationPanel(panel, button) {
   const gap = 10;
   const viewportPadding = 12;
   const right = Math.max(viewportPadding, window.innerWidth - rect.right);
-  const isMobileFloatingButton = document.documentElement?.classList?.contains("is-mobile-viewport");
+  const isMobileFloatingButton =
+    document.documentElement?.classList?.contains("is-mobile-viewport");
 
   if (isMobileFloatingButton) {
     const panelWidth = Math.min(420, Math.max(292, window.innerWidth - viewportPadding * 2));
@@ -514,11 +569,7 @@ function hexToRgb(hex) {
 }
 
 function colorDistance(c1, c2) {
-  return Math.sqrt(
-    Math.pow(c1.r - c2.r, 2) +
-    Math.pow(c1.g - c2.g, 2) +
-    Math.pow(c1.b - c2.b, 2)
-  );
+  return Math.sqrt(Math.pow(c1.r - c2.r, 2) + Math.pow(c1.g - c2.g, 2) + Math.pow(c1.b - c2.b, 2));
 }
 
 const EASTER_EGGS = [
@@ -1048,13 +1099,15 @@ export function createNotificationEmptyState() {
 }
 
 function getInitials(name) {
-  return String(name || "?")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0] || "")
-    .join("")
-    .toUpperCase() || "?";
+  return (
+    String(name || "?")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0] || "")
+      .join("")
+      .toUpperCase() || "?"
+  );
 }
 
 function appendSvgPath(svg, tagName, attributes) {
@@ -1073,9 +1126,13 @@ function createEventIcon(kind) {
   svg.setAttribute("stroke-linejoin", "round");
 
   if (LIKE_NOTIFICATION_KINDS.has(kind)) {
-    appendSvgPath(svg, "path", { d: "M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z" });
+    appendSvgPath(svg, "path", {
+      d: "M20.8 4.6a5.4 5.4 0 0 0-7.6 0L12 5.8l-1.2-1.2a5.4 5.4 0 0 0-7.6 7.6L12 21l8.8-8.8a5.4 5.4 0 0 0 0-7.6Z"
+    });
   } else if (kind === "post-comment") {
-    appendSvgPath(svg, "path", { d: "M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" });
+    appendSvgPath(svg, "path", {
+      d: "M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"
+    });
   } else if (kind === "quote") {
     appendSvgPath(svg, "path", { d: "M8 21H4a2 2 0 0 1-2-2v-7a7 7 0 0 1 7-7" });
     appendSvgPath(svg, "path", { d: "M22 21h-4a2 2 0 0 1-2-2v-7a7 7 0 0 1 7-7" });
@@ -1084,7 +1141,9 @@ function createEventIcon(kind) {
     appendSvgPath(svg, "path", { d: "M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" });
   } else {
     appendSvgPath(svg, "path", { d: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20" });
-    appendSvgPath(svg, "path", { d: "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" });
+    appendSvgPath(svg, "path", {
+      d: "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"
+    });
   }
 
   return svg;
@@ -1160,7 +1219,10 @@ function appendGroupedActivityBody(parent, notification) {
     appendStrong(parent, `${extraCount} ${extraCount === 1 ? "persona mas" : "personas mas"}`);
   }
 
-  appendNotificationText(parent, ` ${getActivityVerb(notification.kind, totalCount)} ${getActivityTargetLabel(notification.kind)}.`);
+  appendNotificationText(
+    parent,
+    ` ${getActivityVerb(notification.kind, totalCount)} ${getActivityTargetLabel(notification.kind)}.`
+  );
 }
 
 function appendDefaultBody(parent, notification) {
@@ -1256,18 +1318,27 @@ function syncNotificationButton(state, dom) {
   }
 
   const notifications = state.notifications || [];
-  const notificationCount = notifications.filter((notification) => !notification.read && !notification.seen).length;
+  const notificationCount = notifications.filter(
+    (notification) => !notification.read && !notification.seen
+  ).length;
   const permission = state.webNotificationsPermission || getWebNotificationPermission();
   button.setAttribute("aria-expanded", String(Boolean(state.isNotificationsPanelOpen)));
-  if (typeof document !== "undefined" && document.documentElement?.classList?.contains("is-mobile-viewport")) {
+  if (
+    typeof document !== "undefined" &&
+    document.documentElement?.classList?.contains("is-mobile-viewport")
+  ) {
     button.setAttribute("aria-description", "Puedes arrastrar este botón para moverlo");
   } else {
     button.removeAttribute?.("aria-description");
   }
-  button.setAttribute("title", notificationCount ? `${notificationCount} notificaciones` : "Notificaciones");
+  button.setAttribute(
+    "title",
+    notificationCount ? `${notificationCount} notificaciones` : "Notificaciones"
+  );
   button.dataset.notificationPermission = permission;
   if (notificationCount > 0) {
-    button.dataset.pendingNotifications = notificationCount > 99 ? "99+" : String(notificationCount);
+    button.dataset.pendingNotifications =
+      notificationCount > 99 ? "99+" : String(notificationCount);
   } else {
     delete button.dataset.pendingNotifications;
   }
@@ -1295,7 +1366,9 @@ export function renderNotifications(state, dom) {
   body.className = "notification-panel__body";
   body.dataset.id = "body";
   body.append(
-    ...(groupedNotifications.length ? groupedNotifications.map(createToast) : [createNotificationEmptyState(state)])
+    ...(groupedNotifications.length
+      ? groupedNotifications.map(createToast)
+      : [createNotificationEmptyState(state)])
   );
   reconcile(node, [createNotificationPanelHeader(notifications), body]);
 }

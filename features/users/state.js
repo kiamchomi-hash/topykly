@@ -22,8 +22,8 @@ export function reduceUserState(state, action) {
         return { changed: false, reason: "missing-user" };
       }
 
-      return { 
-        changed: true, 
+      return {
+        changed: true,
         user: targetUser,
         nextState: { ...state, activeConnectedUserId: userId }
       };

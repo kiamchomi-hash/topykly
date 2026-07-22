@@ -12,7 +12,10 @@ import {
   parseHexColor,
   updateDocumentFavicon
 } from "./palettes.js";
-import { getWebNotificationPermission, requestWebNotificationPermission } from "./ui/notifications.js?v=20260716-quality1";
+import {
+  getWebNotificationPermission,
+  requestWebNotificationPermission
+} from "./ui/notifications.js?v=20260716-quality1";
 import { isStoreCategoryId } from "./store-catalog.js";
 
 const ADMIN_ACTION_FEEDBACK = {
@@ -25,7 +28,12 @@ const ADMIN_ACTION_FEEDBACK = {
   restore_user: "Sancion anulada; el usuario recupero el acceso"
 };
 
-const DESTRUCTIVE_ADMIN_ACTIONS = new Set(["delete_message", "block_topic", "expel_user", "restore_user"]);
+const DESTRUCTIVE_ADMIN_ACTIONS = new Set([
+  "delete_message",
+  "block_topic",
+  "expel_user",
+  "restore_user"
+]);
 const ADMIN_CONFIRM_WINDOW_MS = 4000;
 
 export function clearDocumentTextSelection(selection = globalThis.getSelection?.()) {
@@ -33,9 +41,7 @@ export function clearDocumentTextSelection(selection = globalThis.getSelection?.
 }
 
 function focusPaletteOption(dom, paletteId) {
-  dom.paletteOptionGrid
-    ?.querySelector(`[data-palette-option="${paletteId}"]`)
-    ?.focus();
+  dom.paletteOptionGrid?.querySelector(`[data-palette-option="${paletteId}"]`)?.focus();
 }
 
 function resetPaletteModalScroll(dom) {
@@ -86,16 +92,15 @@ function hslToHex(hue, saturation, lightness) {
 
   const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
   const p = 2 * l - q;
-  const channels = s === 0
-    ? [l, l, l]
-    : [
-        hueToRgb(p, q, h + 1 / 3),
-        hueToRgb(p, q, h),
-        hueToRgb(p, q, h - 1 / 3)
-      ];
+  const channels =
+    s === 0 ? [l, l, l] : [hueToRgb(p, q, h + 1 / 3), hueToRgb(p, q, h), hueToRgb(p, q, h - 1 / 3)];
 
   return `#${channels
-    .map((channel) => Math.round(channel * 255).toString(16).padStart(2, "0"))
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, "0")
+    )
     .join("")
     .toUpperCase()}`;
 }
@@ -140,8 +145,9 @@ export function createActionHandlers({
   }
 
   function trackProductEvent(eventName, routeGroup = null) {
-    return Promise.resolve(apiClient.trackProductEvent?.(eventName, routeGroup) ?? null)
-      .catch(() => null);
+    return Promise.resolve(apiClient.trackProductEvent?.(eventName, routeGroup) ?? null).catch(
+      () => null
+    );
   }
 
   function showFeedback(message, { kind = "info", durationMs = 3600 } = {}) {
@@ -203,7 +209,12 @@ export function createActionHandlers({
     return result;
   }
 
-  async function loginWithPassword({ email, password, turnstileToken = "", selectedTopicId = null } = {}) {
+  async function loginWithPassword({
+    email,
+    password,
+    turnstileToken = "",
+    selectedTopicId = null
+  } = {}) {
     const result = await api.loginWithPassword({
       email,
       password,
@@ -252,7 +263,12 @@ export function createActionHandlers({
     return api.requestPasswordResetCode({ email, turnstileToken });
   }
 
-  async function confirmPasswordReset({ challengeId, code, newPassword, selectedTopicId = null } = {}) {
+  async function confirmPasswordReset({
+    challengeId,
+    code,
+    newPassword,
+    selectedTopicId = null
+  } = {}) {
     const result = await api.confirmPasswordReset({
       challengeId,
       code,
@@ -358,10 +374,10 @@ export function createActionHandlers({
   function requestUserBlock(userId = state.publicProfileUserId) {
     const targetUser = state.users.find((user) => user.id === userId);
     if (
-      !targetUser
-      || targetUser.type !== "registered"
-      || state.viewer?.type !== "registered"
-      || targetUser.id === state.viewer.id
+      !targetUser ||
+      targetUser.type !== "registered" ||
+      state.viewer?.type !== "registered" ||
+      targetUser.id === state.viewer.id
     ) {
       return;
     }
@@ -416,7 +432,9 @@ export function createActionHandlers({
     try {
       const payload = await api.updateBlockedUser(userId, hideContent, state.selectedTopicId);
       dispatch(state, reducers.mergeLiveTopics, payload);
-      showFeedback(hideContent ? "Contenido de la cuenta oculto." : "Contenido de la cuenta visible.");
+      showFeedback(
+        hideContent ? "Contenido de la cuenta oculto." : "Contenido de la cuenta visible."
+      );
       return payload;
     } catch (error) {
       console.error(error);
@@ -460,7 +478,10 @@ export function createActionHandlers({
         if (adminConfirmTimer) {
           clearTimeout(adminConfirmTimer);
         }
-        dispatch(state, reducers.setAdminConfirmAction, { key: confirmKey, until: now + ADMIN_CONFIRM_WINDOW_MS });
+        dispatch(state, reducers.setAdminConfirmAction, {
+          key: confirmKey,
+          until: now + ADMIN_CONFIRM_WINDOW_MS
+        });
         render();
         adminConfirmTimer = setTimeout(() => {
           dispatch(state, reducers.setAdminConfirmAction, null);
@@ -479,7 +500,14 @@ export function createActionHandlers({
     const banHours = actionType === "expel_user" ? "progressive" : null;
 
     try {
-      await api.applyModerationAction(actionType, targetType, targetId, "", state.selectedTopicId, banHours);
+      await api.applyModerationAction(
+        actionType,
+        targetType,
+        targetId,
+        "",
+        state.selectedTopicId,
+        banHours
+      );
       const dashboard = await api.getAdminDashboard();
       dispatch(state, reducers.setAdminDashboard, { ...dashboard, loaded: true });
       showFeedback(ADMIN_ACTION_FEEDBACK[actionType] || "Accion aplicada");
@@ -626,7 +654,10 @@ export function createActionHandlers({
     }
 
     try {
-      const currentPassword = window.prompt("Confirma tu contrasena para eliminar la cuenta. Si usas Google, vuelve a iniciar sesion recientemente.") || "";
+      const currentPassword =
+        window.prompt(
+          "Confirma tu contrasena para eliminar la cuenta. Si usas Google, vuelve a iniciar sesion recientemente."
+        ) || "";
       const payload = await api.deleteAccount(state.selectedTopicId, currentPassword);
       dispatch(state, reducers.mergeLiveTopics, payload);
       dispatch(state, reducers.setSettingsModalOpen, false);
@@ -644,7 +675,6 @@ export function createActionHandlers({
       render();
     }
   }
-
 
   function setProfileNameFeedback(message = "") {
     const normalized = String(message || "").trim();
@@ -690,7 +720,8 @@ export function createActionHandlers({
     const description = dom.profileDescriptionInput?.value?.trim() || "";
     const avatarDataUrl = dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || null;
     const removeAvatar = dom.profileAvatarInput?.dataset?.removeAvatar === "true";
-    const profileShowDescription = dom.profileDescriptionVisibilityButton?.dataset?.visible !== "false";
+    const profileShowDescription =
+      dom.profileDescriptionVisibilityButton?.dataset?.visible !== "false";
     const profileShowJoinedAt = dom.profileJoinedAtVisibilityButton?.dataset?.visible !== "false";
     const socialWhatsapp = dom.socialWhatsappInput?.value?.trim() || "";
     const socialInstagram = dom.socialInstagramInput?.value?.trim() || "";
@@ -728,15 +759,24 @@ export function createActionHandlers({
       dispatch(state, reducers.mergeLiveTopics, payload);
       dispatch(state, reducers.setProfileModalOpen, false);
       if (showSavedFeedback) {
-        showFeedback(avatarDataUrl ? "Perfil actualizado. La foto queda pendiente de revision." : removeAvatar ? "Perfil actualizado. Foto eliminada." : "Perfil actualizado");
+        showFeedback(
+          avatarDataUrl
+            ? "Perfil actualizado. La foto queda pendiente de revision."
+            : removeAvatar
+              ? "Perfil actualizado. Foto eliminada."
+              : "Perfil actualizado"
+        );
       }
       return payload;
     } catch (error) {
       console.error(error);
-      const usernameError = ["NICKNAME_TAKEN", "USERNAME_REQUIRED", "USERNAME_IMMUTABLE"].includes(error?.code);
-      const message = error?.code === "NICKNAME_TAKEN"
-        ? "Ese username no esta disponible."
-        : error?.message || "No se pudo actualizar el perfil.";
+      const usernameError = ["NICKNAME_TAKEN", "USERNAME_REQUIRED", "USERNAME_IMMUTABLE"].includes(
+        error?.code
+      );
+      const message =
+        error?.code === "NICKNAME_TAKEN"
+          ? "Ese username no esta disponible."
+          : error?.message || "No se pudo actualizar el perfil.";
       if (usernameError) {
         setProfileUsernameFeedback(message);
       } else if (error?.code === "VALIDATION_ERROR") {
@@ -756,7 +796,12 @@ export function createActionHandlers({
     }
   }
 
-  async function completeOidcProfile({ username, age = null, acceptedTerms = false, termsVersion = null } = {}) {
+  async function completeOidcProfile({
+    username,
+    age = null,
+    acceptedTerms = false,
+    termsVersion = null
+  } = {}) {
     const payload = await api.updateProfile({
       displayName: username,
       username,
@@ -797,33 +842,34 @@ export function createActionHandlers({
 
     localStorage.setItem("topykly-palette", state.paletteId);
     if (state.paletteId === CUSTOM_PALETTE_ID) {
-      localStorage.setItem("topykly-custom-palette-hex", state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
+      localStorage.setItem(
+        "topykly-custom-palette-hex",
+        state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX
+      );
     }
   }
 
   function syncCustomPaletteControls(hexValue) {
-    const normalized = normalizeHexColor(hexValue, state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
+    const normalized = normalizeHexColor(
+      hexValue,
+      state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX
+    );
     const activeElement = typeof document !== "undefined" ? document.activeElement : null;
 
-    dom.paletteOptionGrid
-      ?.querySelectorAll("[data-custom-palette-hex]")
-      ?.forEach((input) => {
-        if (!isInputLike(input) || input === activeElement) {
-          return;
-        }
+    dom.paletteOptionGrid?.querySelectorAll("[data-custom-palette-hex]")?.forEach((input) => {
+      if (!isInputLike(input) || input === activeElement) {
+        return;
+      }
+      input.value = normalized;
+      input.defaultValue = normalized;
+      input.dataset.lastValid = normalized;
+    });
+
+    dom.paletteOptionGrid?.querySelectorAll("[data-custom-palette-picker]")?.forEach((input) => {
+      if (isInputLike(input) && input !== activeElement) {
         input.value = normalized;
-        input.defaultValue = normalized;
-        input.dataset.lastValid = normalized;
-      });
-
-    dom.paletteOptionGrid
-      ?.querySelectorAll("[data-custom-palette-picker]")
-      ?.forEach((input) => {
-        if (isInputLike(input) && input !== activeElement) {
-          input.value = normalized;
-        }
-      });
-
+      }
+    });
   }
 
   function toggleTheme() {
@@ -897,7 +943,10 @@ export function createActionHandlers({
       return false;
     }
 
-    state.customPaletteHex = normalizeHexColor(parsedHex, state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX);
+    state.customPaletteHex = normalizeHexColor(
+      parsedHex,
+      state.customPaletteHex || DEFAULT_CUSTOM_PALETTE_HEX
+    );
     state.paletteId = CUSTOM_PALETTE_ID;
     applyPalette();
     persistPaletteState();
@@ -939,7 +988,6 @@ export function createActionHandlers({
     }
   }
 
-
   function toggleFriendRequestsPanel(forceOpen = null) {
     const nextOpen = forceOpen === null ? !state.isFriendRequestsPanelOpen : Boolean(forceOpen);
     dispatch(state, reducers.setFriendRequestsPanelOpen, nextOpen);
@@ -973,11 +1021,17 @@ export function createActionHandlers({
       const result = await api.sendFriendRequest(userId, resolveSelectedTopicId());
       dispatch(state, reducers.mergeLiveTopics, result);
       const targetUser = state.users.find((user) => user.id === userId);
-      showFeedback(targetUser?.friendshipStatus === "friend" ? "Amistad aceptada." : "Solicitud de amistad enviada.");
+      showFeedback(
+        targetUser?.friendshipStatus === "friend"
+          ? "Amistad aceptada."
+          : "Solicitud de amistad enviada."
+      );
       render();
       return result;
     } catch (error) {
-      showFeedback(error?.message || "No se pudo enviar la solicitud de amistad.", { kind: "error" });
+      showFeedback(error?.message || "No se pudo enviar la solicitud de amistad.", {
+        kind: "error"
+      });
       return null;
     }
   }
@@ -1013,7 +1067,6 @@ export function createActionHandlers({
     syncResponsiveView,
     render
   });
-
 
   function toggleNotificationsPanel(forceOpen = null) {
     const nextOpen = forceOpen === null ? !state.isNotificationsPanelOpen : Boolean(forceOpen);
@@ -1061,7 +1114,8 @@ export function createActionHandlers({
     if (topicId && (topicId || null) !== previousTopicId) {
       void trackProductEvent("topic_open", "/tema");
       if (state.viewer?.type === "registered" && typeof apiClient.followTopic === "function") {
-        void apiClient.followTopic(topicId, topicId)
+        void apiClient
+          .followTopic(topicId, topicId)
           .then((payload) => {
             dispatch(state, reducers.mergeLiveTopics, payload);
             render();

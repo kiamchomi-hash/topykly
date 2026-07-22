@@ -192,27 +192,35 @@ export function bindPageEvents(dom, handlers) {
   const publicProfileBody = dom.publicProfileModal?.querySelector?.(".public-profile-modal__body");
   if (typeof HTMLElement !== "undefined" && publicProfileBody instanceof HTMLElement) {
     let publicProfileScrollIdleTimer = 0;
-    publicProfileBody.addEventListener("scroll", () => {
-      const indicator = dom.publicProfileScrollIndicator;
-      const maxScrollTop = publicProfileBody.scrollHeight - publicProfileBody.clientHeight;
-      if (!(indicator instanceof HTMLElement) || maxScrollTop <= 0) {
-        return;
-      }
-      const thumbHeight = Math.max(
-        32,
-        Math.round(publicProfileBody.clientHeight * publicProfileBody.clientHeight / publicProfileBody.scrollHeight)
-      );
-      const maxThumbTop = Math.max(0, publicProfileBody.clientHeight - thumbHeight);
-      const thumbTop = publicProfileBody.offsetTop
-        + Math.round(publicProfileBody.scrollTop / maxScrollTop * maxThumbTop);
-      indicator.style.height = `${thumbHeight}px`;
-      indicator.style.transform = `translateY(${thumbTop}px)`;
-      indicator.classList.add("is-visible");
-      clearTimeout(publicProfileScrollIdleTimer);
-      publicProfileScrollIdleTimer = setTimeout(() => {
-        indicator.classList.remove("is-visible");
-      }, 600);
-    }, { passive: true });
+    publicProfileBody.addEventListener(
+      "scroll",
+      () => {
+        const indicator = dom.publicProfileScrollIndicator;
+        const maxScrollTop = publicProfileBody.scrollHeight - publicProfileBody.clientHeight;
+        if (!(indicator instanceof HTMLElement) || maxScrollTop <= 0) {
+          return;
+        }
+        const thumbHeight = Math.max(
+          32,
+          Math.round(
+            (publicProfileBody.clientHeight * publicProfileBody.clientHeight) /
+              publicProfileBody.scrollHeight
+          )
+        );
+        const maxThumbTop = Math.max(0, publicProfileBody.clientHeight - thumbHeight);
+        const thumbTop =
+          publicProfileBody.offsetTop +
+          Math.round((publicProfileBody.scrollTop / maxScrollTop) * maxThumbTop);
+        indicator.style.height = `${thumbHeight}px`;
+        indicator.style.transform = `translateY(${thumbTop}px)`;
+        indicator.classList.add("is-visible");
+        clearTimeout(publicProfileScrollIdleTimer);
+        publicProfileScrollIdleTimer = setTimeout(() => {
+          indicator.classList.remove("is-visible");
+        }, 600);
+      },
+      { passive: true }
+    );
   }
 
   bindTopbarEvents(dom, handlers);
@@ -230,7 +238,10 @@ export function bindPageEvents(dom, handlers) {
 
     const hasClickX = clickPoint && typeof clickPoint.x === "number" && clickPoint.x > 0;
     const anchorX = hasClickX ? clickPoint.x : anchorRect.left;
-    const anchorY = clickPoint && typeof clickPoint.y === "number" && clickPoint.y > 0 ? clickPoint.y : anchorRect.top;
+    const anchorY =
+      clickPoint && typeof clickPoint.y === "number" && clickPoint.y > 0
+        ? clickPoint.y
+        : anchorRect.top;
 
     // Open to the side opposite the click *within the card* so the menu never
     // lands on top of the profile/message buttons at the card's right edge.
@@ -238,10 +249,16 @@ export function bindPageEvents(dom, handlers) {
     // the same side on layouts where the users list sits off-center.)
     const openToLeft = anchorX > anchorRect.left + anchorRect.width / 2;
     let left = openToLeft ? anchorX - menuRect.width - gap : anchorX + gap;
-    left = Math.max(viewportPadding, Math.min(window.innerWidth - menuRect.width - viewportPadding, left));
+    left = Math.max(
+      viewportPadding,
+      Math.min(window.innerWidth - menuRect.width - viewportPadding, left)
+    );
 
     let top = anchorY - menuRect.height / 2;
-    top = Math.max(viewportPadding, Math.min(window.innerHeight - menuRect.height - viewportPadding, top));
+    top = Math.max(
+      viewportPadding,
+      Math.min(window.innerHeight - menuRect.height - viewportPadding, top)
+    );
 
     menu.style.setProperty("--user-menu-left", `${left}px`);
     menu.style.setProperty("--user-menu-top", `${top}px`);
@@ -260,11 +277,13 @@ export function bindPageEvents(dom, handlers) {
         menu.hidden = true;
         menu.style.removeProperty("--user-menu-left");
         menu.style.removeProperty("--user-menu-top");
-        listNode.querySelectorAll(`[data-user-menu-trigger="${menu.dataset.userMenu}"]`).forEach((trigger) => {
-          if (trigger instanceof HTMLElement) {
-            trigger.setAttribute("aria-expanded", "false");
-          }
-        });
+        listNode
+          .querySelectorAll(`[data-user-menu-trigger="${menu.dataset.userMenu}"]`)
+          .forEach((trigger) => {
+            if (trigger instanceof HTMLElement) {
+              trigger.setAttribute("aria-expanded", "false");
+            }
+          });
       });
     });
   }
@@ -303,10 +322,12 @@ export function bindPageEvents(dom, handlers) {
     const actionsEl = userItem.querySelector(".user-item__actions");
     if (actionsEl instanceof HTMLElement) {
       const actionsDeadZoneMargin = 28;
-      const clickX = clickPoint && typeof clickPoint.x === "number" && clickPoint.x > 0 ? clickPoint.x : null;
+      const clickX =
+        clickPoint && typeof clickPoint.x === "number" && clickPoint.x > 0 ? clickPoint.x : null;
       const actionsRect = actionsEl.getBoundingClientRect();
       const insideActionsDeadZone =
-        target.closest(".user-item__actions") || (clickX !== null && clickX >= actionsRect.left - actionsDeadZoneMargin);
+        target.closest(".user-item__actions") ||
+        (clickX !== null && clickX >= actionsRect.left - actionsDeadZoneMargin);
       if (insideActionsDeadZone) {
         closeConnectedUserMenus();
         return true;
@@ -344,8 +365,10 @@ export function bindPageEvents(dom, handlers) {
   bindConnectedUserListEvents(dom.userList);
   bindConnectedUserListEvents(dom.drawerUserList);
 
-
-  if (typeof HTMLElement !== "undefined" && dom.closePublicProfileModalButton instanceof HTMLElement) {
+  if (
+    typeof HTMLElement !== "undefined" &&
+    dom.closePublicProfileModalButton instanceof HTMLElement
+  ) {
     dom.closePublicProfileModalButton.addEventListener("click", () => {
       handlers.closePublicProfileModal?.();
     });
@@ -375,7 +398,10 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
-  if (typeof HTMLElement !== "undefined" && dom.publicProfileCopyLinkButton instanceof HTMLElement) {
+  if (
+    typeof HTMLElement !== "undefined" &&
+    dom.publicProfileCopyLinkButton instanceof HTMLElement
+  ) {
     dom.publicProfileCopyLinkButton.addEventListener("click", async () => {
       const nickname = dom.publicProfileCopyLinkButton.dataset.profileNickname || "";
       if (!nickname) {
@@ -398,7 +424,10 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
-  if (typeof HTMLElement !== "undefined" && dom.publicProfileHideContentToggle instanceof HTMLElement) {
+  if (
+    typeof HTMLElement !== "undefined" &&
+    dom.publicProfileHideContentToggle instanceof HTMLElement
+  ) {
     dom.publicProfileHideContentToggle.addEventListener("click", () => {
       handlers.setPublicProfileBlockHideContent?.(
         dom.publicProfileHideContentToggle.getAttribute("aria-checked") !== "true"
@@ -406,22 +435,30 @@ export function bindPageEvents(dom, handlers) {
     });
   }
 
-  if (typeof HTMLElement !== "undefined" && dom.publicProfileBlockCancelButton instanceof HTMLElement) {
-    dom.publicProfileBlockCancelButton.addEventListener("click", () => handlers.cancelUserBlock?.());
+  if (
+    typeof HTMLElement !== "undefined" &&
+    dom.publicProfileBlockCancelButton instanceof HTMLElement
+  ) {
+    dom.publicProfileBlockCancelButton.addEventListener("click", () =>
+      handlers.cancelUserBlock?.()
+    );
   }
 
-  if (typeof HTMLElement !== "undefined" && dom.publicProfileBlockConfirmButton instanceof HTMLElement) {
+  if (
+    typeof HTMLElement !== "undefined" &&
+    dom.publicProfileBlockConfirmButton instanceof HTMLElement
+  ) {
     dom.publicProfileBlockConfirmButton.addEventListener("click", () => {
       const userId = dom.publicProfileBlockConfirmButton.dataset.blockedUserId || "";
       if (dom.publicProfileBlockConfirmButton.dataset.blockAction === "unblock") {
         void handlers.unblockUser?.(userId);
         return;
       }
-      const hideContent = dom.publicProfileHideContentToggle?.getAttribute?.("aria-checked") !== "false";
+      const hideContent =
+        dom.publicProfileHideContentToggle?.getAttribute?.("aria-checked") !== "false";
       void handlers.blockUser?.(userId, hideContent);
     });
   }
-
 
   if (typeof HTMLElement !== "undefined" && dom.publicProfileRecentCafes instanceof HTMLElement) {
     dom.publicProfileRecentCafes.addEventListener("click", (event) => {
@@ -480,24 +517,27 @@ export function bindPageEvents(dom, handlers) {
       }
     });
 
-    dom.friendRequestsPanel.addEventListener("scroll", (event) => {
-      const list = event.target;
-      if (list instanceof HTMLElement && list.classList.contains("friend-request-panel__list")) {
-        if (list.scrollHeight - list.scrollTop - list.clientHeight < 20) {
-          handlers.loadMoreFriendRequests?.();
+    dom.friendRequestsPanel.addEventListener(
+      "scroll",
+      (event) => {
+        const list = event.target;
+        if (list instanceof HTMLElement && list.classList.contains("friend-request-panel__list")) {
+          if (list.scrollHeight - list.scrollTop - list.clientHeight < 20) {
+            handlers.loadMoreFriendRequests?.();
+          }
         }
-      }
-    }, true);
+      },
+      true
+    );
   }
   if (typeof HTMLFormElement !== "undefined" && dom.messageForm instanceof HTMLFormElement) {
     dom.messageForm.addEventListener("submit", handlers.submitMessage);
   }
-if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTMLElement) {
+  if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTMLElement) {
     dom.notificationToasts.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) {
         return;
       }
-
 
       const closeNotificationsTarget = event.target.closest("[data-close-notifications]");
       if (closeNotificationsTarget instanceof HTMLElement) {
@@ -519,9 +559,15 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
       }
     });
   }
-  if (typeof HTMLTextAreaElement !== "undefined" && dom.messageInput instanceof HTMLTextAreaElement) {
+  if (
+    typeof HTMLTextAreaElement !== "undefined" &&
+    dom.messageInput instanceof HTMLTextAreaElement
+  ) {
     dom.messageInput.addEventListener("beforeinput", (event) => {
-      if (shouldBlockTextareaInput(dom.messageInput, event) || shouldBlockQuoteEdit(dom.messageInput, event)) {
+      if (
+        shouldBlockTextareaInput(dom.messageInput, event) ||
+        shouldBlockQuoteEdit(dom.messageInput, event)
+      ) {
         event.preventDefault();
       }
     });
@@ -556,7 +602,9 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
   }
 
   function getMessageActionMenuBody(menu) {
-    const trigger = dom.messageStream?.querySelector(`[data-message-menu-trigger="${menu.dataset.messageMenu}"]`);
+    const trigger = dom.messageStream?.querySelector(
+      `[data-message-menu-trigger="${menu.dataset.messageMenu}"]`
+    );
     const message = trigger instanceof HTMLElement ? trigger.closest(".message") : null;
     const body = message instanceof HTMLElement ? message.querySelector(".message__body") : null;
     return body instanceof HTMLElement ? body : null;
@@ -598,7 +646,9 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
       }
       menu.hidden = true;
       restoreMessageActionMenu(menu);
-      const trigger = dom.messageStream.querySelector(`[data-message-menu-trigger="${menu.dataset.messageMenu}"]`);
+      const trigger = dom.messageStream.querySelector(
+        `[data-message-menu-trigger="${menu.dataset.messageMenu}"]`
+      );
       if (trigger instanceof HTMLElement) {
         trigger.setAttribute("aria-expanded", "false");
       }
@@ -615,7 +665,9 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
         return;
       }
       menu.hidden = true;
-      const trigger = dom.messageStream.querySelector(`[data-message-reaction-trigger="${menu.dataset.messageReactionMenu}"]`);
+      const trigger = dom.messageStream.querySelector(
+        `[data-message-reaction-trigger="${menu.dataset.messageReactionMenu}"]`
+      );
       if (trigger instanceof HTMLElement) {
         trigger.setAttribute("aria-expanded", "false");
       }
@@ -631,7 +683,10 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
     if (profileTrigger instanceof HTMLElement) {
       closeMessageReactionMenus();
       closeMessageActionMenus();
-      handlers.activateConnectedUser?.(profileTrigger.dataset.messageProfileAuthorId || "", "profile");
+      handlers.activateConnectedUser?.(
+        profileTrigger.dataset.messageProfileAuthorId || "",
+        "profile"
+      );
       return true;
     }
 
@@ -639,7 +694,9 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
     if (likeTrigger instanceof HTMLElement) {
       closeMessageReactionMenus();
       closeMessageActionMenus();
-      handlers.toggleMessageLike?.(likeTrigger.dataset.likeMessageId || "", { trigger: likeTrigger });
+      handlers.toggleMessageLike?.(likeTrigger.dataset.likeMessageId || "", {
+        trigger: likeTrigger
+      });
       return true;
     }
 
@@ -647,7 +704,9 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
     if (dislikeTrigger instanceof HTMLElement) {
       closeMessageReactionMenus();
       closeMessageActionMenus();
-      handlers.toggleMessageDislike?.(dislikeTrigger.dataset.dislikeMessageId || "", { trigger: dislikeTrigger });
+      handlers.toggleMessageDislike?.(dislikeTrigger.dataset.dislikeMessageId || "", {
+        trigger: dislikeTrigger
+      });
       return true;
     }
 
@@ -737,7 +796,10 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
     }
 
     const insideMessageActionMenu = event.target.closest("[data-message-menu]");
-    if (insideMessageActionMenu instanceof HTMLElement && dispatchMessageActionClick(event.target)) {
+    if (
+      insideMessageActionMenu instanceof HTMLElement &&
+      dispatchMessageActionClick(event.target)
+    ) {
       return;
     }
 
@@ -758,54 +820,58 @@ if (typeof HTMLElement !== "undefined" && dom.notificationToasts instanceof HTML
       handlers.toggleNotificationsPanel?.(false);
     }
   });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Tab") {
-      const focusTrapContainer = getActiveFocusTrapContainer(dom);
-      if (!focusTrapContainer) {
-        return;
-      }
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Tab") {
+        const focusTrapContainer = getActiveFocusTrapContainer(dom);
+        if (!focusTrapContainer) {
+          return;
+        }
 
-      const focusableElements = getFocusableElements(focusTrapContainer);
-      if (!focusableElements.length) {
-        event.preventDefault();
-        focusTrapContainer.focus?.();
-        return;
-      }
-
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement;
-
-      if (event.shiftKey) {
-        if (activeElement === firstElement || !focusTrapContainer.contains(activeElement)) {
+        const focusableElements = getFocusableElements(focusTrapContainer);
+        if (!focusableElements.length) {
           event.preventDefault();
-          lastElement.focus();
+          focusTrapContainer.focus?.();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        const activeElement = document.activeElement;
+
+        if (event.shiftKey) {
+          if (activeElement === firstElement || !focusTrapContainer.contains(activeElement)) {
+            event.preventDefault();
+            lastElement.focus();
+          }
+          return;
+        }
+
+        if (activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
         }
         return;
       }
 
-      if (activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
+      if (event.key !== "Escape") {
+        return;
       }
-      return;
-    }
 
-    if (event.key !== "Escape") {
-      return;
-    }
+      const picker = document.querySelector(".clr-picker");
+      const pickerIsOpen = picker instanceof HTMLElement && picker.classList.contains("clr-open");
+      if (!pickerIsOpen || typeof globalThis.Coloris?.close !== "function") {
+        return;
+      }
 
-    const picker = document.querySelector(".clr-picker");
-    const pickerIsOpen = picker instanceof HTMLElement && picker.classList.contains("clr-open");
-    if (!pickerIsOpen || typeof globalThis.Coloris?.close !== "function") {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopImmediatePropagation?.();
-    event.stopPropagation?.();
-    globalThis.Coloris.close();
-  }, true);
+      event.preventDefault();
+      event.stopImmediatePropagation?.();
+      event.stopPropagation?.();
+      globalThis.Coloris.close();
+    },
+    true
+  );
 
   window.addEventListener("keydown", (event) => {
     if (event.defaultPrevented) {

@@ -62,9 +62,12 @@ export function renderRankings(state, dom) {
     );
     renderIntoTargets([dom.rankingList], "scroll-list ranking-list", () => []);
   } else {
-    const backendRankings = state.rankings?.[state.rankingScope]?.[activeRankingStep.type]?.[activeRankingStep.metric] ?? null;
-    const rankings = backendRankings ?? (
-      state.rankingScope === "topic" || activeRankingStep.type === "users"
+    const backendRankings =
+      state.rankings?.[state.rankingScope]?.[activeRankingStep.type]?.[activeRankingStep.metric] ??
+      null;
+    const rankings =
+      backendRankings ??
+      (state.rankingScope === "topic" || activeRankingStep.type === "users"
         ? buildUserRankingEntries(
             state.topics,
             state.users,
@@ -80,8 +83,7 @@ export function renderRankings(state, dom) {
             activeRankingStep.metric,
             state.selectedTopicId,
             state.rankingScope
-          )
-    );
+          ));
 
     showRankingList(dom);
     renderRankingTarget(
@@ -112,12 +114,27 @@ export function renderRankings(state, dom) {
 
     // A. Render Global List
     const globalStep = getScopeActiveRankingStep(state, "global");
-    const globalBackend = state.rankings?.["global"]?.[globalStep.type]?.[globalStep.metric] ?? null;
-    const globalRankings = globalBackend ?? (
-      globalStep.type === "users"
-        ? buildUserRankingEntries(state.topics, state.users, state.currentUserId, globalStep.metric, state.selectedTopicId, "global")
-        : buildPostRankingEntries(state.topics, state.users, state.currentUserId, globalStep.metric, state.selectedTopicId, "global")
-    );
+    const globalBackend =
+      state.rankings?.["global"]?.[globalStep.type]?.[globalStep.metric] ?? null;
+    const globalRankings =
+      globalBackend ??
+      (globalStep.type === "users"
+        ? buildUserRankingEntries(
+            state.topics,
+            state.users,
+            state.currentUserId,
+            globalStep.metric,
+            state.selectedTopicId,
+            "global"
+          )
+        : buildPostRankingEntries(
+            state.topics,
+            state.users,
+            state.currentUserId,
+            globalStep.metric,
+            state.selectedTopicId,
+            "global"
+          ));
     dom.drawerGlobalRankingList.hidden = false;
     renderRankingTarget(
       dom.drawerGlobalRankingList,
@@ -139,14 +156,28 @@ export function renderRankings(state, dom) {
 
     const topicStep = getScopeActiveRankingStep(state, "topic");
     const topicBackend = hasTopic
-      ? state.rankings?.["topic"]?.[topicStep.type]?.[topicStep.metric] ?? null
+      ? (state.rankings?.["topic"]?.[topicStep.type]?.[topicStep.metric] ?? null)
       : null;
     if (hasTopic) {
-      const topicRankings = topicBackend ?? (
-        topicStep.type === "users"
-          ? buildUserRankingEntries(state.topics, state.users, state.currentUserId, topicStep.metric, state.selectedTopicId, "topic")
-          : buildPostRankingEntries(state.topics, state.users, state.currentUserId, topicStep.metric, state.selectedTopicId, "topic")
-      );
+      const topicRankings =
+        topicBackend ??
+        (topicStep.type === "users"
+          ? buildUserRankingEntries(
+              state.topics,
+              state.users,
+              state.currentUserId,
+              topicStep.metric,
+              state.selectedTopicId,
+              "topic"
+            )
+          : buildPostRankingEntries(
+              state.topics,
+              state.users,
+              state.currentUserId,
+              topicStep.metric,
+              state.selectedTopicId,
+              "topic"
+            ));
       renderRankingTarget(
         dom.drawerTopicRankingList,
         "scroll-list ranking-list",
@@ -173,7 +204,10 @@ export function renderRankings(state, dom) {
       }
     }
 
-    const activeTopic = hasTopic ? state.topics.byId?.[state.selectedTopicId] ?? state.topics.find?.((topic) => topic.id === state.selectedTopicId) : null;
+    const activeTopic = hasTopic
+      ? (state.topics.byId?.[state.selectedTopicId] ??
+        state.topics.find?.((topic) => topic.id === state.selectedTopicId))
+      : null;
     const titleEl = document.getElementById("drawerTopicRankingTitle");
     if (titleEl) {
       titleEl.textContent = activeTopic ? `Tema: ${activeTopic.title}` : "Tema";
@@ -229,9 +263,11 @@ function getRankingFadeKey(scope, step) {
 }
 
 function prefersReducedMotion() {
-  return typeof window !== "undefined"
-    && typeof window.matchMedia === "function"
-    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 function scheduleAnimationFrame(callback) {

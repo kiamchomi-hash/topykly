@@ -1,4 +1,9 @@
-import { getActiveRankingIndex, getActiveRankingStep, getRankingSteps, getScopeActiveRankingStep } from "../ranking-state.js";
+import {
+  getActiveRankingIndex,
+  getActiveRankingStep,
+  getRankingSteps,
+  getScopeActiveRankingStep
+} from "../ranking-state.js";
 import { getMetricIcon } from "./ranking-icons.js";
 
 const GLOBAL_MODE_LABELS = {

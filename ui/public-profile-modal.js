@@ -40,10 +40,14 @@ function getRecentUserCafes(topics, userId) {
     .map((topic, index) => ({
       topic,
       index,
-      timestamp: Date.parse(topic.createdAt || topic.lastActivityAt || topic.messages?.[0]?.createdAt || "")
+      timestamp: Date.parse(
+        topic.createdAt || topic.lastActivityAt || topic.messages?.[0]?.createdAt || ""
+      )
     }))
     .sort((a, b) => {
-      const timeDelta = (Number.isNaN(b.timestamp) ? 0 : b.timestamp) - (Number.isNaN(a.timestamp) ? 0 : a.timestamp);
+      const timeDelta =
+        (Number.isNaN(b.timestamp) ? 0 : b.timestamp) -
+        (Number.isNaN(a.timestamp) ? 0 : a.timestamp);
       return timeDelta || a.index - b.index;
     })
     .slice(0, 3)
@@ -103,7 +107,9 @@ function syncPublicProfileBlockActions(state, dom, user, { isGuest, isCurrentUse
     dom.publicProfileBlockCancelButton.disabled = pending;
   }
   if (dom.publicProfileBlockConfirmButton) {
-    dom.publicProfileBlockConfirmButton.textContent = isUnblocking ? "Desbloquear cuenta" : "Bloquear cuenta";
+    dom.publicProfileBlockConfirmButton.textContent = isUnblocking
+      ? "Desbloquear cuenta"
+      : "Bloquear cuenta";
     dom.publicProfileBlockConfirmButton.disabled = pending;
     dom.publicProfileBlockConfirmButton.setAttribute("aria-busy", String(pending));
     dom.publicProfileBlockConfirmButton.dataset.blockAction = isUnblocking ? "unblock" : "block";
@@ -166,7 +172,9 @@ export function renderPublicProfileModal(state, dom) {
     if (dom.publicProfileJoinedAt) {
       dom.publicProfileJoinedAt.hidden = true;
       dom.publicProfileJoinedAt.textContent = "";
-      const joinedAtContainer = dom.publicProfileJoinedAt.closest?.(".public-profile-modal__joined-wrap");
+      const joinedAtContainer = dom.publicProfileJoinedAt.closest?.(
+        ".public-profile-modal__joined-wrap"
+      );
       if (joinedAtContainer) {
         joinedAtContainer.hidden = true;
       }
@@ -182,18 +190,25 @@ export function renderPublicProfileModal(state, dom) {
     return;
   }
 
-  const publicAvatarUrl = isCurrentUser ? user.avatarPendingUrl || user.avatarUrl || "" : user.avatarUrl || "";
+  const publicAvatarUrl = isCurrentUser
+    ? user.avatarPendingUrl || user.avatarUrl || ""
+    : user.avatarUrl || "";
   if (dom.publicProfileAvatar) {
     dom.publicProfileAvatar.hidden = false;
   }
   setPublicProfileAvatar(dom.publicProfileAvatar, publicAvatarUrl);
 
-  const joinedDate = user.profileShowJoinedAt === false ? [] : formatJoinedDateParts(user.createdAt);
-  const description = user.profileShowDescription === false ? "" : String(user.description || "").trim();
+  const joinedDate =
+    user.profileShowJoinedAt === false ? [] : formatJoinedDateParts(user.createdAt);
+  const description =
+    user.profileShowDescription === false ? "" : String(user.description || "").trim();
 
   if (dom.publicProfileDescription) {
     dom.publicProfileDescription.textContent = description || "Sin descripción";
-    dom.publicProfileDescription.classList.toggle("public-profile-modal__description--empty", !description);
+    dom.publicProfileDescription.classList.toggle(
+      "public-profile-modal__description--empty",
+      !description
+    );
   }
   if (dom.publicProfileMeta) {
     dom.publicProfileMeta.hidden = false;
@@ -209,7 +224,9 @@ export function renderPublicProfileModal(state, dom) {
       });
     }
     dom.publicProfileJoinedAt.hidden = !joinedDate.length;
-    const joinedAtContainer = dom.publicProfileJoinedAt.closest?.(".public-profile-modal__joined-wrap");
+    const joinedAtContainer = dom.publicProfileJoinedAt.closest?.(
+      ".public-profile-modal__joined-wrap"
+    );
     if (joinedAtContainer) {
       joinedAtContainer.hidden = !joinedDate.length;
     }
@@ -218,9 +235,10 @@ export function renderPublicProfileModal(state, dom) {
   if (dom.publicProfileSocial) {
     const showSocial = user.profileShowSocial !== false;
     const socialEntries = showSocial
-      ? SOCIAL_PLATFORMS
-          .map((platform) => ({ platform, handle: String(user[`social${capitalize(platform)}`] || "").trim() }))
-          .filter((entry) => entry.handle)
+      ? SOCIAL_PLATFORMS.map((platform) => ({
+          platform,
+          handle: String(user[`social${capitalize(platform)}`] || "").trim()
+        })).filter((entry) => entry.handle)
       : [];
     dom.publicProfileSocial.textContent = "";
     dom.publicProfileSocial.hidden = !showSocial;
@@ -270,5 +288,4 @@ export function renderPublicProfileModal(state, dom) {
       dom.publicProfileRecentCafes.append(title, list);
     }
   }
-
 }

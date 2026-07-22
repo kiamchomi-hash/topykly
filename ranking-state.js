@@ -29,7 +29,10 @@ export function setStoredRankingIndex(state, index, scope = state.rankingScope) 
 }
 
 export function getActiveRankingIndex(state) {
-  return normalizeRankingIndex(getStoredRankingIndex(state), getRankingSteps(state.rankingScope).length);
+  return normalizeRankingIndex(
+    getStoredRankingIndex(state),
+    getRankingSteps(state.rankingScope).length
+  );
 }
 
 export function getActiveRankingStep(state) {

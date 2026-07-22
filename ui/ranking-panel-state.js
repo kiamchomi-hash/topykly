@@ -23,7 +23,12 @@ export function showRankingEmpty(dom, emptyHtml) {
 }
 
 export function resetRankingScroll(dom) {
-  [dom.rankingList, dom.drawerRankingList, dom.drawerGlobalRankingList, dom.drawerTopicRankingList].forEach(list => {
+  [
+    dom.rankingList,
+    dom.drawerRankingList,
+    dom.drawerGlobalRankingList,
+    dom.drawerTopicRankingList
+  ].forEach((list) => {
     if (list) {
       list.scrollTop = 0;
     }
@@ -108,7 +113,12 @@ export function syncRankingListHeights(dom) {
 }
 
 export function clearRankingListHeights(dom) {
-  [dom.rankingList, dom.drawerRankingList, dom.drawerGlobalRankingList, dom.drawerTopicRankingList].forEach((list) => {
+  [
+    dom.rankingList,
+    dom.drawerRankingList,
+    dom.drawerGlobalRankingList,
+    dom.drawerTopicRankingList
+  ].forEach((list) => {
     if (!list) {
       return;
     }
@@ -143,7 +153,7 @@ export function showRankingList(dom) {
     dom.drawerRankingsSection.classList.remove("is-empty");
     dom.drawerRankingsSection.classList.remove("is-loading");
   }
-  [dom.rankingList, dom.drawerRankingList].forEach(list => {
+  [dom.rankingList, dom.drawerRankingList].forEach((list) => {
     if (list) {
       list.hidden = false;
     }
@@ -170,7 +180,7 @@ export function showRankingLoading(dom) {
     dom.drawerRankingsSection.classList.add("is-loading");
   }
   clearRankingListHeights(dom);
-  [dom.rankingList, dom.drawerRankingList].forEach(list => {
+  [dom.rankingList, dom.drawerRankingList].forEach((list) => {
     if (list) {
       list.hidden = true;
     }

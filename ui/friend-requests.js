@@ -6,11 +6,13 @@ function createLazyMascot(className) {
   placeholder.className = `topykly-mascot ${className}`;
   placeholder.setAttribute("aria-hidden", "true");
 
-  void import("./mascot.js?v=20260716-quality1").then(({ createTopyklyMascot }) => {
-    placeholder.replaceWith?.(createTopyklyMascot(className, documentRef));
-  }).catch(() => {
-    placeholder.remove?.();
-  });
+  void import("./mascot.js?v=20260716-quality1")
+    .then(({ createTopyklyMascot }) => {
+      placeholder.replaceWith?.(createTopyklyMascot(className, documentRef));
+    })
+    .catch(() => {
+      placeholder.remove?.();
+    });
 
   return placeholder;
 }
@@ -30,7 +32,11 @@ function createFriendAvatar(user) {
     return avatar;
   }
 
-  avatar.textContent = String(user.name || "?").trim().slice(0, 1).toUpperCase() || "?";
+  avatar.textContent =
+    String(user.name || "?")
+      .trim()
+      .slice(0, 1)
+      .toUpperCase() || "?";
   return avatar;
 }
 
@@ -186,7 +192,6 @@ function createSection(title, items, renderRow, emptyState) {
   return section;
 }
 
-
 function positionFriendRequestsPanel(panel, button) {
   if (!panel || !button || typeof window === "undefined") {
     return;
@@ -231,7 +236,10 @@ function syncFriendRequestsButton(state, dom) {
     delete button.dataset.pendingFriends;
   }
   button.setAttribute("aria-expanded", String(Boolean(state.isFriendRequestsPanelOpen)));
-  button.setAttribute("title", incomingCount ? `${incomingCount} solicitudes pendientes` : "Solicitudes de amistad");
+  button.setAttribute(
+    "title",
+    incomingCount ? `${incomingCount} solicitudes pendientes` : "Solicitudes de amistad"
+  );
 }
 
 export function renderFriendRequests(state, dom) {
@@ -271,7 +279,12 @@ export function renderFriendRequests(state, dom) {
   tabsContainer.dataset.id = "tabs";
 
   const tabsData = [
-    { id: "incoming", label: "Recibidas", count: friendships.incoming?.length || 0, isIncoming: true },
+    {
+      id: "incoming",
+      label: "Recibidas",
+      count: friendships.incoming?.length || 0,
+      isIncoming: true
+    },
     { id: "outgoing", label: "Enviadas", count: friendships.outgoing?.length || 0 },
     { id: "friends", label: "Amigos", count: friendships.friends?.length || 0 }
   ];
@@ -301,10 +314,11 @@ export function renderFriendRequests(state, dom) {
     activeSection = createSection(
       "Solicitudes recibidas",
       (friendships.incoming || []).slice(0, limit),
-      (user) => createFriendRow(user, [
-        { kind: "accept", label: "Aceptar" },
-        { kind: "reject", label: "Rechazar" }
-      ]),
+      (user) =>
+        createFriendRow(user, [
+          { kind: "accept", label: "Aceptar" },
+          { kind: "reject", label: "Rechazar" }
+        ]),
       {
         title: "No hay solicitudes pendientes"
       }

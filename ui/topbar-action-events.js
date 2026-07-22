@@ -1,7 +1,15 @@
 import { CUSTOM_PALETTE_ID } from "../palettes.js";
-import { resetSocialEditing, setProfileSectionEditing, setSocialFieldEditing } from "./profile-edit-state.js";
+import {
+  resetSocialEditing,
+  setProfileSectionEditing,
+  setSocialFieldEditing
+} from "./profile-edit-state.js";
 import { dispatch, reducers } from "../store-logic.js?v=20260709-topicrace1";
-import { computeAgeFromBirthdateParts, MINIMUM_REGISTRATION_AGE, populateBirthYearOptions } from "./date-utils.js";
+import {
+  computeAgeFromBirthdateParts,
+  MINIMUM_REGISTRATION_AGE,
+  populateBirthYearOptions
+} from "./date-utils.js";
 const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 const PROFILE_AVATAR_CROP_SIZE = 1024;
@@ -130,7 +138,9 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
     try {
-      const saved = JSON.parse(globalThis.localStorage?.getItem?.(MOBILE_NOTIFICATIONS_POSITION_KEY) || "null");
+      const saved = JSON.parse(
+        globalThis.localStorage?.getItem?.(MOBILE_NOTIFICATIONS_POSITION_KEY) || "null"
+      );
       if (!Number.isFinite(saved?.x) || !Number.isFinite(saved?.y)) {
         return;
       }
@@ -146,7 +156,12 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   function beginNotificationsButtonDrag(event) {
     const button = dom.notificationsButton;
-    if (!button || !isMobileNotificationsLayout() || (event.button ?? 0) !== 0 || event.isPrimary === false) {
+    if (
+      !button ||
+      !isMobileNotificationsLayout() ||
+      (event.button ?? 0) !== 0 ||
+      event.isPrimary === false
+    ) {
       return;
     }
     const rect = button.getBoundingClientRect?.();
@@ -167,7 +182,11 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   function moveNotificationsButton(event) {
     const button = dom.notificationsButton;
-    if (!button || !notificationsDragState || event.pointerId !== notificationsDragState.pointerId) {
+    if (
+      !button ||
+      !notificationsDragState ||
+      event.pointerId !== notificationsDragState.pointerId
+    ) {
       return;
     }
     const deltaX = event.clientX - notificationsDragState.startX;
@@ -189,7 +208,11 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   function finishNotificationsButtonDrag(event) {
     const button = dom.notificationsButton;
-    if (!button || !notificationsDragState || event.pointerId !== notificationsDragState.pointerId) {
+    if (
+      !button ||
+      !notificationsDragState ||
+      event.pointerId !== notificationsDragState.pointerId
+    ) {
       return;
     }
     button.releasePointerCapture?.(event.pointerId);
@@ -222,10 +245,12 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function isFocusableTarget(node) {
-    return node instanceof HTMLElement
-      && !node.hidden
-      && node.getAttribute?.("aria-hidden") !== "true"
-      && !node.classList?.contains?.("is-search-hidden");
+    return (
+      node instanceof HTMLElement &&
+      !node.hidden &&
+      node.getAttribute?.("aria-hidden") !== "true" &&
+      !node.classList?.contains?.("is-search-hidden")
+    );
   }
 
   function focusNode(node) {
@@ -255,9 +280,11 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function isMobileViewport() {
-    return typeof window !== "undefined"
-      && typeof window.matchMedia === "function"
-      && window.matchMedia("(max-width: 960px)").matches;
+    return (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 960px)").matches
+    );
   }
 
   function isLoggedIn() {
@@ -270,7 +297,9 @@ export function bindTopbarActionEvents(dom, handlers) {
 
   function applyDocumentAuthState() {
     const authState = handlers.state?.viewer
-      ? (isLoggedIn() ? "logged-in" : "logged-out")
+      ? isLoggedIn()
+        ? "logged-in"
+        : "logged-out"
       : "pending";
     if (typeof document === "undefined") {
       return authState;
@@ -286,7 +315,8 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    const avatarUrl = handlers.state?.viewer?.avatarPendingUrl || handlers.state?.viewer?.avatarUrl || "";
+    const avatarUrl =
+      handlers.state?.viewer?.avatarPendingUrl || handlers.state?.viewer?.avatarUrl || "";
     if (avatar.dataset.avatarUrl === avatarUrl) {
       return;
     }
@@ -420,7 +450,9 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    const committedHex = sanitizeHexDraft(pickerInput.dataset.committedHex || pickerInput.defaultValue || pickerInput.value);
+    const committedHex = sanitizeHexDraft(
+      pickerInput.dataset.committedHex || pickerInput.defaultValue || pickerInput.value
+    );
     const livePickerField = document.querySelector("#clr-color-value");
     const draftHex = sanitizeHexDraft(
       livePickerField instanceof HTMLInputElement && livePickerField.value
@@ -468,7 +500,10 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function bindPickerLifecycle(pickerInput) {
-    if (!(pickerInput instanceof HTMLInputElement) || pickerInput.dataset.pickerLifecycleBound === "true") {
+    if (
+      !(pickerInput instanceof HTMLInputElement) ||
+      pickerInput.dataset.pickerLifecycleBound === "true"
+    ) {
       return;
     }
 
@@ -557,10 +592,13 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function isCustomPickerEventTarget(target) {
-    return target instanceof Element && Boolean(
-      target.closest(".clr-picker") ||
+    return (
+      target instanceof Element &&
+      Boolean(
+        target.closest(".clr-picker") ||
         target.closest("[data-open-custom-palette-picker]") ||
         target.closest("[data-custom-palette-hex]")
+      )
     );
   }
   function dismissPaletteModal() {
@@ -606,13 +644,11 @@ export function bindTopbarActionEvents(dom, handlers) {
       dom.drawerRankingsSection.hidden = panelName !== "ranking";
     }
 
-    dom.mobileTopbarMenu
-      ?.querySelectorAll?.("[data-mobile-drawer-panel]")
-      ?.forEach((button) => {
-        const isActive = button.dataset.mobileDrawerPanel === panelName;
-        button.setAttribute("aria-pressed", String(isActive));
-        button.classList?.toggle?.("is-active", isActive);
-      });
+    dom.mobileTopbarMenu?.querySelectorAll?.("[data-mobile-drawer-panel]")?.forEach((button) => {
+      const isActive = button.dataset.mobileDrawerPanel === panelName;
+      button.setAttribute("aria-pressed", String(isActive));
+      button.classList?.toggle?.("is-active", isActive);
+    });
 
     syncMobileMenuSearch();
 
@@ -637,9 +673,8 @@ export function bindTopbarActionEvents(dom, handlers) {
   function syncMobileMenuSearch() {
     const searchInput = getMobileMenuSearchInput();
     const buttons = dom.mobileTopbarMenu?.querySelectorAll?.(".drawer-action-button") ?? [];
-    const query = typeof searchInput?.value === "string"
-      ? searchInput.value.trim().toLowerCase()
-      : "";
+    const query =
+      typeof searchInput?.value === "string" ? searchInput.value.trim().toLowerCase() : "";
 
     buttons.forEach((button) => {
       if (!(button instanceof HTMLElement)) {
@@ -868,12 +903,20 @@ export function bindTopbarActionEvents(dom, handlers) {
     });
   }
 
-  function setAuthButtonPending(button, pending, pendingText = "Verificando...", { preserveLabel = false } = {}) {
+  function setAuthButtonPending(
+    button,
+    pending,
+    pendingText = "Verificando...",
+    { preserveLabel = false } = {}
+  ) {
     if (!button) {
       return;
     }
 
-    const label = button.querySelector?.("[data-auth-button-label]") ?? button.querySelector?.("span:last-child") ?? button;
+    const label =
+      button.querySelector?.("[data-auth-button-label]") ??
+      button.querySelector?.("span:last-child") ??
+      button;
     if (label && !button.dataset.defaultAuthLabel) {
       button.dataset.defaultAuthLabel = label.textContent || "";
     }
@@ -887,7 +930,9 @@ export function bindTopbarActionEvents(dom, handlers) {
     button.setAttribute("aria-busy", String(pending));
     button.classList?.toggle?.("is-pending", pending);
     if (label && !preserveLabel) {
-      label.textContent = pending ? pendingText : button.dataset.defaultAuthLabel || label.textContent;
+      label.textContent = pending
+        ? pendingText
+        : button.dataset.defaultAuthLabel || label.textContent;
     }
   }
 
@@ -986,12 +1031,17 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    dom.authCodeInput.value = getAuthCodeBoxes().map((box) => box.value || "").join("");
+    dom.authCodeInput.value = getAuthCodeBoxes()
+      .map((box) => box.value || "")
+      .join("");
     dom.authCodeInput.dispatchEvent?.(new Event("input", { bubbles: true }));
   }
 
   function setAuthCodeBoxesValue(value) {
-    const digits = String(value || "").replace(/\D/g, "").slice(0, 6).split("");
+    const digits = String(value || "")
+      .replace(/\D/g, "")
+      .slice(0, 6)
+      .split("");
     getAuthCodeBoxes().forEach((box, index) => {
       box.value = digits[index] || "";
     });
@@ -1014,9 +1064,8 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
 
     input.setAttribute?.("aria-invalid", String(Boolean(isInvalid)));
-    const field = typeof input.closest === "function"
-      ? input.closest(".auth-email-form__field")
-      : null;
+    const field =
+      typeof input.closest === "function" ? input.closest(".auth-email-form__field") : null;
     field?.classList?.toggle?.("is-invalid", Boolean(isInvalid));
   }
 
@@ -1048,7 +1097,14 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function resetAuthFieldValidation() {
-    [dom.authNicknameInput, dom.authEmailInput, dom.authAgeInput, dom.authCodeInput, dom.authPasswordInput, dom.authPasswordConfirmInput].forEach((input) => {
+    [
+      dom.authNicknameInput,
+      dom.authEmailInput,
+      dom.authAgeInput,
+      dom.authCodeInput,
+      dom.authPasswordInput,
+      dom.authPasswordConfirmInput
+    ].forEach((input) => {
       setAuthFieldInvalid(input, false);
     });
     setAuthTermsInvalid(false);
@@ -1061,14 +1117,16 @@ export function bindTopbarActionEvents(dom, handlers) {
     const message = String(error?.message || "").toLowerCase();
     let marked = false;
 
-    if ([
-      "INVALID_EMAIL_CODE",
-      "EMAIL_CODE_EXPIRED",
-      "EMAIL_CODE_ATTEMPTS_EXCEEDED",
-      "INVALID_PASSWORD_RESET_CODE",
-      "PASSWORD_RESET_CODE_EXPIRED",
-      "PASSWORD_RESET_ATTEMPTS_EXCEEDED"
-    ].includes(code)) {
+    if (
+      [
+        "INVALID_EMAIL_CODE",
+        "EMAIL_CODE_EXPIRED",
+        "EMAIL_CODE_ATTEMPTS_EXCEEDED",
+        "INVALID_PASSWORD_RESET_CODE",
+        "PASSWORD_RESET_CODE_EXPIRED",
+        "PASSWORD_RESET_ATTEMPTS_EXCEEDED"
+      ].includes(code)
+    ) {
       setAuthFieldInvalid(dom.authCodeInput, true);
       return;
     }
@@ -1222,7 +1280,8 @@ export function bindTopbarActionEvents(dom, handlers) {
       }
 
       if (nicknameInvalid) {
-        authValidationMessage = "El nombre de usuario debe tener 3 a 24 caracteres y empezar con una letra.";
+        authValidationMessage =
+          "El nombre de usuario debe tener 3 a 24 caracteres y empezar con una letra.";
       } else if (ageMessage) {
         authValidationMessage = ageMessage;
       } else if (termsInvalid) {
@@ -1249,12 +1308,21 @@ export function bindTopbarActionEvents(dom, handlers) {
     const recoveryRequestStep = isRecovery && authRecoveryStep === "request";
     const recoveryVerifyStep = isRecovery && authRecoveryStep === "verify";
     const isRegister = !isRecovery && !isAccountLink && authPasswordMode === "register";
-    const isCredentialsStep = !isRecovery && !isAccountLink && (!isRegister || authRegisterStep === "credentials");
+    const isCredentialsStep =
+      !isRecovery && !isAccountLink && (!isRegister || authRegisterStep === "credentials");
     const isProfileStep = isRegister && authRegisterStep === "profile";
     const isCodeStep = isRegister && authRegisterStep === "verify";
     if (dom.authPasswordForm) {
-      dom.authPasswordForm.dataset.authMode = isAccountLink ? "link" : isRecovery ? "recovery" : authPasswordMode;
-      dom.authPasswordForm.dataset.authStep = isRecovery ? authRecoveryStep : isRegister ? authRegisterStep : "credentials";
+      dom.authPasswordForm.dataset.authMode = isAccountLink
+        ? "link"
+        : isRecovery
+          ? "recovery"
+          : authPasswordMode;
+      dom.authPasswordForm.dataset.authStep = isRecovery
+        ? authRecoveryStep
+        : isRegister
+          ? authRegisterStep
+          : "credentials";
     }
 
     const authModalTitle = authOidcCompletion
@@ -1263,7 +1331,9 @@ export function bindTopbarActionEvents(dom, handlers) {
         ? "Recuperar contraseña"
         : isAccountLink
           ? "Vincular con Google"
-          : isRegister ? "Regístrate" : "Iniciar Sesión";
+          : isRegister
+            ? "Regístrate"
+            : "Iniciar Sesión";
     if (dom.authModalTitle) {
       dom.authModalTitle.textContent = authModalTitle;
     }
@@ -1331,12 +1401,15 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (dom.authPasswordInput) {
       dom.authPasswordInput.required = passwordActive;
       dom.authPasswordInput.disabled = !passwordActive;
-      dom.authPasswordInput.autocomplete = isRegister || recoveryVerifyStep ? "new-password" : "current-password";
+      dom.authPasswordInput.autocomplete =
+        isRegister || recoveryVerifyStep ? "new-password" : "current-password";
     }
     if (dom.authPasswordField) {
       dom.authPasswordField.hidden = recoveryRequestStep;
     }
-    setAuthPasswordLabelText(recoveryVerifyStep ? "Nueva contraseña" : isAccountLink ? "Contraseña actual" : "Contraseña");
+    setAuthPasswordLabelText(
+      recoveryVerifyStep ? "Nueva contraseña" : isAccountLink ? "Contraseña actual" : "Contraseña"
+    );
     if (dom.authPasswordConfirmField) {
       dom.authPasswordConfirmField.hidden = !recoveryVerifyStep;
     }
@@ -1360,23 +1433,30 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
     if (dom.authBackButton) {
       dom.authBackButton.hidden = !(isProfileStep || isRecovery || isAccountLink);
-      dom.authBackButton.textContent = authOidcCompletion ? "Más tarde" : isAccountLink ? "Cancelar" : "Volver";
+      dom.authBackButton.textContent = authOidcCompletion
+        ? "Más tarde"
+        : isAccountLink
+          ? "Cancelar"
+          : "Volver";
     }
-    const label = dom.authPasswordButton?.querySelector?.("[data-auth-button-label]") ?? dom.authPasswordButton;
+    const label =
+      dom.authPasswordButton?.querySelector?.("[data-auth-button-label]") ?? dom.authPasswordButton;
     if (label) {
       label.textContent = authOidcCompletion
         ? "Guardar"
         : recoveryRequestStep
-        ? "Enviar código"
-        : recoveryVerifyStep
-        ? "Cambiar contraseña"
-        : isAccountLink
-        ? "Continuar con Google"
-        : isCredentialsStep && isRegister
-        ? "Siguiente"
-        : isCodeStep
-        ? "Verificar código"
-        : (isRegister ? "Enviar código" : "Iniciar sesión");
+          ? "Enviar código"
+          : recoveryVerifyStep
+            ? "Cambiar contraseña"
+            : isAccountLink
+              ? "Continuar con Google"
+              : isCredentialsStep && isRegister
+                ? "Siguiente"
+                : isCodeStep
+                  ? "Verificar código"
+                  : isRegister
+                    ? "Enviar código"
+                    : "Iniciar sesión";
       if (dom.authPasswordButton) {
         // Keep the restore label in sync so pending/error flashes revert to the
         // current mode's text instead of the first one ever captured.
@@ -1398,7 +1478,14 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
 
   function resetAuthFormDraft() {
-    [dom.authNicknameInput, dom.authEmailInput, dom.authAgeInput, dom.authCodeInput, dom.authPasswordInput, dom.authPasswordConfirmInput].forEach((input) => {
+    [
+      dom.authNicknameInput,
+      dom.authEmailInput,
+      dom.authAgeInput,
+      dom.authCodeInput,
+      dom.authPasswordInput,
+      dom.authPasswordConfirmInput
+    ].forEach((input) => {
       if (input) {
         input.value = "";
       }
@@ -1620,12 +1707,13 @@ export function bindTopbarActionEvents(dom, handlers) {
       handlers.closeDrawers?.();
     }
 
-
     authPending = true;
     syncAuthUi();
 
     try {
-      const turnstileToken = nextLoggedIn ? await requestTurnstileToken({ silent: silentTurnstile }) : "";
+      const turnstileToken = nextLoggedIn
+        ? await requestTurnstileToken({ silent: silentTurnstile })
+        : "";
 
       const authResult = nextLoggedIn
         ? await handlers.login?.({ turnstileToken, selectedTopicId: getPendingAuthTopicId() })
@@ -1644,7 +1732,9 @@ export function bindTopbarActionEvents(dom, handlers) {
     } catch (error) {
       console.error(error);
       if (announce) {
-        const message = error?.message || (nextLoggedIn ? "No se pudo iniciar sesión" : "No se pudo cerrar sesión");
+        const message =
+          error?.message ||
+          (nextLoggedIn ? "No se pudo iniciar sesión" : "No se pudo cerrar sesión");
         setAuthStatusMessage(message, "error");
         handlers.flashTitle(message);
       }
@@ -1658,15 +1748,15 @@ export function bindTopbarActionEvents(dom, handlers) {
     const loggedIn = isLoggedIn();
     const isMobile = isMobileViewport();
     const label = dom.authButton?.querySelector(".button-label");
-    const privateDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-auth-private]") ?? [];
-    const adminDrawerActions = dom.mobileTopbarMenu?.querySelectorAll?.("[data-admin-private]") ?? [];
+    const privateDrawerActions =
+      dom.mobileTopbarMenu?.querySelectorAll?.("[data-auth-private]") ?? [];
+    const adminDrawerActions =
+      dom.mobileTopbarMenu?.querySelectorAll?.("[data-admin-private]") ?? [];
     const authState = applyDocumentAuthState();
     const authResolved = authState !== "pending";
     syncThemeTogglePlacement();
     syncProfileButtonAvatar();
-    const authLabel = loggedIn
-      ? (isMobile ? "Cerrar sesión" : "Cerrar sesión")
-      : "Iniciar sesión";
+    const authLabel = loggedIn ? (isMobile ? "Cerrar sesión" : "Cerrar sesión") : "Iniciar sesión";
 
     if (label) {
       label.textContent = authLabel;
@@ -1686,11 +1776,13 @@ export function bindTopbarActionEvents(dom, handlers) {
       dom.authTools.hidden = !loggedIn;
     }
 
-    [dom.profileButton, dom.settingsButton, dom.storeButton, dom.openRightDrawer].forEach((node) => {
-      if (node) {
-        node.hidden = node === dom.openRightDrawer ? false : !loggedIn;
+    [dom.profileButton, dom.settingsButton, dom.storeButton, dom.openRightDrawer].forEach(
+      (node) => {
+        if (node) {
+          node.hidden = node === dom.openRightDrawer ? false : !loggedIn;
+        }
       }
-    });
+    );
 
     privateDrawerActions.forEach((node) => {
       if (node) {
@@ -1739,7 +1831,9 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
     syncMobileMenuSearch();
   });
-  addListener(typeof window !== "undefined" ? window : null, "resize", syncAuthUi, { passive: true });
+  addListener(typeof window !== "undefined" ? window : null, "resize", syncAuthUi, {
+    passive: true
+  });
 
   syncAuthUi();
   function handleAuthButtonClick(event) {
@@ -1893,7 +1987,11 @@ export function bindTopbarActionEvents(dom, handlers) {
       dom.authCodeHint.textContent = "";
       const emailStrong = document.createElement("strong");
       emailStrong.textContent = email;
-      dom.authCodeHint.append("Si ", emailStrong, " tiene una cuenta, recibirá un código. Revisa también spam.");
+      dom.authCodeHint.append(
+        "Si ",
+        emailStrong,
+        " tiene una cuenta, recibirá un código. Revisa también spam."
+      );
     }
     startAuthResendCooldown();
     getAuthCodeBoxes()[0]?.focus?.();
@@ -1924,10 +2022,15 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     authPending = true;
     syncAuthUi();
-    const showVerifyingLabel = authEmailChallenge
-      || authAccountLinkMode
-      || (authRecoveryMode && authRecoveryStep === "verify");
-    setAuthButtonPending(dom.authPasswordButton, true, showVerifyingLabel ? "Verificando..." : "Enviando...");
+    const showVerifyingLabel =
+      authEmailChallenge ||
+      authAccountLinkMode ||
+      (authRecoveryMode && authRecoveryStep === "verify");
+    setAuthButtonPending(
+      dom.authPasswordButton,
+      true,
+      showVerifyingLabel ? "Verificando..." : "Enviando..."
+    );
 
     try {
       let authResult = null;
@@ -1990,7 +2093,9 @@ export function bindTopbarActionEvents(dom, handlers) {
             ? "Contraseña actualizada"
             : authAccountLinkMode
               ? "Cuenta de Google vinculada"
-              : authPasswordMode === "register" ? "Cuenta creada" : "Sesión iniciada";
+              : authPasswordMode === "register"
+                ? "Cuenta creada"
+                : "Sesión iniciada";
         setAuthStatusMessage();
         closeAuthModal();
         handlers.flashTitle(successMessage);
@@ -2034,7 +2139,14 @@ export function bindTopbarActionEvents(dom, handlers) {
     }
   });
 
-  [dom.authNicknameInput, dom.authEmailInput, dom.authAgeInput, dom.authCodeInput, dom.authPasswordInput, dom.authPasswordConfirmInput].forEach((node) => {
+  [
+    dom.authNicknameInput,
+    dom.authEmailInput,
+    dom.authAgeInput,
+    dom.authCodeInput,
+    dom.authPasswordInput,
+    dom.authPasswordConfirmInput
+  ].forEach((node) => {
     addListener(node, "input", () => {
       setAuthFieldInvalid(node, false);
     });
@@ -2046,7 +2158,9 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
   getAuthCodeBoxes().forEach((box, index) => {
     addListener(box, "input", () => {
-      const digit = String(box.value || "").replace(/\D/g, "").slice(-1);
+      const digit = String(box.value || "")
+        .replace(/\D/g, "")
+        .slice(-1);
       box.value = digit;
       syncAuthCodeValueFromBoxes();
       if (digit && index < 5) {
@@ -2080,9 +2194,17 @@ export function bindTopbarActionEvents(dom, handlers) {
   });
   addListener(dom.authTermsInput, "change", () => setAuthTermsInvalid(false));
   addListener(typeof window !== "undefined" ? window : null, "keydown", (event) => {
-    if (event.key === "Escape" && dom.profileAvatarCropBackdrop && !dom.profileAvatarCropBackdrop.hidden) {
+    if (
+      event.key === "Escape" &&
+      dom.profileAvatarCropBackdrop &&
+      !dom.profileAvatarCropBackdrop.hidden
+    ) {
       closeProfileAvatarCrop();
-      renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
+      renderProfileAvatarPreview(
+        dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl ||
+          dom.profileAvatarInput?.dataset?.renderedAvatarUrl ||
+          ""
+      );
       return;
     }
 
@@ -2117,7 +2239,11 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.notificationsButton, "pointermove", moveNotificationsButton);
   addListener(dom.notificationsButton, "pointerup", finishNotificationsButtonDrag);
   addListener(dom.notificationsButton, "pointercancel", finishNotificationsButtonDrag);
-  addListener(typeof window !== "undefined" ? window : null, "resize", restoreNotificationsButtonPosition);
+  addListener(
+    typeof window !== "undefined" ? window : null,
+    "resize",
+    restoreNotificationsButtonPosition
+  );
   addListener(dom.notificationsButton, "click", (event) => {
     if (suppressNotificationsClick) {
       event?.preventDefault?.();
@@ -2151,9 +2277,10 @@ export function bindTopbarActionEvents(dom, handlers) {
     const eventElement = resolveEventElement(event);
     const panelTarget = eventElement?.closest?.("[data-mobile-drawer-panel]") ?? null;
     if (panelTarget instanceof HTMLElement) {
-      const nextPanel = activeMobileDrawerPanel === panelTarget.dataset.mobileDrawerPanel
-        ? null
-        : panelTarget.dataset.mobileDrawerPanel;
+      const nextPanel =
+        activeMobileDrawerPanel === panelTarget.dataset.mobileDrawerPanel
+          ? null
+          : panelTarget.dataset.mobileDrawerPanel;
       setMobileDrawerPanel(nextPanel, { trigger: panelTarget });
       return;
     }
@@ -2220,7 +2347,11 @@ export function bindTopbarActionEvents(dom, handlers) {
       });
     }
   });
-  addListener(dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch") ?? null, "input", syncMobileMenuSearch);
+  addListener(
+    dom.mobileTopbarMenu?.querySelector?.("#mobileDrawerSearch") ?? null,
+    "input",
+    syncMobileMenuSearch
+  );
   addListener(dom.mobileDrawerPanels, "click", (event) => {
     const eventElement = resolveEventElement(event);
     const backTarget = eventElement?.closest?.("[data-mobile-drawer-back]") ?? null;
@@ -2253,7 +2384,8 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    const blockedUserTarget = eventElement?.closest?.("[data-blocked-user-action][data-blocked-user-id]") ?? null;
+    const blockedUserTarget =
+      eventElement?.closest?.("[data-blocked-user-action][data-blocked-user-id]") ?? null;
     if (blockedUserTarget instanceof HTMLElement) {
       const userId = blockedUserTarget.dataset.blockedUserId || "";
       if (blockedUserTarget.dataset.blockedUserAction === "unblock") {
@@ -2287,11 +2419,12 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
     event.preventDefault();
-    const nextIndex = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? tabs.length - 1
-        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     const nextTab = tabs[nextIndex];
     handlers.setSettingsSection?.(nextTab.dataset.settingsSection);
     nextTab.focus();
@@ -2318,7 +2451,11 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (!(target instanceof HTMLElement)) {
       return;
     }
-    void handlers.applyAdminAction?.(target.dataset.adminAction, target.dataset.targetType, target.dataset.targetId);
+    void handlers.applyAdminAction?.(
+      target.dataset.adminAction,
+      target.dataset.targetType,
+      target.dataset.targetId
+    );
   });
   addListener(dom.closeReportModalButton, "click", () => handlers.closeReportModal?.());
   addListener(dom.reportModalBackdrop, "click", (event) => {
@@ -2395,7 +2532,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     const state = profileAvatarCropState;
     const previewSize = getProfileAvatarCropPreviewSize();
-    const scale = previewSize / Math.min(state.width, state.height) * state.zoom;
+    const scale = (previewSize / Math.min(state.width, state.height)) * state.zoom;
     const scaledWidth = state.width * scale;
     const scaledHeight = state.height * scale;
     const maxX = Math.max(0, (scaledWidth - previewSize) / 2);
@@ -2418,7 +2555,7 @@ export function bindTopbarActionEvents(dom, handlers) {
     clampProfileAvatarCropOffset();
     const state = profileAvatarCropState;
     const previewSize = getProfileAvatarCropPreviewSize();
-    const scale = previewSize / Math.min(state.width, state.height) * state.zoom;
+    const scale = (previewSize / Math.min(state.width, state.height)) * state.zoom;
     dom.profileAvatarCropImage.style.width = `${state.width * scale}px`;
     dom.profileAvatarCropImage.style.height = `${state.height * scale}px`;
     dom.profileAvatarCropImage.style.transform = `translate(-50%, -50%) translate(${state.offsetX}px, ${state.offsetY}px)`;
@@ -2471,7 +2608,7 @@ export function bindTopbarActionEvents(dom, handlers) {
 
     const previewSize = getProfileAvatarCropPreviewSize();
     const outputRatio = PROFILE_AVATAR_CROP_SIZE / previewSize;
-    const scale = PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height) * state.zoom;
+    const scale = (PROFILE_AVATAR_CROP_SIZE / Math.min(state.width, state.height)) * state.zoom;
     const scaledWidth = state.width * scale;
     const scaledHeight = state.height * scale;
     const rawDx = (PROFILE_AVATAR_CROP_SIZE - scaledWidth) / 2 + state.offsetX * outputRatio;
@@ -2596,11 +2733,12 @@ export function bindTopbarActionEvents(dom, handlers) {
     const nextVisible = button.dataset.visible !== "false" ? false : true;
     button.dataset.visible = String(nextVisible);
     button.setAttribute("aria-pressed", String(!nextVisible));
-    const label = button.dataset.profileVisibility === "joinedAt"
-      ? "fecha de registro"
-      : button.dataset.profileVisibility === "social"
-        ? "redes sociales"
-        : "descripción";
+    const label =
+      button.dataset.profileVisibility === "joinedAt"
+        ? "fecha de registro"
+        : button.dataset.profileVisibility === "social"
+          ? "redes sociales"
+          : "descripción";
     button.setAttribute("aria-label", nextVisible ? `Ocultar ${label}` : `Mostrar ${label}`);
     button.innerHTML = nextVisible
       ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg>`
@@ -2608,9 +2746,15 @@ export function bindTopbarActionEvents(dom, handlers) {
   }
   addListener(dom.profileNameEditButton, "click", () => toggleProfileSection("name"));
   addListener(dom.profileDescriptionEditButton, "click", () => toggleProfileSection("description"));
-  addListener(dom.profileDescriptionVisibilityButton, "click", () => toggleProfileVisibility(dom.profileDescriptionVisibilityButton));
-  addListener(dom.profileJoinedAtVisibilityButton, "click", () => toggleProfileVisibility(dom.profileJoinedAtVisibilityButton));
-  addListener(dom.profileSocialVisibilityButton, "click", () => toggleProfileVisibility(dom.profileSocialVisibilityButton));
+  addListener(dom.profileDescriptionVisibilityButton, "click", () =>
+    toggleProfileVisibility(dom.profileDescriptionVisibilityButton)
+  );
+  addListener(dom.profileJoinedAtVisibilityButton, "click", () =>
+    toggleProfileVisibility(dom.profileJoinedAtVisibilityButton)
+  );
+  addListener(dom.profileSocialVisibilityButton, "click", () =>
+    toggleProfileVisibility(dom.profileSocialVisibilityButton)
+  );
   dom.profileSocialSection?.querySelectorAll?.("[data-profile-social-edit]")?.forEach((button) => {
     addListener(button, "click", () => {
       const field = button.closest(".profile-modal__social-field");
@@ -2656,14 +2800,20 @@ export function bindTopbarActionEvents(dom, handlers) {
     if (dom.profileAvatarInput) {
       dom.profileAvatarInput.value = "";
       dom.profileAvatarInput.dataset.selectedAvatarDataUrl = "";
-      dom.profileAvatarInput.dataset.removeAvatar = selectedAvatarDataUrl ? "false" : String(Boolean(renderedAvatarUrl));
+      dom.profileAvatarInput.dataset.removeAvatar = selectedAvatarDataUrl
+        ? "false"
+        : String(Boolean(renderedAvatarUrl));
     }
 
     renderProfileAvatarPreview(selectedAvatarDataUrl ? renderedAvatarUrl : "");
   });
   addListener(dom.profileAvatarCropCancelButton, "click", () => {
     closeProfileAvatarCrop();
-    renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
+    renderProfileAvatarPreview(
+      dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl ||
+        dom.profileAvatarInput?.dataset?.renderedAvatarUrl ||
+        ""
+    );
   });
   addListener(dom.profileAvatarCropApplyButton, "click", () => {
     const dataUrl = renderCroppedProfileAvatar();
@@ -2678,7 +2828,11 @@ export function bindTopbarActionEvents(dom, handlers) {
   addListener(dom.profileAvatarCropBackdrop, "click", (event) => {
     if (event.target === dom.profileAvatarCropBackdrop) {
       closeProfileAvatarCrop();
-      renderProfileAvatarPreview(dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl || dom.profileAvatarInput?.dataset?.renderedAvatarUrl || "");
+      renderProfileAvatarPreview(
+        dom.profileAvatarInput?.dataset?.selectedAvatarDataUrl ||
+          dom.profileAvatarInput?.dataset?.renderedAvatarUrl ||
+          ""
+      );
     }
   });
   addListener(dom.profileAvatarCropZoom, "input", () => {
@@ -2729,56 +2883,71 @@ export function bindTopbarActionEvents(dom, handlers) {
       dismissPaletteModal();
     }
   });
-  document.addEventListener("pointerdown", (event) => {
-    pickerPointerStartedInside = isCustomPickerEventTarget(event.target);
-  }, true);
-  document.addEventListener("click", (event) => {
-    if (!(event.target instanceof Element)) {
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      pickerPointerStartedInside = isCustomPickerEventTarget(event.target);
+    },
+    true
+  );
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (!(event.target instanceof Element)) {
+        pickerPointerStartedInside = false;
+        return;
+      }
+
+      const dismissTarget = event.target.closest("[data-dismiss-custom-palette-picker]");
+      if (dismissTarget) {
+        lockPickerReopen();
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        scheduleOpen(() => requestPickerClose(false));
+        return;
+      }
+
+      const acceptTarget = event.target.closest(".clr-close");
+      if (acceptTarget) {
+        lockPickerReopen();
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        markPendingPickerCommit();
+        scheduleOpen(() => requestPickerClose(true));
+        return;
+      }
+
+      const picker = document.querySelector(".clr-picker");
+      const pickerIsOpen = picker instanceof HTMLElement && picker.classList.contains("clr-open");
+      if (pickerIsOpen && !pickerPointerStartedInside && !isCustomPickerEventTarget(event.target)) {
+        requestPickerClose(false);
+      }
       pickerPointerStartedInside = false;
-      return;
-    }
-
-    const dismissTarget = event.target.closest("[data-dismiss-custom-palette-picker]");
-    if (dismissTarget) {
-      lockPickerReopen();
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      scheduleOpen(() => requestPickerClose(false));
-      return;
-    }
-
-    const acceptTarget = event.target.closest(".clr-close");
-    if (acceptTarget) {
-      lockPickerReopen();
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      markPendingPickerCommit();
-      scheduleOpen(() => requestPickerClose(true));
-      return;
-    }
-
-    const picker = document.querySelector(".clr-picker");
-    const pickerIsOpen = picker instanceof HTMLElement && picker.classList.contains("clr-open");
-    if (pickerIsOpen && !pickerPointerStartedInside && !isCustomPickerEventTarget(event.target)) {
-      requestPickerClose(false);
-    }
-    pickerPointerStartedInside = false;
-  }, true);
+    },
+    true
+  );
   addListener(dom.paletteOptionGrid, "click", (event) => {
-    const hexInputTarget = event.target instanceof Element ? event.target.closest("[data-custom-palette-hex]") : null;
+    const hexInputTarget =
+      event.target instanceof Element ? event.target.closest("[data-custom-palette-hex]") : null;
     if (hexInputTarget instanceof HTMLInputElement) {
       hexInputTarget.focus();
       return;
     }
 
-    const randomizeTarget = event.target instanceof Element ? event.target.closest("[data-randomize-custom-palette]") : null;
+    const randomizeTarget =
+      event.target instanceof Element
+        ? event.target.closest("[data-randomize-custom-palette]")
+        : null;
     if (randomizeTarget instanceof HTMLElement) {
       requestPickerClose(false);
       handlers.randomizeCustomPalette();
       return;
     }
 
-    const pickerTarget = event.target instanceof Element ? event.target.closest("[data-open-custom-palette-picker]") : null;
+    const pickerTarget =
+      event.target instanceof Element
+        ? event.target.closest("[data-open-custom-palette-picker]")
+        : null;
     if (pickerTarget instanceof HTMLElement) {
       if (isPickerReopenLocked()) {
         return;
@@ -2797,11 +2966,13 @@ export function bindTopbarActionEvents(dom, handlers) {
           );
           syncCustomPickerDraft(committedHex, { commit: true });
           pickerInput.focus();
-          pickerInput.dispatchEvent(new MouseEvent("click", {
-            bubbles: false,
-            cancelable: true,
-            view: window
-          }));
+          pickerInput.dispatchEvent(
+            new MouseEvent("click", {
+              bubbles: false,
+              cancelable: true,
+              view: window
+            })
+          );
         } else {
           dom.paletteOptionGrid?.querySelector("[data-custom-palette-hex]")?.focus();
         }
@@ -2811,17 +2982,20 @@ export function bindTopbarActionEvents(dom, handlers) {
       return;
     }
 
-    const customCardTarget = event.target instanceof Element ? event.target.closest("[data-custom-palette-card]") : null;
-    const customControlTarget = event.target instanceof Element
-      ? event.target.closest(".palette-option__controls, .palette-option__status--button")
-      : null;
+    const customCardTarget =
+      event.target instanceof Element ? event.target.closest("[data-custom-palette-card]") : null;
+    const customControlTarget =
+      event.target instanceof Element
+        ? event.target.closest(".palette-option__controls, .palette-option__status--button")
+        : null;
     if (customCardTarget instanceof HTMLElement && !(customControlTarget instanceof HTMLElement)) {
       requestPickerClose(false);
       handlers.selectPalette(CUSTOM_PALETTE_ID);
       return;
     }
 
-    const target = event.target instanceof Element ? event.target.closest("[data-palette-option]") : null;
+    const target =
+      event.target instanceof Element ? event.target.closest("[data-palette-option]") : null;
     if (target instanceof HTMLElement) {
       requestPickerClose(false);
       handlers.selectPalette(target.dataset.paletteOption);

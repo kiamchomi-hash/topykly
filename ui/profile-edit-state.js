@@ -42,7 +42,9 @@ export function setSocialFieldEditing(field, editing) {
   }
 
   const isEditing = Boolean(editing);
-  const platform = field.querySelector(".profile-modal__social-label span:last-child")?.textContent || "red social";
+  const platform =
+    field.querySelector(".profile-modal__social-label span:last-child")?.textContent ||
+    "red social";
   field.classList.toggle("is-editing", isEditing);
   field.dataset.editing = String(isEditing);
   input.readOnly = !isEditing;
@@ -58,6 +60,8 @@ export function resetSocialEditing(dom) {
 }
 
 export function resetProfileEditing(dom) {
-  Object.keys(PROFILE_SECTION_CONFIG).forEach((section) => setProfileSectionEditing(dom, section, false));
+  Object.keys(PROFILE_SECTION_CONFIG).forEach((section) =>
+    setProfileSectionEditing(dom, section, false)
+  );
   resetSocialEditing(dom);
 }

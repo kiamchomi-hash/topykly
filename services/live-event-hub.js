@@ -42,12 +42,14 @@ export function createLiveEventHub({
         rejectCapacity(res);
       } else {
         res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({
-          error: {
-            code: "LIVE_CAPACITY_REACHED",
-            message: "La sincronización en vivo está temporalmente ocupada."
-          }
-        }));
+        res.end(
+          JSON.stringify({
+            error: {
+              code: "LIVE_CAPACITY_REACHED",
+              message: "La sincronización en vivo está temporalmente ocupada."
+            }
+          })
+        );
       }
       return;
     }
@@ -56,7 +58,7 @@ export function createLiveEventHub({
       ...getHeaders(req),
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
       "X-Accel-Buffering": "no"
     });
     res.write("retry: 5000\n\n");

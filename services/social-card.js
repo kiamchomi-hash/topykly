@@ -4,7 +4,9 @@ const CARD_WIDTH = 1200;
 const CARD_HEIGHT = 630;
 
 function normalizeText(value) {
-  return String(value || "").trim().replace(/\s+/g, " ");
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function truncateText(value, limit) {
@@ -51,19 +53,24 @@ function wrapText(value, maxChars, maxLines) {
 }
 
 function initialsFor(name) {
-  return normalizeText(name)
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "T";
+  return (
+    normalizeText(name)
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "T"
+  );
 }
 
 function renderTextLines(lines, { x, y, lineHeight, className }) {
-  return lines.map((line, index) => (
-    `<text x="${x}" y="${y + index * lineHeight}" class="${className}">${escapeXml(line)}</text>`
-  )).join("");
+  return lines
+    .map(
+      (line, index) =>
+        `<text x="${x}" y="${y + index * lineHeight}" class="${className}">${escapeXml(line)}</text>`
+    )
+    .join("");
 }
 
 async function renderAvatar(avatarBuffer, authorName) {
@@ -87,13 +94,17 @@ async function renderAvatar(avatarBuffer, authorName) {
   }
 
   const initials = escapeXml(initialsFor(authorName));
-  return sharp(Buffer.from(`
+  return sharp(
+    Buffer.from(`
     <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
       <circle cx="98" cy="98" r="98" fill="#7c5cff"/>
       <circle cx="98" cy="98" r="90" fill="#241b32"/>
       <text x="98" y="116" text-anchor="middle" fill="#f8f5ff" font-family="Arial, sans-serif" font-size="54" font-weight="800">${initials}</text>
     </svg>
-  `)).png().toBuffer();
+  `)
+  )
+    .png()
+    .toBuffer();
 }
 
 export async function renderTopicSocialCard(topic, { avatarBuffer = null } = {}) {

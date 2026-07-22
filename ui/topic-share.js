@@ -5,7 +5,9 @@ const EXPORT_WIDTH = 1080;
 const EXPORT_HEIGHT = 1350;
 
 function normalizeText(value) {
-  return String(value || "").trim().replace(/\s+/g, " ");
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function truncateText(value, limit) {
@@ -43,7 +45,10 @@ export function buildTopicShareModel(topic, users = [], origin = "https://www.to
   return {
     id: topic?.id || "",
     title: truncateText(topic?.title || "Tema de TOPYKLY", 120),
-    excerpt: truncateText(rootMessage?.text || topic?.subtitle || "Conversación abierta en TOPYKLY.", 300),
+    excerpt: truncateText(
+      rootMessage?.text || topic?.subtitle || "Conversación abierta en TOPYKLY.",
+      300
+    ),
     authorName: truncateText(author.name, 42),
     authorNickname: truncateText(author.nickname, 32),
     avatarUrl: author.avatarUrl,
@@ -177,12 +182,22 @@ function drawAvatarFallback(context, model, x, y, size, palette) {
   context.fillStyle = palette.text;
   context.font = "900 56px Arial, sans-serif";
   context.textAlign = "center";
-  const initials = model.authorName.split(" ").filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  const initials = model.authorName
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   context.fillText(initials || "T", x + size / 2, y + size / 2 + 19);
   context.textAlign = "left";
 }
 
-export async function drawTopicShareCard(canvas, model, { documentRef = globalThis.document } = {}) {
+export async function drawTopicShareCard(
+  canvas,
+  model,
+  { documentRef = globalThis.document } = {}
+) {
   const context = canvas.getContext("2d");
   const palette = getCanvasPalette(documentRef);
   canvas.width = EXPORT_WIDTH;
@@ -215,13 +230,29 @@ export async function drawTopicShareCard(canvas, model, { documentRef = globalTh
     const sourceSize = Math.min(avatarImage.width, avatarImage.height);
     const sourceX = (avatarImage.width - sourceSize) / 2;
     const sourceY = (avatarImage.height - sourceSize) / 2;
-    context.drawImage(avatarImage, sourceX, sourceY, sourceSize, sourceSize, avatarX, avatarY, avatarSize, avatarSize);
+    context.drawImage(
+      avatarImage,
+      sourceX,
+      sourceY,
+      sourceSize,
+      sourceSize,
+      avatarX,
+      avatarY,
+      avatarSize,
+      avatarSize
+    );
     context.restore();
     avatarImage.close?.();
     context.strokeStyle = palette.accent;
     context.lineWidth = 8;
     context.beginPath();
-    context.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 - 4, 0, Math.PI * 2);
+    context.arc(
+      avatarX + avatarSize / 2,
+      avatarY + avatarSize / 2,
+      avatarSize / 2 - 4,
+      0,
+      Math.PI * 2
+    );
     context.stroke();
   } else {
     drawAvatarFallback(context, model, avatarX, avatarY, avatarSize, palette);
@@ -289,7 +320,9 @@ function syncPreview(dom, model) {
     dom.sharePreviewAuthor.textContent = model.authorName;
   }
   if (dom.sharePreviewNickname) {
-    dom.sharePreviewNickname.textContent = model.authorNickname ? `@${model.authorNickname}` : "Autor del tema";
+    dom.sharePreviewNickname.textContent = model.authorNickname
+      ? `@${model.authorNickname}`
+      : "Autor del tema";
   }
   if (dom.sharePreviewComments) {
     dom.sharePreviewComments.textContent = model.commentLabel;
@@ -303,13 +336,14 @@ function syncPreview(dom, model) {
       dom.sharePreviewAvatar.hidden = true;
       dom.sharePreviewAvatarFallback.hidden = false;
     };
-    dom.sharePreviewAvatarFallback.textContent = model.authorName
-      .split(" ")
-      .filter(Boolean)
-      .map((part) => part[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "T";
+    dom.sharePreviewAvatarFallback.textContent =
+      model.authorName
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase() || "T";
   }
   if (dom.shareTopicUrl) {
     dom.shareTopicUrl.value = model.url;
@@ -318,13 +352,17 @@ function syncPreview(dom, model) {
 
 function canvasToBlob(canvas) {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) {
-        resolve(blob);
-        return;
-      }
-      reject(new Error("No se pudo generar la imagen."));
-    }, "image/png", 0.94);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+        reject(new Error("No se pudo generar la imagen."));
+      },
+      "image/png",
+      0.94
+    );
   });
 }
 
@@ -435,4 +473,7 @@ export function bindTopicShareEvents(dom, handlers) {
   return { close };
 }
 
-export const TOPIC_SHARE_EXPORT_SIZE = Object.freeze({ width: EXPORT_WIDTH, height: EXPORT_HEIGHT });
+export const TOPIC_SHARE_EXPORT_SIZE = Object.freeze({
+  width: EXPORT_WIDTH,
+  height: EXPORT_HEIGHT
+});

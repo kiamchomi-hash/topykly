@@ -1,4 +1,8 @@
-import { getActiveRankingIndex, getStoredRankingIndex, setStoredRankingIndex } from "../../ranking-state.js";
+import {
+  getActiveRankingIndex,
+  getStoredRankingIndex,
+  setStoredRankingIndex
+} from "../../ranking-state.js";
 
 const RANKING_ACTION_TYPES = {
   setScope: "rankings/setScope",
@@ -56,7 +60,7 @@ export function reduceRankingState(state, action) {
       const nextIndex = getStoredRankingIndex(state, scope);
       const nextState = { ...state, rankingScope: scope };
       setStoredRankingIndex(nextState, nextIndex, scope);
-      
+
       return { changed: true, scope, nextState };
     }
 
@@ -70,8 +74,8 @@ export function reduceRankingState(state, action) {
         return { changed: false, reason: "same-topic" };
       }
 
-      return { 
-        changed: true, 
+      return {
+        changed: true,
         topicId: nextTopicId,
         nextState: {
           ...state,
@@ -86,7 +90,7 @@ export function reduceRankingState(state, action) {
       const nextState = { ...state };
       setStoredRankingIndex(nextState, action.payload?.index ?? 0);
       const nextIndex = getStoredRankingIndex(nextState);
-      
+
       if (nextIndex === previousIndex) {
         return { changed: false, reason: "same-index" };
       }
@@ -98,7 +102,7 @@ export function reduceRankingState(state, action) {
       const nextState = { ...state };
       setStoredRankingIndex(nextState, getActiveRankingIndex(state) + (action.payload?.delta ?? 0));
       const nextIndex = getStoredRankingIndex(nextState);
-      
+
       if (nextIndex === previousIndex) {
         return { changed: false, reason: "same-index" };
       }

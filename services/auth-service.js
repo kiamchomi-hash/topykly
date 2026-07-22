@@ -24,19 +24,34 @@ const EMAIL_CODE_CONTENT = Object.freeze({
 });
 
 function shouldTrustProxy(env = process.env) {
-  return [env.TOPYKLY_TRUST_PROXY, env.CHETREND_TRUST_PROXY]
-    .some((value) => ["1", "true", "yes"].includes(String(value || "").trim().toLowerCase()));
+  return [env.TOPYKLY_TRUST_PROXY, env.CHETREND_TRUST_PROXY].some((value) =>
+    ["1", "true", "yes"].includes(
+      String(value || "")
+        .trim()
+        .toLowerCase()
+    )
+  );
 }
 
 function getRequestIp(req, env = process.env) {
-  const configuredProxyIps = String(env.TOPYKLY_TRUSTED_PROXY_IPS || env.CHETREND_TRUSTED_PROXY_IPS || "")
-    .split(",").map((value) => value.trim()).filter(Boolean);
-  const proxyIsAllowed = !configuredProxyIps.length || configuredProxyIps.includes(String(req?.socket?.remoteAddress || "").trim());
+  const configuredProxyIps = String(
+    env.TOPYKLY_TRUSTED_PROXY_IPS || env.CHETREND_TRUSTED_PROXY_IPS || ""
+  )
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const proxyIsAllowed =
+    !configuredProxyIps.length ||
+    configuredProxyIps.includes(String(req?.socket?.remoteAddress || "").trim());
   if (shouldTrustProxy(env) && proxyIsAllowed) {
-    return String(req?.headers?.["cf-connecting-ip"] || "").trim()
-      || String(req?.headers?.["x-forwarded-for"] || "").split(",")[0].trim()
-      || req?.socket?.remoteAddress
-      || "";
+    return (
+      String(req?.headers?.["cf-connecting-ip"] || "").trim() ||
+      String(req?.headers?.["x-forwarded-for"] || "")
+        .split(",")[0]
+        .trim() ||
+      req?.socket?.remoteAddress ||
+      ""
+    );
   }
 
   return req?.socket?.remoteAddress || "";
@@ -73,7 +88,9 @@ function createSha256Base64Url(value) {
 }
 
 function normalizeOrigin(value) {
-  return String(value || "").trim().replace(/\/+$/, "");
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 function normalizeIssuer(value) {
@@ -81,7 +98,9 @@ function normalizeIssuer(value) {
 }
 
 function normalizeEmail(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   return normalized || null;
 }
 
@@ -110,7 +129,9 @@ function normalizeDisplayName(profile) {
   ];
 
   for (const candidate of candidates) {
-    const normalized = String(candidate || "").trim().replace(/\s+/g, " ");
+    const normalized = String(candidate || "")
+      .trim()
+      .replace(/\s+/g, " ");
     if (normalized) {
       return normalized.slice(0, 80);
     }
@@ -146,7 +167,11 @@ function signPayload(payload, secret) {
 function verifySignedPayload(token, secret) {
   const [encodedPayload = "", providedSignature = ""] = String(token || "").split(".");
   if (!encodedPayload || !providedSignature) {
-    throw new ApiError(400, "INVALID_AUTH_FLOW", "No se encontro un flujo de autenticacion valido.");
+    throw new ApiError(
+      400,
+      "INVALID_AUTH_FLOW",
+      "No se encontro un flujo de autenticacion valido."
+    );
   }
 
   const expectedSignature = crypto
@@ -156,10 +181,14 @@ function verifySignedPayload(token, secret) {
   const signatureBuffer = base64UrlDecode(providedSignature);
 
   if (
-    signatureBuffer.length !== expectedSignature.length
-    || !crypto.timingSafeEqual(signatureBuffer, expectedSignature)
+    signatureBuffer.length !== expectedSignature.length ||
+    !crypto.timingSafeEqual(signatureBuffer, expectedSignature)
   ) {
-    throw new ApiError(400, "INVALID_AUTH_FLOW", "La firma del flujo de autenticacion no es valida.");
+    throw new ApiError(
+      400,
+      "INVALID_AUTH_FLOW",
+      "La firma del flujo de autenticacion no es valida."
+    );
   }
 
   try {
@@ -169,13 +198,11 @@ function verifySignedPayload(token, secret) {
   }
 }
 
-function createCookie(name, value, {
-  httpOnly = true,
-  maxAge = null,
-  path = "/",
-  sameSite = "Lax",
-  secure = false
-} = {}) {
+function createCookie(
+  name,
+  value,
+  { httpOnly = true, maxAge = null, path = "/", sameSite = "Lax", secure = false } = {}
+) {
   const parts = [`${name}=${encodeURIComponent(value)}`, `Path=${path}`, `SameSite=${sameSite}`];
 
   if (httpOnly) {
@@ -198,7 +225,9 @@ function createExpiredCookie(name, options = {}) {
 }
 
 function getRequestOrigin(req, fallbackOrigin = "") {
-  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim();
   const protocol = forwardedProto || (req.socket.encrypted ? "https" : "http");
   const host = req.headers.host || fallbackOrigin.replace(/^https?:\/\//, "");
 
@@ -206,7 +235,9 @@ function getRequestOrigin(req, fallbackOrigin = "") {
 }
 
 function getCookieSecurity(req, env) {
-  const secureEnv = String(env.TOPYKLY_COOKIE_SECURE || env.CHETREND_COOKIE_SECURE || "").trim().toLowerCase();
+  const secureEnv = String(env.TOPYKLY_COOKIE_SECURE || env.CHETREND_COOKIE_SECURE || "")
+    .trim()
+    .toLowerCase();
   if (secureEnv === "true") {
     return true;
   }
@@ -214,7 +245,10 @@ function getCookieSecurity(req, env) {
     return false;
   }
 
-  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase();
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
   return forwardedProto === "https" || Boolean(req.socket.encrypted);
 }
 
@@ -223,7 +257,13 @@ async function readResponsePayload(response) {
   const payload = parseJsonResponse(text);
 
   if (!response.ok) {
-    throw new ApiError(502, "AUTH_PROVIDER_ERROR", payload.error_description || payload.error || "El proveedor de autenticacion devolvio un error.");
+    throw new ApiError(
+      502,
+      "AUTH_PROVIDER_ERROR",
+      payload.error_description ||
+        payload.error ||
+        "El proveedor de autenticacion devolvio un error."
+    );
   }
 
   return payload;
@@ -296,7 +336,10 @@ function renderEmailCodeHtml(code, action, footer) {
 </html>`;
 }
 
-function buildReturnUrl(origin, { selectedTopicId = null, authError = null, authAction = null } = {}) {
+function buildReturnUrl(
+  origin,
+  { selectedTopicId = null, authError = null, authAction = null } = {}
+) {
   const url = new URL("/", origin);
 
   if (selectedTopicId) {
@@ -321,13 +364,27 @@ export function createAuthService({
 } = {}) {
   const issuer = normalizeIssuer(env.TOPYKLY_OIDC_ISSUER || env.CHETREND_OIDC_ISSUER);
   const clientId = String(env.TOPYKLY_OIDC_CLIENT_ID || env.CHETREND_OIDC_CLIENT_ID || "").trim();
-  const clientSecret = String(env.TOPYKLY_OIDC_CLIENT_SECRET || env.CHETREND_OIDC_CLIENT_SECRET || "").trim();
-  const sessionSecret = String(env.TOPYKLY_SESSION_SECRET || env.CHETREND_SESSION_SECRET || "").trim();
-  const providerLabel = String(env.TOPYKLY_AUTH_PROVIDER_NAME || env.CHETREND_AUTH_PROVIDER_NAME || "Google").trim() || "Google";
-  const scopes = String(env.TOPYKLY_OIDC_SCOPE || env.CHETREND_OIDC_SCOPE || "openid profile email").trim() || "openid profile email";
-  const publicOrigin = normalizeOrigin(env.TOPYKLY_PUBLIC_ORIGIN || env.CHETREND_PUBLIC_ORIGIN || "");
-  const turnstileSiteKey = String(env.TOPYKLY_TURNSTILE_SITE_KEY || env.CHETREND_TURNSTILE_SITE_KEY || "").trim();
-  const turnstileSecretKey = String(env.TOPYKLY_TURNSTILE_SECRET_KEY || env.CHETREND_TURNSTILE_SECRET_KEY || "").trim();
+  const clientSecret = String(
+    env.TOPYKLY_OIDC_CLIENT_SECRET || env.CHETREND_OIDC_CLIENT_SECRET || ""
+  ).trim();
+  const sessionSecret = String(
+    env.TOPYKLY_SESSION_SECRET || env.CHETREND_SESSION_SECRET || ""
+  ).trim();
+  const providerLabel =
+    String(env.TOPYKLY_AUTH_PROVIDER_NAME || env.CHETREND_AUTH_PROVIDER_NAME || "Google").trim() ||
+    "Google";
+  const scopes =
+    String(env.TOPYKLY_OIDC_SCOPE || env.CHETREND_OIDC_SCOPE || "openid profile email").trim() ||
+    "openid profile email";
+  const publicOrigin = normalizeOrigin(
+    env.TOPYKLY_PUBLIC_ORIGIN || env.CHETREND_PUBLIC_ORIGIN || ""
+  );
+  const turnstileSiteKey = String(
+    env.TOPYKLY_TURNSTILE_SITE_KEY || env.CHETREND_TURNSTILE_SITE_KEY || ""
+  ).trim();
+  const turnstileSecretKey = String(
+    env.TOPYKLY_TURNSTILE_SECRET_KEY || env.CHETREND_TURNSTILE_SECRET_KEY || ""
+  ).trim();
   const turnstileConfigured = Boolean(fetchImpl && turnstileSiteKey && turnstileSecretKey);
   const resendApiKey = String(env.TOPYKLY_RESEND_API_KEY || "").trim();
   const resendFrom = String(env.TOPYKLY_RESEND_FROM || "").trim();
@@ -341,7 +398,11 @@ export function createAuthService({
 
   async function getDiscoveryConfig() {
     if (!configured) {
-      throw new ApiError(503, "AUTH_NOT_CONFIGURED", "La autenticacion externa no esta configurada.");
+      throw new ApiError(
+        503,
+        "AUTH_NOT_CONFIGURED",
+        "La autenticacion externa no esta configurada."
+      );
     }
 
     if (discoveryCache.payload && discoveryCache.expiresAt > now()) {
@@ -351,13 +412,17 @@ export function createAuthService({
     const discoveryUrl = new URL("/.well-known/openid-configuration", `${issuer}/`).toString();
     const response = await fetchImpl(discoveryUrl, {
       headers: {
-        "Accept": "application/json"
+        Accept: "application/json"
       }
     });
     const payload = await readResponsePayload(response);
 
     if (!payload.authorization_endpoint || !payload.token_endpoint || !payload.userinfo_endpoint) {
-      throw new ApiError(503, "AUTH_PROVIDER_MISCONFIGURED", "El proveedor OIDC no expone todos los endpoints necesarios.");
+      throw new ApiError(
+        503,
+        "AUTH_PROVIDER_MISCONFIGURED",
+        "El proveedor OIDC no expone todos los endpoints necesarios."
+      );
     }
 
     discoveryCache.payload = payload;
@@ -392,10 +457,7 @@ export function createAuthService({
 
   function clearFlowCookies(req) {
     const secure = getCookieSecurity(req, env);
-    return [
-      clearFlowCookie(req),
-      createExpiredCookie(LEGACY_AUTH_FLOW_COOKIE, { secure })
-    ];
+    return [clearFlowCookie(req), createExpiredCookie(LEGACY_AUTH_FLOW_COOKIE, { secure })];
   }
 
   async function validateTurnstile({ req, token = "" } = {}) {
@@ -405,7 +467,11 @@ export function createAuthService({
 
     const normalizedToken = String(token || "").trim();
     if (!normalizedToken) {
-      throw new ApiError(403, "TURNSTILE_REQUIRED", "Completa la verificacion antes de iniciar sesion.");
+      throw new ApiError(
+        403,
+        "TURNSTILE_REQUIRED",
+        "Completa la verificacion antes de iniciar sesion."
+      );
     }
 
     const remoteip = getRequestIp(req, env);
@@ -473,24 +539,36 @@ export function createAuthService({
 
     async sendEmailCode({ email, code, challengeId = "", purpose = "register" } = {}) {
       if (!resendConfigured) {
-        throw new ApiError(503, "RESEND_NOT_CONFIGURED", "El acceso por codigo todavia no esta configurado.");
+        throw new ApiError(
+          503,
+          "RESEND_NOT_CONFIGURED",
+          "El acceso por codigo todavia no esta configurado."
+        );
       }
 
       const content = EMAIL_CODE_CONTENT[purpose];
       if (!content) {
-        throw new ApiError(400, "INVALID_EMAIL_CODE_PURPOSE", "El tipo de codigo solicitado no es valido.");
+        throw new ApiError(
+          400,
+          "INVALID_EMAIL_CODE_PURPOSE",
+          "El tipo de codigo solicitado no es valido."
+        );
       }
       const { subject, action, footer } = content;
       const response = await fetchImpl(RESEND_EMAIL_URL, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
+          Authorization: `Bearer ${resendApiKey}`,
           "Content-Type": "application/json",
           "Idempotency-Key": String(challengeId || `email-code-${code}`)
         },
         body: JSON.stringify({
           from: resendFrom,
-          to: [String(email || "").trim().toLowerCase()],
+          to: [
+            String(email || "")
+              .trim()
+              .toLowerCase()
+          ],
           subject,
           text: `Tu código para ${action} es ${code}. Vence en 10 minutos y solo puede usarse una vez. ${footer}`,
           html: renderEmailCodeHtml(code, action, footer)
@@ -518,19 +596,29 @@ export function createAuthService({
       const normalizedEmail = normalizeEmail(email);
       const normalizedTopicUrl = String(topicUrl || "").trim();
       if (!normalizedEmail || !normalizedTopicUrl) {
-        throw new ApiError(400, "INVALID_ACTIVITY_EMAIL", "No se pudo preparar el aviso por correo.");
+        throw new ApiError(
+          400,
+          "INVALID_ACTIVITY_EMAIL",
+          "No se pudo preparar el aviso por correo."
+        );
       }
 
       const safeRecipientName = escapeEmailHtml(recipientName);
       const safeActorName = escapeEmailHtml(actorName);
       const safeTopicTitle = escapeEmailHtml(topicTitle);
       const safeTopicUrl = escapeEmailHtml(normalizedTopicUrl);
-      const subjectActorName = String(actorName || "Alguien").trim().replace(/\s+/g, " ").slice(0, 50);
-      const subjectTopicTitle = String(topicTitle || "una conversación").trim().replace(/\s+/g, " ").slice(0, 80);
+      const subjectActorName = String(actorName || "Alguien")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 50);
+      const subjectTopicTitle = String(topicTitle || "una conversación")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 80);
       const response = await fetchImpl(RESEND_EMAIL_URL, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${resendApiKey}`,
+          Authorization: `Bearer ${resendApiKey}`,
           "Content-Type": "application/json",
           "Idempotency-Key": String(deliveryKey || `topic-activity-${crypto.randomUUID()}`)
         },
@@ -575,10 +663,16 @@ export function createAuthService({
       const redirectUri = getRedirectUri(req);
       const normalizedSessionId = String(sessionId || `session-${crypto.randomUUID()}`).trim();
       const normalizedPurpose = purpose === "link" ? "link" : "login";
-      const normalizedTargetUserId = normalizedPurpose === "link" ? String(targetUserId || "").trim() : null;
-      const normalizedExpectedEmail = normalizedPurpose === "link" ? normalizeEmail(expectedEmail) : null;
+      const normalizedTargetUserId =
+        normalizedPurpose === "link" ? String(targetUserId || "").trim() : null;
+      const normalizedExpectedEmail =
+        normalizedPurpose === "link" ? normalizeEmail(expectedEmail) : null;
       if (normalizedPurpose === "link" && (!normalizedTargetUserId || !normalizedExpectedEmail)) {
-        throw new ApiError(400, "INVALID_ACCOUNT_LINK_FLOW", "No se pudo iniciar la vinculacion de cuenta.");
+        throw new ApiError(
+          400,
+          "INVALID_ACCOUNT_LINK_FLOW",
+          "No se pudo iniciar la vinculacion de cuenta."
+        );
       }
       const flowPayload = {
         state,
@@ -609,10 +703,7 @@ export function createAuthService({
           redirectUrl: authorizationUrl.toString(),
           provider: providerLabel
         },
-        cookies: [
-          createSessionCookie(req, normalizedSessionId),
-          createFlowCookie(req, flowPayload)
-        ]
+        cookies: [createSessionCookie(req, normalizedSessionId), createFlowCookie(req, flowPayload)]
       };
     },
 
@@ -630,10 +721,15 @@ export function createAuthService({
       const requestOrigin = publicOrigin || getRequestOrigin(req);
       const selectedTopicId = flowPayload.selectedTopicId || null;
       const purpose = flowPayload.purpose === "link" ? "link" : "login";
-      const targetUserId = purpose === "link" ? String(flowPayload.targetUserId || "").trim() : null;
+      const targetUserId =
+        purpose === "link" ? String(flowPayload.targetUserId || "").trim() : null;
       const expectedEmail = purpose === "link" ? normalizeEmail(flowPayload.expectedEmail) : null;
       if (purpose === "link" && (!targetUserId || !expectedEmail)) {
-        throw new ApiError(400, "INVALID_ACCOUNT_LINK_FLOW", "No se pudo validar la vinculacion de cuenta.");
+        throw new ApiError(
+          400,
+          "INVALID_ACCOUNT_LINK_FLOW",
+          "No se pudo validar la vinculacion de cuenta."
+        );
       }
 
       if (query.error) {
@@ -647,7 +743,11 @@ export function createAuthService({
       }
 
       if (!query.code || !query.state || query.state !== flowPayload.state) {
-        throw new ApiError(400, "INVALID_AUTH_CALLBACK", "La respuesta del proveedor no coincide con la solicitud iniciada.");
+        throw new ApiError(
+          400,
+          "INVALID_AUTH_CALLBACK",
+          "La respuesta del proveedor no coincide con la solicitud iniciada."
+        );
       }
 
       const discovery = await getDiscoveryConfig();
@@ -655,7 +755,7 @@ export function createAuthService({
       const tokenResponse = await fetchImpl(discovery.token_endpoint, {
         method: "POST",
         headers: {
-          "Accept": "application/json",
+          Accept: "application/json",
           "Content-Type": "application/x-www-form-urlencoded"
         },
         body: new URLSearchParams({
@@ -675,14 +775,18 @@ export function createAuthService({
 
       const userInfoResponse = await fetchImpl(discovery.userinfo_endpoint, {
         headers: {
-          "Accept": "application/json",
-          "Authorization": `Bearer ${tokenPayload.access_token}`
+          Accept: "application/json",
+          Authorization: `Bearer ${tokenPayload.access_token}`
         }
       });
       const userInfo = await readResponsePayload(userInfoResponse);
 
       if (!userInfo.sub) {
-        throw new ApiError(502, "AUTH_PROVIDER_ERROR", "El proveedor no devolvio un identificador de usuario.");
+        throw new ApiError(
+          502,
+          "AUTH_PROVIDER_ERROR",
+          "El proveedor no devolvio un identificador de usuario."
+        );
       }
 
       const nextSessionId = `session-${crypto.randomUUID()}`;
@@ -705,10 +809,7 @@ export function createAuthService({
         sourceSessionId: String(flowPayload.sessionId || ""),
         sessionId: nextSessionId,
         selectedTopicId,
-        cookies: [
-          createSessionCookie(req, nextSessionId),
-          ...clearFlowCookies(req)
-        ]
+        cookies: [createSessionCookie(req, nextSessionId), ...clearFlowCookies(req)]
       };
     }
   };
