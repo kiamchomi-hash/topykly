@@ -12,14 +12,16 @@ El loop **no debe ejecutar cambios** hasta que TODO esto sea cierto. Si alguna f
 
 - [x] `topykly.com` sirviendo en hosting real de producción (`NODE_ENV=production`). *Render + Cloudflare desde el 2026-07-21.*
 - [x] Redirect 301 `www` → apex (o apex → `www`) consistente y una sola canónica. *Apex → `www`; canónica única `https://www.topykly.com/`.*
-- [ ] Propiedad dada de alta y verificada en Google Search Console.
-- [ ] Al menos **21 días** de datos acumulados en GSC (menos que eso es ruido, no señal).
-- [ ] MCP de Search Console conectado y con permiso de lectura.
+- [x] Propiedad dada de alta y verificada en Google Search Console. *Propiedad de **Dominio**, verificada por registro TXT en Cloudflare. Comprobado el 2026-07-22: `topykly.com` sirve `google-site-verification=vvDhVs-AvnXMFPO-MZqt9GMpmom4eZP6KeumIsOAi0g`.*
+- [ ] Al menos **21 días** de datos acumulados en GSC (menos que eso es ruido, no señal). *Estado desconocido: no se sabe desde cuándo está verificada la propiedad. **Confirmar en `Rendimiento` qué rango de fechas tiene datos** — puede estar ya cumplida.*
+- [ ] Acceso de **lectura programática** a los datos de GSC (MCP u otra vía). *No confundir con la verificación de la propiedad, que ya está hecha: esto es que el agente pueda **consultar** impresiones, clics, CTR y queries por su cuenta. Hoy no hay conector de Search Console disponible en el entorno.*
 - [x] Comando de deploy definido y probado a mano una vez (ver §5). *Ejercitado el 2026-07-22.*
 
-> Estado actual (2026-07-22): **BLOQUEADO, pero solo por Search Console.** El lanzamiento ya ocurrió: la app corre en producción, el 301 y la canónica están resueltos y el deploy está probado. Lo que falta es **dar de alta la propiedad en GSC, conectar el MCP y esperar 21 días de datos**. Sin esa fuente el loop no tiene señal sobre la que decidir, así que sigue sin ejecutar cambios.
+> Estado actual (2026-07-22): **BLOQUEADO por acceso a los datos, no por el alta.** La app está en producción, el 301 y la canónica resueltos, el deploy probado y la propiedad de GSC **verificada**. Lo que falta es una vía para *leer* esos datos y confirmar que haya suficiente historial.
 >
-> Ojo con el orden: el alta en GSC es manual y la hace un humano. Hasta que no esté, cada corrida debe terminar en "bloqueado por precondición: GSC" sin tocar nada.
+> **Corrección respecto de versiones anteriores de este archivo:** hasta el 2026-07-22 acá decía que faltaba el alta en GSC. Era falso. La verificación se hizo por DNS, que no deja ningún rastro en el repo, y la ausencia de una meta `google-site-verification` en `index.html` se interpretó erróneamente como prueba de que no existía. Antes de declarar bloqueada esta precondición, **consultar el TXT del dominio**, no el código.
+>
+> Salida del bloqueo: no requiere necesariamente el MCP. Si un humano opera el loop pasando los números del panel a mano, la precondición de lectura se considera cumplida para esa corrida. El MCP es lo que permite que el loop corra **sin** intervención, no un requisito técnico rígido.
 
 ---
 
@@ -86,6 +88,14 @@ Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retenció
 ## 4. Log de iteraciones
 
 > Formato por entrada. La más reciente arriba.
+
+### Correccion — 2026-07-22 — La propiedad de GSC ya estaba verificada
+
+- **Estado:** sigue BLOQUEADO (§0), pero por un motivo distinto del que este archivo venía afirmando.
+- **Qué se corrigió:** la entrada anterior y las precondiciones daban por pendiente el alta en Search Console. Es falso: la propiedad de **Dominio** está verificada por TXT en Cloudflare (`google-site-verification=vvDhVs-...`), comprobado por consulta DNS.
+- **Por qué se había concluido mal:** se infirió "no hay alta" de la ausencia de una meta `google-site-verification` en `index.html`. La verificación por DNS no toca el repo, así que esa ausencia no probaba nada. **Lección para próximas corridas: el estado de GSC se comprueba contra el TXT del dominio o el propio panel, nunca contra el código.**
+- **Bloqueo real, ya rectificado en §0:** falta una vía de **lectura programática** de los datos (o que un humano los pase a mano) y confirmar cuánto historial hay acumulado.
+- **Cambio SEO aplicado:** ninguno.
 
 ### Infra — 2026-07-22 — Lanzamiento cerrado; queda solo GSC
 
@@ -157,9 +167,9 @@ Reglas de deploy:
 
 Ordenado por prioridad. El agente toma de acá o de una señal nueva de los datos.
 
-1. **[bloqueante, humano]** Dar de alta y verificar `topykly.com` en Google Search Console. Es lo único que separa al loop de arrancar. Implica añadir la meta `google-site-verification` al `<head>` de `index.html` (zona permitida, §1 regla 4) o verificar por DNS en Cloudflare, y enviar `sitemap.xml`.
-2. **[bloqueante]** Conectar el MCP de Search Console con permiso de lectura.
-3. **[bloqueante, espera]** Acumular 21 días de datos antes de la primera iteración real.
+1. **[humano, rápido]** Abrir GSC → `Rendimiento` y anotar **desde qué fecha hay datos**. Define si la precondición de los 21 días ya está cumplida; hoy es la incógnita que decide si el loop puede arrancar.
+2. **[humano]** Confirmar que `https://www.topykly.com/sitemap.xml` esté enviado en GSC → `Sitemaps`. El sitemap existe y responde 200; falta saber si está dado de alta ahí.
+3. **[bloqueante]** Resolver la lectura de datos: conectar un MCP de Search Console **o** decidir que el loop se opera a mano con los números del panel (§0).
 4. Al haber datos: capturar baseline (§2).
 5. Al haber datos: cruzar la **retención por fuente** (ya implementada, ver Log/Infra) para validar que el tráfico de búsqueda retiene, no solo que sube en volumen.
 6. Primera optimización de bajo riesgo candidata: revisar titles/descriptions de las páginas de tema con más impresiones y CTR bajo.

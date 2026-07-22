@@ -10,7 +10,7 @@
 
 Si alguna falla, la corrida solo registra "bloqueado por precondición X" y termina sin proponer nada.
 
-- [ ] App en **producción real con usuarios reales llegando**. *La mitad está cumplida: la app corre en producción desde el 2026-07-21 (`https://www.topykly.com/`). Lo que falta es el **tráfico**, que depende del alta en GSC del [loop de SEO](./seo-loop-progress.md).*
+- [ ] App en **producción real con usuarios reales llegando**. *La app corre en producción desde el 2026-07-21 (`https://www.topykly.com/`) y la propiedad de GSC **ya está verificada** (por DNS). Lo que falta medir es el **tráfico real**: verificar la propiedad no genera visitas por sí solo. La fuente de verdad acá es la analítica propia (`product_events`), no GSC.*
 - [x] Analítica de producto instrumentada y registrando (`product_events`, funnel completo, retención por fuente). *Hecho en código.*
 - [ ] **Volumen mínimo por cohorte** para que un experimento no sea ruido (ver §1, rigor estadístico). Con ~10 usuarios/día todavía es chico: un experimento de retención tarda semanas en acumular señal.
 - [ ] Mecanismo de despliegue **con aprobación humana** (branch/PR). Este loop nunca hace `git push` a `main` por su cuenta. *Ver la nota de `GH_TOKEN` abajo antes de asumir que `gh pr create` va a funcionar.*
@@ -101,6 +101,14 @@ Snapshot del punto de partida, para medir contra esto.
 
 > La más reciente arriba.
 
+### Correccion — 2026-07-22 — GSC ya estaba verificado; el bloqueo es volumen
+
+- **Estado:** sigue BLOQUEADO (§0), sin experimentos propuestos.
+- **Qué se corrigió:** la entrada de más abajo daba el alta en Search Console como pendiente y la trataba como "el grifo del tráfico". La propiedad ya está verificada (por DNS; ver el [loop de SEO](./seo-loop-progress.md)), así que esa dependencia no existe.
+- **Qué implica para este loop:** menos de lo que parece. Verificar una propiedad en GSC **no genera visitas**; solo habilita medir las que haya. El bloqueo de este loop nunca fue el alta sino el **volumen de usuarios**, y eso sigue igual.
+- **Acción concreta que sí se puede hacer hoy:** este loop no depende de GSC para nada — su fuente es la analítica propia (`product_events`). Se puede consultar ya mismo cuántos usuarios hay por día y dejar de especular sobre si el volumen alcanza. Movido al tope del backlog (§7).
+- **Experimento propuesto:** ninguno (falta volumen).
+
 ### Infra — 2026-07-22 — Producción lista, sin usuarios todavía
 
 - **Estado:** sigue BLOQUEADO (§0). Ningún experimento propuesto.
@@ -132,8 +140,8 @@ Snapshot del punto de partida, para medir contra esto.
 
 Ordenado por prioridad.
 
-1. **[bloqueante, humano]** Alta en Search Console (tarea del [loop de SEO](./seo-loop-progress.md)). Es el grifo del tráfico: sin eso este loop no acumula nada.
-2. **[bloqueante, espera]** Acumular volumen suficiente por cohorte una vez que entre tráfico. Semanas, no días.
+1. **[medible ya]** Consultar la analítica propia (`/api/admin/analytics` o la SQLite) y anotar cuántos visitantes únicos y usuarios nuevos por día hay hoy. Es un dato que **ya se puede obtener** y define cuán lejos está la precondición de volumen. No depende de GSC.
+2. **[bloqueante, espera]** Acumular volumen suficiente por cohorte. Semanas, no días.
 3. **[entorno]** Limpiar la `GH_TOKEN` inválida para que el mecanismo de branch/PR funcione (§0).
 4. Al haber datos: capturar baseline (§3).
 5. Cruzar `retentionBySource` con las fuentes que trae el loop de SEO — responder si el tráfico de búsqueda retiene distinto ANTES de proponer cambios de producto.
