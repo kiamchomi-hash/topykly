@@ -639,6 +639,16 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
 
     if (req.method === "POST" && url.pathname === "/api/events") {
       const body = await readJsonBody(req);
+      // Se responde 202 igual que siempre, pero no se registra nada ni se persiste
+      // sesion de invitado: un rastreador no debe inflar el denominador de la
+      // analitica ni aparecer como persona conectada.
+      if (!shouldCountProductEvent(req.headers["user-agent"])) {
+        sendBackendPayload(res, req, authService, 202, {
+          accepted: false,
+          returnVisitRecorded: false
+        });
+        return;
+      }
       sendBackendPayload(
         res,
         req,
@@ -1575,6 +1585,39 @@ function buildSitemapXml(store) {
   return renderSitemap(entries);
 }
 
+// Rastreadores que se identifican como tales. Sirve para dos cosas distintas:
+// decidir si a un cliente se le sirve la pagina SSR o se lo manda a la app, y
+// mantenerlo fuera de la analitica de producto.
+const DECLARED_BOT_UA =
+  /googlebot|bingbot|yandex|baiduspider|duckduckbot|yahoo|twitterbot|facebookexternalhit|discordbot|slackbot|lighthouse|telegrambot|embedly|quora link preview|outbrain|vkshare|pinterest|slack-imgproxy/i;
+
+// Automatizacion que no se declara pero se delata en el user agent.
+const HEADLESS_UA =
+  /headlesschrome|phantomjs|puppeteer|playwright|selenium|webdriver|python-requests|curl\/|wget|go-http-client|java\/|okhttp|axios|node-fetch|scrapy|httpclient/i;
+
+export function isDeclaredBotUserAgent(userAgent) {
+  return DECLARED_BOT_UA.test(String(userAgent || ""));
+}
+
+// Un evento de producto solo cuenta si vino de algo que parece una persona con un
+// navegador. Sin esto, cualquier rastreador que ejecute JS entra al denominador y
+// estrena subject_key, lo que infla las visitas y hunde toda tasa de conversion.
+//
+// No pretende atrapar automatizacion que se disfraza de Chrome: eso no se resuelve
+// desde el user agent. Cubre lo declarado y lo evidente, que es la mayoria.
+export function shouldCountProductEvent(userAgent) {
+  const normalized = String(userAgent || "").trim();
+  if (!normalized) {
+    // Un navegador real siempre manda user agent. La ausencia es de un cliente
+    // programatico, no de una persona.
+    return false;
+  }
+  if (isDeclaredBotUserAgent(normalized) || HEADLESS_UA.test(normalized)) {
+    return false;
+  }
+  return /mozilla|chrome|safari|firefox|edge|opera|mobile/i.test(normalized);
+}
+
 function isSeoPagePath(pathname) {
   return (
     pathname === "/archivo" ||
@@ -1602,10 +1645,7 @@ function handleSeoPageRequest(store, req, res, url) {
   }
 
   const userAgent = req.headers["user-agent"] || "";
-  const isBot =
-    /googlebot|bingbot|yandex|baiduspider|duckduckbot|yahoo|twitterbot|facebookexternalhit|discordbot|slackbot|lighthouse|telegrambot|embedly|quora link preview|outbrain|vkshare|pinterest|slack-imgproxy/i.test(
-      userAgent
-    );
+  const isBot = isDeclaredBotUserAgent(userAgent);
   const isBrowser = /mozilla|chrome|safari|firefox|edge|mobile/i.test(userAgent);
 
   if (isBrowser && !isBot) {

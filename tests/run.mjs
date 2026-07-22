@@ -9,8 +9,10 @@ import sharp from "sharp";
 import { createAuthService } from "../services/auth-service.js";
 import {
   getRequestIp,
+  isDeclaredBotUserAgent,
   isLocalDevLoginAllowed,
   isRequestOriginAllowed,
+  shouldCountProductEvent,
   startPreviewServer,
   shouldTrustProxy
 } from "../services/preview-server.js";
@@ -7020,6 +7022,44 @@ await (async () => {
       true
     );
     assert.equal(html.includes("Otros temas activos"), true);
+  });
+
+  await test("product analytics only counts events that look like real people", () => {
+    const CHROME =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    const IPHONE =
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
+    // Personas: cuentan.
+    assert.equal(shouldCountProductEvent(CHROME), true);
+    assert.equal(shouldCountProductEvent(IPHONE), true);
+    assert.equal(shouldCountProductEvent("Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"), true);
+
+    // Rastreadores declarados: no cuentan, aunque rendericen JS.
+    assert.equal(shouldCountProductEvent("Mozilla/5.0 (compatible; Googlebot/2.1)"), false);
+    assert.equal(shouldCountProductEvent("Mozilla/5.0 (compatible; bingbot/2.0)"), false);
+    assert.equal(shouldCountProductEvent("facebookexternalhit/1.1"), false);
+    assert.equal(shouldCountProductEvent("Slackbot-LinkExpanding 1.0"), false);
+
+    // Automatizacion evidente, incluida la que se envuelve en un UA de Chrome.
+    assert.equal(
+      shouldCountProductEvent(
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/120.0.0.0 Safari/537.36"
+      ),
+      false
+    );
+    assert.equal(shouldCountProductEvent("curl/8.4.0"), false);
+    assert.equal(shouldCountProductEvent("python-requests/2.31.0"), false);
+    assert.equal(shouldCountProductEvent("Go-http-client/1.1"), false);
+
+    // Sin user agent no es una persona: un navegador real siempre lo manda.
+    assert.equal(shouldCountProductEvent(""), false);
+    assert.equal(shouldCountProductEvent(undefined), false);
+    assert.equal(shouldCountProductEvent(null), false);
+
+    // El detector declarado sigue sirviendo al SSR, que es su otro uso.
+    assert.equal(isDeclaredBotUserAgent("Mozilla/5.0 (compatible; Googlebot/2.1)"), true);
+    assert.equal(isDeclaredBotUserAgent(CHROME), false);
   });
 
   await test("empty topic list tells the viewer what to do next", () => {

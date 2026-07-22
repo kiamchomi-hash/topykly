@@ -37,10 +37,17 @@ function readCookieHeader(response) {
 
 async function request(
   pathname,
-  { method = "GET", sessionId = "session-smoke-guest", body = undefined, expectedStatus = 200 } = {}
+  {
+    method = "GET",
+    sessionId = "session-smoke-guest",
+    body = undefined,
+    expectedStatus = 200,
+    extraHeaders = {}
+  } = {}
 ) {
   const headers = {
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    ...extraHeaders
   };
   const cookie = cookieJars.get(sessionId);
   if (cookie) {
@@ -279,6 +286,49 @@ try {
       payload.users.every((user) => !Object.hasOwn(user, "email")),
       true
     );
+  });
+
+  await test("product events are recorded for people and dropped for crawlers", async () => {
+    const CHROME =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    const person = await request("/api/events", {
+      method: "POST",
+      sessionId: "session-smoke-events-person",
+      body: { eventName: "page_view", routeGroup: "/", sourceGroup: "direct" },
+      expectedStatus: 202,
+      extraHeaders: { "User-Agent": CHROME }
+    });
+    assert.equal(person.accepted, true);
+
+    // Un rastreador recibe el mismo 202 —no se le avisa que fue descartado— pero
+    // no entra a la analitica.
+    const crawler = await request("/api/events", {
+      method: "POST",
+      sessionId: "session-smoke-events-bot",
+      body: { eventName: "page_view", routeGroup: "/", sourceGroup: "direct" },
+      expectedStatus: 202,
+      extraHeaders: {
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://google.com/bot.html)"
+      }
+    });
+    assert.equal(crawler.accepted, false);
+
+    const headless = await request("/api/events", {
+      method: "POST",
+      sessionId: "session-smoke-events-headless",
+      body: { eventName: "page_view", routeGroup: "/", sourceGroup: "direct" },
+      expectedStatus: 202,
+      extraHeaders: {
+        "User-Agent":
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    assert.equal(headless.accepted, false);
+
+    // Y no deja sesion de invitado persistida, asi que tampoco cuenta como
+    // persona conectada.
+    assert.equal(Boolean(cookieJars.get("session-smoke-events-bot")), false);
   });
 
   await test("opens a topic and posts a comment through the HTTP route", async () => {
