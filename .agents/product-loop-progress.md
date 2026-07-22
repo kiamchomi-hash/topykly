@@ -19,7 +19,7 @@ Si alguna falla, la corrida solo registra "bloqueado por precondición X" y term
 >
 > **Cuidado con el atajo tentador:** que la app esté publicada puede leerse como "ya se puede experimentar". No. Con el volumen actual cualquier lectura de retención es ruido, y §1 regla 7 lo prohíbe explícitamente.
 >
-> **Nota de entorno (bloquea el mecanismo de PR).** Hay una variable `GH_TOKEN` inválida que pisa la sesión válida de `gh` del keyring y hace fallar `git push` y los comandos `gh`. Mientras siga ahí, una corrida automatizada no puede abrir el branch/PR que exige la regla 1. Se limpia con `setx GH_TOKEN ""`.
+> **Nota de entorno — resuelta el 2026-07-22.** `GH_TOKEN` y `GITHUB_TOKEN` tapaban el token del keyring y hacían fallar `git push` y los comandos `gh`. Ambas fueron eliminadas del entorno de usuario y el push quedó verificado, así que el mecanismo de branch/PR de la regla 1 ya no está bloqueado por esto. Detalle del diagnóstico en el ítem 3 de §7.
 
 ---
 
@@ -176,7 +176,9 @@ Ordenado por prioridad.
 
 1. **[medible ya]** Consultar la analítica propia (`/api/admin/analytics` o la SQLite) y anotar cuántos visitantes únicos y usuarios nuevos por día hay hoy. Es un dato que **ya se puede obtener** y define cuán lejos está la precondición de volumen. No depende de GSC.
 2. **[bloqueante, espera]** Acumular volumen suficiente por cohorte. Semanas, no días.
-3. **[entorno, confirmado]** Limpiar la `GH_TOKEN` inválida (§0). Confirmado el 2026-07-22: `git push` falla con `Invalid username or token`. Hay dos variables que pisan el token válido del keyring, `GH_TOKEN` **y** `GITHUB_TOKEN`. Solución permanente: `setx GH_TOKEN ""` y `setx GITHUB_TOKEN ""`. Workaround por comando, sin tocar el entorno: limpiarlas en la sesión y pushear con `git -c credential.helper="!gh auth git-credential" push origin main`.
+3. **[entorno, RESUELTO el 2026-07-22]** Las variables `GH_TOKEN` y `GITHUB_TOKEN` fueron eliminadas del entorno de usuario. `gh` y `git push` usan el token del keyring (`gho_…`, scopes `gist, read:org, repo, workflow`) y funcionan sin workaround; verificado con `git push --dry-run`. El mecanismo de branch/PR de la regla 1 ya no está bloqueado por esto.
+
+   Detalle por si reaparece, porque el diagnóstico fácil es engañoso: **eran dos tokens distintos, no una variable duplicada.** `GH_TOKEN` estaba lisa y llanamente vencida (401). `GITHUB_TOKEN` era un PAT fine-grained **válido** que autenticaba bien y devolvía `permissions.push: true` al consultar el repo — pero igual daba 403 al pushear. Ese campo de la API describe el rol de **la cuenta** en el repositorio, no lo que el token fine-grained tiene concedido; no sirve para decidir si un token puede escribir. La única prueba que vale es intentar la operación (`git push --dry-run`). Como `gh` prioriza `GH_TOKEN` sobre `GITHUB_TOKEN` y ambas sobre el keyring, cualquiera de las dos presente tapaba al token que sí servía.
 4. **[pendiente de dato real]** Revisar el arreglo del puente archivo → chat vivo cuando exista el **primer tema archivado** en producción. Está desplegado y verificado en local, pero nunca se ejercitó con datos reales (ver la fecha de corte en §6).
 5. Al haber datos: capturar baseline (§3), **empezando el rango el 2026-07-22**: cualquier serie que cruce esa fecha mezcla dos productos distintos.
 6. Cruzar `retentionBySource` con las fuentes que trae el loop de SEO — responder si el tráfico de búsqueda retiene distinto ANTES de proponer cambios de producto.
