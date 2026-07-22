@@ -2465,13 +2465,24 @@ function buildBackendRankings(db, context, selectedTopicId = null) {
     }
   };
 }
-// Personas distintas con sesion viva en la ventana de presencia. Cuenta invitados
-// ademas de registrados: en el arranque son la mayoria de quienes estan mirando.
+// Personas distintas con sesion viva en la ventana de presencia.
+//
+// No se puede agrupar por user_id a secas: todos los invitados comparten la fila
+// guest-anonymous (ver getOrCreateGuestUser), asi que DISTINCT user_id los colapsa
+// en una sola persona. Para invitados la unidad es la sesion; para registrados sigue
+// siendo el usuario, para que dos pestanas de la misma persona no cuenten doble.
+//
+// Cuenta a quien tiene sesion persistida. Una lectura anonima no persiste sesion
+// (defensa antibot), asi que quien solo mira de paso no entra en el numero.
 function countOnlineUsers(db) {
   const since = new Date(Date.now() - PRESENCE_ONLINE_WINDOW_MS).toISOString();
   return Number(
     db
-      .prepare("SELECT COUNT(DISTINCT user_id) AS count FROM sessions WHERE updated_at >= ?")
+      .prepare(
+        `SELECT COUNT(DISTINCT CASE WHEN auth_mode = 'registered' THEN user_id ELSE id END) AS count
+         FROM sessions
+         WHERE updated_at >= ?`
+      )
       .get(since)?.count ?? 0
   );
 }

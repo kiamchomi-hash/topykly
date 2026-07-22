@@ -41,24 +41,27 @@ sin intención previa— es enorme: hay que pagar el costo completo de una cuent
 absolutamente nada a cambio.
 
 > **Nota técnica.** Los límites de invitado que existen en `getRateLimitConfig` (1 comentario cada
-> 5 min, 1 tema cada 2 h) son **inalcanzables**: el corte por registro se evalúa antes. Igual
-> `mapViewerRow` (`:1741`) se los calcula y se los manda al frontend, así que la UI transporta unos
-> límites que nunca pueden aplicarse. Vale limpiarlo, pero es cosmético al lado de lo de arriba.
+> 5 min, 1 tema cada 2 h) y lo que dice `task.md:73-74` son **historia del diseño**, no una tarea
+> pendiente: el corte por registro se evalúa antes y los vuelve inalcanzables.
 
-**Decisión tuya, no la tomo yo.** Es política de producto y toca auth, que está fuera de lo que
-puedo cambiar por mi cuenta. Los caminos, de más a menos ambicioso:
+### Que los invitados no participen es una decisión tomada, no un pendiente
 
-1. **Dejar comentar a los invitados**, con los límites estrictos que ya existen (1 cada 5 min) y
-   pidiendo la cuenta después, cuando la persona ya se enganchó. Es lo que más mueve la aguja y para
-   lo que el backend **ya tiene** la infraestructura de rate limit escrita y sin usar.
-2. **Registro sin código de email**: `registerWithPassword` ya existe en el backend y crea la cuenta
-   directo, sin viaje al correo. Hoy el modal no lo usa. Quita el peor paso sin abrir el sistema.
-3. **No tocar nada** y aceptar que la siembra convierte poquísimo, sembrando de a pocas personas y
-   solo donde ya te conocen.
+Decidido el 2026-07-22: **los invitados leen, no participan.** No está en discusión y no hay que
+volver sobre eso al analizar el embudo.
 
-Mi recomendación es la **1**: en un chat cuyo valor es que haya gente hablando ahora, exigir una
-cuenta con verificación por correo antes de la primera frase es pedir el pago antes de mostrar el
-producto. Pero tiene implicancias de moderación y abuso reales, y esa decisión es tuya.
+Hay dos motivos por los que alguien podría querer "arreglarlo" por error, y los dos son falsos:
+`task.md` describe invitados que crean temas y comentan, y el backend conserva sus límites escritos.
+Ninguna de las dos cosas es un pendiente.
+
+Además, técnicamente hoy no se podría sin más: todos los invitados comparten la fila de usuario
+`guest-anonymous` (`getOrCreateGuestUser`), así que no son distinguibles entre sí como autores ni
+moderables de a uno. Mientras solo lean, eso no genera ningún problema.
+
+**Entonces la palanca está adentro del registro, no afuera.** Si el drop-off de
+`auth_open` → `registration_complete` resulta ser el mayor punto de fuga, la opción a evaluar es
+sacar el viaje al correo: `registerWithPassword` ya existe en el backend y crea la cuenta directo,
+pero el modal de registro hoy no lo usa. Es una decisión de producto y de riesgo, así que se propone
+y la aprobás vos; no se aplica sola.
 
 **Mientras siga así**, todo el material de abajo asume que hay que registrarse para participar, y lo
 dice de frente en vez de esconderlo.
@@ -262,10 +265,11 @@ Sin esto, la siembra no enseña nada.
 - **No concluir con cohortes chicas.** Con 15 personas, una diferencia del 20 % es ruido. El
   veredicto honesto casi siempre va a ser "seguir midiendo".
 - **Una tanda por vez.** Es lo único que permite atribuir.
-- **Mirá primero `auth_open` → `registration_complete`.** Mientras participar exija cuenta (§0.2),
-  ese es el cuello de botella de todo: cada persona que se cae ahí es alguien que quiso escribir y
-  no pudo. Si esa tasa es muy baja, el problema no es el copy de la siembra ni los temas que
-  abriste, es el muro. No rediseñes nada más hasta descartarlo.
+- **Mirá primero `auth_open` → `registration_complete`.** Participar exige cuenta y así queda
+  (§0.2), con lo cual ese paso es el cuello de botella de todo: cada persona que se cae ahí es
+  alguien que quiso escribir y no pudo. Si esa tasa es muy baja, el problema no es el copy de la
+  siembra ni los temas que abriste, es el registro. Se trabaja adentro del registro —no abriendo la
+  participación a invitados— y no se rediseña nada más hasta descartarlo.
 
 **Señal de éxito real de esta fase:** no "entraron 100 personas", sino que **dos personas que no se
 conocen sostengan una conversación sin que vos participes**. Ese es el momento en que el producto
