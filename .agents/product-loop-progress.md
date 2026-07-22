@@ -119,6 +119,22 @@ Snapshot del punto de partida, para medir contra esto.
 
 > La más reciente arriba.
 
+### ⚠️ Fecha de corte — 2026-07-22 — Cuatro cambios de producto desplegados juntos
+
+**Toda serie histórica anterior al 2026-07-22 no es comparable con la posterior.** Segmentar por esta fecha antes de leer cualquier métrica que la cruce (regla 10 de §1).
+
+- **Estado:** sigue BLOQUEADO (§0). Esto no es una iteración ni un experimento: es el registro de un corte, exigido por la regla 10.
+- **Qué se desplegó** (push `5d86ddd..e25858d`, CI en `success`, producción verificada en vivo):
+  - `da39a61` + `daf7b87` — se quitó la autorredirección hacia la app en las páginas SEO de tema y de perfil. Antes, quien llegaba desde Google a un **tema archivado** era rebotado a la SPA sobre una conversación de solo lectura, sin llegar a leer nada; y para Googlebot cada URL indexada parecía una redirección. Afecta adquisición orgánica y el embudo de entrada.
+  - `f094361` — ventana visible de temas adaptativa a la población conectada (5 visibles con menos de 8 conectados, subiendo hasta los 20 de siempre con 40+). **Cambia qué ve todo el mundo al entrar**, así que corta las series de `topic_open` y de profundidad de navegación. El conjunto activo de 40 y la expulsión no se tocaron.
+  - `aa0a455` + `ab6f53f` — contador de presencia real en el panel de usuarios, contando personas y no filas.
+  - `aa3e234` — estado vacío en la lista de temas. Antes, con cero temas no se renderizaba nada y la app se leía como rota: es lo que veía cualquiera que entrara a producción.
+  - `3193b14` + `e25858d` — título y descripción del sitio reescritos (`<title>`, `og`, `twitter`, `h1` y el `BASE_TITLE` de runtime). Afecta el snippet de Google y las tarjetas al compartir, con semanas de retraso hasta reindexar.
+- **Limitación de atribución, explícita:** salieron **juntos** y tocan superficies distintas. Si alguna métrica se mueve, **no se puede atribuir a ninguno en particular**. No escribir en una iteración futura que "la ventana adaptativa mejoró X": el diseño no lo permite. Es una violación consciente de la regla 8 (un experimento a la vez), aceptada porque con el volumen actual no había ninguna señal que preservar — pero deja de ser aceptable en cuanto entre tráfico.
+- **Sin ejercitar en producción:** el arreglo del archivo está desplegado pero **no hay ningún tema archivado todavía** (hacen falta 40 temas activos desplazándose). Verificado en local forzando expulsiones; sin dato de producción hasta que exista el primer archivado. **Revisar cuando aparezca.**
+- **Qué NO cambió:** el volumen. Este loop sigue bloqueado por lo mismo de siempre.
+- **Experimento propuesto:** ninguno.
+
 ### Correccion — 2026-07-22 — GSC ya estaba verificado; el bloqueo es volumen
 
 - **Estado:** sigue BLOQUEADO (§0), sin experimentos propuestos.
@@ -160,10 +176,11 @@ Ordenado por prioridad.
 
 1. **[medible ya]** Consultar la analítica propia (`/api/admin/analytics` o la SQLite) y anotar cuántos visitantes únicos y usuarios nuevos por día hay hoy. Es un dato que **ya se puede obtener** y define cuán lejos está la precondición de volumen. No depende de GSC.
 2. **[bloqueante, espera]** Acumular volumen suficiente por cohorte. Semanas, no días.
-3. **[entorno]** Limpiar la `GH_TOKEN` inválida para que el mecanismo de branch/PR funcione (§0).
-4. Al haber datos: capturar baseline (§3).
-5. Cruzar `retentionBySource` con las fuentes que trae el loop de SEO — responder si el tráfico de búsqueda retiene distinto ANTES de proponer cambios de producto.
-6. Primer foco candidato de bajo costo: el drop-off `auth_open` → `registration_complete` (gente que abre el modal de registro y no completa). Ya está medido; una hipótesis de copy/fricción del formulario es barata y reversible.
+3. **[entorno, confirmado]** Limpiar la `GH_TOKEN` inválida (§0). Confirmado el 2026-07-22: `git push` falla con `Invalid username or token`. Hay dos variables que pisan el token válido del keyring, `GH_TOKEN` **y** `GITHUB_TOKEN`. Solución permanente: `setx GH_TOKEN ""` y `setx GITHUB_TOKEN ""`. Workaround por comando, sin tocar el entorno: limpiarlas en la sesión y pushear con `git -c credential.helper="!gh auth git-credential" push origin main`.
+4. **[pendiente de dato real]** Revisar el arreglo del puente archivo → chat vivo cuando exista el **primer tema archivado** en producción. Está desplegado y verificado en local, pero nunca se ejercitó con datos reales (ver la fecha de corte en §6).
+5. Al haber datos: capturar baseline (§3), **empezando el rango el 2026-07-22**: cualquier serie que cruce esa fecha mezcla dos productos distintos.
+6. Cruzar `retentionBySource` con las fuentes que trae el loop de SEO — responder si el tráfico de búsqueda retiene distinto ANTES de proponer cambios de producto.
+7. Primer foco candidato de bajo costo: el drop-off `auth_open` → `registration_complete` (gente que abre el modal de registro y no completa). Ya está medido; una hipótesis de copy/fricción del formulario es barata y reversible. **Ojo con el alcance:** participar exige cuenta y así queda por decisión de producto (2026-07-22), así que la palanca se busca **adentro** del registro — por ejemplo evitar el viaje al correo con `registerWithPassword`, que ya existe— y nunca abriendo la participación a invitados.
 
 ---
 
