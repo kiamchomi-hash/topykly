@@ -286,7 +286,7 @@ export function renderTopicsIndexPage(topics, { origin }) {
   return renderPageShell({
     title: "Temas activos — TOPYKLY",
     description:
-      "Lista de temas activos en TOPYKLY, la comunidad para conversar por temas, descubrir rankings y conectar con usuarios.",
+      "Conversaciones abiertas ahora en TOPYKLY, el chat público por temas donde cada tema sigue vivo mientras haya gente respondiendo.",
     canonicalUrl: `${origin}/temas`,
     jsonLd: {
       "@context": "https://schema.org",
@@ -380,7 +380,7 @@ export function renderProfilePage(profile, { origin }) {
     title: `${profile.name} (@${profile.nickname}) — TOPYKLY`,
     description: profile.description
       ? `${profile.description} — Perfil de @${profile.nickname} en TOPYKLY.`
-      : `Perfil público de @${profile.nickname} en TOPYKLY, la comunidad para conversar por temas.`,
+      : `Perfil público de @${profile.nickname} en TOPYKLY, el chat público por temas.`,
     canonicalUrl,
     robotsMeta: profile.indexable ? "index,follow" : "noindex,follow",
     jsonLd,
