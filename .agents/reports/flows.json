@@ -1,38 +1,36 @@
 {
-  "agentName": "Agente de Flujos de Usabilidad",
-  "status": "reviewed",
-  "lastChecked": "2026-07-16T16:20:00-03:00",
-  "scope": "Adquisición, activación, participación, retención y recomendación",
-  "funnel": [
+  "generatedAt": "2026-07-21T12:28:19-03:00",
+  "scope": ["visita invitada", "apertura de tema", "creación de tema", "autenticación", "ranking"],
+  "changes": [
     {
-      "stage": "Adquisición",
-      "strength": "Robots, sitemap, páginas públicas, metadatos sociales y tarjetas compartibles están implementados.",
-      "weakness": "No hay analítica de producto visible y la propuesta de valor es genérica.",
-      "priorityAction": "Medir visita, apertura de tema, intento de publicar, inicio de registro, registro completo y regreso a 1/7 días."
+      "flow": "Invitado -> publicar",
+      "status": "fixed",
+      "result": "El requisito de cuenta aparece antes de escribir y el botón abre directamente la autenticación."
     },
     {
-      "stage": "Activación",
-      "strength": "El visitante puede leer temas y abrir el registro con Google o email.",
-      "weakness": "La portada no explica de forma visible que la propuesta es entrar y conversar. El formulario de crear tema se muestra a invitados aunque el backend exige registro.",
-      "priorityAction": "Explicar la propuesta con una frase breve y abrir directamente el registro cuando una acción requiera cuenta, preservando el borrador."
+      "flow": "Invitado móvil -> crear tema",
+      "status": "fixed",
+      "result": "Crear tema abre autenticación sin mostrar un compositor inutilizable."
     },
     {
-      "stage": "Participación",
-      "strength": "Crear temas, comentar, citar, reaccionar, reportar y compartir forman un ciclo conversacional completo.",
-      "weakness": "Los límites de publicación pueden cortar el ritmo de una charla cuando todavía hay pocas personas conectadas.",
-      "priorityAction": "Revisar los tiempos de espera para usuarios registrados confiables sin debilitar los controles contra abuso."
+      "flow": "Explorar temas",
+      "status": "fixed",
+      "result": "La actividad relativa ayuda a elegir una conversación activa sin abrir cada tema."
     },
     {
-      "stage": "Retención",
-      "strength": "Hay notificaciones internas, temas seguidos implícitamente, amistades y presencia.",
-      "weakness": "Los temas seguidos viven en memoria del cliente y las notificaciones web requieren que la app esté abierta; no existe un retorno asíncrono.",
-      "priorityAction": "Persistir seguimiento y ofrecer un digest opcional o avisos de respuesta por email."
+      "flow": "Ranking",
+      "status": "preserved",
+      "result": "Los controles GLOBAL, TEMA, anterior y siguiente siguen disponibles."
     },
     {
-      "stage": "Recomendación",
-      "strength": "Compartir genera URL estable, tarjeta social y opción nativa.",
-      "weakness": "No hay invitaciones con contexto, atribución de referidos ni llamado a traer a otra persona a una conversación concreta.",
-      "priorityAction": "Convertir Compartir en un flujo de invitación a responder un tema específico y medir su conversión."
+      "flow": "Recarga mobile -> resolución de sesión",
+      "status": "fixed",
+      "result": "El estado inicial queda pendiente y evita mostrar acceso o controles privados hasta que el bootstrap confirma la sesión."
     }
-  ]
+  ],
+  "validation": {
+    "desktop": "1440x900: tema, acceso de invitado, autenticación y ranking verificados",
+    "mobile": "390x844: lista, actividad, creación de tema y recarga durante resolución de sesión verificados"
+  },
+  "remainingRecommendations": []
 }

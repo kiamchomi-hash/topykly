@@ -1,40 +1,38 @@
 {
-  "agentName": "Agente Arquitecto",
-  "status": "reviewed",
-  "lastChecked": "2026-07-16T18:24:22-03:00",
-  "guidelinesReviewed": [
-    "AGENTS.md",
-    "GEMINI.md",
-    "CLAUDE.md",
-    ".agents/resolved_issues.md"
-  ],
-  "strengths": [
-    "La regla SEO problemática está centralizada en el backend y se aplica a páginas, listados y sitemap.",
-    "El panel administrativo reutiliza la analítica agregada existente sin crear otra fuente de datos.",
-    "La sincronización normal usa SSE y conserva polling espaciado como respaldo y comprobación de seguridad.",
-    "SQLite mantiene WAL y suma ajustes conservadores de concurrencia y memoria compatibles con el despliegue actual.",
-    "La mascota y Coloris salen del grafo inicial de módulos mediante importación dinámica."
-  ],
-  "risks": [
+  "generatedAt": "2026-07-16T21:25:00-03:00",
+  "guidelines": ["AGENTS.md", "GEMINI.md"],
+  "completedRefactors": [
     {
-      "severity": "medium",
-      "id": "large-active-modules",
-      "message": "backend-store.js, styles.css y tests/run.mjs siguen concentrando muchas responsabilidades.",
-      "recommendation": "Separarlos gradualmente por responsabilidad cuando se modifiquen esas áreas, sin introducir nuevas capas."
+      "area": "controller-render.js",
+      "change": "Carga dinámica de administración, paletas, perfil, perfil público, reportes y ajustes.",
+      "impact": "Reduce el grafo inicial sin tocar rankings ni el render principal."
     },
     {
-      "severity": "low",
-      "id": "single-process-live-events",
-      "message": "El hub SSE es local al proceso y SQLite conserva un único escritor; un despliegue futuro con varias instancias necesitará coordinación compartida.",
-      "recommendation": "Al superar una sola instancia, migrar eventos a pub/sub y persistencia a una base administrada o a la arquitectura Cloudflare prevista."
+      "area": "ui/profile-edit-state.js",
+      "change": "Estado de edición de perfil extraído de la vista modal.",
+      "impact": "El encabezado ya no arrastra toda la vista de perfil al inicio."
+    },
+    {
+      "area": "services/live-event-hub.js",
+      "change": "Hub SSE extraído con interfaz opcional de relay compartido y protección contra eco propio.",
+      "impact": "Reduce el acoplamiento del servidor y prepara sincronización entre instancias."
+    },
+    {
+      "area": "services/backend-store.js",
+      "change": "Analítica amplía fuente, ruta y cohorte, con índices parciales para consultas de page_view.",
+      "impact": "El panel administrativo obtiene adquisición y retención sin almacenar contenido ni IP."
     }
   ],
-  "resolvedChanges": [
-    "Contenido ofensivo o con reportes abiertos queda noindex y fuera de hubs, relacionados y sitemap aunque tenga suficientes comentarios.",
-    "El administrador dispone de una sección visual de métricas con embudo, eventos y actividad diaria.",
-    "SSE reemplaza el polling frecuente; el fallback pasa a 30, 60 y 120 segundos según estado.",
-    "La mascota no se crea con paneles cerrados y su módulo, imagen y el cargador de Coloris se difieren hasta la interacción.",
-    "SQLite usa WAL, busy_timeout, synchronous NORMAL, temp_store MEMORY y autocheckpoint."
-  ],
-  "proposedDiffs": []
+  "residualRisks": [
+    {
+      "area": "services/backend-store.js",
+      "severity": "medium",
+      "detail": "Sigue siendo un módulo grande y síncrono; separar dominios requiere una migración gradual con pruebas de paridad."
+    },
+    {
+      "area": "services/preview-server.js",
+      "severity": "medium",
+      "detail": "La implementación predeterminada del relay sigue siendo local hasta configurar infraestructura compartida."
+    }
+  ]
 }

@@ -1,84 +1,59 @@
 {
-  "generatedAt": "2026-07-16T19:22:58-03:00",
-  "scope": "Contenido ofensivo noindex, panel administrativo de analítica, carga inicial y sincronización en vivo",
-  "routes": [
-    "http://127.0.0.1:4173/",
-    "http://127.0.0.1:4174/",
-    "http://127.0.0.1:4173/api/live",
-    "http://127.0.0.1:4173/temas",
-    "http://127.0.0.1:4173/sitemap.xml"
-    ,
-    "https://www.topykly.com/",
-    "https://www.topykly.com/api/live",
-    "https://www.topykly.com/sitemap.xml"
-  ],
+  "generatedAt": "2026-07-16T21:25:00-03:00",
+  "scope": "Título público, acceso de invitados, actividad, carga inicial, analítica y SEO técnico",
   "environment": {
-    "server": "node local-server.cjs y producción Render/Cloudflare",
+    "url": "http://127.0.0.1:4173/",
     "browser": "Chromium mediante Playwright CLI",
-    "viewports": [
-      "390x844",
-      "1440x900"
-    ],
-    "dataState": "Base local existente y base temporal determinista para el panel administrador"
+    "viewports": ["1440x900", "390x844"],
+    "dataState": "Base local existente"
   },
-  "findings": [
+  "testedRoutes": [
+    "/",
+    "/tema/editorial-topic-5/que-plan-gratuito-o-economico-recomiendas-para-este-invierno",
+    "/api/live",
+    "/sitemap.xml"
+  ],
+  "measurements": {
+    "initialStaticRequests": 55,
+    "previousApproximateStaticRequests": 68,
+    "mascotPngBytes": 695038,
+    "servedMascotWebpBytes": 72496,
+    "browserConsoleErrors": 0
+  },
+  "fixes": [
     {
-      "id": "offensive-content-indexability",
-      "dimension": "seo",
-      "severity": "moderate",
-      "status": "fixed_live",
-      "fix": "El título, los mensajes y los reportes abiertos determinan isProblematic; esos temas reciben noindex y se excluyen de sitemap, hubs y relacionados.",
-      "evidence": [
-        "La prueba de servidor mantiene indexable un tema con tres comentarios y lo cambia a noindex al añadir un comentario ofensivo.",
-        "La misma prueba confirma su desaparición de /temas y sitemap.xml.",
-        "Un tema ofensivo real devolvió X-Robots-Tag noindex y quedó fuera del sitemap de producción."
-      ]
+      "id": "public-title",
+      "status": "fixed",
+      "evidence": "El título, Open Graph, Twitter y H1 presentan TOPYKLY como conversaciones por temas."
     },
     {
-      "id": "admin-analytics-panel",
-      "dimension": "ux",
-      "severity": "moderate",
-      "status": "fixed_live",
-      "fix": "Se añadió la sección Métricas al panel de administración con visitantes, aperturas, registros, publicaciones, regresos, eventos y actividad diaria.",
-      "evidence": [
-        "Chromium mostró el diálogo con el embudo completo a 1440x900.",
-        "La consola del navegador registró cero errores y cero advertencias."
-      ]
+      "id": "guest-participation",
+      "status": "fixed",
+      "evidence": "El invitado ve el requisito de cuenta antes del compositor y los intentos de crear o publicar abren autenticación."
     },
     {
-      "id": "eager-mascot-download",
-      "dimension": "performance",
-      "severity": "high",
-      "status": "fixed_live",
-      "fix": "Los paneles cerrados no crean su estado vacío y mascot.js se importa únicamente al mostrar la mascota.",
-      "evidence": [
-        "La navegación móvil inicial realizó 64 solicitudes totales y no solicitó ui/mascot.js ni assets/mascot/topy-concept-v8.png.",
-        "El grafo estático calculado desde app.js contiene 55 módulos y excluye mascot.js y coloris-loader.js."
-      ]
+      "id": "topic-activity",
+      "status": "fixed",
+      "evidence": "Cada tema muestra actividad relativa, por ejemplo 'hace 2 d', en escritorio y móvil."
     },
     {
-      "id": "polling-and-sqlite-pressure",
-      "dimension": "performance",
-      "severity": "moderate",
-      "status": "live_for_current_scale",
-      "fix": "El cliente recibe avisos por SSE y consulta datos solo cuando hay cambios; el polling queda como respaldo de 30/60/120 segundos y SQLite incorpora pragmas conservadores.",
-      "evidence": [
-        "Chromium mantiene una conexión /api/live en la carga inicial.",
-        "La prueba HTTP confirma que una creación correcta emite un evento update.",
-        "La suite prueba el aplazamiento de eventos mientras la pestaña está oculta."
-      ]
+      "id": "initial-load",
+      "status": "fixed",
+      "evidence": "Los paneles secundarios se cargan bajo demanda y la mascota servida usa WebP; el inicio bajó aproximadamente de 68 a 55 recursos estáticos."
+    },
+    {
+      "id": "offensive-noindex",
+      "status": "verified",
+      "evidence": "Las pruebas del servidor confirman noindex y exclusión del sitemap para temas problemáticos."
+    },
+    {
+      "id": "ranking-preserved",
+      "status": "verified",
+      "evidence": "El ranking global y por tema permanece visible y no se modificó su cálculo."
     }
   ],
-  "verification": {
-    "fullQa": "passed: 178 deterministic tests and 12 smoke checks",
-    "browserMobile": "passed at 390x844; mascot and Coloris absent from initial requests",
-    "browserDesktop": "passed at 1440x900; admin analytics rendered without console errors",
-    "productionBrowser": "passed at 390x844; topic navigation, SSE and deferred mascot verified without console errors",
-    "diffCheck": "passed; only line-ending conversion warnings"
-  },
   "residualRisks": [
-    "La imagen original de la mascota sigue siendo grande cuando el usuario abre un estado vacío; ya no afecta la carga inicial.",
-    "SSE en memoria y SQLite son adecuados para una sola instancia, pero no sustituyen pub/sub y una base multiinstancia cuando el tráfico crezca.",
-    "El grafo inicial todavía es amplio aunque bajó y ya no incluye los módulos diferidos."
+    "No se ejecutó Lighthouse ni una traza de Core Web Vitals; no se afirma conformidad WCAG completa.",
+    "El escalado horizontal requiere configurar una implementación externa del relay y migrar SQLite a almacenamiento compartido."
   ]
 }

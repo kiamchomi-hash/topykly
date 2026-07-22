@@ -1,55 +1,43 @@
 {
-  "agentName": "Agente QA",
+  "generatedAt": "2026-07-21T12:28:19-03:00",
   "status": "passed",
-  "lastChecked": "2026-07-16T18:24:22-03:00",
-  "tests": [
+  "commands": [
     {
-      "name": "UI suite",
+      "command": "npm test",
+      "result": "passed",
+      "passed": 182,
+      "failed": 0
+    },
+    {
       "command": "npm run test:ui",
-      "status": "passed",
-      "summary": "75 ejecutadas; SSE, intervalos de respaldo, mascota diferida y estructura del panel pasaron."
+      "result": "passed",
+      "passed": 77,
+      "failed": 0
     },
     {
-      "name": "backend suite",
-      "command": "npm run test:backend",
-      "status": "passed",
-      "summary": "51 ejecutadas; analítica administrativa, SQLite y persistencia pasaron."
+      "command": "node tests/smoke.mjs",
+      "result": "passed",
+      "passed": 12,
+      "failed": 0
     },
     {
-      "name": "server suite",
-      "command": "npm run test:server",
-      "status": "passed",
-      "summary": "24 ejecutadas; SSE y noindex ofensivo con exclusión del sitemap pasaron."
-    },
-    {
-      "name": "complete QA",
-      "command": "npm run qa",
-      "status": "passed",
-      "summary": "178 pruebas deterministas y 12 comprobaciones HTTP pasaron."
-    },
-    {
-      "name": "browser verification",
-      "command": "Playwright CLI",
-      "status": "passed",
-      "summary": "Panel de métricas validado en escritorio; carga inicial validada en móvil sin mascota ni Coloris."
-    },
-    {
-      "name": "diff validation",
-      "command": "git diff --check",
-      "status": "passed",
-      "summary": "Sin errores de espacios; solo advertencias de conversión de finales de línea."
+      "command": "Playwright CLI en 1440x900 y 390x844",
+      "result": "passed",
+      "checks": [
+        "título público",
+        "actividad relativa",
+        "acceso de invitados",
+        "banner oculto mientras la sesión está pending",
+        "banner visible al confirmar logged-out",
+        "modal de autenticación",
+        "ranking preservado",
+        "carga diferida de paletas",
+        "sin errores de consola"
+      ]
     }
   ],
-  "suiteCoverage": {
-    "total": 178,
-    "core": 28,
-    "ui": 75,
-    "backend": 51,
-    "server": 24,
-    "smoke": 12
-  },
   "notes": [
-    "Se añadió cobertura específica para eventos SSE y contenido ofensivo indexable por volumen.",
-    "La comprobación del navegador no produjo errores ni advertencias de consola en el panel administrativo."
+    "Node mostró únicamente la advertencia experimental conocida de node:sqlite.",
+    "No se realizó despliegue."
   ]
 }

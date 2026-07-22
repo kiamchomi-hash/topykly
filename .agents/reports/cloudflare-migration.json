@@ -1,0 +1,37 @@
+{
+  "generatedAt": "2026-07-16T21:25:00-03:00",
+  "activeRuntime": "Node HTTP en Render, SQLite con WAL y SSE con polling espaciado como respaldo",
+  "inventory": {
+    "incompatibleWithWorkers": [
+      "node:sqlite y consultas síncronas",
+      "node:fs y base SQLite en disco",
+      "temporizadores de limpieza de proceso",
+      "conexiones SSE mantenidas por una sola instancia"
+    ],
+    "candidateTargets": {
+      "database": "D1",
+      "binaryObjects": "R2",
+      "staticAssets": "Cloudflare Static Assets",
+      "liveRelay": "servicio compartido compatible con publish/subscribe"
+    }
+  },
+  "completed": [
+    "El hub SSE se separó de preview-server.js.",
+    "startPreviewServer acepta liveEventRelay sin alterar la ruta Node/SQLite activa.",
+    "Los eventos incluyen sourceId para evitar que una instancia procese su propio eco.",
+    "Las pruebas de servidor y humo verifican que el comportamiento local conserva paridad."
+  ],
+  "notExecuted": [
+    "No se crearon recursos D1 o R2.",
+    "No se copiaron datos de producción.",
+    "No se cambió DNS ni se realizó despliegue."
+  ],
+  "nextStages": [
+    "Separar persistencia por dominios comenzando por analítica de producto.",
+    "Crear migraciones D1 idempotentes y pruebas de orden, paginación y restricciones.",
+    "Implementar el relay compartido en un entorno aislado.",
+    "Exportar, importar y comparar conteos antes de cualquier corte de producción."
+  ],
+  "rollback": "Mantener Render y la base SQLite como sistema activo; si falla una etapa, retirar el adaptador o relay externo y volver al hub local sin importar datos sobre la base original.",
+  "remainingRisk": "SQLite continúa limitando el escalado horizontal hasta completar la migración de persistencia."
+}
