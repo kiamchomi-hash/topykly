@@ -39,6 +39,8 @@ Note: a parallel `features/` directory (chat, rankings, topics, users, titles, p
 
 `services/preview-server.js` is a plain `node:http` server (no framework) that routes `/api/*` to `backend-store.js`, serves static files, handles avatar uploads under `/avatars/*`, enforces per-IP rate limiting, sets CSP/security headers, and runs periodic guest-session cleanup + a daily like/dislike reset job. This is both the local dev server and the production server (`local-server.cjs`/`dev-server.cjs` start it).
 
+**Single-instance constraint (open risk).** Production runs exactly one Node process, and two pieces of the design assume that: SQLite is a local file on a Render disk (`TOPYKLY_DB_PATH`, single writer), and the SSE hub in `services/live-event-hub.js` holds connections in-process. `createLiveEventHub` already accepts an optional `liveEventRelay` and stamps a `sourceId` on every event so an instance ignores its own echo, but the default relay is local — no shared pub/sub is configured. **Do not scale to multiple instances** without first migrating persistence to shared storage and wiring a real relay; a second instance would split the SSE fanout and contend for the SQLite writer. A Cloudflare migration (D1 + R2) is scoped in `.agents/reports/cloudflare-migration.json`, but no resources were created and no data was copied.
+
 Key REST endpoints (`/api/...`): `bootstrap`, `topics`, `topics/:id`, `topics/:id/messages`, `messages/:id/like|dislike`, `reports`, `friends/:id/request|accept|reject`, `profile` (PATCH), `auth/status|login|logout|password/login|password/register|email/request-code|email/verify-code`, `admin/dashboard`, `moderation/reports|actions`, `diagnostics`, plus `/auth/oidc/callback`.
 
 ### Auth
