@@ -20,28 +20,48 @@ Producción no siembra datos de demo (`services/preview-server.js:1897`, `should
 **Antes de invitar a nadie:** que haya conversación real en curso (§4) o un estado vacío que
 invite a abrir el primer tema. Es un cambio chico y lo puedo hacer cuando digas.
 
-### 0.2 El límite de invitado rompe justo el momento del pico
+### 0.2 Un invitado no puede participar: solo leer
 
-|            | Crear tema    | Comentar         |
-| ---------- | ------------- | ---------------- |
-| Invitado   | 1 cada 2 h    | **1 cada 5 min** |
-| Registrado | 1 cada 30 min | 1 cada 10 s      |
+Este es el bloqueo grande, y hay que entenderlo bien antes de invitar a nadie.
 
-(`services/backend-store.js:734-746`)
+Un invitado **no puede comentar, ni crear temas, ni dar likes**. No es que tenga límites más
+estrictos: no puede, y punto. `addMessage` (`services/backend-store.js:5890`) y `createTopic`
+(`:5828`) llaman a `assertRegisteredContextCanPost`, que devuelve `403 LOGIN_REQUIRED` a cualquiera
+que no esté registrado (`:3403-3411`). Los likes y dislikes tienen su propio corte equivalente
+(`:5943`, `:5960`).
 
-Si entran 20 personas de golpe desde un enlace, llegan como invitadas, escriben una vez y quedan
-mudas 5 minutos. En un chat cuyo valor es que haya gente hablando **ahora**, eso mata la primera
-impresión de todo el grupo a la vez.
+Lo único que puede hacer un invitado es leer y reportar.
 
-**Decisión tuya, no la tomo yo** (es límite antiabuso, no cosmética). Tres caminos:
+**Lo que hay entre alguien que llega y su primera palabra:** elegir nickname, dar email, dar edad,
+elegir contraseña, aceptar términos, resolver Turnstile si está configurado, **salir de la app a
+buscar un código en el correo** y volver a pegarlo antes de que expiren los 10 minutos.
 
-1. Bajar el límite de invitado a ~30-60 s mientras el volumen sea chico, y subirlo si aparece abuso.
-2. Dejarlo y hacer que el registro sea lo primero que se ofrece al segundo comentario, explicando
-   que registrarse baja la espera a 10 s.
-3. No tocar nada y sembrar de a pocas personas por vez, nunca en ráfaga.
+Esa es la verdadera pared. Para tráfico sembrado —gente que entró por curiosidad, desde un enlace,
+sin intención previa— es enorme: hay que pagar el costo completo de una cuenta antes de recibir
+absolutamente nada a cambio.
 
-Mi recomendación es la **1**, temporal y reversible: con menos de 100 usuarios el riesgo de spam es
-bajo y el costo de la fricción es total. Pero decidís vos.
+> **Nota técnica.** Los límites de invitado que existen en `getRateLimitConfig` (1 comentario cada
+> 5 min, 1 tema cada 2 h) son **inalcanzables**: el corte por registro se evalúa antes. Igual
+> `mapViewerRow` (`:1741`) se los calcula y se los manda al frontend, así que la UI transporta unos
+> límites que nunca pueden aplicarse. Vale limpiarlo, pero es cosmético al lado de lo de arriba.
+
+**Decisión tuya, no la tomo yo.** Es política de producto y toca auth, que está fuera de lo que
+puedo cambiar por mi cuenta. Los caminos, de más a menos ambicioso:
+
+1. **Dejar comentar a los invitados**, con los límites estrictos que ya existen (1 cada 5 min) y
+   pidiendo la cuenta después, cuando la persona ya se enganchó. Es lo que más mueve la aguja y para
+   lo que el backend **ya tiene** la infraestructura de rate limit escrita y sin usar.
+2. **Registro sin código de email**: `registerWithPassword` ya existe en el backend y crea la cuenta
+   directo, sin viaje al correo. Hoy el modal no lo usa. Quita el peor paso sin abrir el sistema.
+3. **No tocar nada** y aceptar que la siembra convierte poquísimo, sembrando de a pocas personas y
+   solo donde ya te conocen.
+
+Mi recomendación es la **1**: en un chat cuyo valor es que haya gente hablando ahora, exigir una
+cuenta con verificación por correo antes de la primera frase es pedir el pago antes de mostrar el
+producto. Pero tiene implicancias de moderación y abuso reales, y esa decisión es tuya.
+
+**Mientras siga así**, todo el material de abajo asume que hay que registrarse para participar, y lo
+dice de frente en vez de esconderlo.
 
 ---
 
@@ -67,7 +87,7 @@ Todo lo de acá abajo es verdad verificable en el producto. No usar nada que no 
 > donde todo se pierde. Es un punto intermedio: hay una cantidad limitada de temas activos a la vez,
 > cada uno guarda solo las últimas respuestas, y los temas se ordenan por actividad reciente — si
 > alguien responde algo viejo, vuelve arriba. Cuando un tema queda desplazado, pasa al archivo: se
-> puede leer, no se puede seguir respondiendo. Se puede participar sin cuenta.
+> puede leer, no se puede seguir respondiendo.
 
 **El diferencial en una línea, para cuando te preguntan "¿en qué se diferencia de X?":**
 
@@ -80,6 +100,9 @@ Todo lo de acá abajo es verdad verificable en el producto. No usar nada que no 
 - No prometer la tienda ni cosméticos: todavía no están implementados.
 - No decir "en tiempo real": la sincronización es por polling de 1 segundo. "Se actualiza solo" es
   verdad; "tiempo real" es una exageración innecesaria.
+- **No decir que se puede participar sin cuenta.** Es falso hoy (§0.2): sin registrarse solo se
+  puede leer. Prometerlo garantiza que la persona llegue, escriba, choque contra el muro y se vaya
+  con la sensación de que la engañaron. Es la peor forma posible de gastar una invitación.
 
 ---
 
@@ -115,11 +138,12 @@ No copiar y pegar el mismo en todos lados. Adaptar siempre la primera línea al 
 > respuestas. Cuando un tema se cae de la lista queda archivado para leer, pero ya no se puede
 > responder.
 >
-> Ahora mismo hay poca gente, así que si entran de a varios se nota mucho más. Se puede participar
-> sin crear cuenta. Si algo se siente raro, decímelo directamente.
+> Ahora mismo hay poca gente, así que si entran de a varios se nota mucho más. Aviso: para escribir
+> hay que crear cuenta, leer se puede sin nada. Si algo se siente raro, decímelo directamente.
 
-_Por qué funciona:_ no oculta que está vacío. Convierte la escasez en motivo para entrar juntos, que
-es exactamente lo que necesita un chat en vivo.
+_Por qué funciona:_ no oculta que está vacío ni que hay que registrarse. Convierte la escasez en
+motivo para entrar juntos, que es lo que necesita un chat en vivo, y avisa del costo antes de que la
+persona lo descubra sola —que es la diferencia entre una fricción y un engaño.
 
 ### 3.2 Comunidad de proyectos / indie
 
@@ -146,17 +170,26 @@ pregunta que a un anuncio.
 >
 > El tema está acá: [enlace directo al tema]
 >
-> No hace falta cuenta para responder.
+> Se puede leer sin cuenta; para responder hay que registrarse.
 
 _Por qué funciona:_ invita a **una conversación concreta**, no a una plataforma. Enlace directo al
-tema, nunca a la home — que alguien caiga en una lista vacía es el peor primer segundo posible.
+tema, nunca a la home — que alguien caiga en una lista vacía es el peor primer segundo posible. Y
+como acá el registro es un costo real, el tema tiene que valer el precio: una pregunta tibia no lo
+paga.
 
 ### 3.4 Mensaje a una persona (WhatsApp / DM)
 
 > Armé un chat por temas y estoy juntando las primeras personas. Abrí un tema sobre [algo que le
-> interese a esa persona]: [enlace]. ¿Le tirás una respuesta? Con poca gente cada respuesta se nota.
+> interese a esa persona]: [enlace]. ¿Le tirás una respuesta? Te va a pedir crear cuenta, es un
+> minuto. Con poca gente cada respuesta se nota.
 
-_Por qué funciona:_ pide una acción única y chica ("una respuesta"), no un compromiso.
+_Por qué funciona:_ pide una acción única y chica ("una respuesta"), no un compromiso, y pone el
+costo del registro por delante en vez de dejar que lo descubra a mitad de camino.
+
+> **Ojo con este canal mientras el registro siga como está.** Es el único donde tenés crédito
+> personal suficiente para que alguien pague el costo de una cuenta por hacerte un favor. Eso lo
+> hace el más efectivo hoy —y el que peor mide: están respondiendo por vos, no por el producto. No
+> saques conclusiones de retención de acá.
 
 ---
 
@@ -229,6 +262,10 @@ Sin esto, la siembra no enseña nada.
 - **No concluir con cohortes chicas.** Con 15 personas, una diferencia del 20 % es ruido. El
   veredicto honesto casi siempre va a ser "seguir midiendo".
 - **Una tanda por vez.** Es lo único que permite atribuir.
+- **Mirá primero `auth_open` → `registration_complete`.** Mientras participar exija cuenta (§0.2),
+  ese es el cuello de botella de todo: cada persona que se cae ahí es alguien que quiso escribir y
+  no pudo. Si esa tasa es muy baja, el problema no es el copy de la siembra ni los temas que
+  abriste, es el muro. No rediseñes nada más hasta descartarlo.
 
 **Señal de éxito real de esta fase:** no "entraron 100 personas", sino que **dos personas que no se
 conocen sostengan una conversación sin que vos participes**. Ese es el momento en que el producto
