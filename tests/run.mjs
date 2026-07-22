@@ -10169,7 +10169,7 @@ await (async () => {
       assert.equal(themeToggle["aria-checked"], "true");
       assert.equal(themeToggle["aria-label"], "Tema oscuro");
       assert.equal(themeToggle.title, "Cambiar a tema claro");
-      assert.equal(document.title, "TOPYKLY — Conversaciones por temas en español");
+      assert.equal(document.title, "TOPYKLY — Chat público por temas en español");
 
       state.theme = "light";
       state.topics = [{ id: "topic-1", title: "Tema alpha", subtitle: "Subtitulo", messages: [] }];
@@ -10558,12 +10558,14 @@ await (async () => {
     const topbar = await read("ui/topbar.js");
     const topbarActionEvents = await read("ui/topbar-action-events.js");
 
-    assert.match(html, /<title>TOPYKLY — Conversaciones por temas en español<\/title>/);
+    assert.match(html, /<title>TOPYKLY — Chat público por temas en español<\/title>/);
+    // El titulo servido y el que pone renderTitles en runtime son el mismo string.
+    assert.match(await read("ui/titles.js"), /"TOPYKLY — Chat público por temas en español"/);
     assert.match(html, /<meta name="robots" content="index,follow" \/>/);
     assert.match(html, /<link rel="canonical" href="https:\/\/www\.topykly\.com\/" \/>/);
     assert.match(html, /<meta property="og:url" content="https:\/\/www\.topykly\.com\/" \/>/);
     assert.match(html, /<main id="main-content" class="workspace" aria-label="Chat social">/);
-    assert.match(html, /<h1 class="sr-only">TOPYKLY: conversaciones por temas en español<\/h1>/);
+    assert.match(html, /<h1 class="sr-only">TOPYKLY: chat público por temas en español<\/h1>/);
     assert.match(html, /class="topbar__title" role="img" aria-label="TOPYKLY"/);
     assert.match(html, /class="brand-mark__che">TOPY<\/span>/);
     assert.match(html, /class="brand-mark__trend">KLY<\/span>/);

@@ -142,7 +142,7 @@ try {
       /script-src 'self' https:\/\/cdn\.jsdelivr\.net https:\/\/challenges\.cloudflare\.com/
     );
     assert.doesNotMatch(contentSecurityPolicy, /script-src[^;]*'unsafe-inline'/);
-    assert.match(html, /<title>TOPYKLY — Conversaciones por temas en español<\/title>/);
+    assert.match(html, /<title>TOPYKLY — Chat público por temas en español<\/title>/);
     assert.match(html, /id="messageForm"/);
   });
 

@@ -9,7 +9,9 @@ import {
 import { getRankingGlyph, getScopeIcon } from "./ranking-icons.js";
 
 const SITE_NAME = "TOPYKLY";
-const BASE_TITLE = "TOPYKLY — Conversaciones por temas en español";
+// Debe coincidir con el <title> de index.html: es el mismo titulo, uno servido y el
+// otro puesto en runtime cuando no hay tema abierto.
+const BASE_TITLE = "TOPYKLY — Chat público por temas en español";
 
 const observedChatTitles = new WeakSet();
 let chatTitleResizeObserver = null;
