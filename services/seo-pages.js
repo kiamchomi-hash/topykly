@@ -286,7 +286,7 @@ export function renderTopicsIndexPage(topics, { origin }) {
   return renderPageShell({
     title: "Temas activos — TOPYKLY",
     description:
-      "Conversaciones abiertas ahora en TOPYKLY, el chat público por temas donde cada tema sigue vivo mientras haya gente respondiendo.",
+      "Descubre los temas activos en TOPYKLY y forma parte de conversaciones abiertas en español donde cada comentario cuenta.",
     canonicalUrl: `${origin}/temas`,
     jsonLd: {
       "@context": "https://schema.org",

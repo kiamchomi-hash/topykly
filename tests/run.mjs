@@ -10796,16 +10796,16 @@ await (async () => {
     assert.match(html, /class="auth-field-error-marker"[\s\S]*>\*<\/span>/);
     assert.doesNotMatch(html, /id="auth(?:Nickname|Email|Age|Code)Input"[^>]*placeholder=/);
     assert.match(html, /<h2 class="profile-modal__title">Perfil<\/h2>/);
-    // La descripcion dice que es el producto y por que es distinto, no que
-    // funcionalidades tiene. Las tres copias (description, og y twitter) tienen que
-    // seguir diciendo lo mismo.
+    // La descripcion dice que es el producto y explica su mecanica diferencial, no
+    // una lista generica de funciones sociales. Las copias de description, og,
+    // twitter y JSON-LD tienen que seguir diciendo lo mismo.
     const siteDescription =
-      "Chat público por temas. Pocas conversaciones abiertas a la vez, cada una viva mientras haya gente respondiendo. Lo que se cierra queda archivado para leer.";
+      "En TOPYKLY, cada comentario cuenta. Descubre temas, comparte tu mirada y forma parte de conversaciones abiertas en español.";
     assert.match(
       html,
       new RegExp(`<meta\\s+name="description"\\s+content="${siteDescription}"\\s*/>`)
     );
-    assert.equal(html.split(siteDescription).length - 1, 3);
+    assert.equal(html.split(siteDescription).length - 1, 4);
     assert.equal(html.includes("comunidad social para conversar"), false);
     assert.equal(siteDescription.length <= 160, true);
     assert.match(

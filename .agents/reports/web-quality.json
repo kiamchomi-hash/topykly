@@ -1,59 +1,55 @@
 {
-  "generatedAt": "2026-07-16T21:25:00-03:00",
-  "scope": "Título público, acceso de invitados, actividad, carga inicial, analítica y SEO técnico",
+  "generatedAt": "2026-07-24T13:40:43-03:00",
+  "scope": "Comprensión del producto en el resultado de búsqueda de la portada",
   "environment": {
-    "url": "http://127.0.0.1:4173/",
+    "localUrl": "http://127.0.0.1:4173/",
+    "productionUrl": "https://www.topykly.com/",
     "browser": "Chromium mediante Playwright CLI",
-    "viewports": ["1440x900", "390x844"],
-    "dataState": "Base local existente"
+    "viewports": ["escritorio predeterminado de Playwright CLI", "390x844"],
+    "dataState": "Base local existente; inspección de producción y Google Search Console"
   },
-  "testedRoutes": [
-    "/",
-    "/tema/editorial-topic-5/que-plan-gratuito-o-economico-recomiendas-para-este-invierno",
-    "/api/live",
-    "/sitemap.xml"
-  ],
+  "testedRoutes": ["/", "/temas"],
   "measurements": {
-    "initialStaticRequests": 55,
-    "previousApproximateStaticRequests": 68,
-    "mascotPngBytes": 695038,
-    "servedMascotWebpBytes": 72496,
-    "browserConsoleErrors": 0
+    "homepageDescriptionCharacters": 123,
+    "descriptionCopies": 4,
+    "googleLastCrawlTime": "2026-07-19T17:16:28Z",
+    "googleCrawledAs": "MOBILE",
+    "googleCoverageState": "Enviada e indexada",
+    "deterministicTestsPassed": 188,
+    "smokeTestsPassed": 13
   },
+  "findings": [
+    {
+      "id": "stale-search-snippet",
+      "status": "confirmed",
+      "evidence": "Google rastreó la portada el 19 de julio; la descripción genérica se retiró del código y de producción el 22 de julio, después del último rastreo."
+    },
+    {
+      "id": "generic-product-positioning",
+      "status": "fixed-locally",
+      "evidence": "La descripción pone en primer plano la promesa de marca «cada comentario cuenta» sin explicar el algoritmo de actividad y archivo."
+    }
+  ],
   "fixes": [
     {
-      "id": "public-title",
-      "status": "fixed",
-      "evidence": "El título, Open Graph, Twitter y H1 presentan TOPYKLY como conversaciones por temas."
+      "id": "homepage-description",
+      "status": "fixed-locally",
+      "evidence": "Meta description, Open Graph, Twitter y JSON-LD comparten la misma descripción de 155 caracteres."
     },
     {
-      "id": "guest-participation",
-      "status": "fixed",
-      "evidence": "El invitado ve el requisito de cuenta antes del compositor y los intentos de crear o publicar abren autenticación."
+      "id": "topics-hub-description",
+      "status": "fixed-locally",
+      "evidence": "La ruta /temas también pone «cada comentario cuenta» en el centro con una redacción conceptual."
     },
     {
-      "id": "topic-activity",
-      "status": "fixed",
-      "evidence": "Cada tema muestra actividad relativa, por ejemplo 'hace 2 d', en escritorio y móvil."
-    },
-    {
-      "id": "initial-load",
-      "status": "fixed",
-      "evidence": "Los paneles secundarios se cargan bajo demanda y la mascota servida usa WebP; el inicio bajó aproximadamente de 68 a 55 recursos estáticos."
-    },
-    {
-      "id": "offensive-noindex",
+      "id": "regression-test",
       "status": "verified",
-      "evidence": "Las pruebas del servidor confirman noindex y exclusión del sitemap para temas problemáticos."
-    },
-    {
-      "id": "ranking-preserved",
-      "status": "verified",
-      "evidence": "El ranking global y por tema permanece visible y no se modificó su cálculo."
+      "evidence": "La prueba de estructura exige las cuatro copias y rechaza la antigua frase de comunidad social."
     }
   ],
   "residualRisks": [
-    "No se ejecutó Lighthouse ni una traza de Core Web Vitals; no se afirma conformidad WCAG completa.",
-    "El escalado horizontal requiere configurar una implementación externa del relay y migrar SQLite a almacenamiento compartido."
+    "Los cambios locales deben publicarse antes de que Google pueda rastrearlos.",
+    "Google puede reescribir el snippet aunque la meta descripción sea correcta.",
+    "Search Console no expuso en esta sesión una acción para solicitar indexación; después del despliegue se puede pedir un nuevo rastreo desde la interfaz."
   ]
 }
