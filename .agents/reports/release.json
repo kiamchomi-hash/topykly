@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-21T13:19:32-03:00",
+  "generatedAt": "2026-07-24T14:05:46-03:00",
   "decision": "released",
   "environment": "production",
   "provider": {
@@ -12,35 +12,28 @@
   "source": {
     "repository": "kiamchomi-hash/topykly",
     "branch": "main",
-    "releaseCommit": "522e4c417c7f81f618e20e1a90d8e5275f1c5ac9",
-    "releaseCommitMessage": "Mejorar rendimiento, tienda y acceso mobile",
-    "previousProductionCommit": "29829e4bbec74701c45b1affbeb44e7fe415fd84"
+    "releaseCommit": "99bd5b4fa7f785040c9cf325bd985523b0d08966",
+    "releaseCommitMessage": "Enfocar descripcion en cada comentario",
+    "previousProductionCommit": "53ceff6b233e133db0228a9815d48742b0138419"
   },
   "releaseContents": [
-    "Estado pending de autenticacion para evitar el destello de acceso durante la recarga mobile.",
-    "Tienda visual con catalogo inicial de emotes Noto y categorias de accesorios.",
-    "Gate de participacion para invitados y actividad relativa en la lista de temas.",
-    "Compresion Brotli/gzip, ETag, cache estatica acotada y cache de tarjetas sociales.",
-    "Relay de eventos live compatible con una instancia y separacion de modulos secundarios.",
-    "Mascota WebP y ajustes de carga diferida, SEO y copy publico."
+    "Meta description conceptual centrada en la promesa «cada comentario cuenta».",
+    "Open Graph, Twitter y JSON-LD alineados con la misma descripción.",
+    "Descripción de /temas alineada con el nuevo posicionamiento.",
+    "Prueba determinística para impedir que las cuatro copias diverjan."
   ],
   "backup": {
-    "requiredForThisRelease": true,
-    "reason": "No hay migraciones, pero se creo un punto de recuperacion fresco antes del deploy.",
-    "logicalBackup": "/var/data/topykly/backups/topykly-2026-07-21T16-04-48-913Z.sqlite",
-    "backupBytes": 417792,
-    "integrityCheck": "ok",
-    "renderDiskId": "dsk-d9376o6h2hms73cd7j80",
-    "renderDiskMount": "/var/data/topykly"
+    "requiredForThisRelease": false,
+    "reason": "El release sólo modifica copy SEO, datos estructurados, pruebas e informes; no incluye esquema, migraciones ni escrituras persistentes."
   },
   "deployment": {
-    "deployId": "dep-d9fpk2gjo6nc73dp8jlg",
+    "deployId": "dep-d9hplg77f7vs738bk5u0",
     "status": "live",
-    "startedAt": "2026-07-21T16:10:50.66122Z",
-    "finishedAt": "2026-07-21T16:11:34.312024Z",
-    "githubActionsRunId": 29847425454,
+    "startedAt": "2026-07-24T17:02:56.244139Z",
+    "finishedAt": "2026-07-24T17:03:39.210053Z",
+    "githubActionsRunId": 30111459683,
     "githubActionsConclusion": "success",
-    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/29847425454",
+    "githubActionsUrl": "https://github.com/kiamchomi-hash/topykly/actions/runs/30111459683",
     "jobs": [
       "core: success",
       "ui: success",
@@ -50,61 +43,40 @@
     ]
   },
   "preDeployChecks": {
-    "localQa": "passed: 182 deterministic tests and 12 smoke checks",
-    "npmAudit": "0 vulnerabilities",
-    "secretScan": "no credential-like additions in the staged release diff",
+    "localQa": "passed: 188 deterministic tests and 13 smoke checks",
+    "formatCheck": "passed for the four release files",
+    "secretScan": "no credential-like additions in the staged diff",
     "diffCheck": "passed",
-    "formatCheck": "existing Prettier debt remains in 27 touched files; no bulk rewrite was applied",
     "databaseMigration": "none",
-    "environment": "required production, database, origin and auth variables present",
-    "branchSync": "main matched origin/main before the release commit"
+    "branchSync": "main matched origin/main before the release commit",
+    "dependencyAudit": "one pre-existing high-severity sharp/libvips advisory; automatic remediation requires a potentially breaking sharp 0.35.3 upgrade and was intentionally kept outside this SEO release"
   },
   "postDeployVerification": {
-    "shell": "200 with deployed store and version markers",
-    "authentication": "GET /api/auth/status returned 200 with OIDC, session secret, Turnstile and email checks configured",
-    "bootstrap": "200 guest payload with 17 topics and no session ID in the body",
-    "authorization": "anonymous admin dashboard returned 403",
-    "securityHeaders": "HSTS and CSP present",
-    "seoEndpoints": "robots.txt, sitemap.xml and terms returned 200",
-    "staticDelivery": "versioned catalog returned immutable cache headers, ETag, conditional 304 and Brotli at the Render origin",
-    "newAssets": "store catalog, first emote and mascot WebP returned 200",
-    "liveEvents": "GET /api/live returned text/event-stream and an initial ready event",
+    "shell": "200 with the approved 123-character description",
+    "title": "TOPYKLY — Chat público por temas en español",
+    "description": "En TOPYKLY, cada comentario cuenta. Descubre temas, comparte tu mirada y forma parte de conversaciones abiertas en español.",
+    "authentication": "GET /api/auth/status returned 200",
+    "bootstrap": "200 guest payload with 18 topics",
+    "securityHeaders": "HSTS, CSP and Permissions-Policy present through Cloudflare",
+    "seoEndpoints": "robots.txt, sitemap.xml, /temas, terms and privacy returned 200",
     "browser": {
       "viewport": "390x844",
-      "flow": "topic list, topic selection, guest composer gate and return to list passed without writes",
-      "authReload": "pending banner hidden, then logged-out login/register banner visible after bootstrap",
-      "consoleErrors": 0
+      "flow": "topic list and topic opening passed without production writes",
+      "consoleErrors": 0,
+      "consoleWarnings": 0
     },
-    "renderErrorLogs": 0,
-    "renderHttp5xxLogs": 0
-  },
-  "metrics": {
-    "cpu": {
-      "beforeMax": 0.037638765,
-      "afterMax": 0.0013305667,
-      "latest": 0.00012156666
-    },
-    "memoryBytes": {
-      "beforeMax": 52076544,
-      "afterMax": 51785730,
-      "latest": 40644610
-    },
-    "diskUsageBytes": {
-      "beforeMax": 6455296,
-      "afterMax": 6455296,
-      "latest": 6455296
-    },
-    "assessment": "CPU and memory settled below the pre-deploy maxima, disk usage stayed flat, and no stop condition occurred."
+    "renderLogs": "not queried because the connector requires explicit workspace selection; public probes and the Render deploy state were healthy"
   },
   "rollback": {
-    "codeTargetCommit": "29829e4bbec74701c45b1affbeb44e7fe415fd84",
-    "codeTargetDeployId": "dep-d9fgc7t8nd3s73f6vsb0",
-    "databaseCompatibility": "No schema migration was applied; the previous deploy can use the same database unchanged.",
-    "procedure": "Redeploy dep-d9fgc7t8nd3s73f6vsb0 if a code rollback is required. Restore the logical backup only if persistent data integrity is affected."
+    "codeTargetCommit": "53ceff6b233e133db0228a9815d48742b0138419",
+    "codeTargetDeployId": "dep-d9gfdnf7f7vs73f470lg",
+    "databaseCompatibility": "No schema or data change was applied.",
+    "procedure": "Redeploy dep-d9gfdnf7f7vs73f470lg or revert commit 99bd5b4 if the copy must be rolled back."
   },
   "unresolvedRisks": [
-    "Repository-wide Prettier debt remains outside this release.",
-    "The live relay and SQLite deployment remain single-instance components.",
-    "Render deploys on commit rather than waiting for CI; local QA completed before push and remote CI passed during deploy."
+    "Google can rewrite the search snippet and must recrawl the page before showing the new description.",
+    "The existing sharp/libvips high-severity advisory remains pending a separately tested dependency upgrade.",
+    "Advanced Render log comparison was not available without selecting an account workspace.",
+    "The untracked assets/emotes/GUIA-CREAR-EMOTES.md file was intentionally excluded from the release."
   ]
 }
