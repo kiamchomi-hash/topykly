@@ -4506,7 +4506,7 @@ html.is-mobile-viewport .drawer--right .ranking-mode {
 
 html.is-mobile-viewport .topbar {
   position: fixed;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-columns: 78px minmax(0, 1fr) 78px;
   gap: 8px;
   align-items: center;
   height: auto;

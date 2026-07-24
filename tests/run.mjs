@@ -11632,7 +11632,7 @@ await (async () => {
     assert.match(styles, /html\[data-theme="light"\] \.theme-switch__thumb\s*\{[\s\S]*left:\s*0;/);
     assert.match(
       styles,
-      /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\) auto;[\s\S]*gap:\s*8px;/
+      /html\.is-mobile-viewport \.topbar\s*\{[\s\S]*grid-template-columns:\s*78px minmax\(0,\s*1fr\) 78px;[\s\S]*gap:\s*8px;/
     );
     assert.match(
       styles,

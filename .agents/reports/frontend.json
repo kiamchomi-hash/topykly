@@ -1,16 +1,23 @@
 {
   "agentName": "Agente Revisor de Frontend",
-  "status": "reviewed",
-  "lastChecked": "2026-07-16T16:20:00-03:00",
-  "scope": "Primera impresión, jerarquía visual, carga inicial y consistencia entre escritorio y móvil",
+  "status": "fixed",
+  "lastChecked": "2026-07-24T17:25:00-03:00",
+  "scope": "Primera impresión, jerarquía visual, rendimiento y centrado del logotipo en la barra superior móvil",
   "strengths": [
     "Identidad visual reconocible, con marca, paletas y tema oscuro coherentes.",
     "La composición de tres paneles comunica correctamente temas, conversación y comunidad en escritorio.",
     "La vista móvil reorganiza el producto sin romper la navegación principal.",
-    "La interfaz usa regiones, encabezados, nombres accesibles y estados ARIA de forma consistente.",
-    "No se observaron errores ni advertencias de consola durante el recorrido de producción."
+    "La interfaz usa regiones, encabezados, nombres accesibles y estados ARIA de forma consistente."
   ],
   "findings": [
+    {
+      "level": "high",
+      "id": "mobile-logo-off-center-authenticated",
+      "status": "fixed",
+      "message": "En una sesión autenticada a 390 px, la grilla reservaba 44 px a la izquierda y 78 px a la derecha. El centro del contenedor de marca quedaba 17 px a la izquierda del centro del viewport.",
+      "recommendation": "Mantener columnas laterales simétricas de 78 px para que el área de marca quede centrada respecto del viewport en todos los estados de autenticación.",
+      "verification": "Medición en navegador a 390 × 844 y comprobación visual en estados visitante y autenticado."
+    },
     {
       "level": "high",
       "id": "missing-visible-value-proposition",
@@ -27,7 +34,7 @@
       "level": "medium",
       "id": "initial-load-weight",
       "message": "Una sesión nueva registró aproximadamente 70 recursos, 1.1 MB transferidos y 3.15 s hasta load en la medición puntual de producción.",
-      "recommendation": "Reducir módulos y estilos iniciales, diferir modales secundarios y cargar avatares/contenido no visible bajo demanda."
+      "recommendation": "Reducir módulos y estilos iniciales, diferir modales secundarios y cargar avatares o contenido no visible bajo demanda."
     }
   ]
 }
