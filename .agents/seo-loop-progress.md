@@ -13,11 +13,13 @@ El loop **no debe ejecutar cambios** hasta que TODO esto sea cierto. Si alguna f
 - [x] `topykly.com` sirviendo en hosting real de producción (`NODE_ENV=production`). *Render + Cloudflare desde el 2026-07-21.*
 - [x] Redirect 301 `www` → apex (o apex → `www`) consistente y una sola canónica. *Apex → `www`; canónica única `https://www.topykly.com/`.*
 - [x] Propiedad dada de alta y verificada en Google Search Console. *Propiedad de **Dominio**, verificada por registro TXT en Cloudflare. Comprobado el 2026-07-22: `topykly.com` sirve `google-site-verification=vvDhVs-AvnXMFPO-MZqt9GMpmom4eZP6KeumIsOAi0g`.*
-- [ ] Al menos **21 días** de datos acumulados en GSC (menos que eso es ruido, no señal). *Estado desconocido: no se sabe desde cuándo está verificada la propiedad. **Confirmar en `Rendimiento` qué rango de fechas tiene datos** — puede estar ya cumplida.*
-- [ ] Acceso de **lectura programática** a los datos de GSC (MCP u otra vía). *No confundir con la verificación de la propiedad, que ya está hecha: esto es que el agente pueda **consultar** impresiones, clics, CTR y queries por su cuenta. Hoy no hay conector de Search Console disponible en el entorno.*
+- [ ] Al menos **21 días** de datos acumulados en GSC (menos que eso es ruido, no señal). *Medido el 2026-07-27 con el MCP ya conectado: la primera impresión registrada es del **2026-07-12**, o sea **15 días** de historial. Sigue sin cumplirse, pero ya no es un estado desconocido. Se cumple alrededor del **2026-08-02**.*
+- [x] Acceso de **lectura programática** a los datos de GSC (MCP u otra vía). *Resuelto el 2026-07-27: el MCP de Search Console ve `sc-domain:topykly.com` con permiso `siteFullUser`, que alcanza para Search Analytics, sitemaps e inspección de URL. Se logró agregando la cuenta de servicio del MCP (`gsc-reader@gsc-mcp-503419.iam.gserviceaccount.com`) como usuario de la propiedad. Ojo: la propiedad ya tenía otra cuenta de servicio distinta (`gsc-mcp@topykly-auth-prod...`), que no es la que usa este entorno.*
 - [x] Comando de deploy definido y probado a mano una vez (ver §5). *Ejercitado el 2026-07-22.*
 
-> Estado actual (2026-07-22): **BLOQUEADO por acceso a los datos, no por el alta.** La app está en producción, el 301 y la canónica resueltos, el deploy probado y la propiedad de GSC **verificada**. Lo que falta es una vía para *leer* esos datos y confirmar que haya suficiente historial.
+> Estado actual (2026-07-27): **BLOQUEADO solo por historial.** El acceso de lectura quedó resuelto, así que de las seis precondiciones falta una sola: acumular 21 días de datos. Se destraba alrededor del **2026-08-02**.
+>
+> Estado anterior (2026-07-22): **BLOQUEADO por acceso a los datos, no por el alta.** La app está en producción, el 301 y la canónica resueltos, el deploy probado y la propiedad de GSC **verificada**. Lo que falta es una vía para *leer* esos datos y confirmar que haya suficiente historial.
 >
 > **Corrección respecto de versiones anteriores de este archivo:** hasta el 2026-07-22 acá decía que faltaba el alta en GSC. Era falso. La verificación se hizo por DNS, que no deja ningún rastro en el repo, y la ausencia de una meta `google-site-verification` en `index.html` se interpretó erróneamente como prueba de que no existía. Antes de declarar bloqueada esta precondición, **consultar el TXT del dominio**, no el código.
 >
@@ -57,12 +59,21 @@ Snapshot del punto de partida, para medir contra esto. Actualizar solo si se reb
 
 | Métrica (GSC, últimos 28 d) | Valor baseline | Fecha |
 |---|---|---|
-| Impresiones | _pendiente_ | — |
-| Clicks | _pendiente_ | — |
-| CTR medio | _pendiente_ | — |
-| Posición media | _pendiente_ | — |
-| Páginas indexadas | _pendiente_ | — |
-| Queries con impresiones | _pendiente_ | — |
+| Impresiones | 3 | 2026-07-27 |
+| Clicks | 0 | 2026-07-27 |
+| CTR medio | 0 % | 2026-07-27 |
+| Posición media | 14,3 | 2026-07-27 |
+| Páginas indexadas | 2 de 27 del sitemap | 2026-07-27 |
+| Queries con impresiones | 1 | 2026-07-27 |
+
+Detalle de la línea de base (rango 2026-06-29 → 2026-07-27, propiedad `sc-domain:topykly.com`):
+
+- **Indexadas:** solo `https://www.topykly.com/` (rastreada el 19/07, como móvil) y `https://www.topykly.com/terms.html` (rastreada el 16/07). Todo lo demás está en *Descubierta, sin indexar — nunca rastreada* o *URL desconocida para Google*, incluidos `/temas`, `/archivo` y **todas** las páginas `/tema/...`.
+- **Única query registrada en 90 días:** `toukly` —un error de tipeo de la marca— con 1 impresión en posición 41. No hay tráfico de intención real todavía.
+- **Nada roto en lo técnico:** 301 limpios de `http`, apex y `www` hacia `https://www.topykly.com/`; `robots.txt` correcto; sitemap válido con 0 errores; canónicas coherentes; sin `noindex` indebido. Las páginas `/tema/` se sirven renderizadas de verdad (`<h1>`, description propia, enlaces internos).
+- **Causa del estancamiento:** la inspección de la home devuelve `referring_urls` **vacío** — Google no conoce ni un enlace externo hacia el sitio. Sin enlaces entrantes no hay presupuesto de rastreo, y por eso la cadena `/` → `/temas` → `/tema/...`, que existe y está bien armada, no se recorre.
+
+> **Conclusión para el loop:** el cuello de botella no es la capa SEO ni el código. Es que el sitio no tiene enlaces entrantes ni contenido de usuarios acumulado — `/archivo` está literalmente vacío ("Todavía no hay temas archivados"). Optimizar títulos o schema ahora no mueve nada. Coincide con lo ya asumido en §1: **SEO no trae los primeros usuarios.**
 
 Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retención D1/D7 → estos los cubre el **loop de producto**, no este. Pero anotalos aquí para tener contexto, porque en TOPYKLY el contenido = actividad de usuarios: si la retención cae, este loop se queda sin materia prima.
 
@@ -90,6 +101,16 @@ Negocio (fuente aparte, no GSC): new users/día, % que crea ≥1 tema, retenció
 ## 4. Log de iteraciones
 
 > Formato por entrada. La más reciente arriba.
+
+### Infra — 2026-07-27 — GSC conectado, baseline tomada y perfiles fuera del sitemap
+
+- **Estado:** el acceso de lectura quedó resuelto (§0). Queda una sola precondición: 21 días de historial, que se cumple alrededor del 2026-08-02.
+- **Cómo se destrabó:** el MCP se autentica con una **cuenta de servicio**, no con la cuenta de Google del dueño. Bastó con agregar `gsc-reader@gsc-mcp-503419.iam.gserviceaccount.com` como usuario de la propiedad. `siteFullUser` alcanza para Search Analytics, sitemaps **e inspección de URL**. Trampa encontrada: la propiedad ya listaba otra cuenta de servicio (`gsc-mcp@topykly-auth-prod...`) que no es la de este entorno, y eso confundía el diagnóstico.
+- **Baseline registrada en §2.** Resumen: 3 impresiones, 0 clics, 2 de 27 URLs indexadas, 1 sola query y esa es un error de tipeo de la marca.
+- **Diagnóstico:** nada roto en lo técnico. `referring_urls` vacío en la home ⇒ sin enlaces entrantes no hay presupuesto de rastreo, y Google no pasa del primer nivel.
+- **Cambio SEO aplicado:** los perfiles `/u/` entraban al sitemap con **una sola** contribución, y ocupaban 13 de 27 URLs compitiendo por el poco rastreo disponible contra las páginas de tema. Ahora se les exige el mismo umbral que a los temas (`SEO_THIN_PROFILE_CONTRIBUTION_COUNT = 3`, temas + comentarios). Los perfiles siguen siendo indexables y enlazados desde los temas; esto solo decide qué se prioriza en el sitemap.
+- **Validación:** `node tests/run.mjs` (188 ok) y `node tests/smoke.mjs`. El test del sitemap se actualizó al comportamiento nuevo.
+- **Pendiente de decisión del dueño:** criterio para que los temas pasen a `/archivo`. Hoy hay 9 temas editoriales activos y **cero** archivados, así que la capa SEO del proyecto todavía no existe en la práctica.
 
 ### Correccion — 2026-07-22 — La propiedad de GSC ya estaba verificada
 
