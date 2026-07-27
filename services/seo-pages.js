@@ -8,6 +8,11 @@ const HTML_ESCAPES = new Map([
 
 export const DEFAULT_PUBLIC_ORIGIN = "https://www.topykly.com";
 export const SEO_THIN_TOPIC_COMMENT_COUNT = 3;
+// Mismo criterio que los temas, aplicado a perfiles: con una sola contribucion
+// la ficha no tiene contenido propio que justifique pedirle a Google que la
+// rastree. Los perfiles siguen siendo indexables y enlazados desde los temas;
+// esto solo decide que entra al sitemap, que es donde se prioriza el rastreo.
+export const SEO_THIN_PROFILE_CONTRIBUTION_COUNT = 3;
 
 export function resolvePublicOrigin(env = process.env) {
   const raw = String(env.TOPYKLY_PUBLIC_ORIGIN || env.CHETREND_PUBLIC_ORIGIN || "").trim();

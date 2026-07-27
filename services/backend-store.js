@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
 import { backupSqliteDatabase } from "../scripts/backup-sqlite.mjs";
 import { hasProfanity } from "../profanity-filter.js";
-import { SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
+import {
+  SEO_THIN_PROFILE_CONTRIBUTION_COUNT,
+  SEO_THIN_TOPIC_COMMENT_COUNT
+} from "./seo-pages.js";
 
 export const ACTIVE_TOPIC_LIMIT = 40;
 export const VISIBLE_TOPIC_LIMIT = 20;
@@ -7094,20 +7097,20 @@ export function createBackendStore({
           AND users.nickname IS NOT NULL
           AND users.profile_indexable != 0
           AND (
-            EXISTS (
-              SELECT 1 FROM topics
+            (
+              SELECT COUNT(*) FROM topics
               WHERE topics.author_id = users.id AND topics.status != 'blocked'
             )
-            OR EXISTS (
-              SELECT 1 FROM messages
+            + (
+              SELECT COUNT(*) FROM messages
               WHERE messages.author_id = users.id AND messages.kind = 'user' AND messages.is_root = 0
             )
-          )
+          ) >= ?
         ORDER BY users.created_at ASC
         LIMIT 500
       `
         )
-        .all()
+        .all(SEO_THIN_PROFILE_CONTRIBUTION_COUNT)
         .map((row) => ({
           nickname: row.nickname,
           lastmod: row.updated_at ?? row.created_at ?? null

@@ -7731,6 +7731,40 @@ await (async () => {
         profileIndexable: false
       });
 
+      // Perfil que supera el umbral de contribuciones: un tema propio y dos
+      // comentarios. El limite de 10 s entre mensajes se saltea envejeciendo
+      // last_message_at, que es lo unico que separa a este usuario del resto.
+      store.registerWithPassword({
+        sessionId: "session-sitemap-activo",
+        email: "sitemap-activo@example.com",
+        password: "password-segura",
+        nickname: "sitemap_activo"
+      });
+      const activoTopic = store.createTopic({
+        sessionId: "session-sitemap-activo",
+        authMode: "registered",
+        title: "Tema de un perfil activo",
+        text: "Mensaje raíz del perfil activo."
+      });
+      const activoTopicId = activoTopic.selectedTopicId || activoTopic.topics[0].id;
+      const rateLimitDb = new DatabaseSync(store.dbPath);
+      const agePostingLimits = () => {
+        rateLimitDb
+          .prepare("UPDATE users SET last_message_at = ?, last_topic_at = ? WHERE nickname = ?")
+          .run("2020-01-01T00:00:00.000Z", "2020-01-01T00:00:00.000Z", "Sitemap_activo");
+      };
+      // Comenta en dos temas distintos: dos comentarios seguidos en el mismo
+      // tema chocarian con el limite de comentario consecutivo, que es otro.
+      for (const targetTopicId of [richTopicId, thinTopicId]) {
+        agePostingLimits();
+        store.addMessage(targetTopicId, {
+          sessionId: "session-sitemap-activo",
+          authMode: "registered",
+          text: `Comentario del perfil activo en ${targetTopicId}`
+        });
+      }
+      rateLimitDb.close();
+
       const robotsResponse = await fetch(`${origin}/robots.txt`);
       assert.equal(robotsResponse.status, 200);
       const robotsBody = await robotsResponse.text();
@@ -7750,10 +7784,17 @@ await (async () => {
       assert.equal(sitemapBody.includes("<loc>https://www.topykly.com/privacy.html</loc>"), true);
       assert.equal(sitemapBody.includes(`/tema/${richTopicId}/`), true);
       assert.equal(sitemapBody.includes(thinTopicId), false);
-      assert.equal(sitemapBody.includes("/u/Sitemap_autor"), true);
-      assert.equal(sitemapBody.includes("Sitemap_com_0"), true);
+      // Solo entran los perfiles que superan SEO_THIN_PROFILE_CONTRIBUTION_COUNT.
+      // Sitemap_activo suma tres contribuciones; el resto se queda en una y
+      // queda fuera del sitemap, aunque sus fichas sigan siendo indexables.
+      assert.equal(sitemapBody.includes("/u/Sitemap_activo"), true);
+      assert.equal(sitemapBody.includes("/u/Sitemap_autor"), false);
+      assert.equal(sitemapBody.includes("Sitemap_com_0"), false);
       assert.equal(sitemapBody.includes("Sitemap_optout"), false);
-      assert.equal(sitemapBody.includes("Sitemap_thin"), true);
+      assert.equal(sitemapBody.includes("Sitemap_thin"), false);
+      // El tema propio de Sitemap_activo no tiene comentarios: el perfil entra
+      // por volumen de aportes, pero el tema sigue filtrado por delgado.
+      assert.equal(sitemapBody.includes(activoTopicId), false);
     } finally {
       if (preview) {
         const closed = new Promise((resolve) => preview.server.once("close", resolve));
