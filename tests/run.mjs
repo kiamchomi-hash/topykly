@@ -22,9 +22,11 @@ import {
   createBackendStore,
   MINIMUM_REGISTRATION_AGE,
   resolveDbConfig,
+  resolveTopicInactivityArchiveMs,
   resolveVisibleTopicLimit,
   shouldSeedDemoData,
   TERMS_VERSION,
+  TOPIC_INACTIVITY_ARCHIVE_MS,
   VISIBLE_TOPIC_LIMIT
 } from "../services/backend-store.js";
 import {
@@ -7647,6 +7649,109 @@ await (async () => {
       }
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  await test("topics move to the archive after the inactivity window", async () => {
+    await withTempStore(
+      async (store) => {
+        store.registerWithPassword({
+          sessionId: "session-archive-author",
+          email: "archive-author@example.com",
+          password: "password-segura",
+          nickname: "archive_autor"
+        });
+        const stale = store.createTopic({
+          sessionId: "session-archive-author",
+          authMode: "registered",
+          title: "Tema que va a quedar inactivo",
+          text: "Mensaje raíz del tema inactivo."
+        });
+        const staleTopicId = stale.selectedTopicId || stale.topics[0].id;
+        for (let index = 0; index < 3; index += 1) {
+          const commenterSession = `session-archive-commenter-${index}`;
+          store.registerWithPassword({
+            sessionId: commenterSession,
+            email: `archive-commenter-${index}@example.com`,
+            password: "password-segura",
+            nickname: `archive_com_${index}`
+          });
+          store.addMessage(staleTopicId, {
+            sessionId: commenterSession,
+            authMode: "registered",
+            text: `Comentario ${index + 1} del tema inactivo`
+          });
+        }
+
+        // El segundo tema lo crea otro usuario: el limite de creacion es de 30
+        // minutos por persona, no del sistema.
+        store.registerWithPassword({
+          sessionId: "session-archive-fresh",
+          email: "archive-fresh@example.com",
+          password: "password-segura",
+          nickname: "archive_fresco"
+        });
+        const fresh = store.createTopic({
+          sessionId: "session-archive-fresh",
+          authMode: "registered",
+          title: "Tema con actividad reciente",
+          text: "Mensaje raíz del tema fresco."
+        });
+        const freshTopicId = fresh.selectedTopicId || fresh.topics[0].id;
+
+        // Un tema fijado sin actividad no debe archivarse: su permanencia es una
+        // decision de moderacion.
+        const pinned = store.createTopic({
+          sessionId: "session-archive-commenter-0",
+          authMode: "registered",
+          title: "Tema fijado y sin actividad",
+          text: "Mensaje raíz del tema fijado."
+        });
+        const pinnedTopicId = pinned.selectedTopicId || pinned.topics[0].id;
+
+        const maintenanceDb = new DatabaseSync(store.dbPath);
+        const backdate = maintenanceDb.prepare(
+          "UPDATE topics SET last_activity_at = ?, status = ? WHERE id = ?"
+        );
+        backdate.run("2020-01-01T00:00:00.000Z", "active", staleTopicId);
+        backdate.run("2020-01-01T00:00:00.000Z", "pinned", pinnedTopicId);
+        maintenanceDb.close();
+
+        const result = store.archiveInactiveTopics();
+        assert.equal(result.archivedTopicIds.includes(staleTopicId), true);
+        assert.equal(result.archivedTopicIds.includes(freshTopicId), false);
+        assert.equal(result.archivedTopicIds.includes(pinnedTopicId), false);
+
+        const activeIds = store.getSeoTopicEntries().map((row) => row.id);
+        const archivedIds = store.getSeoArchivedTopicEntries().map((row) => row.id);
+        assert.equal(activeIds.includes(staleTopicId), false);
+        assert.equal(archivedIds.includes(staleTopicId), true);
+        assert.equal(activeIds.includes(freshTopicId), true);
+        assert.equal(archivedIds.includes(freshTopicId), false);
+        assert.equal(activeIds.includes(pinnedTopicId), true);
+
+        // Archivar conserva el mensaje raiz y los comentarios, asi que la pagina
+        // sigue siendo indexable en vez de convertirse en contenido delgado.
+        const page = store.getTopicPageData(staleTopicId);
+        assert.equal(page.isArchived, true);
+        assert.equal(page.commentCount, 3);
+        assert.equal(page.isThin, false);
+        assert.equal(page.messages.length, 4);
+        assert.equal(
+          page.messages.some((message) => message.isRoot),
+          true
+        );
+      },
+      { seedDemoData: false }
+    );
+
+    // El umbral se puede desactivar sin tocar codigo: eso deja solo la regla de
+    // desborde, que es el comportamiento anterior al cambio.
+    assert.equal(resolveTopicInactivityArchiveMs({}), TOPIC_INACTIVITY_ARCHIVE_MS);
+    assert.equal(
+      resolveTopicInactivityArchiveMs({ TOPYKLY_TOPIC_INACTIVITY_ARCHIVE_MS: "60000" }),
+      60000
+    );
+    assert.equal(resolveTopicInactivityArchiveMs({ TOPYKLY_TOPIC_INACTIVITY_ARCHIVE_MS: "0" }), 0);
   });
 
   await test("preview server serves robots.txt and a filtered sitemap.xml", async () => {

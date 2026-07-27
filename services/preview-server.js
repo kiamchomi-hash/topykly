@@ -27,6 +27,7 @@ const __dirname = path.dirname(__filename);
 const root = path.join(__dirname, "..");
 const DEFAULT_GUEST_CLEANUP_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_REACTION_RESET_CHECK_INTERVAL_MS = 60 * 60_000;
+const DEFAULT_TOPIC_ARCHIVE_CHECK_INTERVAL_MS = 60 * 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
@@ -1452,6 +1453,27 @@ function runMessageReactionReset(store, log) {
   }
 }
 
+function resolveTopicArchiveCheckIntervalMs(env = process.env) {
+  const rawValue = String(env.TOPYKLY_TOPIC_ARCHIVE_CHECK_INTERVAL_MS || "").trim();
+  if (!rawValue) {
+    return DEFAULT_TOPIC_ARCHIVE_CHECK_INTERVAL_MS;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function runTopicInactivityArchive(store, log) {
+  try {
+    const result = store.archiveInactiveTopics();
+    if (result.archivedTopicIds.length) {
+      log(`archived ${result.archivedTopicIds.length} topics with no recent activity`);
+    }
+  } catch (error) {
+    log(`topic archive failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 const SITEMAP_CACHE_TTL_MS = 5 * 60_000;
 
 function sendTextResource(res, req, body, contentType, cacheControl) {
@@ -1979,8 +2001,15 @@ export function startPreviewServer({
       ? setInterval(() => runMessageReactionReset(store, log), reactionResetCheckIntervalMs)
       : null;
   reactionResetTimer?.unref?.();
+  const topicArchiveCheckIntervalMs = resolveTopicArchiveCheckIntervalMs();
+  const topicArchiveTimer =
+    topicArchiveCheckIntervalMs > 0
+      ? setInterval(() => runTopicInactivityArchive(store, log), topicArchiveCheckIntervalMs)
+      : null;
+  topicArchiveTimer?.unref?.();
   runGuestCleanup(store, log);
   runMessageReactionReset(store, log);
+  runTopicInactivityArchive(store, log);
   const server = http.createServer(async (req, res) => {
     // The app is strictly same-origin: no CORS headers are ever granted.
     if (req.method === "OPTIONS") {
@@ -2092,6 +2121,9 @@ export function startPreviewServer({
       }
       if (reactionResetTimer) {
         clearInterval(reactionResetTimer);
+      }
+      if (topicArchiveTimer) {
+        clearInterval(topicArchiveTimer);
       }
       liveEventHub.close();
       server.close();

@@ -7,13 +7,34 @@ import { fileURLToPath } from "node:url";
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
 import { backupSqliteDatabase } from "../scripts/backup-sqlite.mjs";
 import { hasProfanity } from "../profanity-filter.js";
-import {
-  SEO_THIN_PROFILE_CONTRIBUTION_COUNT,
-  SEO_THIN_TOPIC_COMMENT_COUNT
-} from "./seo-pages.js";
+import { SEO_THIN_PROFILE_CONTRIBUTION_COUNT, SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
 
 export const ACTIVE_TOPIC_LIMIT = 40;
 export const VISIBLE_TOPIC_LIMIT = 20;
+
+// Archivado por inactividad. Sin esto un tema solo sale del conjunto activo
+// cuando se desborda ACTIVE_TOPIC_LIMIT, asi que con pocos temas /archivo no se
+// llena nunca: la capa permanente del producto quedaba esperando un desborde
+// que no podia ocurrir. Los fijados quedan afuera porque su permanencia es una
+// decision de moderacion, no falta de actividad.
+// 30 dias y no menos: con poco trafico una ventana corta vacia la home entera.
+// Los temas vivos hoy tienen su ultima actividad el 14/07/2026, asi que a 14
+// dias se archivaban todos juntos en el primer despliegue y no quedaba ninguno
+// activo. Para sostener un tema mas alla de la ventana esta el fijado, que ya
+// queda exento.
+export const TOPIC_INACTIVITY_ARCHIVE_MS = 30 * 24 * 60 * 60_000;
+
+export function resolveTopicInactivityArchiveMs(env = process.env) {
+  const rawValue = String(env.TOPYKLY_TOPIC_INACTIVITY_ARCHIVE_MS || "").trim();
+  if (!rawValue) {
+    return TOPIC_INACTIVITY_ARCHIVE_MS;
+  }
+
+  // 0 o un valor invalido desactivan el archivado por inactividad y dejan solo
+  // la regla de desborde, que es el comportamiento anterior.
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
 export const TOPIC_REPLY_LIMIT = 29;
 export const TOPIC_TOTAL_MESSAGE_LIMIT = TOPIC_REPLY_LIMIT + 1;
 
@@ -2623,7 +2644,49 @@ function getOrderedActiveTopicRows(db) {
     .all(TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, TOPIC_STATUS_PINNED);
 }
 
-function rebuildActiveTopicRanks(db) {
+// Manda al archivo los temas sin actividad reciente. Conserva el mensaje raiz y
+// las ultimas respuestas: trimTopicReplies solo toca lo que excede el tope, asi
+// que un tema archivado sin comentarios queda con su mensaje principal intacto.
+function archiveInactiveTopics(db, now = Date.now()) {
+  const windowMs = resolveTopicInactivityArchiveMs();
+  if (!windowMs) {
+    return [];
+  }
+
+  const cutoffIso = new Date(now - windowMs).toISOString();
+  const staleRows = db
+    .prepare(
+      `
+    SELECT id
+    FROM topics
+    WHERE status = ? AND last_activity_at < ?
+  `
+    )
+    .all(TOPIC_STATUS_ACTIVE, cutoffIso);
+
+  if (!staleRows.length) {
+    return [];
+  }
+
+  const nowIso = new Date(now).toISOString();
+  const expelTopic = db.prepare(`
+    UPDATE topics
+    SET status = ?, active_rank = NULL, updated_at = ?
+    WHERE id = ?
+  `);
+
+  staleRows.forEach((row) => {
+    trimTopicReplies(db, row.id);
+    expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
+  });
+
+  return staleRows.map((row) => row.id);
+}
+
+function rebuildActiveTopicRanks(db, now = Date.now()) {
+  // Primero la inactividad y despues el desborde: un tema que ya se fue por
+  // viejo no debe ocupar un lugar del conjunto activo ni empujar a otro afuera.
+  archiveInactiveTopics(db, now);
   const orderedRows = getOrderedActiveTopicRows(db);
   const keptRows = orderedRows.slice(0, ACTIVE_TOPIC_LIMIT);
   const droppedRows = orderedRows.slice(ACTIVE_TOPIC_LIMIT);
@@ -2633,7 +2696,7 @@ function rebuildActiveTopicRanks(db) {
     SET status = ?, active_rank = NULL, updated_at = ?
     WHERE id = ?
   `);
-  const nowIso = new Date().toISOString();
+  const nowIso = new Date(now).toISOString();
 
   keptRows.forEach((row, index) => {
     updateRank.run(index, nowIso, row.id);
@@ -5378,6 +5441,19 @@ export function createBackendStore({
     },
     resetDailyMessageReactions({ now = new Date() } = {}) {
       return withTransaction(db, () => resetDailyMessageReactionsIfNeeded(db, now));
+    },
+    // El archivado tambien corre dentro de rebuildActiveTopicRanks, que se
+    // dispara con cualquier interaccion. Esto cubre los periodos sin trafico,
+    // donde nadie construye payload y el archivo se quedaria desactualizado
+    // justo cuando lo visita un rastreador.
+    archiveInactiveTopics({ nowMs = Date.now() } = {}) {
+      return withTransaction(db, () => {
+        const archivedTopicIds = archiveInactiveTopics(db, nowMs);
+        if (archivedTopicIds.length) {
+          rebuildActiveTopicRanks(db, nowMs);
+        }
+        return { archivedTopicIds };
+      });
     },
     createEmailAuthChallenge(options = {}) {
       return withTransaction(db, () => createStoredEmailAuthChallenge(db, options));
