@@ -3,11 +3,9 @@
   "outputDirectory": "public",
   "functions": {
     "api/server.js": {
-      "memory": 1024,
       "maxDuration": 30
     },
     "api/cron/maintenance.js": {
-      "memory": 512,
       "maxDuration": 60
     }
   },
