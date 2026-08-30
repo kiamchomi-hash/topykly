@@ -36,6 +36,7 @@
     "prettier": "^3.6.2"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.4",
     "sharp": "^0.34.5"
   }
 }

@@ -10,6 +10,11 @@ import sharp from "sharp";
 
 import { createAuthService } from "../services/auth-service.js";
 import {
+  createDbClient,
+  resolveDbClientConfig,
+  stripLocalOnlyPragmas
+} from "../services/db-client.js";
+import {
   createRequestHandler,
   getRequestIp,
   isDeclaredBotUserAgent,
@@ -1981,6 +1986,117 @@ await (async () => {
     assert.equal(topic.messages[0].text, "Primer mensaje para abrir el hilo.");
     assert.equal(topic.messages[0].isRoot, true);
     assert.equal(summarizeTopicMessage("a".repeat(110)).endsWith("..."), true);
+  });
+
+  await test("backend db client mirrors the node:sqlite statement surface", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-db-client-"));
+    const db = createDbClient({ url: `file:${path.join(tempDir, "client.sqlite")}` });
+
+    try {
+      assert.equal(db.isLocal, true);
+      await db.exec(`
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, score INTEGER);
+      `);
+
+      const inserted = await db
+        .prepare("INSERT INTO items (name, score) VALUES (?, ?)")
+        .run("uno", 10);
+      // run() devuelve numeros, no BigInt, igual que DatabaseSync.
+      assert.equal(inserted.changes, 1);
+      assert.equal(inserted.lastInsertRowid, 1);
+      assert.equal(typeof inserted.lastInsertRowid, "number");
+
+      const insertItem = db.prepare("INSERT INTO items (name, score) VALUES (?, ?)");
+      await insertItem.run("dos", 20);
+      await insertItem.run("tres", 30);
+
+      const row = await db.prepare("SELECT name, score FROM items WHERE name = ?").get("dos");
+      assert.deepEqual(row, { name: "dos", score: 20 });
+      // Las filas son objetos planos, no filas de libSQL con indices numericos.
+      assert.deepEqual(Object.keys(row), ["name", "score"]);
+
+      const missing = await db.prepare("SELECT name FROM items WHERE name = ?").get("cuatro");
+      assert.equal(missing, undefined);
+
+      const all = await db.prepare("SELECT name FROM items ORDER BY score").all();
+      assert.deepEqual(all, [{ name: "uno" }, { name: "dos" }, { name: "tres" }]);
+
+      const cleared = await db.prepare("DELETE FROM items WHERE score > ?").run(15);
+      assert.equal(cleared.changes, 2);
+
+      const columns = await db.prepare("PRAGMA table_info(items)").all();
+      assert.deepEqual(
+        columns.map((column) => column.name),
+        ["id", "name", "score"]
+      );
+    } finally {
+      db.close();
+      // En Windows el handle nativo tarda un instante en soltar el archivo.
+      await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    }
+  });
+
+  await test("backend db client commits and rolls back through its own handle", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-db-tx-"));
+    const db = createDbClient({ url: `file:${path.join(tempDir, "tx.sqlite")}` });
+
+    try {
+      await db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);");
+
+      const committed = await db.transaction(async (tx) => {
+        await tx.prepare("INSERT INTO items (name) VALUES (?)").run("persistida");
+        return "listo";
+      });
+      assert.equal(committed, "listo");
+
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.prepare("INSERT INTO items (name) VALUES (?)").run("descartada");
+          throw new Error("fallo dentro de la transaccion");
+        }),
+        /fallo dentro de la transaccion/
+      );
+
+      const names = await db.prepare("SELECT name FROM items ORDER BY id").all();
+      assert.deepEqual(names, [{ name: "persistida" }]);
+    } finally {
+      db.close();
+      // En Windows el handle nativo tarda un instante en soltar el archivo.
+      await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    }
+  });
+
+  await test("backend db client drops local-only pragmas when the database is remote", async () => {
+    const kept = stripLocalOnlyPragmas(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
+      PRAGMA busy_timeout = 5000;
+      PRAGMA wal_autocheckpoint = 1000;
+      PRAGMA temp_store = MEMORY;
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE t (id INTEGER PRIMARY KEY);
+    `);
+
+    // Turso administra journal y checkpointing por su cuenta.
+    assert.equal(
+      /journal_mode|synchronous|busy_timeout|wal_autocheckpoint|temp_store/.test(kept),
+      false
+    );
+    // foreign_keys si viaja: cambia la semantica del esquema, no el almacenamiento.
+    assert.equal(kept.includes("PRAGMA foreign_keys = ON"), true);
+    assert.equal(kept.includes("CREATE TABLE t"), true);
+
+    const config = resolveDbClientConfig({
+      TURSO_DATABASE_URL: "libsql://demo.turso.io",
+      TURSO_AUTH_TOKEN: "token"
+    });
+    assert.deepEqual(config, {
+      url: "libsql://demo.turso.io",
+      authToken: "token",
+      isLocal: false
+    });
+    assert.equal(resolveDbClientConfig({}), null);
   });
 
   await test("backend can start without demo topics for real users", async () => {
