@@ -1,5 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
-
 // Adaptador de base con dos backends detras de una misma interfaz asincronica
 // que conserva la forma de node:sqlite: prepare(sql) devuelve un statement con
 // get/all/run, y exec(sql) acepta varias sentencias.
@@ -46,7 +44,11 @@ function toPlainRow(row) {
   return { ...row };
 }
 
-function createLocalBackend(url) {
+// node:sqlite se carga aca dentro y no arriba: es un modulo experimental que en
+// Node 22 exige un flag, y con base remota no hace falta. Importarlo siempre
+// romperia el arranque en un runtime que no lo tenga habilitado.
+async function createLocalBackend(url) {
+  const { DatabaseSync } = await import("node:sqlite");
   const filePath = url.replace(LOCAL_URL_PATTERN, "");
   const db = new DatabaseSync(filePath);
   // El codigo llamador reutiliza el mismo SQL en bucles; sin cache se volveria a
@@ -214,7 +216,9 @@ export async function createDbClient({ url, authToken = undefined }) {
   }
 
   const isLocal = LOCAL_URL_PATTERN.test(url);
-  const backend = isLocal ? createLocalBackend(url) : await createRemoteBackend(url, authToken);
+  const backend = isLocal
+    ? await createLocalBackend(url)
+    : await createRemoteBackend(url, authToken);
   const turnstile = createTurnstile(isLocal);
 
   return {

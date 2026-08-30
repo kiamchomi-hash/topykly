@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -70,6 +70,10 @@ export function backupSqliteDatabase({
   env = process.env
 } = {}) {
   const target = resolveBackupTarget({ dbPath, backupDir, now, env });
+  // Igual que en db-client: modulo experimental que no debe cargarse solo por
+  // importar los helpers de este archivo desde el servidor. createRequire lo
+  // resuelve sin volver asincronica a esta funcion.
+  const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
   const db = new DatabaseSync(target.dbPath);
 
   try {
