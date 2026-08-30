@@ -795,6 +795,10 @@ function createRateLimitMessage(kind, retryAfterSeconds) {
   return `Tienes que esperar ${remaining} entre comentarios.`;
 }
 
+// El segundo parametro que recibe la tarea es el handle sobre el que hay que
+// ejecutar todo lo que pasa dentro de la transaccion. Los sitios de llamada lo
+// reciben con el nombre `db`, tapando al de afuera, para que ninguna consulta
+// del cuerpo quede escribiendo fuera de la transaccion por descuido.
 function withTransaction(db, task) {
   const afterCommitTasks = [];
   db.exec("BEGIN IMMEDIATE");
@@ -803,7 +807,7 @@ function withTransaction(db, task) {
       if (typeof callback === "function") {
         afterCommitTasks.push(callback);
       }
-    });
+    }, db);
     db.exec("COMMIT");
     afterCommitTasks.forEach((callback) => callback());
     return result;
@@ -4915,7 +4919,7 @@ function verifyStoredEmailAuthChallenge(
     );
   }
 
-  const result = withTransaction(db, () => {
+  const result = withTransaction(db, (afterCommit, db) => {
     const challenge = db
       .prepare(
         `
@@ -5142,7 +5146,7 @@ function verifyStoredPasswordResetChallenge(
     );
   }
 
-  const result = withTransaction(db, () => {
+  const result = withTransaction(db, (afterCommit, db) => {
     const challenge = db
       .prepare(
         `
@@ -5330,7 +5334,7 @@ function linkIdentityToCurrentUser(
     );
   }
 
-  return withTransaction(db, () => {
+  return withTransaction(db, (afterCommit, db) => {
     const sourceSessionRow = readSessionRow(db, normalizedSourceSessionId);
     if (
       !sourceSessionRow ||
@@ -5458,17 +5462,17 @@ export function createBackendStore({
       db.close();
     },
     cleanupInactiveGuests({ nowMs = Date.now() } = {}) {
-      return withTransaction(db, () => pruneGuestSessions(db, "", nowMs, ""));
+      return withTransaction(db, (afterCommit, db) => pruneGuestSessions(db, "", nowMs, ""));
     },
     resetDailyMessageReactions({ now = new Date() } = {}) {
-      return withTransaction(db, () => resetDailyMessageReactionsIfNeeded(db, now));
+      return withTransaction(db, (afterCommit, db) => resetDailyMessageReactionsIfNeeded(db, now));
     },
     // El archivado tambien corre dentro de rebuildActiveTopicRanks, que se
     // dispara con cualquier interaccion. Esto cubre los periodos sin trafico,
     // donde nadie construye payload y el archivo se quedaria desactualizado
     // justo cuando lo visita un rastreador.
     archiveInactiveTopics({ nowMs = Date.now() } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const archivedTopicIds = archiveInactiveTopics(db, nowMs);
         if (archivedTopicIds.length) {
           rebuildActiveTopicRanks(db, nowMs);
@@ -5477,7 +5481,7 @@ export function createBackendStore({
       });
     },
     createEmailAuthChallenge(options = {}) {
-      return withTransaction(db, () => createStoredEmailAuthChallenge(db, options));
+      return withTransaction(db, (afterCommit, db) => createStoredEmailAuthChallenge(db, options));
     },
     discardEmailAuthChallenge(challengeId) {
       db.prepare("DELETE FROM auth_email_challenges WHERE id = ?").run(String(challengeId || ""));
@@ -5486,7 +5490,9 @@ export function createBackendStore({
       return verifyStoredEmailAuthChallenge(db, options);
     },
     createPasswordResetChallenge(options = {}) {
-      return withTransaction(db, () => createStoredPasswordResetChallenge(db, options));
+      return withTransaction(db, (afterCommit, db) =>
+        createStoredPasswordResetChallenge(db, options)
+      );
     },
     discardPasswordResetChallenge(challengeId) {
       db.prepare(
@@ -5513,7 +5519,7 @@ export function createBackendStore({
       nickname,
       rotateSession = false
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
@@ -5546,7 +5552,7 @@ export function createBackendStore({
       password,
       rotateSession = false
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
@@ -5578,7 +5584,7 @@ export function createBackendStore({
       userId = REGISTERED_USER_ID,
       rotateSession = false
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
@@ -5614,7 +5620,7 @@ export function createBackendStore({
       displayName = "",
       avatarUrl = null
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const normalizedSourceSessionId = ensureViewerSessionId(sourceSessionId);
         const nowIso = new Date().toISOString();
@@ -5648,7 +5654,7 @@ export function createBackendStore({
       });
     },
     logout({ sessionId, selectedTopicId = null, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
         const existingSessionRow = readSessionRow(db, normalizedSessionId);
@@ -5686,7 +5692,7 @@ export function createBackendStore({
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, (afterCommit) => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
         assertContextNotBlocked(db, context);
@@ -5841,7 +5847,7 @@ export function createBackendStore({
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
         assertContextNotBlocked(db, context);
@@ -5903,7 +5909,7 @@ export function createBackendStore({
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, (afterCommit) => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         if (context.viewer.type !== "registered") {
           throw new ApiError(
@@ -5979,19 +5985,19 @@ export function createBackendStore({
       ipAddress = "",
       profileNickname = null
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         return buildFrontendPayload(db, context, selectedTopicId, profileNickname);
       });
     },
     refresh({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         return buildFrontendPayload(db, context, selectedTopicId);
       });
     },
     seedEditorialContent({ limit = 5 } = {}) {
-      return withTransaction(db, () => seedEditorialContentIntoDatabase(db, limit));
+      return withTransaction(db, (afterCommit, db) => seedEditorialContentIntoDatabase(db, limit));
     },
     // Destructivo e irreversible. Por defecto hace una simulacion: hay que pedir
     // explicitamente dryRun:false para que borre.
@@ -6003,7 +6009,7 @@ export function createBackendStore({
       const wantsDelete = dryRun === false;
 
       // Autorizar primero, para que nadie sin permiso dispare siquiera la copia.
-      const preview = withTransaction(db, () => {
+      const preview = withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         return removeEditorialSeedContentFromDatabase(db, { dryRun: true });
@@ -6025,7 +6031,7 @@ export function createBackendStore({
         );
       }
 
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         const summary = removeEditorialSeedContentFromDatabase(db, { dryRun: false });
@@ -6049,7 +6055,7 @@ export function createBackendStore({
       });
     },
     openTopic(topicId, { sessionId, authMode, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         const row = db.prepare("SELECT id FROM topics WHERE id = ?").get(topicId);
         if (!row) {
@@ -6060,7 +6066,7 @@ export function createBackendStore({
       });
     },
     followTopic(topicId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         if (context.viewer.type !== "registered") {
           throw new ApiError(
@@ -6078,7 +6084,7 @@ export function createBackendStore({
       });
     },
     createTopic({ sessionId, authMode, title, text, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredContextCanPost(db, context);
         const lastTopicAt = getContextActivityAt(db, context, "last_topic_at");
@@ -6140,7 +6146,7 @@ export function createBackendStore({
       });
     },
     addMessage(topicId, { sessionId, authMode, text, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredContextCanPost(db, context);
         const normalizedText = validateMessageInput(text);
@@ -6191,7 +6197,7 @@ export function createBackendStore({
       messageId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertContextCanParticipate(db, context);
         if (context.viewer.type !== "registered") {
@@ -6208,7 +6214,7 @@ export function createBackendStore({
       messageId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertContextCanParticipate(db, context);
         if (context.viewer.type !== "registered") {
@@ -6225,7 +6231,7 @@ export function createBackendStore({
       targetUserId,
       { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredBlockContext(db, context);
         const target = assertBlockTarget(db, context.viewer.id, targetUserId);
@@ -6255,7 +6261,7 @@ export function createBackendStore({
       targetUserId,
       { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredBlockContext(db, context);
         const target = assertBlockTarget(db, context.viewer.id, targetUserId);
@@ -6283,7 +6289,7 @@ export function createBackendStore({
       targetUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredBlockContext(db, context);
         const normalizedTargetUserId = String(targetUserId || "").trim();
@@ -6301,7 +6307,7 @@ export function createBackendStore({
       targetUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredFriendContext(db, context);
         const target = assertFriendTarget(db, context.viewer.id, targetUserId);
@@ -6357,7 +6363,7 @@ export function createBackendStore({
       requesterUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredFriendContext(db, context);
         const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
@@ -6383,7 +6389,7 @@ export function createBackendStore({
       requesterUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertRegisteredFriendContext(db, context);
         const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
@@ -6410,7 +6416,7 @@ export function createBackendStore({
       entityId,
       { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
         assertContextCanParticipate(db, context);
         const normalizedEntityType =
@@ -6463,7 +6469,7 @@ export function createBackendStore({
       reportPage = 1,
       reportLimit = ADMIN_REPORT_PAGE_SIZE
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         const reportPageResult = listOpenReports(db, { page: reportPage, limit: reportLimit });
@@ -6482,7 +6488,7 @@ export function createBackendStore({
       avatarPage = 1,
       avatarLimit = ADMIN_AVATAR_PAGE_SIZE
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         const reportPageResult = listOpenReports(db, { page: reportPage, limit: reportLimit });
@@ -6511,7 +6517,7 @@ export function createBackendStore({
         ipAddress = ""
       } = {}
     ) {
-      return withTransaction(db, (afterCommit) => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         const nowIso = new Date().toISOString();
@@ -7214,7 +7220,7 @@ export function createBackendStore({
         }));
     },
     getDiagnosticsForViewer({ sessionId, authMode, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         return this.getDiagnostics();
@@ -7228,7 +7234,7 @@ export function createBackendStore({
       sourceGroup = "direct",
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, {
           sessionId,
           authMode,
@@ -7242,14 +7248,14 @@ export function createBackendStore({
       });
     },
     getProductAnalyticsForViewer({ sessionId, authMode, days = 30, ipAddress = "" } = {}) {
-      return withTransaction(db, () => {
+      return withTransaction(db, (afterCommit, db) => {
         const context = resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         return buildProductAnalyticsReport(db, days);
       });
     },
     claimTopicActivityEmailRecipients(topicId, actorUserId) {
-      return withTransaction(db, () =>
+      return withTransaction(db, (afterCommit, db) =>
         claimTopicActivityEmailRecipients(db, String(topicId || ""), String(actorUserId || ""))
       );
     },
