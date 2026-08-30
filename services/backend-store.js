@@ -683,7 +683,9 @@ function scheduleStoredAvatarCleanup(registerAfterCommit, db, avatarStorageDir, 
   }
 
   registerAfterCommit(() => {
-    uniqueUrls.forEach((avatarUrl) => cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl));
+    for (const avatarUrl of uniqueUrls) {
+      cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl);
+    }
   });
 }
 function summarizeText(text, limit = 96) {
@@ -1353,7 +1355,7 @@ function seedUsers(db) {
   `);
 
   const nowIso = new Date().toISOString();
-  initialUsers.forEach((user) => {
+  for (const user of initialUsers) {
     const nickname = user.nickname ? normalizeNickname(user.nickname) : null;
     insertUser.run(
       user.id,
@@ -1366,7 +1368,7 @@ function seedUsers(db) {
       nowIso,
       nowIso
     );
-  });
+  }
 }
 
 function seedTopics(db) {
@@ -1394,7 +1396,7 @@ function seedTopics(db) {
   const seeds = getSeedTopicEntries();
   const baseMs = Date.now() - seeds.length * 90 * 60_000;
 
-  seeds.forEach(([title, subtitle, seededReplies = []], topicIndex) => {
+  for (const [topicIndex, [title, subtitle, seededReplies = []]] of seeds.entries()) {
     const topicId = `topic-${topicIndex + 1}`;
     const authorId = users[topicIndex % users.length];
     const createdAt = createIsoTimestamp(topicIndex * 4, baseMs);
@@ -1434,7 +1436,7 @@ function seedTopics(db) {
             ].join(" ")
           );
 
-    replies.forEach((replyText, replyIndex) => {
+    for (const [replyIndex, replyText] of replies.entries()) {
       const replyAuthorId = users[(topicIndex + replyIndex + 1) % users.length];
       const replyCreatedAt = createIsoTimestamp(topicIndex * 4 + replyIndex + 1, baseMs);
       const replyResult = insertMessage.run(
@@ -1448,10 +1450,10 @@ function seedTopics(db) {
       lastMessageId = Number(replyResult.lastInsertRowid);
       lastActivityAt = replyCreatedAt;
       subtitlePreview = summarizeText(replyText);
-    });
+    }
 
     updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
-  });
+  }
 
   rebuildActiveTopicRanks(db);
 }
@@ -1610,12 +1612,18 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     min: 1,
     max: editorialTopicSeedData.length
   });
-  const entries = editorialTopicSeedData
+  const candidates = editorialTopicSeedData
     .slice(0, limit)
-    .map((entry, index) => ({ entry, index }))
-    .filter(
-      ({ entry }) => !db.prepare("SELECT 1 FROM topics WHERE title = ? LIMIT 1").get(entry[0])
-    );
+    .map((entry, index) => ({ entry, index }));
+  const entries = [];
+  for (const candidate of candidates) {
+    const existing = db
+      .prepare("SELECT 1 FROM topics WHERE title = ? LIMIT 1")
+      .get(candidate.entry[0]);
+    if (!existing) {
+      entries.push(candidate);
+    }
+  }
 
   if (!entries.length) {
     return { requested: limit, insertedTopics: 0, insertedUsers: 0, archivedTopicIds: [] };
@@ -1631,7 +1639,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     ) VALUES (?, ?, ?, ?, 'registered', ?, ?, 'active', ?, 1, ?, ?)
   `);
 
-  initialUsers.forEach((user) => {
+  for (const user of initialUsers) {
     const nickname = normalizeNickname(user.nickname);
     const nicknameKey = normalizeUniqueNameKey(nickname);
     const existingByNickname = db
@@ -1674,7 +1682,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     );
     editorialUserIds.set(user.id, editorialUserId);
     insertedUsers += 1;
-  });
+  }
 
   const activeTopicIdsBefore = new Set(getOrderedActiveTopicRows(db).map((row) => row.id));
   const insertTopic = db.prepare(`
@@ -1692,88 +1700,92 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     WHERE id = ?
   `);
 
-  entries.forEach(
-    (
-      { entry: [title, subtitle, replies = [], requestedAuthorId = null], index },
-      insertionIndex
-    ) => {
-      const normalizedTitle = normalizeTopicTitle(title);
-      const titleHash = crypto
-        .createHash("sha256")
-        .update(normalizedTitle)
-        .digest("hex")
-        .slice(0, 16);
-      const topicId = `editorial-topic-${titleHash}`;
-      const existingId = db.prepare("SELECT title FROM topics WHERE id = ? LIMIT 1").get(topicId);
-      if (existingId) {
-        throw new ApiError(
-          409,
-          "EDITORIAL_TOPIC_ID_CONFLICT",
-          `El id editorial ${topicId} ya está ocupado.`
-        );
-      }
+  for (const [
+    insertionIndex,
+    {
+      entry: [title, subtitle, replies = [], requestedAuthorId = null],
+      index
+    }
+  ] of entries.entries()) {
+    const normalizedTitle = normalizeTopicTitle(title);
+    const titleHash = crypto
+      .createHash("sha256")
+      .update(normalizedTitle)
+      .digest("hex")
+      .slice(0, 16);
+    const topicId = `editorial-topic-${titleHash}`;
+    const existingId = db.prepare("SELECT title FROM topics WHERE id = ? LIMIT 1").get(topicId);
+    if (existingId) {
+      throw new ApiError(
+        409,
+        "EDITORIAL_TOPIC_ID_CONFLICT",
+        `El id editorial ${topicId} ya está ocupado.`
+      );
+    }
 
-      const authorSeed =
-        initialUsers.find((user) => user.id === requestedAuthorId) ||
-        initialUsers[index % initialUsers.length];
-      const authorId = editorialUserIds.get(authorSeed.id);
-      const createdAt = createIsoTimestamp(
-        insertionIndex * 4,
+    const authorSeed =
+      initialUsers.find((user) => user.id === requestedAuthorId) ||
+      initialUsers[index % initialUsers.length];
+    const authorId = editorialUserIds.get(authorSeed.id);
+    const createdAt = createIsoTimestamp(
+      insertionIndex * 4,
+      Date.now() - entries.length * 10 * 60_000
+    );
+    const rootText = `${normalizedTitle}. ${normalizeMessageText(subtitle)}`;
+    insertTopic.run(
+      topicId,
+      normalizedTitle,
+      summarizeText(rootText),
+      authorId,
+      TOPIC_STATUS_ACTIVE,
+      createdAt,
+      createdAt,
+      createdAt
+    );
+
+    const rootResult = insertMessage.run(
+      topicId,
+      authorId,
+      rootText,
+      1 + (index % 4),
+      1,
+      createdAt
+    );
+    let lastMessageId = Number(rootResult.lastInsertRowid);
+    let lastActivityAt = createdAt;
+    let subtitlePreview = summarizeText(rootText);
+
+    for (const [replyIndex, replyText] of replies.entries()) {
+      const replyAuthorSeed = initialUsers[(index + replyIndex + 1) % initialUsers.length];
+      const replyAuthorId = editorialUserIds.get(replyAuthorSeed.id);
+      const replyCreatedAt = createIsoTimestamp(
+        insertionIndex * 4 + replyIndex + 1,
         Date.now() - entries.length * 10 * 60_000
       );
-      const rootText = `${normalizedTitle}. ${normalizeMessageText(subtitle)}`;
-      insertTopic.run(
+      const replyResult = insertMessage.run(
         topicId,
-        normalizedTitle,
-        summarizeText(rootText),
-        authorId,
-        TOPIC_STATUS_ACTIVE,
-        createdAt,
-        createdAt,
-        createdAt
+        replyAuthorId,
+        normalizeMessageText(replyText),
+        1 + ((index + replyIndex) % 5),
+        0,
+        replyCreatedAt
       );
-
-      const rootResult = insertMessage.run(
-        topicId,
-        authorId,
-        rootText,
-        1 + (index % 4),
-        1,
-        createdAt
-      );
-      let lastMessageId = Number(rootResult.lastInsertRowid);
-      let lastActivityAt = createdAt;
-      let subtitlePreview = summarizeText(rootText);
-
-      replies.forEach((replyText, replyIndex) => {
-        const replyAuthorSeed = initialUsers[(index + replyIndex + 1) % initialUsers.length];
-        const replyAuthorId = editorialUserIds.get(replyAuthorSeed.id);
-        const replyCreatedAt = createIsoTimestamp(
-          insertionIndex * 4 + replyIndex + 1,
-          Date.now() - entries.length * 10 * 60_000
-        );
-        const replyResult = insertMessage.run(
-          topicId,
-          replyAuthorId,
-          normalizeMessageText(replyText),
-          1 + ((index + replyIndex) % 5),
-          0,
-          replyCreatedAt
-        );
-        lastMessageId = Number(replyResult.lastInsertRowid);
-        lastActivityAt = replyCreatedAt;
-        subtitlePreview = summarizeText(replyText);
-      });
-
-      updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
+      lastMessageId = Number(replyResult.lastInsertRowid);
+      lastActivityAt = replyCreatedAt;
+      subtitlePreview = summarizeText(replyText);
     }
-  );
+
+    updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
+  }
 
   rebuildActiveTopicRanks(db);
-  const archivedTopicIds = [...activeTopicIdsBefore].filter((topicId) => {
+  const archivedTopicIds = [];
+  for (const topicId of activeTopicIdsBefore) {
     const row = db.prepare("SELECT status FROM topics WHERE id = ?").get(topicId);
-    return row?.status === TOPIC_STATUS_EXPELLED;
-  });
+    if (row?.status === TOPIC_STATUS_EXPELLED) {
+      archivedTopicIds.push(topicId);
+    }
+  }
 
   return {
     requested: limit,
@@ -2675,10 +2687,10 @@ function archiveInactiveTopics(db, now = Date.now()) {
     WHERE id = ?
   `);
 
-  staleRows.forEach((row) => {
+  for (const row of staleRows) {
     trimTopicReplies(db, row.id);
     expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
-  });
+  }
 
   return staleRows.map((row) => row.id);
 }
@@ -2698,14 +2710,14 @@ function rebuildActiveTopicRanks(db, now = Date.now()) {
   `);
   const nowIso = new Date(now).toISOString();
 
-  keptRows.forEach((row, index) => {
+  for (const [index, row] of keptRows.entries()) {
     updateRank.run(index, nowIso, row.id);
-  });
+  }
 
-  droppedRows.forEach((row) => {
+  for (const row of droppedRows) {
     trimTopicReplies(db, row.id);
     expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
-  });
+  }
 
   db.prepare(
     `
@@ -3192,15 +3204,18 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   // todos los temas de este snapshot.
   const onlineCount = countOnlineUsers(db);
   const visibleLimit = resolveVisibleTopicLimit(onlineCount);
-  const topics = activeTopicRows
-    .map((row, index) =>
-      hydrateTopic(db, row, {
-        forceVisible: index < visibleLimit,
-        viewerId: context.viewer.id,
-        visibleLimit
-      })
-    )
-    .map(hideBlockedMessages);
+  const topics = [];
+  for (const [index, row] of activeTopicRows.entries()) {
+    topics.push(
+      hideBlockedMessages(
+        hydrateTopic(db, row, {
+          forceVisible: index < visibleLimit,
+          viewerId: context.viewer.id,
+          visibleLimit
+        })
+      )
+    );
+  }
   const reportSnapshot = getReportSnapshot(db, context.sessionId);
   const friendships = getFriendshipsForFrontend(db, context.viewer.id);
   const friendshipStatusByUserId = getFriendshipStatusByUserId(friendships);
@@ -3778,10 +3793,10 @@ function backfillRegisteredNicknames(db) {
     WHERE id = ?
   `);
 
-  rows.forEach((row) => {
+  for (const row of rows) {
     const nickname = createAvailableNickname(db, row.nickname || row.name, row.id);
     updateNickname.run(nickname, normalizeNicknameKey(nickname), row.id);
-  });
+  }
 }
 function backfillVerifiedPasswordEmails(db) {
   db.prepare(
@@ -4275,7 +4290,7 @@ function getUserSanctionSummary(db, userId) {
 
 function listActiveSanctions(db) {
   const nowIso = new Date().toISOString();
-  return db
+  const sanctionedRows = db
     .prepare(
       `
     SELECT id, name, status, banned_until
@@ -4285,23 +4300,27 @@ function listActiveSanctions(db) {
     ORDER BY updated_at DESC, id ASC
   `
     )
-    .all(USER_STATUS_EXPELLED, nowIso)
-    .map((row) => {
-      const history = getUserSanctionHistory(db, row.id);
-      const active = history.activeSanction;
-      const metadata = active?.metadata || {};
-      return {
-        userId: row.id,
-        name: row.name,
-        kind: row.status === USER_STATUS_EXPELLED ? "permanent" : "temporary",
-        bannedUntil: row.banned_until || null,
-        sanctionId: active?.id || null,
-        stage: Number(metadata.stage) || null,
-        label: metadata.label || (row.status === USER_STATUS_EXPELLED ? "Permanente" : "Temporal"),
-        reason: active?.reason || "",
-        appliedAt: active?.createdAt || null
-      };
+    .all(USER_STATUS_EXPELLED, nowIso);
+
+  const sanctions = [];
+  for (const row of sanctionedRows) {
+    const history = getUserSanctionHistory(db, row.id);
+    const active = history.activeSanction;
+    const metadata = active?.metadata || {};
+    sanctions.push({
+      userId: row.id,
+      name: row.name,
+      kind: row.status === USER_STATUS_EXPELLED ? "permanent" : "temporary",
+      bannedUntil: row.banned_until || null,
+      sanctionId: active?.id || null,
+      stage: Number(metadata.stage) || null,
+      label: metadata.label || (row.status === USER_STATUS_EXPELLED ? "Permanente" : "Temporal"),
+      reason: active?.reason || "",
+      appliedAt: active?.createdAt || null
     });
+  }
+
+  return sanctions;
 }
 
 function resolveReportsForEntity(db, entityType, entityId, resolvedAt) {
@@ -4394,8 +4413,9 @@ function attachReportTargets(db, items) {
 
   const messageTargets = new Map();
   if (messageIds.length) {
-    db.prepare(
-      `
+    for (const row of db
+      .prepare(
+        `
       SELECT
         messages.id,
         messages.text,
@@ -4408,61 +4428,60 @@ function attachReportTargets(db, items) {
       LEFT JOIN topics ON topics.id = messages.topic_id
       WHERE messages.id IN (${messageIds.map(() => "?").join(", ")})
     `
-    )
-      .all(...messageIds)
-      .forEach((row) => {
-        messageTargets.set(String(row.id), {
-          kind: "message",
-          text: row.text,
-          authorId: row.author_id,
-          authorName: row.author_name || "Usuario eliminado",
-          topicId: row.topic_id,
-          topicTitle: row.topic_title || "Tema eliminado",
-          sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
-        });
+      )
+      .all(...messageIds)) {
+      messageTargets.set(String(row.id), {
+        kind: "message",
+        text: row.text,
+        authorId: row.author_id,
+        authorName: row.author_name || "Usuario eliminado",
+        topicId: row.topic_id,
+        topicTitle: row.topic_title || "Tema eliminado",
+        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
       });
+    }
   }
 
   const topicTargets = new Map();
   if (topicIds.length) {
-    db.prepare(
-      `
+    for (const row of db
+      .prepare(
+        `
       SELECT topics.id, topics.title, topics.author_id, users.name AS author_name
       FROM topics
       LEFT JOIN users ON users.id = topics.author_id
       WHERE topics.id IN (${topicIds.map(() => "?").join(", ")})
     `
-    )
-      .all(...topicIds)
-      .forEach((row) => {
-        topicTargets.set(String(row.id), {
-          kind: "topic",
-          title: row.title || "Tema eliminado",
-          authorId: row.author_id,
-          authorName: row.author_name || "Usuario eliminado",
-          sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
-        });
+      )
+      .all(...topicIds)) {
+      topicTargets.set(String(row.id), {
+        kind: "topic",
+        title: row.title || "Tema eliminado",
+        authorId: row.author_id,
+        authorName: row.author_name || "Usuario eliminado",
+        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
       });
+    }
   }
 
   const userTargets = new Map();
   if (userIds.length) {
-    db.prepare(
-      `
+    for (const row of db
+      .prepare(
+        `
       SELECT id, name, status
       FROM users
       WHERE id IN (${userIds.map(() => "?").join(", ")})
     `
-    )
-      .all(...userIds)
-      .forEach((row) => {
-        userTargets.set(String(row.id), {
-          kind: "user",
-          name: row.name || "Usuario eliminado",
-          status: row.status,
-          sanction: getUserSanctionSummary(db, row.id)
-        });
+      )
+      .all(...userIds)) {
+      userTargets.set(String(row.id), {
+        kind: "user",
+        name: row.name || "Usuario eliminado",
+        status: row.status,
+        sanction: getUserSanctionSummary(db, row.id)
       });
+    }
   }
 
   return items.map((item) => {
@@ -4546,9 +4565,9 @@ function trimTopicReplies(db, topicId) {
   }
 
   const deleteMessage = db.prepare("DELETE FROM messages WHERE id = ?");
-  overflowRows.forEach((row) => {
+  for (const row of overflowRows) {
     deleteMessage.run(row.id);
-  });
+  }
 }
 
 function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new Date()) {
@@ -4593,7 +4612,9 @@ function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new D
     VALUES (?, ?, ?)
     ON CONFLICT(user_id, topic_id) DO UPDATE SET last_sent_at = excluded.last_sent_at
   `);
-  recipients.forEach((recipient) => claim.run(recipient.id, topic.id, nowIso));
+  for (const recipient of recipients) {
+    claim.run(recipient.id, topic.id, nowIso);
+  }
 
   return recipients.map((recipient) => ({
     userId: recipient.id,
