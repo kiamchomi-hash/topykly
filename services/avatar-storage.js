@@ -67,7 +67,11 @@ export function createDiskAvatarStorage({ directory }) {
   };
 }
 
-export function createBlobAvatarStorage({ token, prefix = "avatars", client = null }) {
+export function createBlobAvatarStorage({ token = "", prefix = "avatars", client = null }) {
+  // Sin token explicito la libreria se autentica sola con VERCEL_OIDC_TOKEN y
+  // BLOB_STORE_ID, que es como conecta el almacen nativo de Vercel. Pasarle un
+  // token vacio romperia ese camino, asi que la clave no viaja si no la hay.
+  const credentials = token ? { token } : {};
   const loadClient = client
     ? async () => client
     : async () => {
@@ -96,7 +100,7 @@ export function createBlobAvatarStorage({ token, prefix = "avatars", client = nu
         access: "public",
         contentType: contentTypeFor(extension),
         addRandomSuffix: false,
-        token
+        ...credentials
       });
       return result.url;
     },
@@ -116,7 +120,7 @@ export function createBlobAvatarStorage({ token, prefix = "avatars", client = nu
       }
       const { del } = await loadClient();
       try {
-        await del(String(url), { token });
+        await del(String(url), { ...credentials });
       } catch {
         // Un objeto ya ausente no debe romper el perfil ni la moderacion.
       }
@@ -126,7 +130,10 @@ export function createBlobAvatarStorage({ token, prefix = "avatars", client = nu
 
 export function createAvatarStorage({ directory = null, env = process.env, client = null } = {}) {
   const token = String(env.BLOB_READ_WRITE_TOKEN || "").trim();
-  if (token || client) {
+  // BLOB_STORE_ID solo lo define el almacen nativo de Vercel, que se autentica
+  // por OIDC y no necesita token propio.
+  const storeId = String(env.BLOB_STORE_ID || "").trim();
+  if (token || storeId || client) {
     return createBlobAvatarStorage({ token, client });
   }
 

@@ -2056,6 +2056,13 @@ await (async () => {
 
     assert.equal(storage.kind, "blob");
     assert.equal(storage.directory, null);
+    // El almacen nativo de Vercel no inyecta token propio: se autentica por
+    // OIDC y solo define BLOB_STORE_ID. Elegir disco ahi perderia los avatares.
+    assert.equal(
+      createAvatarStorage({ env: { BLOB_STORE_ID: "store_abc" }, client: { put() {}, del() {} } })
+        .kind,
+      "blob"
+    );
 
     const url = await storage.save(Buffer.from("imagen"), "webp");
     assert.equal(uploaded.length, 1);

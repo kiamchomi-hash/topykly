@@ -45,7 +45,7 @@ Note: a parallel `features/` directory (chat, rankings, topics, users, titles, p
 **Despliegue: proceso unico o serverless.** El codigo soporta los dos, y lo que cambia entre ellos vive en piezas separadas:
 
 - **Persistencia**: `db-client.js` (archivo local o base remota). Con base remota `store.avatarStorageDir` es `null`.
-- **Avatares**: `services/avatar-storage.js` (disco u almacen de objetos segun `BLOB_READ_WRITE_TOKEN`). `owns(url)` decide que url es propia y por lo tanto borrable.
+- **Avatares**: `services/avatar-storage.js` (disco u almacen de objetos segun `BLOB_READ_WRITE_TOKEN` o `BLOB_STORE_ID`). `owns(url)` decide que url es propia y por lo tanto borrable.
 - **Limite de trafico**: `services/rate-limit-store.js` (Map en memoria o contador compartido segun `UPSTASH_REDIS_REST_URL`).
 - **Tareas periodicas**: los tres `setInterval` de `startPreviewServer`, o `api/cron/maintenance.js` disparado por el cron de la plataforma.
 - **Entrada HTTP**: `createRequestHandler` en `preview-server.js` es comun a los dos. `startPreviewServer` lo monta sobre `http.createServer`; `api/server.js` lo monta como funcion con `mode: "serverless"`, que ademas deja de servir estaticos y responde 501 en `/api/live`.
