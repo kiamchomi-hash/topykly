@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
-import { backupSqliteDatabase } from "../scripts/backup-sqlite.mjs";
+import { escapeSqliteString, resolveBackupTarget } from "../scripts/backup-sqlite.mjs";
+import { createDbClient } from "./db-client.js";
 import { hasProfanity } from "../profanity-filter.js";
 import { SEO_THIN_PROFILE_CONTRIBUTION_COUNT, SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
 
@@ -172,12 +173,35 @@ const DEFAULT_REGISTERED_ROLE = "Registrado";
 const ADMIN_ROLE = "Admin";
 const MODERATOR_ROLE = "Moderacion";
 
+function localDbConfig(dbPath, dbPathSource, { storageConfigured = true, storageWarning = null }) {
+  return {
+    url: `file:${dbPath}`,
+    authToken: undefined,
+    dbPath,
+    dbPathSource,
+    isRemote: false,
+    storageConfigured,
+    storageWarning
+  };
+}
+
 function resolveDbConfig(explicitDbPath = null, env = process.env) {
+  // La ruta explicita gana siempre: es la que usan las pruebas para aislarse.
   const normalizedExplicitPath = String(explicitDbPath || "").trim();
   if (normalizedExplicitPath) {
+    return localDbConfig(normalizedExplicitPath, "explicit", {});
+  }
+
+  // Configurar una base remota es una decision deliberada, asi que se impone
+  // sobre cualquier ruta de disco que haya quedado en el entorno.
+  const remoteUrl = String(env.TURSO_DATABASE_URL || "").trim();
+  if (remoteUrl) {
     return {
-      dbPath: normalizedExplicitPath,
-      dbPathSource: "explicit",
+      url: remoteUrl,
+      authToken: String(env.TURSO_AUTH_TOKEN || "").trim() || undefined,
+      dbPath: null,
+      dbPathSource: "TURSO_DATABASE_URL",
+      isRemote: !remoteUrl.toLowerCase().startsWith("file:"),
       storageConfigured: true,
       storageWarning: null
     };
@@ -185,31 +209,19 @@ function resolveDbConfig(explicitDbPath = null, env = process.env) {
 
   const topyklyDbPath = String(env.TOPYKLY_DB_PATH || "").trim();
   if (topyklyDbPath) {
-    return {
-      dbPath: topyklyDbPath,
-      dbPathSource: "TOPYKLY_DB_PATH",
-      storageConfigured: true,
-      storageWarning: null
-    };
+    return localDbConfig(topyklyDbPath, "TOPYKLY_DB_PATH", {});
   }
 
   const legacyDbPath = String(env.CHETREND_DB_PATH || "").trim();
   if (legacyDbPath) {
-    return {
-      dbPath: legacyDbPath,
-      dbPathSource: "CHETREND_DB_PATH",
-      storageConfigured: true,
-      storageWarning: null
-    };
+    return localDbConfig(legacyDbPath, "CHETREND_DB_PATH", {});
   }
 
-  return {
-    dbPath: FALLBACK_DB_PATH,
-    dbPathSource: "default",
+  return localDbConfig(FALLBACK_DB_PATH, "default", {
     storageConfigured: false,
     storageWarning:
-      "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
-  };
+      "Sin TOPYKLY_DB_PATH ni TURSO_DATABASE_URL la base vive en el arbol del proyecto y no sobrevive a un despliegue."
+  });
 }
 
 function getConfiguredAdminEmails() {
@@ -676,15 +688,17 @@ async function cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl) {
   }
 }
 
-function scheduleStoredAvatarCleanup(registerAfterCommit, db, avatarStorageDir, avatarUrls) {
+// La limpieza corre despues del commit, cuando la transaccion ya esta cerrada,
+// asi que recibe la conexion y no el handle de la transaccion.
+function scheduleStoredAvatarCleanup(registerAfterCommit, avatarStorageDir, avatarUrls) {
   const uniqueUrls = [...new Set(avatarUrls.filter(Boolean))];
   if (!uniqueUrls.length) {
     return;
   }
 
-  registerAfterCommit(async () => {
+  registerAfterCommit(async (connection) => {
     for (const avatarUrl of uniqueUrls) {
-      await cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl);
+      await cleanupStoredAvatarUrl(connection, avatarStorageDir, avatarUrl);
     }
   });
 }
@@ -799,24 +813,21 @@ function createRateLimitMessage(kind, retryAfterSeconds) {
 // del cuerpo quede escribiendo fuera de la transaccion por descuido.
 async function withTransaction(db, task) {
   const afterCommitTasks = [];
-  await db.exec("BEGIN IMMEDIATE");
-  try {
-    const result = await task((callback) => {
-      if (typeof callback === "function") {
-        afterCommitTasks.push(callback);
-      }
-    }, db);
-    await db.exec("COMMIT");
-    // Se esperan una por una: si el llamador observa el resultado, el efecto
-    // posterior al commit ya tiene que haber ocurrido.
-    for (const callback of afterCommitTasks) {
-      await callback();
-    }
-    return result;
-  } catch (error) {
-    await db.exec("ROLLBACK");
-    throw error;
+  const result = await db.transaction(
+    async (tx) =>
+      await task((callback) => {
+        if (typeof callback === "function") {
+          afterCommitTasks.push(callback);
+        }
+      }, tx)
+  );
+  // Se esperan una por una y ya fuera de la transaccion: si el llamador observa
+  // el resultado, el efecto posterior al commit ya tiene que haber ocurrido.
+  // Reciben la conexion porque el handle de la transaccion ya esta cerrado.
+  for (const callback of afterCommitTasks) {
+    await callback(db);
   }
+  return result;
 }
 
 function normalizePositiveInteger(
@@ -5595,11 +5606,16 @@ export async function createBackendStore({
 } = {}) {
   const dbConfig = resolveDbConfig(dbPath);
   const resolvedDbPath = dbConfig.dbPath;
-  const storageDir = path.dirname(resolvedDbPath);
+  // Con base remota no hay disco propio donde dejar los avatares. Se usa un
+  // directorio temporal para que el flujo siga andando hasta que pasen a un
+  // almacenamiento de objetos; lo que se escriba ahi no sobrevive al proceso.
+  const storageDir = resolvedDbPath
+    ? path.dirname(resolvedDbPath)
+    : path.join(os.tmpdir(), "topykly-storage");
   const avatarStorageDir = path.join(storageDir, "avatars");
   mkdirSync(storageDir, { recursive: true });
   mkdirSync(avatarStorageDir, { recursive: true });
-  const db = new DatabaseSync(resolvedDbPath);
+  const db = await createDbClient({ url: dbConfig.url, authToken: dbConfig.authToken });
 
   await initSchema(db);
   if (seedDemoData) {
@@ -5993,7 +6009,6 @@ export async function createBackendStore({
         const nextAvatarUrls = new Set([nextAvatarUrl, nextPendingUrl].filter(Boolean));
         scheduleStoredAvatarCleanup(
           afterCommit,
-          db,
           avatarStorageDir,
           previousAvatarUrls.filter((avatarUrl) => avatarUrl && !nextAvatarUrls.has(avatarUrl))
         );
@@ -6145,7 +6160,7 @@ export async function createBackendStore({
           )
           .run(nowIso, userId);
 
-        scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, previousAvatarUrls);
+        scheduleStoredAvatarCleanup(afterCommit, avatarStorageDir, previousAvatarUrls);
 
         const guestContext = await createGuestSession(
           db,
@@ -6201,16 +6216,27 @@ export async function createBackendStore({
         return preview;
       }
 
-      // Fuera de transaccion: VACUUM INTO no puede correr dentro de una.
+      // Fuera de transaccion: VACUUM INTO no puede correr dentro de una. Y por
+      // la conexion del store: abrir el archivo con un segundo driver mientras
+      // este lo tiene tomado se traba.
       let backupPath = null;
-      try {
-        backupPath = backupSqliteDatabase({ dbPath: resolvedDbPath }).backupPath;
-      } catch (error) {
-        throw new ApiError(
-          500,
-          "BACKUP_FAILED",
-          `No se pudo respaldar la base antes de borrar, no se borro nada: ${error.message}`
-        );
+      if (dbConfig.isRemote) {
+        // En una base remota el VACUUM escribiria en el disco del proveedor, que
+        // no es un respaldo recuperable desde aca. El punto de restauracion lo
+        // aporta el propio servicio.
+        backupPath = null;
+      } else {
+        try {
+          const target = resolveBackupTarget({ dbPath: resolvedDbPath });
+          await db.exec(`VACUUM INTO '${escapeSqliteString(target.backupPath)}'`);
+          backupPath = target.backupPath;
+        } catch (error) {
+          throw new ApiError(
+            500,
+            "BACKUP_FAILED",
+            `No se pudo respaldar la base antes de borrar, no se borro nada: ${error.message}`
+          );
+        }
       }
 
       return await withTransaction(db, async (afterCommit, db) => {
@@ -7021,7 +7047,6 @@ export async function createBackendStore({
             .run(userRow.avatar_pending_url, nowIso, userRow.id);
           scheduleStoredAvatarCleanup(
             afterCommit,
-            db,
             avatarStorageDir,
             userRow.avatar_url && userRow.avatar_url !== userRow.avatar_pending_url
               ? [userRow.avatar_url]
@@ -7058,9 +7083,7 @@ export async function createBackendStore({
           `
             )
             .run(nowIso, userRow.id);
-          scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, [
-            userRow.avatar_pending_url
-          ]);
+          scheduleStoredAvatarCleanup(afterCommit, avatarStorageDir, [userRow.avatar_pending_url]);
           await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",

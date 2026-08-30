@@ -20,8 +20,30 @@ function createBackupFileName(now = new Date()) {
   return `topykly-${now.toISOString().replace(/[:.]/g, "-")}.sqlite`;
 }
 
-function escapeSqliteString(value) {
+export function escapeSqliteString(value) {
   return String(value).replace(/'/g, "''");
+}
+
+// Prepara el destino sin abrir la base. El servidor lo usa para hacer el
+// VACUUM INTO por su propia conexion: abrir el mismo archivo con un segundo
+// driver mientras el store lo tiene tomado se traba.
+export function resolveBackupTarget({
+  dbPath = null,
+  backupDir = null,
+  now = new Date(),
+  env = process.env
+} = {}) {
+  const config = resolveBackupConfig({ dbPath, backupDir, env });
+  if (!existsSync(config.dbPath)) {
+    throw new Error(`SQLite database not found: ${config.dbPath}`);
+  }
+
+  mkdirSync(config.backupDir, { recursive: true });
+
+  return {
+    ...config,
+    backupPath: path.join(config.backupDir, createBackupFileName(now))
+  };
 }
 
 export function resolveBackupConfig({ dbPath = null, backupDir = null, env = process.env } = {}) {
@@ -47,25 +69,19 @@ export function backupSqliteDatabase({
   now = new Date(),
   env = process.env
 } = {}) {
-  const config = resolveBackupConfig({ dbPath, backupDir, env });
-  if (!existsSync(config.dbPath)) {
-    throw new Error(`SQLite database not found: ${config.dbPath}`);
-  }
-
-  mkdirSync(config.backupDir, { recursive: true });
-  const backupPath = path.join(config.backupDir, createBackupFileName(now));
-  const db = new DatabaseSync(config.dbPath);
+  const target = resolveBackupTarget({ dbPath, backupDir, now, env });
+  const db = new DatabaseSync(target.dbPath);
 
   try {
-    db.exec(`VACUUM INTO '${escapeSqliteString(backupPath)}'`);
+    db.exec(`VACUUM INTO '${escapeSqliteString(target.backupPath)}'`);
   } finally {
     db.close();
   }
 
   return {
-    dbPath: config.dbPath,
-    backupDir: config.backupDir,
-    backupPath
+    dbPath: target.dbPath,
+    backupDir: target.backupDir,
+    backupPath: target.backupPath
   };
 }
 

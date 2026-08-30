@@ -312,6 +312,19 @@ function createClassList() {
   };
 }
 
+// En Windows el binding nativo de libSQL no suelta el archivo al cerrar, asi
+// que borrar el directorio temporal es best-effort: lo que quede lo limpia el
+// sistema. No afecta a produccion, donde la base es remota y no hay archivo.
+async function removeTempDir(dir) {
+  try {
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch (error) {
+    if (!["EBUSY", "EPERM", "ENOTEMPTY"].includes(error.code)) {
+      throw error;
+    }
+  }
+}
+
 async function withTempStore(fn, options = {}) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-store-"));
   const dbPath = path.join(tempDir, "topykly.sqlite");
@@ -321,7 +334,7 @@ async function withTempStore(fn, options = {}) {
     return await fn(store);
   } finally {
     await store.close();
-    await rm(tempDir, { recursive: true, force: true });
+    await removeTempDir(tempDir);
   }
 }
 
@@ -1990,7 +2003,7 @@ await (async () => {
 
   await test("backend db client mirrors the node:sqlite statement surface", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-db-client-"));
-    const db = createDbClient({ url: `file:${path.join(tempDir, "client.sqlite")}` });
+    const db = await createDbClient({ url: `file:${path.join(tempDir, "client.sqlite")}` });
 
     try {
       assert.equal(db.isLocal, true);
@@ -2033,13 +2046,13 @@ await (async () => {
     } finally {
       db.close();
       // En Windows el handle nativo tarda un instante en soltar el archivo.
-      await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      await removeTempDir(tempDir);
     }
   });
 
   await test("backend db client commits and rolls back through its own handle", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-db-tx-"));
-    const db = createDbClient({ url: `file:${path.join(tempDir, "tx.sqlite")}` });
+    const db = await createDbClient({ url: `file:${path.join(tempDir, "tx.sqlite")}` });
 
     try {
       await db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);");
@@ -2063,7 +2076,51 @@ await (async () => {
     } finally {
       db.close();
       // En Windows el handle nativo tarda un instante en soltar el archivo.
-      await rm(tempDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+      await removeTempDir(tempDir);
+    }
+  });
+
+  await test("backend db client serializes concurrent transactions on a local database", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-db-concurrency-"));
+    const db = await createDbClient({ url: `file:${path.join(tempDir, "concurrency.sqlite")}` });
+
+    try {
+      await db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);");
+
+      // Sobre una sola conexion SQLite no admite dos transacciones a la vez: sin
+      // turno estas escrituras se pierden con SQLITE_BUSY.
+      const tags = ["a", "b", "c", "d", "e"];
+      const results = await Promise.allSettled(
+        tags.map((tag) =>
+          db.transaction(async (tx) => {
+            await tx.prepare("INSERT INTO items (name) VALUES (?)").run(tag);
+            return tag;
+          })
+        )
+      );
+
+      assert.deepEqual(
+        results.map((result) => result.status),
+        tags.map(() => "fulfilled")
+      );
+      const stored = await db.prepare("SELECT name FROM items").all();
+      assert.deepEqual(stored.map((row) => row.name).sort(), [...tags].sort());
+
+      // Una transaccion que falla no deja el turno tomado.
+      await assert.rejects(
+        db.transaction(async () => {
+          throw new Error("fallo aislado");
+        }),
+        /fallo aislado/
+      );
+      const afterFailure = await db.transaction(async (tx) => {
+        await tx.prepare("INSERT INTO items (name) VALUES (?)").run("f");
+        return "sigue andando";
+      });
+      assert.equal(afterFailure, "sigue andando");
+    } finally {
+      db.close();
+      await removeTempDir(tempDir);
     }
   });
 
@@ -2153,7 +2210,7 @@ await (async () => {
       assert.equal(payload.viewer.nickname, "Real_user");
     } finally {
       await store.close();
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
   await test("backend bootstrap returns a guest viewer plus 40 active topics with a window sized to the audience", async () => {
@@ -2543,20 +2600,45 @@ await (async () => {
     });
   });
   await test("backend diagnostics report whether SQLite storage was explicitly configured", async () => {
+    const fallbackPath = path.join(rootDir, ".data", "topykly.sqlite");
     assert.deepEqual(resolveDbConfig(null, {}), {
-      dbPath: path.join(rootDir, ".data", "topykly.sqlite"),
+      url: `file:${fallbackPath}`,
+      authToken: undefined,
+      dbPath: fallbackPath,
       dbPathSource: "default",
+      isRemote: false,
       storageConfigured: false,
       storageWarning:
-        "TOPYKLY_DB_PATH no esta configurado; en Render usa un Persistent Disk para no perder datos."
+        "Sin TOPYKLY_DB_PATH ni TURSO_DATABASE_URL la base vive en el arbol del proyecto y no sobrevive a un despliegue."
     });
 
     assert.deepEqual(resolveDbConfig(null, { TOPYKLY_DB_PATH: "/var/data/topykly.sqlite" }), {
+      url: "file:/var/data/topykly.sqlite",
+      authToken: undefined,
       dbPath: "/var/data/topykly.sqlite",
       dbPathSource: "TOPYKLY_DB_PATH",
+      isRemote: false,
       storageConfigured: true,
       storageWarning: null
     });
+
+    // Una base remota se impone sobre cualquier ruta de disco del entorno.
+    assert.deepEqual(
+      resolveDbConfig(null, {
+        TURSO_DATABASE_URL: "libsql://topykly.turso.io",
+        TURSO_AUTH_TOKEN: "token",
+        TOPYKLY_DB_PATH: "/var/data/topykly.sqlite"
+      }),
+      {
+        url: "libsql://topykly.turso.io",
+        authToken: "token",
+        dbPath: null,
+        dbPathSource: "TURSO_DATABASE_URL",
+        isRemote: true,
+        storageConfigured: true,
+        storageWarning: null
+      }
+    );
 
     await withTempStore(async (store) => {
       const diagnostics = await store.getDiagnostics();
@@ -2567,33 +2649,41 @@ await (async () => {
     });
   });
   await test("sqlite backup script creates a usable database snapshot", async () => {
-    await withTempStore(async (store) => {
-      const backupDir = path.join(path.dirname(store.dbPath), "manual-backups");
-      const config = resolveBackupConfig({ dbPath: store.dbPath, backupDir, env: {} });
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-backup-"));
+    const dbPath = path.join(tempDir, "topykly.sqlite");
+    const backupDir = path.join(tempDir, "manual-backups");
+
+    try {
+      // El store se cierra antes de invocar el script: abrir el mismo archivo
+      // con un segundo driver mientras esta tomado se traba en Windows.
+      const store = await createBackendStore({ dbPath });
+      await store.close();
+
+      const config = resolveBackupConfig({ dbPath, backupDir, env: {} });
       const result = backupSqliteDatabase({
-        dbPath: store.dbPath,
+        dbPath,
         backupDir,
         now: new Date("2026-01-02T03:04:05.006Z"),
         env: {}
       });
       const backupBytes = await readFile(result.backupPath);
-      const backupStore = await createBackendStore({ dbPath: result.backupPath });
 
+      assert.deepEqual(config, { dbPath, backupDir });
+      assert.equal(
+        result.backupPath,
+        path.join(backupDir, "topykly-2026-01-02T03-04-05-006Z.sqlite")
+      );
+      assert.equal(backupBytes.subarray(0, 15).toString("utf8"), "SQLite format 3");
+
+      const backupStore = await createBackendStore({ dbPath: result.backupPath });
       try {
-        assert.deepEqual(config, {
-          dbPath: store.dbPath,
-          backupDir
-        });
-        assert.equal(
-          result.backupPath,
-          path.join(backupDir, "topykly-2026-01-02T03-04-05-006Z.sqlite")
-        );
-        assert.equal(backupBytes.subarray(0, 15).toString("utf8"), "SQLite format 3");
         assert.equal((await backupStore.getDiagnostics()).users, initialUsers.length);
       } finally {
         await backupStore.close();
       }
-    });
+    } finally {
+      await removeTempDir(tempDir);
+    }
   });
   await test("backend registers and logs in password users with nickname", async () => {
     await withTempStore(
@@ -3628,7 +3718,7 @@ await (async () => {
       assert.equal(persistedTopic.messages[0].text, "Mensaje persistente");
     } finally {
       await store.close();
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
   await test("backend updateProfile lets registered users change display name and request avatar review", async () => {
@@ -4040,7 +4130,7 @@ await (async () => {
       assert.equal(reopenedMessage.dislikedByViewer, true);
     } finally {
       await store.close();
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
   await test("backend hydrates persistent rankings from SQLite", async () => {
@@ -6851,7 +6941,7 @@ await (async () => {
         await new Promise((resolve) => server.close(resolve));
       }
       await await store?.close();
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 
@@ -6946,7 +7036,7 @@ await (async () => {
         preview.close();
         await closed;
       }
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 
@@ -7040,7 +7130,7 @@ await (async () => {
       } else {
         process.env.TOPYKLY_TURNSTILE_SECRET_KEY = previousTurnstileSecretKey;
       }
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 
@@ -7116,7 +7206,7 @@ await (async () => {
       } else {
         process.env.CHETREND_SESSION_SECRET = previousLegacySecret;
       }
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 
@@ -7230,7 +7320,7 @@ await (async () => {
         preview.close();
         await closed;
       }
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 
@@ -7742,7 +7832,7 @@ await (async () => {
         preview.close();
         await closed;
       }
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 
@@ -7850,7 +7940,7 @@ await (async () => {
         preview.close();
         await closed;
       }
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 
@@ -8109,7 +8199,7 @@ await (async () => {
         preview.close();
         await closed;
       }
-      await rm(tempDir, { recursive: true, force: true });
+      await removeTempDir(tempDir);
     }
   });
 

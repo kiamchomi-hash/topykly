@@ -10,6 +10,19 @@ import {
 } from "../services/backend-store.js";
 import { startPreviewServer } from "../services/preview-server.js";
 
+// En Windows el binding nativo de libSQL no suelta el archivo al cerrar, asi
+// que borrar el directorio temporal es best-effort. No afecta a produccion,
+// donde la base es remota y no hay archivo.
+async function removeTempDir(dir) {
+  try {
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  } catch (error) {
+    if (!["EBUSY", "EPERM", "ENOTEMPTY"].includes(error.code)) {
+      throw error;
+    }
+  }
+}
+
 const host = "127.0.0.1";
 const port = 4300 + Math.floor(Math.random() * 1000);
 const origin = `http://${host}:${port}`;
@@ -253,7 +266,7 @@ try {
       assert.equal(payload.error.code, "AUTH_NOT_CONFIGURED");
     } finally {
       isolatedApp?.close();
-      await rm(isolatedTempDir, { recursive: true, force: true });
+      await removeTempDir(isolatedTempDir);
       for (const [key, value] of Object.entries(previousEnv)) {
         if (value === undefined) {
           delete process.env[key];
@@ -500,5 +513,5 @@ try {
   });
 } finally {
   app.close();
-  await rm(tempDir, { recursive: true, force: true });
+  await removeTempDir(tempDir);
 }
