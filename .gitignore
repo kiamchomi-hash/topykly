@@ -12,3 +12,5 @@ build/
 
 # Generado por scripts/build-vercel.mjs
 public/
+
+.env*
