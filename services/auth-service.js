@@ -228,7 +228,9 @@ function getRequestOrigin(req, fallbackOrigin = "") {
   const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
     .split(",")[0]
     .trim();
-  const protocol = forwardedProto || (req.socket.encrypted ? "https" : "http");
+  // En serverless la peticion puede no exponer socket: ahi el protocolo real
+  // solo llega por cabecera.
+  const protocol = forwardedProto || (req.socket?.encrypted ? "https" : "http");
   const host = req.headers.host || fallbackOrigin.replace(/^https?:\/\//, "");
 
   return normalizeOrigin(`${protocol}://${host}`);
