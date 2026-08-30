@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 import { runAfterResponse } from "./after-response.js";
+import { createRateLimiter } from "./rate-limit-store.js";
 import { createAuthService } from "./auth-service.js";
 import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-store.js";
 import { createLiveEventHub as createSharedLiveEventHub } from "./live-event-hub.js";
@@ -33,7 +34,6 @@ const DEFAULT_HTTP_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_HTTP_RATE_LIMIT_MAX = 240;
 const DEFAULT_HTTP_AUTH_RATE_LIMIT_MAX = 30;
 const TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS = 30 * 60_000;
-const MAX_HTTP_RATE_LIMIT_BUCKETS = 10_000;
 const MAX_JSON_BODY_BYTES = 3 * 1024 * 1024;
 const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
 const COMPRESSIBLE_TYPE_PATTERN =
@@ -1346,7 +1346,7 @@ function getHttpRateLimitScope(url) {
   return "api";
 }
 
-function checkHttpRateLimit(buckets, req, url, config, nowMs = Date.now()) {
+export async function checkHttpRateLimit(limiter, req, url, config, nowMs = Date.now()) {
   if (!config.windowMs || (!config.max && !config.authMax)) {
     return { allowed: true, retryAfterSeconds: 0 };
   }
@@ -1358,34 +1358,11 @@ function checkHttpRateLimit(buckets, req, url, config, nowMs = Date.now()) {
   }
 
   const ipAddress = getRequestIp(req) || "unknown";
-  const key = `${scope}:${ipAddress}`;
-  for (const [bucketKey, bucket] of buckets) {
-    if (bucket.resetAt <= nowMs) {
-      buckets.delete(bucketKey);
-    }
-  }
-  if (!buckets.has(key) && buckets.size >= MAX_HTTP_RATE_LIMIT_BUCKETS) {
-    return { allowed: false, retryAfterSeconds: 1 };
-  }
-  const existing = buckets.get(key);
-  const resetAt =
-    existing?.resetAt && existing.resetAt > nowMs ? existing.resetAt : nowMs + config.windowMs;
-  const count = existing?.resetAt && existing.resetAt > nowMs ? existing.count + 1 : 1;
-
-  buckets.set(key, { count, resetAt });
-
-  if (count <= limit) {
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-
-  return {
-    allowed: false,
-    retryAfterSeconds: Math.max(1, Math.ceil((resetAt - nowMs) / 1000))
-  };
+  return await limiter.check(`topykly:rl:${scope}:${ipAddress}`, limit, config.windowMs, nowMs);
 }
 
-function enforceHttpRateLimit(res, buckets, req, url, config) {
-  const result = checkHttpRateLimit(buckets, req, url, config);
+async function enforceHttpRateLimit(res, limiter, req, url, config) {
+  const result = await checkHttpRateLimit(limiter, req, url, config);
   if (result.allowed) {
     return true;
   }
@@ -1953,7 +1930,7 @@ export function createRequestHandler({
   mode = "node",
   hostFallback = "127.0.0.1",
   rateLimitConfig = resolveHttpRateLimitConfig(),
-  rateLimitBuckets = new Map(),
+  rateLimiter = createRateLimiter(),
   onLiveChange = null
 }) {
   const serverless = mode === "serverless";
@@ -1971,7 +1948,7 @@ export function createRequestHandler({
       const url = new URL(req.url || "/", `http://${req.headers.host || hostFallback}`);
 
       if (url.pathname === "/auth/oidc/callback") {
-        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+        if (!(await enforceHttpRateLimit(res, rateLimiter, req, url, rateLimitConfig))) {
           return;
         }
         await handleAuthCallback(store, authService, req, res, url);
@@ -1992,7 +1969,7 @@ export function createRequestHandler({
           });
           return;
         }
-        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+        if (!(await enforceHttpRateLimit(res, rateLimiter, req, url, rateLimitConfig))) {
           return;
         }
         if (!isRequestOriginAllowed(req)) {
@@ -2029,7 +2006,7 @@ export function createRequestHandler({
       }
 
       if (url.pathname.startsWith("/og/tema/") && url.pathname.endsWith(".png")) {
-        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+        if (!(await enforceHttpRateLimit(res, rateLimiter, req, url, rateLimitConfig))) {
           return;
         }
         await handleTopicSocialCardRequest(store, req, res, url);
@@ -2052,7 +2029,7 @@ export function createRequestHandler({
       }
 
       if (isSeoPagePath(url.pathname)) {
-        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+        if (!(await enforceHttpRateLimit(res, rateLimiter, req, url, rateLimitConfig))) {
           return;
         }
         await handleSeoPageRequest(store, req, res, url);

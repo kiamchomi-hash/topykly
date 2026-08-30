@@ -10,6 +10,7 @@ import sharp from "sharp";
 
 import { createAuthService } from "../services/auth-service.js";
 import { createAvatarStorage } from "../services/avatar-storage.js";
+import { createMemoryRateLimiter, createRedisRateLimiter } from "../services/rate-limit-store.js";
 import {
   createDbClient,
   resolveDbClientConfig,
@@ -6969,6 +6970,72 @@ await (async () => {
     });
   });
 
+  await test("preview rate limiter counts a fixed window in memory", async () => {
+    const limiter = createMemoryRateLimiter({ maxBuckets: 2 });
+    const start = 1_000_000;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const result = await limiter.check("ip:1", 3, 60_000, start);
+      assert.deepEqual(result, { allowed: true, retryAfterSeconds: 0 }, `intento ${attempt}`);
+    }
+
+    const blocked = await limiter.check("ip:1", 3, 60_000, start + 1000);
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.retryAfterSeconds, 59);
+
+    // La ventana no se corre con cada peticion: vencida, el contador arranca de cero.
+    const afterWindow = await limiter.check("ip:1", 3, 60_000, start + 61_000);
+    assert.equal(afterWindow.allowed, true);
+
+    // Con el mapa lleno se rechaza en lugar de crecer sin techo.
+    await limiter.check("ip:2", 3, 60_000, start + 61_000);
+    const overflow = await limiter.check("ip:3", 3, 60_000, start + 61_000);
+    assert.deepEqual(overflow, { allowed: false, retryAfterSeconds: 1 });
+  });
+
+  await test("preview rate limiter shares the counter and stays open when it fails", async () => {
+    const calls = [];
+    let nextCount = 1;
+    let failing = false;
+
+    const limiter = createRedisRateLimiter({
+      url: "https://redis.example.com/",
+      token: "token-de-prueba",
+      log() {},
+      async fetchImpl(endpoint, options) {
+        calls.push({ endpoint, body: JSON.parse(options.body) });
+        if (failing) {
+          throw new Error("sin red");
+        }
+        return {
+          ok: true,
+          async json() {
+            return [{ result: nextCount }, { result: 1 }];
+          }
+        };
+      }
+    });
+
+    const allowed = await limiter.check("topykly:rl:api:1.2.3.4", 2, 60_000);
+    assert.deepEqual(allowed, { allowed: true, retryAfterSeconds: 0 });
+    assert.equal(calls[0].endpoint, "https://redis.example.com/pipeline");
+    // EXPIRE con NX: la ventana se fija una vez y no se corre en cada peticion.
+    assert.deepEqual(calls[0].body, [
+      ["INCR", "topykly:rl:api:1.2.3.4"],
+      ["EXPIRE", "topykly:rl:api:1.2.3.4", "60", "NX"]
+    ]);
+
+    nextCount = 3;
+    const blocked = await limiter.check("topykly:rl:api:1.2.3.4", 2, 60_000);
+    assert.deepEqual(blocked, { allowed: false, retryAfterSeconds: 60 });
+
+    // Si el contador compartido se cae se deja pasar: fallar cerrado
+    // convertiria una intermitencia del contador en una caida del sitio.
+    failing = true;
+    const degraded = await limiter.check("topykly:rl:api:1.2.3.4", 2, 60_000);
+    assert.deepEqual(degraded, { allowed: true, retryAfterSeconds: 0 });
+  });
+
   await test("preview cron endpoint refuses requests without the configured secret", async () => {
     const { default: cronHandler } = await import("../api/cron/maintenance.js");
     const previousSecret = process.env.CRON_SECRET;
@@ -11285,7 +11352,10 @@ await (async () => {
     assert.match(previewServer, /NODE_ENV/);
     assert.match(previewServer, /TOPYKLY_ALLOW_LOCAL_LOGIN/);
     assert.match(previewServer, /AUTH_NOT_CONFIGURED/);
-    assert.match(previewServer, /function enforceHttpRateLimit\(res, buckets, req, url, config\)/);
+    assert.match(
+      previewServer,
+      /async function enforceHttpRateLimit\(res, limiter, req, url, config\)/
+    );
     assert.match(previewServer, /sendJson\(\s*res,\s*429/);
     assert.match(backendStore, /created_at AS createdAt/);
     assert.match(backendStore, /profile_show_description AS profileShowDescription/);
@@ -11302,7 +11372,7 @@ await (async () => {
     assert.match(previewServer, /"Retry-After": String\(result.retryAfterSeconds\)/);
     assert.match(
       previewServer,
-      /if \(!enforceHttpRateLimit\(res, rateLimitBuckets, req, url, rateLimitConfig\)\)/
+      /if \(!\(await enforceHttpRateLimit\(res, rateLimiter, req, url, rateLimitConfig\)\)\)/
     );
     assert.match(
       previewServer,
