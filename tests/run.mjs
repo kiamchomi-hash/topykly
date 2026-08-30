@@ -6969,6 +6969,95 @@ await (async () => {
     });
   });
 
+  await test("preview cron endpoint refuses requests without the configured secret", async () => {
+    const { default: cronHandler } = await import("../api/cron/maintenance.js");
+    const previousSecret = process.env.CRON_SECRET;
+
+    function fakeResponse() {
+      const sent = { status: 0, body: "" };
+      return {
+        sent,
+        writeHead(status) {
+          sent.status = status;
+        },
+        end(body) {
+          sent.body = String(body || "");
+        }
+      };
+    }
+
+    try {
+      // Sin secreto configurado el endpoint queda cerrado, no abierto.
+      delete process.env.CRON_SECRET;
+      const openRes = fakeResponse();
+      await cronHandler({ headers: { authorization: "Bearer lo-que-sea" } }, openRes);
+      assert.equal(openRes.sent.status, 401);
+
+      process.env.CRON_SECRET = "secreto-de-prueba";
+      for (const authorization of ["", "Bearer otro", "secreto-de-prueba"]) {
+        const res = fakeResponse();
+        await cronHandler({ headers: { authorization } }, res);
+        assert.equal(res.sent.status, 401, authorization);
+        assert.match(res.sent.body, /UNAUTHORIZED/);
+      }
+    } finally {
+      if (previousSecret === undefined) {
+        delete process.env.CRON_SECRET;
+      } else {
+        process.env.CRON_SECRET = previousSecret;
+      }
+    }
+  });
+
+  await test("preview vercel config routes everything unmatched to the server function", async () => {
+    const config = JSON.parse(await read("vercel.json"));
+
+    assert.equal(config.buildCommand, "node scripts/build-vercel.mjs");
+    // Sin outputDirectory Vercel publicaria el arbol del repositorio entero.
+    assert.equal(config.outputDirectory, "public");
+    assert.deepEqual(config.rewrites, [{ source: "/(.*)", destination: "/api/server" }]);
+    assert.deepEqual(config.crons, [{ path: "/api/cron/maintenance", schedule: "0 * * * *" }]);
+    // Las cabeceras de seguridad que ya existian no se pierden en el cambio.
+    const globalHeaders = config.headers.find((entry) => entry.source === "/(.*)")?.headers || [];
+    assert.equal(
+      globalHeaders.some((header) => header.key === "Content-Security-Policy"),
+      true
+    );
+  });
+
+  await test("serverless handler answers 501 on the live stream so the client polls", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-serverless-live-"));
+    let store = null;
+    let server = null;
+
+    try {
+      store = await createBackendStore({ dbPath: path.join(tempDir, "live.sqlite") });
+      server = http.createServer(
+        createRequestHandler({
+          store,
+          authService: createAuthService(),
+          liveEventHub: { publish() {}, subscribe() {}, close() {} },
+          mode: "serverless"
+        })
+      );
+      await new Promise((resolve, reject) => {
+        server.listen(0, "127.0.0.1", resolve);
+        server.once("error", reject);
+      });
+
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/live`);
+      assert.equal(response.status, 501);
+      const payload = await response.json();
+      assert.equal(payload.error.code, "LIVE_STREAM_UNAVAILABLE");
+    } finally {
+      if (server) {
+        await new Promise((resolve) => server.close(resolve));
+      }
+      await store?.close();
+      await removeTempDir(tempDir);
+    }
+  });
+
   await test("serverless handler drops static serving and keeps api and seo routes", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-serverless-"));
     let store = null;

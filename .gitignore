@@ -8,3 +8,6 @@ build/
 .data/
 
 .vercel
+
+# Generado por scripts/build-vercel.mjs
+public/

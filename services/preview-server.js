@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
+import { runAfterResponse } from "./after-response.js";
 import { createAuthService } from "./auth-service.js";
 import { ApiError, createBackendStore, shouldSeedDemoData } from "./backend-store.js";
 import { createLiveEventHub as createSharedLiveEventHub } from "./live-event-hub.js";
@@ -57,28 +58,28 @@ const mime = {
   ".webp": "image/webp",
   ".gif": "image/gif"
 };
-const PUBLIC_SERVICE_MODULES = new Set([
+export const PUBLIC_SERVICE_MODULES = new Set([
   "api.js",
   "coloris-loader.js",
   "drawer-service.js",
   "palette-service.js",
   "seo-pages.js"
 ]);
-const PROTECTED_STATIC_DIRECTORIES = new Set([
+export const PROTECTED_STATIC_DIRECTORIES = new Set([
   "scripts",
   "tests",
   "node_modules",
   "output",
   "features"
 ]);
-const PROTECTED_STATIC_ROOT_FILES = new Set([
+export const PROTECTED_STATIC_ROOT_FILES = new Set([
   "package.json",
   "package-lock.json",
   "local-server.cjs",
   "dev-server.cjs",
   "vercel.json"
 ]);
-const UNPUBLISHED_STATIC_ROOT_FILES = new Set([
+export const UNPUBLISHED_STATIC_ROOT_FILES = new Set([
   "1000",
   "app-broken-check.png",
   "dashboard.html",
@@ -86,7 +87,7 @@ const UNPUBLISHED_STATIC_ROOT_FILES = new Set([
   "mascot-review.html",
   "taskkill"
 ]);
-const PROTECTED_STATIC_EXTENSIONS = new Set([".log", ".md", ".sqlite", ".env"]);
+export const PROTECTED_STATIC_EXTENSIONS = new Set([".log", ".md", ".sqlite", ".env"]);
 
 function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) {
@@ -1024,13 +1025,13 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         text: body.text
       });
       sendBackendPayload(res, req, authService, 200, payload);
-      queueMicrotask(() => {
-        void deliverTopicActivityEmails(store, authService, {
+      runAfterResponse(() =>
+        deliverTopicActivityEmails(store, authService, {
           topicId,
           actorUserId: payload.viewer?.id,
           actorName: payload.viewer?.displayName || "Alguien"
-        }).catch(console.error);
-      });
+        })
+      );
       return;
     }
 
@@ -1419,7 +1420,7 @@ function resolveGuestCleanupIntervalMs(env = process.env) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-async function runGuestCleanup(store, log) {
+export async function runGuestCleanup(store, log) {
   try {
     const result = await store.cleanupInactiveGuests();
     const deletedChallengeCount =
@@ -1449,7 +1450,7 @@ function resolveReactionResetCheckIntervalMs(env = process.env) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-async function runMessageReactionReset(store, log) {
+export async function runMessageReactionReset(store, log) {
   try {
     const result = await store.resetDailyMessageReactions();
     if (result.reset) {
@@ -1472,7 +1473,7 @@ function resolveTopicArchiveCheckIntervalMs(env = process.env) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-async function runTopicInactivityArchive(store, log) {
+export async function runTopicInactivityArchive(store, log) {
   try {
     const result = await store.archiveInactiveTopics();
     if (result.archivedTopicIds.length) {
@@ -1978,6 +1979,19 @@ export function createRequestHandler({
       }
 
       if (url.pathname.startsWith("/api/")) {
+        // El stream en vivo mantiene la conexion abierta y el fanout en memoria
+        // del proceso: en serverless eso seria una funcion viva por pestaña y
+        // solo alcanzaria a las conexiones de la misma instancia. El cliente ya
+        // vuelve al sondeo cuando el stream no esta disponible.
+        if (serverless && url.pathname === "/api/live") {
+          sendJson(res, 501, {
+            error: {
+              code: "LIVE_STREAM_UNAVAILABLE",
+              message: "La sincronización en vivo no está disponible en este despliegue."
+            }
+          });
+          return;
+        }
         if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
           return;
         }
