@@ -444,11 +444,13 @@ export function getRequestIp(req, env = process.env) {
   const proxyIsAllowed =
     !configuredProxyIps.length ||
     configuredProxyIps.includes(String(req.socket?.remoteAddress || "").trim());
+  // En serverless el objeto de peticion puede no exponer socket, asi que la IP
+  // real solo llega por cabecera.
   if (shouldTrustProxy(env) && proxyIsAllowed) {
-    return getForwardedRequestIp(req) || req.socket.remoteAddress || "";
+    return getForwardedRequestIp(req) || req.socket?.remoteAddress || "";
   }
 
-  return req.socket.remoteAddress || "";
+  return req.socket?.remoteAddress || "";
 }
 
 export function isRequestOriginAllowed(req, env = process.env) {
@@ -1939,6 +1941,132 @@ function handleStaticRequest(req, res, url, store) {
   res.end(negotiated.body);
 }
 
+// El handler vive separado de startPreviewServer para poder montarlo tanto sobre
+// http.createServer como sobre una funcion serverless, que recibe (req, res) con
+// la misma forma. En modo "serverless" no se sirven archivos estaticos: de eso se
+// encarga la capa de hosting, y el proceso no tiene el arbol del repo en disco.
+export function createRequestHandler({
+  store,
+  authService,
+  liveEventHub,
+  mode = "node",
+  hostFallback = "127.0.0.1",
+  rateLimitConfig = resolveHttpRateLimitConfig(),
+  rateLimitBuckets = new Map(),
+  onLiveChange = null
+}) {
+  const serverless = mode === "serverless";
+  const sitemapCache = { xml: null, expiresAt: 0 };
+
+  return async function handleRequest(req, res) {
+    // The app is strictly same-origin: no CORS headers are ever granted.
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, getSecurityHeaders({ includeCsp: false, req }));
+      res.end();
+      return;
+    }
+
+    try {
+      const url = new URL(req.url || "/", `http://${req.headers.host || hostFallback}`);
+
+      if (url.pathname === "/auth/oidc/callback") {
+        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+          return;
+        }
+        await handleAuthCallback(store, authService, req, res, url);
+        return;
+      }
+
+      if (url.pathname.startsWith("/api/")) {
+        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+          return;
+        }
+        if (!isRequestOriginAllowed(req)) {
+          sendJson(res, 403, {
+            error: {
+              code: "ORIGIN_NOT_ALLOWED",
+              message: "Origen no permitido."
+            }
+          });
+          return;
+        }
+        if (shouldPublishLiveChange(req, url)) {
+          res.once("finish", () => {
+            if (res.statusCode >= 200 && res.statusCode < 400) {
+              liveEventHub.publish(url.pathname);
+              sitemapCache.expiresAt = 0;
+              onLiveChange?.(url.pathname);
+            }
+          });
+        }
+        await handleApiRequest(store, authService, liveEventHub, req, res, url);
+        return;
+      }
+
+      if (url.pathname === "/robots.txt") {
+        sendTextResource(
+          res,
+          req,
+          renderRobots({ origin: resolvePublicOrigin() }),
+          "text/plain; charset=utf-8",
+          "public, max-age=3600"
+        );
+        return;
+      }
+
+      if (url.pathname.startsWith("/og/tema/") && url.pathname.endsWith(".png")) {
+        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+          return;
+        }
+        await handleTopicSocialCardRequest(store, req, res, url);
+        return;
+      }
+
+      if (url.pathname === "/sitemap.xml") {
+        if (!sitemapCache.xml || Date.now() >= sitemapCache.expiresAt) {
+          sitemapCache.xml = buildSitemapXml(store);
+          sitemapCache.expiresAt = Date.now() + SITEMAP_CACHE_TTL_MS;
+        }
+        sendTextResource(
+          res,
+          req,
+          sitemapCache.xml,
+          "application/xml; charset=utf-8",
+          "public, max-age=300"
+        );
+        return;
+      }
+
+      if (isSeoPagePath(url.pathname)) {
+        if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
+          return;
+        }
+        handleSeoPageRequest(store, req, res, url);
+        return;
+      }
+
+      if (serverless) {
+        if (url.pathname.startsWith("/avatars/")) {
+          handleAvatarRequest(res, url, store.avatarStorageDir);
+          return;
+        }
+        writePlainText(res, 404, "Not found");
+        return;
+      }
+
+      handleStaticRequest(req, res, url, store);
+    } catch (error) {
+      console.error("Request failed:", error);
+      sendJson(res, 500, {
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "Error interno del servidor."
+        }
+      });
+    }
+  };
+}
+
 export function startPreviewServer({
   port,
   host = "127.0.0.1",
@@ -1986,9 +2114,6 @@ export function startPreviewServer({
         }
       })
   });
-  const httpRateLimitConfig = resolveHttpRateLimitConfig();
-  const httpRateLimitBuckets = new Map();
-  const sitemapCache = { xml: null, expiresAt: 0 };
   const guestCleanupIntervalMs = resolveGuestCleanupIntervalMs();
   const reactionResetCheckIntervalMs = resolveReactionResetCheckIntervalMs();
   const guestCleanupTimer =
@@ -2010,103 +2135,15 @@ export function startPreviewServer({
   runGuestCleanup(store, log);
   runMessageReactionReset(store, log);
   runTopicInactivityArchive(store, log);
-  const server = http.createServer(async (req, res) => {
-    // The app is strictly same-origin: no CORS headers are ever granted.
-    if (req.method === "OPTIONS") {
-      res.writeHead(204, getSecurityHeaders({ includeCsp: false, req }));
-      res.end();
-      return;
-    }
-
-    try {
-      const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
-
-      if (url.pathname === "/auth/oidc/callback") {
-        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
-          return;
-        }
-        await handleAuthCallback(store, authService, req, res, url);
-        return;
-      }
-
-      if (url.pathname.startsWith("/api/")) {
-        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
-          return;
-        }
-        if (!isRequestOriginAllowed(req)) {
-          sendJson(res, 403, {
-            error: {
-              code: "ORIGIN_NOT_ALLOWED",
-              message: "Origen no permitido."
-            }
-          });
-          return;
-        }
-        if (shouldPublishLiveChange(req, url)) {
-          res.once("finish", () => {
-            if (res.statusCode >= 200 && res.statusCode < 400) {
-              liveEventHub.publish(url.pathname);
-              sitemapCache.expiresAt = 0;
-            }
-          });
-        }
-        await handleApiRequest(store, authService, liveEventHub, req, res, url);
-        return;
-      }
-
-      if (url.pathname === "/robots.txt") {
-        sendTextResource(
-          res,
-          req,
-          renderRobots({ origin: resolvePublicOrigin() }),
-          "text/plain; charset=utf-8",
-          "public, max-age=3600"
-        );
-        return;
-      }
-
-      if (url.pathname.startsWith("/og/tema/") && url.pathname.endsWith(".png")) {
-        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
-          return;
-        }
-        await handleTopicSocialCardRequest(store, req, res, url);
-        return;
-      }
-
-      if (url.pathname === "/sitemap.xml") {
-        if (!sitemapCache.xml || Date.now() >= sitemapCache.expiresAt) {
-          sitemapCache.xml = buildSitemapXml(store);
-          sitemapCache.expiresAt = Date.now() + SITEMAP_CACHE_TTL_MS;
-        }
-        sendTextResource(
-          res,
-          req,
-          sitemapCache.xml,
-          "application/xml; charset=utf-8",
-          "public, max-age=300"
-        );
-        return;
-      }
-
-      if (isSeoPagePath(url.pathname)) {
-        if (!enforceHttpRateLimit(res, httpRateLimitBuckets, req, url, httpRateLimitConfig)) {
-          return;
-        }
-        handleSeoPageRequest(store, req, res, url);
-        return;
-      }
-
-      handleStaticRequest(req, res, url, store);
-    } catch (error) {
-      console.error("Request failed:", error);
-      sendJson(res, 500, {
-        error: {
-          code: "INTERNAL_ERROR",
-          message: "Error interno del servidor."
-        }
-      });
-    }
-  });
+  const server = http.createServer(
+    createRequestHandler({
+      store,
+      authService,
+      liveEventHub,
+      mode: "node",
+      hostFallback: `${host}:${port}`
+    })
+  );
 
   server.listen(port, host, () => {
     log(`preview listening on http://${host}:${port}`);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -9,6 +10,7 @@ import sharp from "sharp";
 
 import { createAuthService } from "../services/auth-service.js";
 import {
+  createRequestHandler,
   getRequestIp,
   isDeclaredBotUserAgent,
   isLocalDevLoginAllowed,
@@ -6652,6 +6654,53 @@ await (async () => {
     });
   });
 
+  await test("serverless handler drops static serving and keeps api and seo routes", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-serverless-"));
+    let store = null;
+    let server = null;
+
+    try {
+      store = createBackendStore({ dbPath: path.join(tempDir, "serverless.sqlite") });
+      const handler = createRequestHandler({
+        store,
+        authService: createAuthService(),
+        liveEventHub: { publish() {}, subscribe() {}, close() {} },
+        mode: "serverless"
+      });
+      server = http.createServer(handler);
+      await new Promise((resolve, reject) => {
+        server.listen(0, "127.0.0.1", resolve);
+        server.once("error", reject);
+      });
+      const origin = `http://127.0.0.1:${server.address().port}`;
+
+      // El hosting sirve los estaticos: la funcion no debe leerlos del disco.
+      const shell = await fetch(`${origin}/index.html`);
+      assert.equal(shell.status, 404);
+      await shell.arrayBuffer();
+      const stylesheet = await fetch(`${origin}/styles.css`);
+      assert.equal(stylesheet.status, 404);
+      await stylesheet.arrayBuffer();
+
+      // Las rutas que sigue atendiendo la funcion no cambian.
+      const robots = await fetch(`${origin}/robots.txt`);
+      assert.equal(robots.status, 200);
+      assert.match(await robots.text(), /Sitemap:/);
+      const sitemap = await fetch(`${origin}/sitemap.xml`);
+      assert.equal(sitemap.status, 200);
+      assert.match(await sitemap.text(), /<urlset/);
+      const bootstrap = await fetch(`${origin}/api/bootstrap`);
+      assert.equal(bootstrap.status, 200);
+      await bootstrap.arrayBuffer();
+    } finally {
+      if (server) {
+        await new Promise((resolve) => server.close(resolve));
+      }
+      store?.close();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   await test("preview server pushes successful content changes through live events", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-preview-live-"));
     const abortController = new AbortController();
@@ -10849,7 +10898,7 @@ await (async () => {
     assert.match(previewServer, /"Retry-After": String\(result.retryAfterSeconds\)/);
     assert.match(
       previewServer,
-      /if \(!enforceHttpRateLimit\(res, httpRateLimitBuckets, req, url, httpRateLimitConfig\)\)/
+      /if \(!enforceHttpRateLimit\(res, rateLimitBuckets, req, url, rateLimitConfig\)\)/
     );
     assert.match(
       previewServer,

@@ -4,3 +4,11 @@
 tests/
 .data/
 *.log
+
+# No son entrada del build de estaticos ni del runtime.
+avatars/
+output/
+node_modules/
+features/
+app-broken-check.png
+header-alignment-after.png
