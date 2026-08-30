@@ -582,7 +582,7 @@ async function deliverTopicActivityEmails(
   if (!authService.isEmailConfigured()) {
     return;
   }
-  const recipients = store.claimTopicActivityEmailRecipients(topicId, actorUserId);
+  const recipients = await store.claimTopicActivityEmailRecipients(topicId, actorUserId);
   if (!recipients.length) {
     return;
   }
@@ -617,7 +617,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.bootstrap({
+        await store.bootstrap({
           ...context,
           selectedTopicId: normalizeSelectedTopicId(url),
           profileNickname: url.searchParams.get("perfil") || null
@@ -632,7 +632,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.refresh({
+        await store.refresh({
           ...context,
           selectedTopicId: normalizeSelectedTopicId(url)
         })
@@ -657,7 +657,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         202,
-        store.recordProductEvent({
+        await store.recordProductEvent({
           ...context,
           eventName: body.eventName,
           routeGroup: body.routeGroup,
@@ -703,7 +703,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.login({
+        await store.login({
           ...context,
           selectedTopicId: body.selectedTopicId ?? null,
           rotateSession: true
@@ -723,7 +723,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.loginWithPassword({
+        await store.loginWithPassword({
           ...context,
           email: body.email,
           password: body.password,
@@ -747,7 +747,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
           "La recuperacion por email todavia no esta configurada."
         );
       }
-      const challenge = store.createPasswordResetChallenge({
+      const challenge = await store.createPasswordResetChallenge({
         email: body.email,
         ipAddress: context.ipAddress
       });
@@ -759,7 +759,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
             purpose: "password_reset"
           });
         } catch {
-          store.discardPasswordResetChallenge(challenge.challengeId);
+          await store.discardPasswordResetChallenge(challenge.challengeId);
           console.error("Password reset email delivery failed.");
         }
       }
@@ -779,7 +779,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.verifyPasswordResetChallenge({
+        await store.verifyPasswordResetChallenge({
           ...context,
           challengeId: body.challengeId,
           code: body.code,
@@ -797,7 +797,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         token: body.turnstileToken
       });
-      const target = store.prepareIdentityLink({
+      const target = await store.prepareIdentityLink({
         ...context,
         password: body.password
       });
@@ -828,7 +828,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         token: body.turnstileToken
       });
-      const challenge = store.createEmailAuthChallenge({
+      const challenge = await store.createEmailAuthChallenge({
         email: body.email,
         nickname: body.nickname,
         age: body.age,
@@ -840,7 +840,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       try {
         await authService.sendEmailCode(challenge);
       } catch (error) {
-        store.discardEmailAuthChallenge(challenge.challengeId);
+        await store.discardEmailAuthChallenge(challenge.challengeId);
         throw error;
       }
 
@@ -859,7 +859,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.verifyEmailAuthChallenge({
+        await store.verifyEmailAuthChallenge({
           ...context,
           challengeId: body.challengeId,
           code: body.code,
@@ -884,7 +884,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.logout({
+        await store.logout({
           ...context,
           selectedTopicId: body.selectedTopicId ?? null
         })
@@ -899,7 +899,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.updateProfile({
+        await store.updateProfile({
           ...context,
           displayName: body.displayName,
           username: body.username,
@@ -933,7 +933,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.updateSettings({
+        await store.updateSettings({
           ...context,
           likesAnonymous: typeof body.likesAnonymous === "boolean" ? body.likesAnonymous : null,
           filterProfanity: typeof body.filterProfanity === "boolean" ? body.filterProfanity : null,
@@ -959,7 +959,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.deleteAccount({
+        await store.deleteAccount({
           ...context,
           currentPassword: body.currentPassword,
           selectedTopicId: body.selectedTopicId ?? null
@@ -970,7 +970,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
 
     if (req.method === "GET" && url.pathname.startsWith("/api/topics/")) {
       const topicId = url.pathname.split("/").pop() || "";
-      sendBackendPayload(res, req, authService, 200, store.openTopic(topicId, context));
+      sendBackendPayload(res, req, authService, 200, await store.openTopic(topicId, context));
       return;
     }
 
@@ -981,7 +981,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         201,
-        store.createTopic({
+        await store.createTopic({
           ...context,
           title: body.title,
           text: body.text
@@ -1003,7 +1003,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.followTopic(topicId, {
+        await store.followTopic(topicId, {
           ...context,
           selectedTopicId: body.selectedTopicId ?? topicId
         })
@@ -1019,7 +1019,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       const segments = url.pathname.split("/").filter(Boolean);
       const topicId = segments[2] || "";
       const body = await readJsonBody(req);
-      const payload = store.addMessage(topicId, {
+      const payload = await store.addMessage(topicId, {
         ...context,
         text: body.text
       });
@@ -1050,7 +1050,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store[action](messageId, {
+        await store[action](messageId, {
           ...context,
           selectedTopicId: body.selectedTopicId ?? null
         })
@@ -1064,7 +1064,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.reportEntity(body.entityType, body.entityId, {
+        await store.reportEntity(body.entityType, body.entityId, {
           ...context,
           reason: body.reason,
           selectedTopicId: body.selectedTopicId ?? null
@@ -1090,7 +1090,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store[storeMethod](userId, {
+        await store[storeMethod](userId, {
           ...context,
           hideContent: body.hideContent !== false,
           selectedTopicId: body.selectedTopicId ?? null
@@ -1118,7 +1118,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store[storeMethod](userId, {
+        await store[storeMethod](userId, {
           ...context,
           selectedTopicId: body.selectedTopicId ?? null
         })
@@ -1129,7 +1129,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       sendJson(
         res,
         200,
-        store.getAdminDashboard({
+        await store.getAdminDashboard({
           ...context,
           reportPage: url.searchParams.get("reportPage"),
           reportLimit: url.searchParams.get("reportLimit"),
@@ -1144,7 +1144,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       sendJson(
         res,
         200,
-        store.listReports({
+        await store.listReports({
           ...context,
           reportPage: url.searchParams.get("reportPage"),
           reportLimit: url.searchParams.get("reportLimit")
@@ -1163,7 +1163,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.removeEditorialSeedContent({ ...context, dryRun: body.dryRun !== false })
+        await store.removeEditorialSeedContent({ ...context, dryRun: body.dryRun !== false })
       );
       return;
     }
@@ -1175,7 +1175,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
         req,
         authService,
         200,
-        store.applyModerationAction(body.actionType, {
+        await store.applyModerationAction(body.actionType, {
           ...context,
           targetType: body.targetType,
           targetId: body.targetId,
@@ -1188,7 +1188,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
     }
 
     if (req.method === "GET" && url.pathname === "/api/diagnostics") {
-      sendJson(res, 200, store.getDiagnosticsForViewer(context));
+      sendJson(res, 200, await store.getDiagnosticsForViewer(context));
       return;
     }
 
@@ -1196,7 +1196,7 @@ async function handleApiRequest(store, authService, liveEventHub, req, res, url)
       sendJson(
         res,
         200,
-        store.getProductAnalyticsForViewer({
+        await store.getProductAnalyticsForViewer({
           ...context,
           days: url.searchParams.get("days")
         })
@@ -1240,7 +1240,7 @@ async function handleAuthCallback(store, authService, req, res, url) {
 
     if (callback.identity) {
       if (callback.purpose === "link") {
-        store.completeIdentityLink({
+        await store.completeIdentityLink({
           sessionId: callback.sessionId,
           sourceSessionId: callback.sourceSessionId,
           targetUserId: callback.targetUserId,
@@ -1250,7 +1250,7 @@ async function handleAuthCallback(store, authService, req, res, url) {
           ...callback.identity
         });
       } else {
-        store.loginWithIdentity({
+        await store.loginWithIdentity({
           sessionId: callback.sessionId,
           sourceSessionId: callback.sourceSessionId,
           selectedTopicId: callback.selectedTopicId,
@@ -1412,9 +1412,9 @@ function resolveGuestCleanupIntervalMs(env = process.env) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-function runGuestCleanup(store, log) {
+async function runGuestCleanup(store, log) {
   try {
-    const result = store.cleanupInactiveGuests();
+    const result = await store.cleanupInactiveGuests();
     const deletedChallengeCount =
       result.deletedExpiredAuthChallenges + result.deletedExpiredPasswordResetChallenges;
     if (
@@ -1442,9 +1442,9 @@ function resolveReactionResetCheckIntervalMs(env = process.env) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-function runMessageReactionReset(store, log) {
+async function runMessageReactionReset(store, log) {
   try {
-    const result = store.resetDailyMessageReactions();
+    const result = await store.resetDailyMessageReactions();
     if (result.reset) {
       log(
         `message reactions reset for ${result.resetDay}: ${result.deletedLikes} likes and ${result.deletedDislikes} dislikes removed`
@@ -1465,9 +1465,9 @@ function resolveTopicArchiveCheckIntervalMs(env = process.env) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-function runTopicInactivityArchive(store, log) {
+async function runTopicInactivityArchive(store, log) {
   try {
-    const result = store.archiveInactiveTopics();
+    const result = await store.archiveInactiveTopics();
     if (result.archivedTopicIds.length) {
       log(`archived ${result.archivedTopicIds.length} topics with no recent activity`);
     }
@@ -1551,7 +1551,7 @@ async function handleTopicSocialCardRequest(store, req, res, url) {
 
   let topic;
   try {
-    topic = store.getTopicPageData(topicId);
+    topic = await store.getTopicPageData(topicId);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       writePlainText(res, 404, "Not found");
@@ -1594,7 +1594,7 @@ async function handleTopicSocialCardRequest(store, req, res, url) {
   res.end(req.method === "HEAD" ? "" : cached.image);
 }
 
-function buildSitemapXml(store) {
+async function buildSitemapXml(store) {
   const origin = resolvePublicOrigin();
   const entries = [
     { loc: `${origin}/` },
@@ -1603,19 +1603,17 @@ function buildSitemapXml(store) {
     { loc: `${origin}/terms.html` },
     { loc: `${origin}/privacy.html` }
   ];
-  store
-    .getSeoTopicEntries()
+  (await store.getSeoTopicEntries())
     .filter((topic) => !topic.isThin && !topic.isProblematic)
     .forEach((topic) => {
       entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
     });
-  store
-    .getSeoArchivedTopicEntries()
+  (await store.getSeoArchivedTopicEntries())
     .filter((topic) => !topic.isThin && !topic.isProblematic)
     .forEach((topic) => {
       entries.push({ loc: `${origin}${topicPath(topic)}`, lastmod: topic.lastActivityAt });
     });
-  store.getSeoProfileEntries().forEach((profile) => {
+  (await store.getSeoProfileEntries()).forEach((profile) => {
     entries.push({
       loc: `${origin}/u/${encodeURIComponent(profile.nickname)}`,
       lastmod: profile.lastmod
@@ -1668,16 +1666,16 @@ function isSeoPagePath(pathname) {
   );
 }
 
-function isArchivedTopic(store, topicId) {
+async function isArchivedTopic(store, topicId) {
   try {
-    return store.getTopicPageData(topicId).isArchived === true;
+    return (await store.getTopicPageData(topicId)).isArchived === true;
   } catch {
     // Si el tema no existe, que siga el flujo normal y resuelva el 404 mas abajo.
     return false;
   }
 }
 
-function handleSeoPageRequest(store, req, res, url) {
+async function handleSeoPageRequest(store, req, res, url) {
   if (req.method !== "GET" && req.method !== "HEAD") {
     writePlainText(res, 405, "Method not allowed");
     return;
@@ -1704,7 +1702,7 @@ function handleSeoPageRequest(store, req, res, url) {
       // una busqueda lo deja en una conversacion muerta sin haber leido lo que vino
       // a leer. En ese caso se le sirve la pagina, igual que a un buscador, con su
       // CTA al chat vivo. Los temas activos si siguen abriendo la app directamente.
-      if (topicId && !isArchivedTopic(store, topicId)) {
+      if (topicId && !(await isArchivedTopic(store, topicId))) {
         sendRedirect(res, 302, `/?selectedTopicId=${encodeURIComponent(topicId)}`);
         return;
       }
@@ -1736,7 +1734,7 @@ function handleSeoPageRequest(store, req, res, url) {
       req,
       200,
       renderTopicsIndexPage(
-        store.getSeoTopicEntries().filter((topic) => !topic.isProblematic),
+        (await store.getSeoTopicEntries()).filter((topic) => !topic.isProblematic),
         { origin }
       ),
       {
@@ -1752,7 +1750,7 @@ function handleSeoPageRequest(store, req, res, url) {
       req,
       200,
       renderTopicsArchivePage(
-        store.getSeoArchivedTopicEntries().filter((topic) => !topic.isProblematic),
+        (await store.getSeoArchivedTopicEntries()).filter((topic) => !topic.isProblematic),
         { origin }
       ),
       {
@@ -1778,7 +1776,7 @@ function handleSeoPageRequest(store, req, res, url) {
 
     let profile;
     try {
-      profile = store.getPublicProfileByNickname(nickname);
+      profile = await store.getPublicProfileByNickname(nickname);
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         sendHtml(res, req, 404, renderNotFoundPage());
@@ -1811,7 +1809,7 @@ function handleSeoPageRequest(store, req, res, url) {
 
   let topic;
   try {
-    topic = store.getTopicPageData(topicId);
+    topic = await store.getTopicPageData(topicId);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       sendHtml(res, req, 404, renderNotFoundPage());
@@ -2024,7 +2022,7 @@ export function createRequestHandler({
 
       if (url.pathname === "/sitemap.xml") {
         if (!sitemapCache.xml || Date.now() >= sitemapCache.expiresAt) {
-          sitemapCache.xml = buildSitemapXml(store);
+          sitemapCache.xml = await buildSitemapXml(store);
           sitemapCache.expiresAt = Date.now() + SITEMAP_CACHE_TTL_MS;
         }
         sendTextResource(
@@ -2041,7 +2039,7 @@ export function createRequestHandler({
         if (!enforceHttpRateLimit(res, rateLimitBuckets, req, url, rateLimitConfig)) {
           return;
         }
-        handleSeoPageRequest(store, req, res, url);
+        await handleSeoPageRequest(store, req, res, url);
         return;
       }
 
@@ -2067,7 +2065,7 @@ export function createRequestHandler({
   };
 }
 
-export function startPreviewServer({
+export async function startPreviewServer({
   port,
   host = "127.0.0.1",
   log = console.log,
@@ -2097,7 +2095,7 @@ export function startPreviewServer({
       'ADVERTENCIA: login local sin contraseña habilitado porque NODE_ENV no es "production". No usar esta configuración en producción.'
     );
   }
-  const store = createBackendStore({
+  const store = await createBackendStore({
     dbPath,
     seedDemoData: shouldSeedDemoData(process.env, false)
   });
@@ -2118,23 +2116,29 @@ export function startPreviewServer({
   const reactionResetCheckIntervalMs = resolveReactionResetCheckIntervalMs();
   const guestCleanupTimer =
     guestCleanupIntervalMs > 0
-      ? setInterval(() => runGuestCleanup(store, log), guestCleanupIntervalMs)
+      ? setInterval(async () => await runGuestCleanup(store, log), guestCleanupIntervalMs)
       : null;
   guestCleanupTimer?.unref?.();
   const reactionResetTimer =
     reactionResetCheckIntervalMs > 0
-      ? setInterval(() => runMessageReactionReset(store, log), reactionResetCheckIntervalMs)
+      ? setInterval(
+          async () => await runMessageReactionReset(store, log),
+          reactionResetCheckIntervalMs
+        )
       : null;
   reactionResetTimer?.unref?.();
   const topicArchiveCheckIntervalMs = resolveTopicArchiveCheckIntervalMs();
   const topicArchiveTimer =
     topicArchiveCheckIntervalMs > 0
-      ? setInterval(() => runTopicInactivityArchive(store, log), topicArchiveCheckIntervalMs)
+      ? setInterval(
+          async () => await runTopicInactivityArchive(store, log),
+          topicArchiveCheckIntervalMs
+        )
       : null;
   topicArchiveTimer?.unref?.();
-  runGuestCleanup(store, log);
-  runMessageReactionReset(store, log);
-  runTopicInactivityArchive(store, log);
+  await runGuestCleanup(store, log);
+  await runMessageReactionReset(store, log);
+  await runTopicInactivityArchive(store, log);
   const server = http.createServer(
     createRequestHandler({
       store,
@@ -2152,7 +2156,7 @@ export function startPreviewServer({
   return {
     server,
     store,
-    close() {
+    async close() {
       if (guestCleanupTimer) {
         clearInterval(guestCleanupTimer);
       }
@@ -2164,7 +2168,7 @@ export function startPreviewServer({
       }
       liveEventHub.close();
       server.close();
-      store.close();
+      await store.close();
     }
   };
 }

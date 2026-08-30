@@ -315,12 +315,12 @@ function createClassList() {
 async function withTempStore(fn, options = {}) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-store-"));
   const dbPath = path.join(tempDir, "topykly.sqlite");
-  const store = createBackendStore({ dbPath, ...options });
+  const store = await createBackendStore({ dbPath, ...options });
 
   try {
     return await fn(store);
   } finally {
-    store.close();
+    await store.close();
     await rm(tempDir, { recursive: true, force: true });
   }
 }
@@ -2101,8 +2101,8 @@ await (async () => {
 
   await test("backend can start without demo topics for real users", async () => {
     await withTempStore(
-      (store) => {
-        const payload = store.bootstrap({ sessionId: "session-empty-demo" });
+      async (store) => {
+        const payload = await store.bootstrap({ sessionId: "session-empty-demo" });
         assert.equal(payload.topics.length, 0);
         assert.equal(payload.users.length, 0);
         assert.equal(payload.viewer.type, "guest");
@@ -2115,25 +2115,25 @@ await (async () => {
   await test("backend purges existing demo seed data when demo seeding is disabled", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-demo-purge-"));
     const dbPath = path.join(tempDir, "topykly.sqlite");
-    let store = createBackendStore({ dbPath, seedDemoData: true });
+    let store = await createBackendStore({ dbPath, seedDemoData: true });
 
     try {
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-real-user",
         email: "real-user@example.com",
         password: "password-segura",
         nickname: "Real_user"
       });
-      const created = store.createTopic({
+      const created = await store.createTopic({
         sessionId: "session-real-user",
         title: "Tema real persistente",
         text: "Contenido creado por una cuenta real"
       });
       const realTopicId = created.selectedTopicId;
-      store.close();
+      await store.close();
 
-      store = createBackendStore({ dbPath, seedDemoData: false });
-      const payload = store.bootstrap({
+      store = await createBackendStore({ dbPath, seedDemoData: false });
+      const payload = await store.bootstrap({
         sessionId: "session-real-user",
         authMode: "registered"
       });
@@ -2152,13 +2152,13 @@ await (async () => {
       );
       assert.equal(payload.viewer.nickname, "Real_user");
     } finally {
-      store.close();
+      await store.close();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
   await test("backend bootstrap returns a guest viewer plus 40 active topics with a window sized to the audience", async () => {
-    await withTempStore((store) => {
-      const payload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const payload = await store.bootstrap({
         sessionId: "session-bootstrap",
         authMode: "guest"
       });
@@ -2191,16 +2191,16 @@ await (async () => {
   });
 
   await test("backend anonymous reads do not persist guest users or sessions", async () => {
-    await withTempStore((store) => {
+    await withTempStore(async (store) => {
       for (let index = 0; index < 25; index += 1) {
-        store.bootstrap({
+        await store.bootstrap({
           sessionId: `session-bot-read-${index}`,
           authMode: "guest",
           ipAddress: "203.0.113.44"
         });
       }
 
-      const diagnostics = store.getDiagnostics();
+      const diagnostics = await store.getDiagnostics();
 
       assert.equal(diagnostics.users, initialUsers.length);
       assert.equal(diagnostics.sessions, 0);
@@ -2208,16 +2208,16 @@ await (async () => {
   });
 
   await test("backend requires registered users to create topics and comments", async () => {
-    await withTempStore((store) => {
-      const initial = store.bootstrap({
+    await withTempStore(async (store) => {
+      const initial = await store.bootstrap({
         sessionId: "session-guest-participates",
         authMode: "guest"
       });
       const topicId = initial.topics[0].id;
 
-      assert.throws(
-        () =>
-          store.createTopic({
+      await assert.rejects(
+        async () =>
+          await store.createTopic({
             sessionId: "session-guest-participates",
             authMode: "guest",
             title: "Tema invitado",
@@ -2225,9 +2225,9 @@ await (async () => {
           }),
         (error) => error?.code === "LOGIN_REQUIRED"
       );
-      assert.throws(
-        () =>
-          store.addMessage(topicId, {
+      await assert.rejects(
+        async () =>
+          await store.addMessage(topicId, {
             sessionId: "session-guest-participates",
             authMode: "guest",
             text: "Comentario invitado bloqueado"
@@ -2235,7 +2235,7 @@ await (async () => {
         (error) => error?.code === "LOGIN_REQUIRED"
       );
 
-      const diagnostics = store.getDiagnostics();
+      const diagnostics = await store.getDiagnostics();
       assert.equal(diagnostics.users, initialUsers.length);
       assert.equal(diagnostics.sessions, 0);
     });
@@ -2243,8 +2243,8 @@ await (async () => {
 
   await test("backend lets the first real user create the first topic without seeds", async () => {
     await withTempStore(
-      (store) => {
-        const registered = store.registerWithPassword({
+      async (store) => {
+        const registered = await store.registerWithPassword({
           sessionId: "session-first-real-user",
           email: "first-real@example.com",
           password: "password-segura",
@@ -2256,7 +2256,7 @@ await (async () => {
           true
         );
 
-        const created = store.createTopic({
+        const created = await store.createTopic({
           sessionId: "session-first-real-user",
           title: "Primer tema real",
           text: "Primer posteo creado por una cuenta real."
@@ -2276,13 +2276,13 @@ await (async () => {
 
   await test("backend editorial seeding is explicit and idempotent for an existing database", async () => {
     await withTempStore(
-      (store) => {
-        const firstRun = store.seedEditorialContent({ limit: 3 });
+      async (store) => {
+        const firstRun = await store.seedEditorialContent({ limit: 3 });
         assert.equal(firstRun.insertedTopics, 3);
         assert.equal(firstRun.insertedUsers, initialUsers.length);
         assert.deepEqual(firstRun.archivedTopicIds, []);
 
-        const payload = store.bootstrap({ sessionId: "session-editorial-seed" });
+        const payload = await store.bootstrap({ sessionId: "session-editorial-seed" });
         assert.equal(payload.topics.length, 3);
         assert.equal(
           payload.topics.every((topic) => topic.messages.length >= 4),
@@ -2312,14 +2312,14 @@ await (async () => {
           ),
           true
         );
-        const editorialProfile = store.getPublicProfileByNickname("comunidad_topykly");
+        const editorialProfile = await store.getPublicProfileByNickname("comunidad_topykly");
         assert.equal(editorialProfile.isEditorial, true);
         assert.equal(editorialProfile.indexable, true);
 
-        const secondRun = store.seedEditorialContent({ limit: 3 });
+        const secondRun = await store.seedEditorialContent({ limit: 3 });
         assert.equal(secondRun.insertedTopics, 0);
         assert.equal(secondRun.insertedUsers, 0);
-        assert.equal(store.getDiagnostics().topics, 3);
+        assert.equal((await store.getDiagnostics()).topics, 3);
       },
       { seedDemoData: false }
     );
@@ -2331,27 +2331,27 @@ await (async () => {
 
     try {
       await withTempStore(
-        (store) => {
-          store.seedEditorialContent({ limit: 3 });
+        async (store) => {
+          await store.seedEditorialContent({ limit: 3 });
 
           // Actividad real que TIENE que sobrevivir: un usuario con su propio tema, y
           // ademas un comentario suyo dentro de un tema editorial.
-          store.registerWithPassword({
+          await store.registerWithPassword({
             sessionId: "session-real-user",
             email: "real@example.com",
             password: "password-segura",
             nickname: "persona_real"
           });
-          store.createTopic({
+          await store.createTopic({
             sessionId: "session-real-user",
             authMode: "registered",
             title: "Tema de una persona real",
             text: "Este mensaje no se puede perder."
           });
-          const editorialTopicId = store
-            .bootstrap({ sessionId: "session-peek" })
-            .topics.find((topic) => topic.authorId === "editorial-u10").id;
-          store.addMessage(editorialTopicId, {
+          const editorialTopicId = (
+            await store.bootstrap({ sessionId: "session-peek" })
+          ).topics.find((topic) => topic.authorId === "editorial-u10").id;
+          await store.addMessage(editorialTopicId, {
             sessionId: "session-real-user",
             authMode: "registered",
             text: "Comentario real dentro de un tema editorial."
@@ -2359,7 +2359,7 @@ await (async () => {
 
           // Moderador real: el rol se resuelve por email verificado contra la
           // allowlist, asi que hace falta una identidad con emailVerified.
-          const admin = store.loginWithIdentity({
+          const admin = await store.loginWithIdentity({
             sessionId: "session-admin-purge",
             sourceSessionId: "session-admin-purge-src",
             authProvider: "https://accounts.example.com",
@@ -2371,9 +2371,9 @@ await (async () => {
           assert.equal(admin.viewer.isAdmin, true);
 
           // Un usuario comun no puede correr esto.
-          assert.throws(
-            () =>
-              store.removeEditorialSeedContent({
+          await assert.rejects(
+            async () =>
+              await store.removeEditorialSeedContent({
                 sessionId: "session-real-user",
                 authMode: "registered",
                 dryRun: false
@@ -2382,7 +2382,7 @@ await (async () => {
           );
 
           // La simulacion informa sin borrar nada.
-          const dry = store.removeEditorialSeedContent({
+          const dry = await store.removeEditorialSeedContent({
             sessionId: "session-admin-purge",
             authMode: "registered"
           });
@@ -2390,9 +2390,9 @@ await (async () => {
           assert.equal(dry.users.length, initialUsers.length);
           assert.equal(dry.topics.length, 3);
           assert.equal(dry.removedTopics, 0);
-          assert.equal(store.getDiagnostics().topics, 4);
+          assert.equal((await store.getDiagnostics()).topics, 4);
 
-          const purge = store.removeEditorialSeedContent({
+          const purge = await store.removeEditorialSeedContent({
             sessionId: "session-admin-purge",
             authMode: "registered",
             dryRun: false
@@ -2415,7 +2415,7 @@ await (async () => {
             respaldo.close();
           }
 
-          const after = store.bootstrap({ sessionId: "session-after-purge" });
+          const after = await store.bootstrap({ sessionId: "session-after-purge" });
           assert.equal(after.topics.length, 1);
           assert.equal(after.topics[0].title, "Tema de una persona real");
           assert.equal(
@@ -2426,7 +2426,7 @@ await (async () => {
           assert.equal(after.topics[0].messages[0].text, "Este mensaje no se puede perder.");
 
           // Idempotente: correrlo de nuevo no encuentra nada y no falla.
-          const again = store.removeEditorialSeedContent({
+          const again = await store.removeEditorialSeedContent({
             sessionId: "session-admin-purge",
             authMode: "registered",
             dryRun: false
@@ -2446,16 +2446,18 @@ await (async () => {
   });
 
   await test("backend caps materialized guest storage for rotating report sessions", async () => {
-    await withTempStore((store) => {
-      const topicId = store.createTopic({
-        sessionId: "session-guest-cap-topic",
-        authMode: "registered",
-        title: "Tema para reportes invitados",
-        text: "Raiz para probar sesiones invitadas."
-      }).selectedTopicId;
+    await withTempStore(async (store) => {
+      const topicId = (
+        await store.createTopic({
+          sessionId: "session-guest-cap-topic",
+          authMode: "registered",
+          title: "Tema para reportes invitados",
+          text: "Raiz para probar sesiones invitadas."
+        })
+      ).selectedTopicId;
 
       for (let index = 0; index < 40; index += 1) {
-        store.reportEntity("topic", topicId, {
+        await store.reportEntity("topic", topicId, {
           sessionId: `session-rotating-guest-${index}`,
           authMode: "guest",
           ipAddress: "203.0.113.77",
@@ -2463,41 +2465,43 @@ await (async () => {
         });
       }
 
-      const diagnostics = store.getDiagnostics();
+      const diagnostics = await store.getDiagnostics();
 
       assert.equal(diagnostics.users, initialUsers.length + 1);
       assert.equal(diagnostics.sessions <= 1 + 25, true);
     });
   });
   await test("backend scheduled cleanup removes inactive guest state", async () => {
-    await withTempStore((store) => {
-      const topicId = store.login({
-        sessionId: "session-cleanup-registered"
-      }).topics[0].id;
-      store.reportEntity("topic", topicId, {
+    await withTempStore(async (store) => {
+      const topicId = (
+        await store.login({
+          sessionId: "session-cleanup-registered"
+        })
+      ).topics[0].id;
+      await store.reportEntity("topic", topicId, {
         sessionId: "session-cleanup-guest",
         authMode: "guest",
         reason: "Reporte temporal invitado",
         ipAddress: "203.0.113.88"
       });
 
-      assert.equal(store.getDiagnostics().sessions, 2);
+      assert.equal((await store.getDiagnostics()).sessions, 2);
 
-      const result = store.cleanupInactiveGuests({
+      const result = await store.cleanupInactiveGuests({
         nowMs: Date.now() + 8 * 24 * 60 * 60_000
       });
 
       assert.equal(result.deletedSessions, 1);
       assert.equal(result.deletedGuestIpRateLimits, 0);
       assert.equal(result.deletedRegisteredSessions, 0);
-      assert.equal(store.getDiagnostics().sessions, 1);
+      assert.equal((await store.getDiagnostics()).sessions, 1);
 
-      const registeredResult = store.cleanupInactiveGuests({
+      const registeredResult = await store.cleanupInactiveGuests({
         nowMs: Date.now() + 31 * 24 * 60 * 60_000
       });
 
       assert.equal(registeredResult.deletedRegisteredSessions, 1);
-      assert.equal(store.getDiagnostics().sessions, 0);
+      assert.equal((await store.getDiagnostics()).sessions, 0);
     });
   });
   await test("backend initializes SQLite indexes for operational queries", async () => {
@@ -2554,8 +2558,8 @@ await (async () => {
       storageWarning: null
     });
 
-    await withTempStore((store) => {
-      const diagnostics = store.getDiagnostics();
+    await withTempStore(async (store) => {
+      const diagnostics = await store.getDiagnostics();
 
       assert.equal(diagnostics.dbPathSource, "explicit");
       assert.equal(diagnostics.storageConfigured, true);
@@ -2573,7 +2577,7 @@ await (async () => {
         env: {}
       });
       const backupBytes = await readFile(result.backupPath);
-      const backupStore = createBackendStore({ dbPath: result.backupPath });
+      const backupStore = await createBackendStore({ dbPath: result.backupPath });
 
       try {
         assert.deepEqual(config, {
@@ -2585,16 +2589,16 @@ await (async () => {
           path.join(backupDir, "topykly-2026-01-02T03-04-05-006Z.sqlite")
         );
         assert.equal(backupBytes.subarray(0, 15).toString("utf8"), "SQLite format 3");
-        assert.equal(backupStore.getDiagnostics().users, initialUsers.length);
+        assert.equal((await backupStore.getDiagnostics()).users, initialUsers.length);
       } finally {
-        backupStore.close();
+        await backupStore.close();
       }
     });
   });
   await test("backend registers and logs in password users with nickname", async () => {
     await withTempStore(
-      (store) => {
-        const registered = store.registerWithPassword({
+      async (store) => {
+        const registered = await store.registerWithPassword({
           sessionId: "session-password-register",
           email: "Clave@Example.com",
           password: "password-segura",
@@ -2609,12 +2613,12 @@ await (async () => {
         assert.equal(registered.viewer.displayName, "Clave_user");
         assert.equal(registered.viewer.profilePending, false);
         assert.equal(
-          store.refresh({ sessionId: "session-password-register" }).viewer.type,
+          (await store.refresh({ sessionId: "session-password-register" })).viewer.type,
           "guest"
         );
-        assert.throws(
-          () =>
-            store.registerWithPassword({
+        await assert.rejects(
+          async () =>
+            await store.registerWithPassword({
               sessionId: "session-password-register-duplicate-email",
               email: "clave@example.com",
               password: "password-segura",
@@ -2622,9 +2626,9 @@ await (async () => {
             }),
           (error) => error.code === "EMAIL_TAKEN"
         );
-        assert.throws(
-          () =>
-            store.registerWithPassword({
+        await assert.rejects(
+          async () =>
+            await store.registerWithPassword({
               sessionId: "session-password-register-duplicate-nickname",
               email: "otro@example.com",
               password: "password-segura",
@@ -2632,13 +2636,13 @@ await (async () => {
             }),
           (error) => error.code === "NICKNAME_TAKEN"
         );
-        const compactName = store.registerWithPassword({
+        const compactName = await store.registerWithPassword({
           sessionId: "session-password-register-compact-name",
           email: "compact-name@example.com",
           password: "password-segura",
           nickname: "COCOMORA"
         });
-        const underscoredName = store.registerWithPassword({
+        const underscoredName = await store.registerWithPassword({
           sessionId: "session-password-register-underscored-name",
           email: "underscored-name@example.com",
           password: "password-segura",
@@ -2646,9 +2650,9 @@ await (async () => {
         });
         assert.equal(compactName.viewer.nickname, "Cocomora");
         assert.equal(underscoredName.viewer.nickname, "Coco_mora");
-        assert.throws(
-          () =>
-            store.registerWithPassword({
+        await assert.rejects(
+          async () =>
+            await store.registerWithPassword({
               sessionId: "session-password-register-spaced-name",
               email: "spaced-name@example.com",
               password: "password-segura",
@@ -2656,9 +2660,9 @@ await (async () => {
             }),
           (error) => error.code === "VALIDATION_ERROR"
         );
-        assert.throws(
-          () =>
-            store.loginWithPassword({
+        await assert.rejects(
+          async () =>
+            await store.loginWithPassword({
               sessionId: "session-password-wrong",
               email: "clave@example.com",
               password: "incorrecta"
@@ -2666,7 +2670,7 @@ await (async () => {
           (error) => error.code === "INVALID_CREDENTIALS"
         );
 
-        const loggedIn = store.loginWithPassword({
+        const loggedIn = await store.loginWithPassword({
           sessionId: "session-password-login",
           email: "clave@example.com",
           password: "password-segura",
@@ -2675,17 +2679,20 @@ await (async () => {
         assert.notEqual(loggedIn.sessionId, "session-password-login");
         assert.equal(loggedIn.viewer.id, registered.viewer.id);
         assert.equal(loggedIn.viewer.nickname, "Clave_user");
-        assert.equal(store.refresh({ sessionId: "session-password-login" }).viewer.type, "guest");
+        assert.equal(
+          (await store.refresh({ sessionId: "session-password-login" })).viewer.type,
+          "guest"
+        );
       },
       { seedDemoData: false }
     );
   });
   await test("backend confirms password registration with a one-time email code", async () => {
     await withTempStore(
-      (store) => {
-        assert.throws(
-          () =>
-            store.createEmailAuthChallenge({
+      async (store) => {
+        await assert.rejects(
+          async () =>
+            await store.createEmailAuthChallenge({
               email: "code@example.com",
               nickname: "Code_user",
               age: MINIMUM_REGISTRATION_AGE - 1,
@@ -2695,9 +2702,9 @@ await (async () => {
             }),
           (error) => error.code === "INVALID_AGE"
         );
-        assert.throws(
-          () =>
-            store.createEmailAuthChallenge({
+        await assert.rejects(
+          async () =>
+            await store.createEmailAuthChallenge({
               email: "code@example.com",
               nickname: "Code_user",
               age: MINIMUM_REGISTRATION_AGE,
@@ -2707,9 +2714,9 @@ await (async () => {
             }),
           (error) => error.code === "TERMS_REQUIRED"
         );
-        assert.throws(
-          () =>
-            store.createEmailAuthChallenge({
+        await assert.rejects(
+          async () =>
+            await store.createEmailAuthChallenge({
               email: "code@example.com",
               nickname: "Code_user",
               age: MINIMUM_REGISTRATION_AGE,
@@ -2720,7 +2727,7 @@ await (async () => {
           (error) => error.code === "VALIDATION_ERROR"
         );
 
-        const registration = store.createEmailAuthChallenge({
+        const registration = await store.createEmailAuthChallenge({
           email: "Code@Example.com",
           nickname: "Code_user",
           age: MINIMUM_REGISTRATION_AGE,
@@ -2730,9 +2737,9 @@ await (async () => {
           nowMs: Date.UTC(2026, 6, 10, 12)
         });
         assert.match(registration.code, /^\d{6}$/);
-        assert.throws(
-          () =>
-            store.verifyEmailAuthChallenge({
+        await assert.rejects(
+          async () =>
+            await store.verifyEmailAuthChallenge({
               challengeId: registration.challengeId,
               code: registration.code === "000000" ? "111111" : "000000",
               sessionId: "session-email-code-wrong",
@@ -2741,7 +2748,7 @@ await (async () => {
           (error) => error.code === "INVALID_EMAIL_CODE"
         );
 
-        const registered = store.verifyEmailAuthChallenge({
+        const registered = await store.verifyEmailAuthChallenge({
           challengeId: registration.challengeId,
           code: registration.code,
           sessionId: "session-email-code-register",
@@ -2753,9 +2760,9 @@ await (async () => {
         assert.equal(registered.viewer.nickname, "Code_user");
         assert.equal(registered.viewer.profileIndexable, false);
         assert.equal(registered.viewer.notificationsFriendsOnly, true);
-        assert.throws(
-          () =>
-            store.verifyEmailAuthChallenge({
+        await assert.rejects(
+          async () =>
+            await store.verifyEmailAuthChallenge({
               challengeId: registration.challengeId,
               code: registration.code,
               sessionId: "session-email-code-reuse",
@@ -2764,7 +2771,7 @@ await (async () => {
           (error) => error.code === "INVALID_EMAIL_CODE"
         );
 
-        const loggedIn = store.loginWithPassword({
+        const loggedIn = await store.loginWithPassword({
           sessionId: "session-email-code-login",
           email: "code@example.com",
           password: "password-segura",
@@ -2776,15 +2783,15 @@ await (async () => {
     );
   });
   await test("backend login rotates the session and logout clears the rotated session", async () => {
-    await withTempStore((store) => {
-      const initialPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const initialPayload = await store.bootstrap({
         sessionId: "session-auth-flow"
       });
       const selectedTopicId = initialPayload.topics[0].id;
 
       assert.equal(initialPayload.viewer.type, "guest");
 
-      const loggedIn = store.login({
+      const loggedIn = await store.login({
         sessionId: "session-auth-flow",
         selectedTopicId,
         rotateSession: true
@@ -2795,19 +2802,19 @@ await (async () => {
       assert.equal(loggedIn.viewer.id, "u1");
       assert.equal(loggedIn.selectedTopicId, selectedTopicId);
 
-      const oldSessionRefresh = store.refresh({
+      const oldSessionRefresh = await store.refresh({
         sessionId: "session-auth-flow"
       });
       assert.equal(oldSessionRefresh.viewer.type, "guest");
 
-      const refreshedRegistered = store.refresh({
+      const refreshedRegistered = await store.refresh({
         sessionId: loggedIn.sessionId
       });
 
       assert.equal(refreshedRegistered.viewer.type, "registered");
       assert.equal(refreshedRegistered.viewer.id, "u1");
 
-      const loggedOut = store.logout({
+      const loggedOut = await store.logout({
         sessionId: loggedIn.sessionId,
         selectedTopicId
       });
@@ -2815,7 +2822,7 @@ await (async () => {
       assert.notEqual(loggedOut.viewer.id, "u1");
       assert.equal(loggedOut.selectedTopicId, selectedTopicId);
 
-      const refreshedGuest = store.refresh({
+      const refreshedGuest = await store.refresh({
         sessionId: loggedIn.sessionId
       });
 
@@ -2825,11 +2832,11 @@ await (async () => {
   });
 
   await test("backend persists friend requests and accepted friendships", async () => {
-    await withTempStore((store) => {
-      const firstUser = store.login({ sessionId: "session-friend-u1", userId: "u1" });
-      const secondUser = store.login({ sessionId: "session-friend-u2", userId: "u2" });
+    await withTempStore(async (store) => {
+      const firstUser = await store.login({ sessionId: "session-friend-u1", userId: "u1" });
+      const secondUser = await store.login({ sessionId: "session-friend-u2", userId: "u2" });
 
-      const requested = store.sendFriendRequest("u2", {
+      const requested = await store.sendFriendRequest("u2", {
         sessionId: firstUser.sessionId,
         selectedTopicId: firstUser.topics[0].id
       });
@@ -2841,7 +2848,7 @@ await (async () => {
         "outgoing-request"
       );
 
-      const pendingForSecondUser = store.refresh({ sessionId: secondUser.sessionId });
+      const pendingForSecondUser = await store.refresh({ sessionId: secondUser.sessionId });
       assert.equal(pendingForSecondUser.friendships.incoming.length, 1);
       assert.equal(pendingForSecondUser.friendships.incoming[0].id, "u1");
       assert.equal(
@@ -2849,7 +2856,7 @@ await (async () => {
         "incoming-request"
       );
 
-      const accepted = store.acceptFriendRequest("u1", {
+      const accepted = await store.acceptFriendRequest("u1", {
         sessionId: secondUser.sessionId
       });
 
@@ -2858,7 +2865,7 @@ await (async () => {
       assert.equal(accepted.friendships.friends[0].online, true);
       assert.equal(accepted.users.find((user) => user.id === "u1")?.friendshipStatus, "friend");
 
-      const refreshedFirstUser = store.refresh({ sessionId: firstUser.sessionId });
+      const refreshedFirstUser = await store.refresh({ sessionId: firstUser.sessionId });
       assert.equal(refreshedFirstUser.friendships.friends[0].id, "u2");
       assert.equal(
         refreshedFirstUser.users.find((user) => user.id === "u2")?.friendshipStatus,
@@ -2867,16 +2874,16 @@ await (async () => {
     });
   });
   await test("backend persists user blocks and hides blocked content on demand", async () => {
-    await withTempStore((store) => {
-      const firstUser = store.login({ sessionId: "session-block-u1", userId: "u1" });
-      const secondUser = store.login({ sessionId: "session-block-u2", userId: "u2" });
+    await withTempStore(async (store) => {
+      const firstUser = await store.login({ sessionId: "session-block-u1", userId: "u1" });
+      const secondUser = await store.login({ sessionId: "session-block-u2", userId: "u2" });
       const topicBySecondUser = firstUser.topics.find((topic) => topic.authorId === "u2");
 
       assert.ok(topicBySecondUser);
-      store.sendFriendRequest("u2", { sessionId: firstUser.sessionId });
-      store.acceptFriendRequest("u1", { sessionId: secondUser.sessionId });
+      await store.sendFriendRequest("u2", { sessionId: firstUser.sessionId });
+      await store.acceptFriendRequest("u1", { sessionId: secondUser.sessionId });
 
-      const blocked = store.blockUser("u2", {
+      const blocked = await store.blockUser("u2", {
         sessionId: firstUser.sessionId,
         hideContent: true,
         selectedTopicId: topicBySecondUser.id
@@ -2896,12 +2903,12 @@ await (async () => {
         blocked.topics.some((topic) => topic.messages.some((message) => message.authorId === "u2")),
         false
       );
-      assert.throws(
-        () => store.sendFriendRequest("u1", { sessionId: secondUser.sessionId }),
+      await assert.rejects(
+        async () => await store.sendFriendRequest("u1", { sessionId: secondUser.sessionId }),
         (error) => error.code === "USER_BLOCKED"
       );
 
-      const visibleAgain = store.updateBlockedUser("u2", {
+      const visibleAgain = await store.updateBlockedUser("u2", {
         sessionId: firstUser.sessionId,
         hideContent: false
       });
@@ -2911,11 +2918,11 @@ await (async () => {
         true
       );
 
-      const refreshed = store.refresh({ sessionId: firstUser.sessionId });
+      const refreshed = await store.refresh({ sessionId: firstUser.sessionId });
       assert.equal(refreshed.blockedUsers[0].id, "u2");
       assert.equal(refreshed.blockedUsers[0].hideContent, false);
 
-      const unblocked = store.unblockUser("u2", { sessionId: firstUser.sessionId });
+      const unblocked = await store.unblockUser("u2", { sessionId: firstUser.sessionId });
       assert.deepEqual(unblocked.blockedUsers, []);
       assert.equal(
         unblocked.topics.some((topic) => topic.authorId === "u2"),
@@ -2924,12 +2931,12 @@ await (async () => {
     });
   });
   await test("backend fills a blocked viewer's visible slots only from the global active 40", async () => {
-    await withTempStore((store) => {
-      const viewer = store.login({ sessionId: "session-block-many-u1", userId: "u1" });
+    await withTempStore(async (store) => {
+      const viewer = await store.login({ sessionId: "session-block-many-u1", userId: "u1" });
       let personalized = viewer;
 
       for (const targetUserId of ["u2", "u3", "u4", "u5", "u6"]) {
-        personalized = store.blockUser(targetUserId, {
+        personalized = await store.blockUser(targetUserId, {
           sessionId: viewer.sessionId,
           hideContent: true
         });
@@ -2954,7 +2961,7 @@ await (async () => {
         true
       );
 
-      const fewerThanTwenty = store.blockUser("u7", {
+      const fewerThanTwenty = await store.blockUser("u7", {
         sessionId: viewer.sessionId,
         hideContent: true
       });
@@ -2974,8 +2981,8 @@ await (async () => {
     });
   });
   await test("backend loginWithIdentity creates and reuses a registered user from the provider identity", async () => {
-    await withTempStore((store) => {
-      const initialPayload = store.loginWithIdentity({
+    await withTempStore(async (store) => {
+      const initialPayload = await store.loginWithIdentity({
         sessionId: "session-oidc-1",
         sourceSessionId: "session-oidc-source",
         authProvider: "https://accounts.example.com",
@@ -2998,9 +3005,9 @@ await (async () => {
         initialPayload.viewer.profileSuggestedAvatarUrl,
         "https://cdn.example.com/avatar.png"
       );
-      assert.throws(
-        () =>
-          store.createTopic({
+      await assert.rejects(
+        async () =>
+          await store.createTopic({
             sessionId: "session-oidc-1",
             title: "Tema OAuth",
             text: "Mensaje"
@@ -3008,9 +3015,9 @@ await (async () => {
         /Completa tu perfil/
       );
 
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-oidc-1",
             displayName: "Abril",
             username: "abril_uno",
@@ -3019,7 +3026,7 @@ await (async () => {
         (error) => error.code === "TERMS_REQUIRED"
       );
 
-      const completedPayload = store.updateProfile({
+      const completedPayload = await store.updateProfile({
         sessionId: "session-oidc-1",
         displayName: "Abril",
         username: "abril_uno",
@@ -3038,9 +3045,9 @@ await (async () => {
       assert.equal(completedPayload.viewer.profileIndexable, false);
       assert.equal(completedPayload.viewer.notificationsFriendsOnly, true);
 
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-oidc-1",
             displayName: "Abril",
             username: "otro_username"
@@ -3048,7 +3055,7 @@ await (async () => {
         (error) => error.code === "USERNAME_IMMUTABLE"
       );
 
-      const duplicateNameLogin = store.loginWithIdentity({
+      const duplicateNameLogin = await store.loginWithIdentity({
         sessionId: "session-oidc-duplicate-name",
         sourceSessionId: "session-oidc-duplicate-name-source",
         authProvider: "https://accounts.example.com",
@@ -3057,16 +3064,16 @@ await (async () => {
         emailVerified: true,
         displayName: "Abril"
       });
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-oidc-duplicate-name",
             displayName: "Abril",
             username: "ABRIL_UNO"
           }),
         (error) => error.code === "NICKNAME_TAKEN"
       );
-      const duplicateDisplayName = store.updateProfile({
+      const duplicateDisplayName = await store.updateProfile({
         sessionId: "session-oidc-duplicate-name",
         displayName: "Abril",
         username: "abril_dos",
@@ -3079,7 +3086,7 @@ await (async () => {
       assert.notEqual(duplicateDisplayName.viewer.nickname, completedPayload.viewer.nickname);
       assert.notEqual(duplicateNameLogin.viewer.id, completedPayload.viewer.id);
 
-      const secondPayload = store.loginWithIdentity({
+      const secondPayload = await store.loginWithIdentity({
         sessionId: "session-oidc-2",
         sourceSessionId: "session-oidc-source-2",
         authProvider: "https://accounts.example.com",
@@ -3098,10 +3105,10 @@ await (async () => {
 
   await test("backend rejects unverified OIDC email claims without creating accounts", async () => {
     await withTempStore(
-      (store) => {
-        assert.throws(
-          () =>
-            store.loginWithIdentity({
+      async (store) => {
+        await assert.rejects(
+          async () =>
+            await store.loginWithIdentity({
               sessionId: "session-oidc-unverified",
               sourceSessionId: "session-oidc-unverified-source",
               authProvider: "https://accounts.example.com",
@@ -3112,8 +3119,8 @@ await (async () => {
             }),
           (error) => error.code === "OIDC_EMAIL_NOT_VERIFIED"
         );
-        assert.equal(store.getDiagnostics().users, 0);
-        assert.equal(store.getDiagnostics().sessions, 0);
+        assert.equal((await store.getDiagnostics()).users, 0);
+        assert.equal((await store.getDiagnostics()).sessions, 0);
       },
       { seedDemoData: false }
     );
@@ -3121,9 +3128,9 @@ await (async () => {
 
   await test("backend links verified password and Google identities to the same stable user id", async () => {
     await withTempStore(
-      (store) => {
+      async (store) => {
         const nowMs = Date.UTC(2026, 6, 11, 12);
-        const challenge = store.createEmailAuthChallenge({
+        const challenge = await store.createEmailAuthChallenge({
           email: "linked@example.com",
           nickname: "linked_user",
           age: MINIMUM_REGISTRATION_AGE,
@@ -3132,7 +3139,7 @@ await (async () => {
           password: "password-segura",
           nowMs
         });
-        const registered = store.verifyEmailAuthChallenge({
+        const registered = await store.verifyEmailAuthChallenge({
           challengeId: challenge.challengeId,
           code: challenge.code,
           sessionId: "session-linked-password",
@@ -3148,7 +3155,7 @@ await (async () => {
           true
         );
 
-        const linked = store.loginWithIdentity({
+        const linked = await store.loginWithIdentity({
           sessionId: "session-linked-google",
           sourceSessionId: "session-linked-google-source",
           authProvider: "https://accounts.google.com",
@@ -3157,7 +3164,7 @@ await (async () => {
           emailVerified: true,
           displayName: "Abril"
         });
-        const passwordLogin = store.loginWithPassword({
+        const passwordLogin = await store.loginWithPassword({
           sessionId: "session-linked-password-login",
           email: "linked@example.com",
           password: "password-segura"
@@ -3172,7 +3179,7 @@ await (async () => {
           linked.users.every((user) => !Object.hasOwn(user, "email")),
           true
         );
-        assert.equal(store.getDiagnostics().users, 1);
+        assert.equal((await store.getDiagnostics()).users, 1);
       },
       { seedDemoData: false }
     );
@@ -3180,8 +3187,8 @@ await (async () => {
 
   await test("backend refuses to auto-link a legacy password email that was never verified", async () => {
     await withTempStore(
-      (store) => {
-        const legacy = store.registerWithPassword({
+      async (store) => {
+        const legacy = await store.registerWithPassword({
           sessionId: "session-legacy-password",
           email: "legacy@example.com",
           password: "password-segura",
@@ -3189,9 +3196,9 @@ await (async () => {
         });
 
         assert.equal(legacy.viewer.emailVerified, false);
-        assert.throws(
-          () =>
-            store.loginWithIdentity({
+        await assert.rejects(
+          async () =>
+            await store.loginWithIdentity({
               sessionId: "session-legacy-google",
               sourceSessionId: "session-legacy-google-source",
               authProvider: "https://accounts.google.com",
@@ -3202,7 +3209,7 @@ await (async () => {
             }),
           (error) => error.code === "ACCOUNT_LINK_REQUIRED"
         );
-        assert.equal(store.getDiagnostics().users, 1);
+        assert.equal((await store.getDiagnostics()).users, 1);
       },
       { seedDemoData: false }
     );
@@ -3210,9 +3217,9 @@ await (async () => {
 
   await test("backend password reset is indistinguishable, rate limited and rotates credentials safely", async () => {
     await withTempStore(
-      (store) => {
+      async (store) => {
         const nowMs = Date.UTC(2026, 6, 11, 12);
-        const registration = store.createEmailAuthChallenge({
+        const registration = await store.createEmailAuthChallenge({
           email: "reset@example.com",
           nickname: "reset_user",
           age: MINIMUM_REGISTRATION_AGE,
@@ -3221,7 +3228,7 @@ await (async () => {
           password: "password-vieja",
           nowMs
         });
-        const registered = store.verifyEmailAuthChallenge({
+        const registered = await store.verifyEmailAuthChallenge({
           challengeId: registration.challengeId,
           code: registration.code,
           sessionId: "session-reset-origin",
@@ -3230,14 +3237,17 @@ await (async () => {
         });
         const originalId = registered.viewer.id;
         const activeSessionId = registered.sessionId;
-        assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "registered");
+        assert.equal(
+          (await store.refresh({ sessionId: activeSessionId })).viewer.type,
+          "registered"
+        );
 
-        const knownChallenge = store.createPasswordResetChallenge({
+        const knownChallenge = await store.createPasswordResetChallenge({
           email: "reset@example.com",
           ipAddress: "203.0.113.10",
           nowMs: nowMs + 10_000
         });
-        const unknownChallenge = store.createPasswordResetChallenge({
+        const unknownChallenge = await store.createPasswordResetChallenge({
           email: "nadie@example.com",
           ipAddress: "203.0.113.11",
           nowMs: nowMs + 10_000
@@ -3253,7 +3263,7 @@ await (async () => {
         assert.equal(unknownChallenge.code, null);
         assert.equal(unknownChallenge.email, null);
 
-        const cooldownChallenge = store.createPasswordResetChallenge({
+        const cooldownChallenge = await store.createPasswordResetChallenge({
           email: "reset@example.com",
           ipAddress: "203.0.113.10",
           nowMs: nowMs + 20_000
@@ -3261,15 +3271,15 @@ await (async () => {
         assert.equal(cooldownChallenge.deliveryRequired, false);
         assert.equal(cooldownChallenge.code, null);
 
-        const secondChallenge = store.createPasswordResetChallenge({
+        const secondChallenge = await store.createPasswordResetChallenge({
           email: "reset@example.com",
           ipAddress: "203.0.113.10",
           nowMs: nowMs + 71_000
         });
         assert.equal(secondChallenge.deliveryRequired, true);
-        assert.throws(
-          () =>
-            store.verifyPasswordResetChallenge({
+        await assert.rejects(
+          async () =>
+            await store.verifyPasswordResetChallenge({
               challengeId: knownChallenge.challengeId,
               code: knownChallenge.code,
               newPassword: "password-nueva",
@@ -3281,9 +3291,9 @@ await (async () => {
 
         const wrongCode = secondChallenge.code === "000000" ? "111111" : "000000";
         for (let attempt = 0; attempt < 5; attempt += 1) {
-          assert.throws(
-            () =>
-              store.verifyPasswordResetChallenge({
+          await assert.rejects(
+            async () =>
+              await store.verifyPasswordResetChallenge({
                 challengeId: secondChallenge.challengeId,
                 code: wrongCode,
                 newPassword: "password-nueva",
@@ -3293,9 +3303,9 @@ await (async () => {
             (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
           );
         }
-        assert.throws(
-          () =>
-            store.verifyPasswordResetChallenge({
+        await assert.rejects(
+          async () =>
+            await store.verifyPasswordResetChallenge({
               challengeId: secondChallenge.challengeId,
               code: secondChallenge.code,
               newPassword: "password-nueva",
@@ -3305,14 +3315,14 @@ await (async () => {
           (error) => error.code === "PASSWORD_RESET_ATTEMPTS_EXCEEDED"
         );
 
-        const expiredChallenge = store.createPasswordResetChallenge({
+        const expiredChallenge = await store.createPasswordResetChallenge({
           email: "reset@example.com",
           ipAddress: "203.0.113.10",
           nowMs: nowMs + 140_000
         });
-        assert.throws(
-          () =>
-            store.verifyPasswordResetChallenge({
+        await assert.rejects(
+          async () =>
+            await store.verifyPasswordResetChallenge({
               challengeId: expiredChallenge.challengeId,
               code: expiredChallenge.code,
               newPassword: "password-nueva",
@@ -3322,12 +3332,12 @@ await (async () => {
           (error) => error.code === "PASSWORD_RESET_CODE_EXPIRED"
         );
 
-        const finalChallenge = store.createPasswordResetChallenge({
+        const finalChallenge = await store.createPasswordResetChallenge({
           email: "reset@example.com",
           ipAddress: "203.0.113.10",
           nowMs: nowMs + 210_000
         });
-        const resetPayload = store.verifyPasswordResetChallenge({
+        const resetPayload = await store.verifyPasswordResetChallenge({
           challengeId: finalChallenge.challengeId,
           code: finalChallenge.code,
           newPassword: "password-nueva",
@@ -3341,10 +3351,10 @@ await (async () => {
         assert.equal(resetPayload.viewer.emailVerified, true);
         assert.notEqual(resetPayload.sessionId, "session-reset-confirm");
 
-        assert.equal(store.refresh({ sessionId: activeSessionId }).viewer.type, "guest");
-        assert.throws(
-          () =>
-            store.verifyPasswordResetChallenge({
+        assert.equal((await store.refresh({ sessionId: activeSessionId })).viewer.type, "guest");
+        await assert.rejects(
+          async () =>
+            await store.verifyPasswordResetChallenge({
               challengeId: finalChallenge.challengeId,
               code: finalChallenge.code,
               newPassword: "password-replay",
@@ -3354,16 +3364,16 @@ await (async () => {
           (error) => error.code === "INVALID_PASSWORD_RESET_CODE"
         );
 
-        assert.throws(
-          () =>
-            store.loginWithPassword({
+        await assert.rejects(
+          async () =>
+            await store.loginWithPassword({
               sessionId: "session-reset-old-password",
               email: "reset@example.com",
               password: "password-vieja"
             }),
           (error) => error.code === "INVALID_CREDENTIALS"
         );
-        const newLogin = store.loginWithPassword({
+        const newLogin = await store.loginWithPassword({
           sessionId: "session-reset-new-password",
           email: "reset@example.com",
           password: "password-nueva",
@@ -3377,8 +3387,8 @@ await (async () => {
 
   await test("backend account linking demands fresh password proof and a matching Google identity", async () => {
     await withTempStore(
-      (store) => {
-        const registered = store.registerWithPassword({
+      async (store) => {
+        const registered = await store.registerWithPassword({
           sessionId: "session-link-owner",
           email: "owner@example.com",
           password: "password-segura",
@@ -3390,20 +3400,24 @@ await (async () => {
         assert.equal(registered.viewer.hasPassword, true);
         assert.equal(registered.viewer.canLinkGoogle, true);
 
-        assert.throws(
-          () =>
-            store.prepareIdentityLink({
+        await assert.rejects(
+          async () =>
+            await store.prepareIdentityLink({
               sessionId: "session-link-guest",
               password: "password-segura"
             }),
           (error) => error.code === "ACCOUNT_LINK_NOT_AVAILABLE"
         );
-        assert.throws(
-          () => store.prepareIdentityLink({ sessionId: ownerSessionId, password: "password-mala" }),
+        await assert.rejects(
+          async () =>
+            await store.prepareIdentityLink({
+              sessionId: ownerSessionId,
+              password: "password-mala"
+            }),
           (error) => error.code === "INVALID_CREDENTIALS"
         );
 
-        const target = store.prepareIdentityLink({
+        const target = await store.prepareIdentityLink({
           sessionId: ownerSessionId,
           password: "password-segura"
         });
@@ -3421,21 +3435,24 @@ await (async () => {
           emailVerified: true
         };
 
-        assert.throws(
-          () => store.completeIdentityLink({ ...baseLink, emailVerified: false }),
+        await assert.rejects(
+          async () => await store.completeIdentityLink({ ...baseLink, emailVerified: false }),
           (error) => error.code === "INVALID_ACCOUNT_LINK_IDENTITY"
         );
-        assert.throws(
-          () => store.completeIdentityLink({ ...baseLink, email: "otra@example.com" }),
+        await assert.rejects(
+          async () => await store.completeIdentityLink({ ...baseLink, email: "otra@example.com" }),
           (error) => error.code === "ACCOUNT_LINK_EMAIL_MISMATCH"
         );
-        assert.throws(
-          () =>
-            store.completeIdentityLink({ ...baseLink, sourceSessionId: "session-link-stranger" }),
+        await assert.rejects(
+          async () =>
+            await store.completeIdentityLink({
+              ...baseLink,
+              sourceSessionId: "session-link-stranger"
+            }),
           (error) => error.code === "ACCOUNT_LINK_SESSION_EXPIRED"
         );
 
-        store.loginWithIdentity({
+        await store.loginWithIdentity({
           sessionId: "session-link-other",
           sourceSessionId: "session-link-other-source",
           authProvider: "https://accounts.google.com",
@@ -3444,19 +3461,23 @@ await (async () => {
           emailVerified: true,
           displayName: "Otra"
         });
-        assert.throws(
-          () => store.completeIdentityLink({ ...baseLink, authSubject: "google-taken-subject" }),
+        await assert.rejects(
+          async () =>
+            await store.completeIdentityLink({ ...baseLink, authSubject: "google-taken-subject" }),
           (error) => error.code === "AUTH_IDENTITY_TAKEN"
         );
 
-        const linked = store.completeIdentityLink(baseLink);
+        const linked = await store.completeIdentityLink(baseLink);
         assert.equal(linked.viewer.id, ownerId);
         assert.equal(linked.viewer.authProvider, "https://accounts.google.com");
         assert.equal(linked.viewer.canLinkGoogle, false);
 
-        assert.throws(
-          () =>
-            store.prepareIdentityLink({ sessionId: linked.sessionId, password: "password-segura" }),
+        await assert.rejects(
+          async () =>
+            await store.prepareIdentityLink({
+              sessionId: linked.sessionId,
+              password: "password-segura"
+            }),
           (error) => error.code === "ACCOUNT_ALREADY_LINKED"
         );
       },
@@ -3465,8 +3486,8 @@ await (async () => {
   });
 
   await test("backend loginWithIdentity preserves existing account data when provider data is incomplete", async () => {
-    await withTempStore((store) => {
-      const initialPayload = store.loginWithIdentity({
+    await withTempStore(async (store) => {
+      const initialPayload = await store.loginWithIdentity({
         sessionId: "session-oidc-preserve-1",
         sourceSessionId: "session-oidc-preserve-source-1",
         authProvider: "https://accounts.example.com",
@@ -3477,7 +3498,7 @@ await (async () => {
         avatarUrl: "https://cdn.example.com/provider-avatar.png"
       });
 
-      const completedPayload = store.updateProfile({
+      const completedPayload = await store.updateProfile({
         sessionId: "session-oidc-preserve-1",
         displayName: "Alias_protegido",
         username: "alias_protegido",
@@ -3487,11 +3508,11 @@ await (async () => {
         avatarDataUrl: "data:image/png;base64,c2FmZQ=="
       });
 
-      store.login({
+      await store.login({
         sessionId: "session-oidc-preserve-moderator",
         userId: "u2"
       });
-      const approvedPayload = store.applyModerationAction("approve_avatar", {
+      const approvedPayload = await store.applyModerationAction("approve_avatar", {
         sessionId: "session-oidc-preserve-moderator",
         targetType: "user",
         targetId: completedPayload.viewer.id
@@ -3500,7 +3521,7 @@ await (async () => {
         (user) => user.id === completedPayload.viewer.id
       );
 
-      const secondPayload = store.loginWithIdentity({
+      const secondPayload = await store.loginWithIdentity({
         sessionId: "session-oidc-preserve-2",
         sourceSessionId: "session-oidc-preserve-source-2",
         authProvider: "https://accounts.example.com",
@@ -3521,10 +3542,10 @@ await (async () => {
     });
   });
   await test("backend loginWithIdentity ignores invalid provider avatar urls", async () => {
-    await withTempStore((store) => {
+    await withTempStore(async (store) => {
       const longAvatarUrl = `https://cdn.example.com/avatar.png?signature=${"a".repeat(520)}`;
 
-      const longAvatarPayload = store.loginWithIdentity({
+      const longAvatarPayload = await store.loginWithIdentity({
         sessionId: "session-oidc-long-avatar",
         sourceSessionId: "session-oidc-long-avatar-source",
         authProvider: "https://accounts.example.com",
@@ -3539,7 +3560,7 @@ await (async () => {
       assert.equal(longAvatarPayload.viewer.profileSuggestedName, "Long Avatar User");
       assert.equal(longAvatarPayload.viewer.profileSuggestedAvatarUrl, null);
 
-      const invalidAvatarPayload = store.loginWithIdentity({
+      const invalidAvatarPayload = await store.loginWithIdentity({
         sessionId: "session-oidc-invalid-avatar",
         sourceSessionId: "session-oidc-invalid-avatar-source",
         authProvider: "https://accounts.example.com",
@@ -3558,10 +3579,10 @@ await (async () => {
   await test("backend persists registered users and topics across store reopen", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-persist-"));
     const dbPath = path.join(tempDir, "topykly.sqlite");
-    let store = createBackendStore({ dbPath });
+    let store = await createBackendStore({ dbPath });
 
     try {
-      const firstLogin = store.loginWithIdentity({
+      const firstLogin = await store.loginWithIdentity({
         sessionId: "session-persist-1",
         authProvider: "https://accounts.example.com",
         authSubject: "persist-subject",
@@ -3571,7 +3592,7 @@ await (async () => {
       });
       const userId = firstLogin.viewer.id;
 
-      store.updateProfile({
+      await store.updateProfile({
         sessionId: "session-persist-1",
         displayName: "Persist_alias",
         username: "persist_alias",
@@ -3579,17 +3600,17 @@ await (async () => {
         acceptedTerms: true,
         termsVersion: TERMS_VERSION
       });
-      const created = store.createTopic({
+      const created = await store.createTopic({
         sessionId: "session-persist-1",
         title: "Tema persistente",
         text: "Mensaje persistente"
       });
       const topicId = created.selectedTopicId;
 
-      store.close();
-      store = createBackendStore({ dbPath });
+      await store.close();
+      store = await createBackendStore({ dbPath });
 
-      const secondLogin = store.loginWithIdentity({
+      const secondLogin = await store.loginWithIdentity({
         sessionId: "session-persist-2",
         authProvider: "https://accounts.example.com",
         authSubject: "persist-subject",
@@ -3606,18 +3627,18 @@ await (async () => {
       assert.equal(persistedTopic.title, "Tema persistente");
       assert.equal(persistedTopic.messages[0].text, "Mensaje persistente");
     } finally {
-      store.close();
+      await store.close();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
   await test("backend updateProfile lets registered users change display name and request avatar review", async () => {
     await withTempStore(async (store) => {
-      const beforeUpdate = store.login({
+      const beforeUpdate = await store.login({
         sessionId: "session-profile",
         selectedTopicId: null
       });
 
-      const updated = store.updateProfile({
+      const updated = await store.updateProfile({
         sessionId: "session-profile",
         displayName: "Nombre_nuevo",
         description: "Descripcion breve del perfil",
@@ -3679,7 +3700,7 @@ await (async () => {
         path.join(store.avatarStorageDir, path.basename(updated.viewer.avatarPendingUrl))
       );
       assert.equal(storedAvatar.toString("utf8"), "image");
-      const sameDisplayName = store.registerWithPassword({
+      const sameDisplayName = await store.registerWithPassword({
         sessionId: "session-profile-duplicate-register",
         email: "profile-duplicate@example.com",
         password: "password-segura",
@@ -3689,11 +3710,11 @@ await (async () => {
       assert.equal(sameDisplayName.viewer.displayName, updated.viewer.displayName);
       assert.notEqual(sameDisplayName.viewer.nickname, updated.viewer.nickname);
 
-      store.login({
+      await store.login({
         sessionId: "session-profile-moderator",
         userId: "u2"
       });
-      const approved = store.applyModerationAction("approve_avatar", {
+      const approved = await store.applyModerationAction("approve_avatar", {
         sessionId: "session-profile-moderator",
         targetType: "user",
         targetId: updated.viewer.id
@@ -3703,7 +3724,7 @@ await (async () => {
       assert.doesNotMatch(approvedUser.avatarUrl, /^data:/);
       assert.equal(approvedUser.avatarPendingUrl, null);
 
-      const removedAvatar = store.updateProfile({
+      const removedAvatar = await store.updateProfile({
         sessionId: "session-profile",
         displayName: "Nombre_nuevo",
         removeAvatar: true
@@ -3723,7 +3744,7 @@ await (async () => {
         /ENOENT/
       );
 
-      const firstPendingAvatar = store.updateProfile({
+      const firstPendingAvatar = await store.updateProfile({
         sessionId: "session-profile",
         displayName: "Nombre_nuevo",
         avatarDataUrl: "data:image/png;base64,b2xk"
@@ -3732,7 +3753,7 @@ await (async () => {
         store.avatarStorageDir,
         path.basename(firstPendingAvatar.viewer.avatarPendingUrl)
       );
-      const secondPendingAvatar = store.updateProfile({
+      const secondPendingAvatar = await store.updateProfile({
         sessionId: "session-profile",
         displayName: "Nombre_nuevo",
         avatarDataUrl: "data:image/webp;base64,bmV3"
@@ -3750,35 +3771,35 @@ await (async () => {
         "new"
       );
 
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile-guest",
             avatarDataUrl: "data:image/png;base64,aGVsbG8="
           }),
         /Hace falta iniciar sesion/
       );
 
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile",
             avatarDataUrl: "data:text/html;base64,PHNjcmlwdD4="
           }),
         /PNG, JPG, WebP o GIF/
       );
       const oversizedAvatar = Buffer.alloc(2 * 1024 * 1024 + 1).toString("base64");
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile",
             avatarDataUrl: `data:image/png;base64,${oversizedAvatar}`
           }),
         /2 MB/
       );
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile",
             displayName: "Nombre_nuevo",
             description: "x".repeat(181)
@@ -3786,36 +3807,36 @@ await (async () => {
         (error) => error.code === "VALIDATION_ERROR"
       );
 
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile",
             displayName: "Nombre_nuevo",
             socialInstagram: "a".repeat(41)
           }),
         (error) => error.code === "VALIDATION_ERROR"
       );
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile",
             displayName: "Nombre_nuevo",
             socialInstagram: "javascript:alert(1)"
           }),
         (error) => error.code === "VALIDATION_ERROR"
       );
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile",
             displayName: "Nombre_nuevo",
             socialFacebook: "../../etc"
           }),
         (error) => error.code === "VALIDATION_ERROR"
       );
-      assert.throws(
-        () =>
-          store.updateProfile({
+      await assert.rejects(
+        async () =>
+          await store.updateProfile({
             sessionId: "session-profile",
             displayName: "Nombre_nuevo",
             socialWhatsapp: "not-a-phone"
@@ -3830,8 +3851,8 @@ await (async () => {
     delete process.env.TOPYKLY_ADMIN_EMAILS;
 
     try {
-      await withTempStore((store) => {
-        const userPayload = store.loginWithIdentity({
+      await withTempStore(async (store) => {
+        const userPayload = await store.loginWithIdentity({
           sessionId: "session-existing-admin-email",
           sourceSessionId: "session-existing-admin-source",
           authProvider: "https://accounts.example.com",
@@ -3846,11 +3867,15 @@ await (async () => {
 
         process.env.TOPYKLY_ADMIN_EMAILS = "existing-admin@example.com";
 
-        const bootstrapPayload = store.bootstrap({ sessionId: "session-existing-admin-email" });
+        const bootstrapPayload = await store.bootstrap({
+          sessionId: "session-existing-admin-email"
+        });
         assert.equal(bootstrapPayload.viewer.role, "Admin");
         assert.equal(bootstrapPayload.viewer.isAdmin, true);
 
-        const dashboard = store.getAdminDashboard({ sessionId: "session-existing-admin-email" });
+        const dashboard = await store.getAdminDashboard({
+          sessionId: "session-existing-admin-email"
+        });
         assert.equal(dashboard.viewer.isAdmin, true);
       });
     } finally {
@@ -3866,8 +3891,8 @@ await (async () => {
     process.env.TOPYKLY_ADMIN_EMAILS = "admin@example.com";
 
     try {
-      await withTempStore((store) => {
-        const adminPayload = store.loginWithIdentity({
+      await withTempStore(async (store) => {
+        const adminPayload = await store.loginWithIdentity({
           sessionId: "session-admin-oauth",
           sourceSessionId: "session-admin-source",
           authProvider: "https://accounts.example.com",
@@ -3880,7 +3905,7 @@ await (async () => {
         assert.equal(adminPayload.viewer.role, "Admin");
         assert.equal(adminPayload.viewer.isAdmin, true);
 
-        const userPayload = store.loginWithIdentity({
+        const userPayload = await store.loginWithIdentity({
           sessionId: "session-avatar-review-user",
           sourceSessionId: "session-avatar-review-source",
           authProvider: "https://accounts.example.com",
@@ -3889,7 +3914,7 @@ await (async () => {
           emailVerified: true,
           displayName: "Review User"
         });
-        const pendingPayload = store.updateProfile({
+        const pendingPayload = await store.updateProfile({
           sessionId: "session-avatar-review-user",
           displayName: "Review_user",
           username: "review_user",
@@ -3902,13 +3927,13 @@ await (async () => {
         assert.equal(pendingPayload.viewer.avatarReviewStatus, "pending");
         assert.match(pendingPayload.viewer.avatarPendingUrl, /^\/avatars\/[a-f0-9-]+\.png$/);
 
-        const dashboard = store.getAdminDashboard({ sessionId: "session-admin-oauth" });
+        const dashboard = await store.getAdminDashboard({ sessionId: "session-admin-oauth" });
         assert.equal(
           dashboard.pendingAvatars.some((item) => item.userId === userPayload.viewer.id),
           true
         );
 
-        const approved = store.applyModerationAction("approve_avatar", {
+        const approved = await store.applyModerationAction("approve_avatar", {
           sessionId: "session-admin-oauth",
           targetType: "user",
           targetId: userPayload.viewer.id
@@ -3919,7 +3944,8 @@ await (async () => {
         assert.doesNotMatch(approvedUser.avatarUrl, /^data:/);
         assert.equal(approvedUser.avatarPendingUrl, null);
         assert.equal(
-          store.getAdminDashboard({ sessionId: "session-admin-oauth" }).pendingAvatars.length,
+          (await store.getAdminDashboard({ sessionId: "session-admin-oauth" })).pendingAvatars
+            .length,
           0
         );
       });
@@ -3934,7 +3960,7 @@ await (async () => {
   await test("backend locks one message reaction per registered user until daily reset", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-likes-"));
     const dbPath = path.join(tempDir, "topykly.sqlite");
-    let store = createBackendStore({ dbPath });
+    let store = await createBackendStore({ dbPath });
 
     function findMessage(payload, topicId, messageId) {
       return payload.topics
@@ -3943,13 +3969,13 @@ await (async () => {
     }
 
     try {
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-like-user",
         email: "like@example.com",
         password: "password-segura",
         nickname: "like_user"
       });
-      const created = store.createTopic({
+      const created = await store.createTopic({
         sessionId: "session-like-user",
         title: "Tema con likes reales",
         text: "Mensaje con likes reales"
@@ -3957,7 +3983,7 @@ await (async () => {
       const topic = created.topics[0];
       const message = topic.messages[0];
 
-      const liked = store.toggleMessageLike(message.id, {
+      const liked = await store.toggleMessageLike(message.id, {
         sessionId: "session-like-user",
         selectedTopicId: topic.id
       });
@@ -3967,31 +3993,31 @@ await (async () => {
       assert.equal(likedMessage.likedByViewer, true);
       assert.equal(likedMessage.dislikedByViewer, false);
 
-      assert.throws(
-        () =>
-          store.toggleMessageLike(message.id, {
+      await assert.rejects(
+        async () =>
+          await store.toggleMessageLike(message.id, {
             sessionId: "session-like-user",
             selectedTopicId: topic.id
           }),
         (error) => error?.code === "MESSAGE_REACTION_LOCKED"
       );
-      assert.throws(
-        () =>
-          store.toggleMessageDislike(message.id, {
+      await assert.rejects(
+        async () =>
+          await store.toggleMessageDislike(message.id, {
             sessionId: "session-like-user",
             selectedTopicId: topic.id
           }),
         (error) => error?.code === "MESSAGE_REACTION_LOCKED"
       );
 
-      const reset = store.resetDailyMessageReactions({
+      const reset = await store.resetDailyMessageReactions({
         now: new Date(Date.now() + 36 * 60 * 60_000)
       });
       assert.equal(reset.reset, true);
       assert.equal(reset.deletedLikes, 1);
       assert.equal(reset.deletedDislikes, 0);
 
-      const disliked = store.toggleMessageDislike(message.id, {
+      const disliked = await store.toggleMessageDislike(message.id, {
         sessionId: "session-like-user",
         selectedTopicId: topic.id
       });
@@ -4001,9 +4027,9 @@ await (async () => {
       assert.equal(dislikedMessage.likedByViewer, false);
       assert.equal(dislikedMessage.dislikedByViewer, true);
 
-      store.close();
-      store = createBackendStore({ dbPath });
-      const reopened = store.openTopic(topic.id, {
+      await store.close();
+      store = await createBackendStore({ dbPath });
+      const reopened = await store.openTopic(topic.id, {
         sessionId: "session-like-user",
         authMode: "registered"
       });
@@ -4013,26 +4039,26 @@ await (async () => {
       assert.equal(reopenedMessage.likedByViewer, false);
       assert.equal(reopenedMessage.dislikedByViewer, true);
     } finally {
-      store.close();
+      await store.close();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
   await test("backend hydrates persistent rankings from SQLite", async () => {
     await withTempStore(
-      (store) => {
-        store.registerWithPassword({
+      async (store) => {
+        await store.registerWithPassword({
           sessionId: "session-ranking-author",
           email: "ranking-author@example.com",
           password: "password-segura",
           nickname: "Ranking_author"
         });
-        store.registerWithPassword({
+        await store.registerWithPassword({
           sessionId: "session-ranking-voter",
           email: "ranking-voter@example.com",
           password: "password-segura",
           nickname: "ranking_voter"
         });
-        const created = store.createTopic({
+        const created = await store.createTopic({
           sessionId: "session-ranking-author",
           title: "Tema para ranking real",
           text: "Primer comentario puntuable"
@@ -4040,7 +4066,7 @@ await (async () => {
         const topic = created.topics[0];
         const message = topic.messages[0];
 
-        const liked = store.toggleMessageLike(message.id, {
+        const liked = await store.toggleMessageLike(message.id, {
           sessionId: "session-ranking-voter",
           selectedTopicId: topic.id
         });
@@ -4060,8 +4086,8 @@ await (async () => {
     );
   });
   await test("backend reports persist per session and moderation can resolve topic and message reports", async () => {
-    await withTempStore((store) => {
-      const bootstrapPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const bootstrapPayload = await store.bootstrap({
         sessionId: "session-report-viewer",
         authMode: "guest"
       });
@@ -4072,7 +4098,7 @@ await (async () => {
 
       assert.ok(reportableMessageId);
 
-      const topicReportedPayload = store.reportEntity("topic", topicId, {
+      const topicReportedPayload = await store.reportEntity("topic", topicId, {
         sessionId: "session-report-viewer",
         reason: "Tema conflictivo",
         selectedTopicId: topicId
@@ -4080,7 +4106,7 @@ await (async () => {
 
       assert.equal(topicReportedPayload.reportedTopicIds.includes(topicId), true);
 
-      const messageReportedPayload = store.reportEntity("message", reportableMessageId, {
+      const messageReportedPayload = await store.reportEntity("message", reportableMessageId, {
         sessionId: "session-report-viewer",
         reason: "Mensaje conflictivo",
         selectedTopicId: topicId
@@ -4088,12 +4114,12 @@ await (async () => {
 
       assert.equal(messageReportedPayload.reportedMessageIds.includes(reportableMessageId), true);
 
-      store.login({
+      await store.login({
         sessionId: "session-moderator",
         userId: "u2"
       });
 
-      const openReports = store.listReports({
+      const openReports = await store.listReports({
         sessionId: "session-moderator"
       });
 
@@ -4121,7 +4147,7 @@ await (async () => {
       assert.equal(messageReport.target.authorId, reportedMessage.authorId);
       assert.equal(messageReport.target.topicTitle, reportedTopic.title);
 
-      const blockedPayload = store.applyModerationAction("block_topic", {
+      const blockedPayload = await store.applyModerationAction("block_topic", {
         sessionId: "session-moderator",
         targetType: "topic",
         targetId: topicId,
@@ -4132,13 +4158,13 @@ await (async () => {
       assert.ok(blockedTopic);
       assert.equal(blockedTopic.status, "blocked");
       assert.equal(
-        store
-          .listReports({ sessionId: "session-moderator" })
-          .reports.some((report) => report.entityType === "topic" && report.entityId === topicId),
+        (await store.listReports({ sessionId: "session-moderator" })).reports.some(
+          (report) => report.entityType === "topic" && report.entityId === topicId
+        ),
         false
       );
 
-      const afterDeletePayload = store.applyModerationAction("delete_message", {
+      const afterDeletePayload = await store.applyModerationAction("delete_message", {
         sessionId: "session-moderator",
         targetType: "message",
         targetId: reportableMessageId,
@@ -4151,20 +4177,20 @@ await (async () => {
         moderatedTopic.messages.some((message) => message.id === reportableMessageId),
         false
       );
-      assert.equal(store.listReports({ sessionId: "session-moderator" }).reports.length, 0);
+      assert.equal((await store.listReports({ sessionId: "session-moderator" })).reports.length, 0);
     });
   });
 
   await test("backend paginates moderation reports", async () => {
-    await withTempStore((store) => {
-      const bootstrapPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const bootstrapPayload = await store.bootstrap({
         sessionId: "session-report-pagination",
         authMode: "guest"
       });
       const topicId = bootstrapPayload.topics[0].id;
 
       for (let index = 0; index < 55; index += 1) {
-        store.reportEntity("topic", topicId, {
+        await store.reportEntity("topic", topicId, {
           sessionId: `session-report-pagination-${index}`,
           reason: `Reporte ${index}`,
           selectedTopicId: topicId,
@@ -4172,19 +4198,19 @@ await (async () => {
         });
       }
 
-      store.login({
+      await store.login({
         sessionId: "session-report-pagination-moderator",
         userId: "u2"
       });
 
-      const firstPage = store.listReports({
+      const firstPage = await store.listReports({
         sessionId: "session-report-pagination-moderator"
       });
-      const secondPage = store.listReports({
+      const secondPage = await store.listReports({
         sessionId: "session-report-pagination-moderator",
         reportPage: 2
       });
-      const oversizedLimit = store.listReports({
+      const oversizedLimit = await store.listReports({
         sessionId: "session-report-pagination-moderator",
         reportLimit: 500
       });
@@ -4208,8 +4234,8 @@ await (async () => {
     });
   });
   await test("backend supports user reports and moderator problematic flags", async () => {
-    await withTempStore((store) => {
-      const bootstrapPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const bootstrapPayload = await store.bootstrap({
         sessionId: "session-user-report",
         authMode: "guest"
       });
@@ -4218,18 +4244,18 @@ await (async () => {
 
       assert.ok(messageId);
 
-      store.reportEntity("user", "u3", {
+      await store.reportEntity("user", "u3", {
         sessionId: "session-user-report",
         reason: "Escala mal con otros usuarios",
         selectedTopicId: topicId
       });
 
-      store.login({
+      await store.login({
         sessionId: "session-moderator",
         userId: "u2"
       });
 
-      let openReports = store.listReports({
+      let openReports = await store.listReports({
         sessionId: "session-moderator"
       });
 
@@ -4240,13 +4266,13 @@ await (async () => {
         true
       );
 
-      store.applyModerationAction("expel_user", {
+      await store.applyModerationAction("expel_user", {
         sessionId: "session-moderator",
         targetType: "user",
         targetId: "u3"
       });
 
-      openReports = store.listReports({
+      openReports = await store.listReports({
         sessionId: "session-moderator"
       });
       assert.equal(
@@ -4256,7 +4282,7 @@ await (async () => {
         false
       );
 
-      store.applyModerationAction("mark_problematic", {
+      await store.applyModerationAction("mark_problematic", {
         sessionId: "session-moderator",
         targetType: "message",
         targetId: messageId,
@@ -4264,7 +4290,7 @@ await (async () => {
         selectedTopicId: topicId
       });
 
-      openReports = store.listReports({
+      openReports = await store.listReports({
         sessionId: "session-moderator"
       });
       assert.equal(
@@ -4279,25 +4305,27 @@ await (async () => {
   });
 
   await test("backend expelled registered users cannot create topics, comment or report", async () => {
-    await withTempStore((store) => {
-      const topicId = store.bootstrap({
-        sessionId: "session-pre-expel"
-      }).topics[0].id;
+    await withTempStore(async (store) => {
+      const topicId = (
+        await store.bootstrap({
+          sessionId: "session-pre-expel"
+        })
+      ).topics[0].id;
 
-      store.login({
+      await store.login({
         sessionId: "session-moderator",
         userId: "u2"
       });
 
-      store.applyModerationAction("expel_user", {
+      await store.applyModerationAction("expel_user", {
         sessionId: "session-moderator",
         targetType: "user",
         targetId: "u1"
       });
 
-      assert.throws(
-        () => {
-          store.createTopic({
+      await assert.rejects(
+        async () => {
+          await store.createTopic({
             sessionId: "session-expelled-user",
             authMode: "registered",
             title: "No entra",
@@ -4307,9 +4335,9 @@ await (async () => {
         (error) => error.code === "USER_EXPELLED"
       );
 
-      assert.throws(
-        () => {
-          store.addMessage(topicId, {
+      await assert.rejects(
+        async () => {
+          await store.addMessage(topicId, {
             sessionId: "session-expelled-user",
             authMode: "registered",
             text: "No comenta"
@@ -4318,9 +4346,9 @@ await (async () => {
         (error) => error.code === "USER_EXPELLED"
       );
 
-      assert.throws(
-        () => {
-          store.reportEntity("topic", topicId, {
+      await assert.rejects(
+        async () => {
+          await store.reportEntity("topic", topicId, {
             sessionId: "session-expelled-user",
             authMode: "registered",
             reason: "No reporta"
@@ -4332,18 +4360,20 @@ await (async () => {
   });
 
   await test("backend temporary bans restrict access and expire correctly", async () => {
-    await withTempStore((store) => {
-      const topicId = store.bootstrap({
-        sessionId: "session-pre-ban"
-      }).topics[0].id;
+    await withTempStore(async (store) => {
+      const topicId = (
+        await store.bootstrap({
+          sessionId: "session-pre-ban"
+        })
+      ).topics[0].id;
 
-      store.login({
+      await store.login({
         sessionId: "session-moderator",
         userId: "u2"
       });
 
       // Suspender al usuario u1 por 2 horas
-      store.applyModerationAction("expel_user", {
+      await store.applyModerationAction("expel_user", {
         sessionId: "session-moderator",
         targetType: "user",
         targetId: "u1",
@@ -4351,9 +4381,9 @@ await (async () => {
       });
 
       // El usuario u1 está suspendido, no puede postear
-      assert.throws(
-        () => {
-          store.createTopic({
+      await assert.rejects(
+        async () => {
+          await store.createTopic({
             sessionId: "session-pre-ban", // u1
             authMode: "registered",
             title: "No entra",
@@ -4368,8 +4398,8 @@ await (async () => {
   });
 
   await test("backend pin_topic promotes hidden active topics to the first visible slot", async () => {
-    await withTempStore((store) => {
-      const initialPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const initialPayload = await store.bootstrap({
         sessionId: "session-pin-bootstrap",
         authMode: "registered"
       });
@@ -4377,12 +4407,12 @@ await (async () => {
 
       assert.ok(hiddenTopic);
 
-      store.login({
+      await store.login({
         sessionId: "session-moderator",
         userId: "u2"
       });
 
-      const pinnedPayload = store.applyModerationAction("pin_topic", {
+      const pinnedPayload = await store.applyModerationAction("pin_topic", {
         sessionId: "session-moderator",
         targetType: "topic",
         targetId: hiddenTopic.id,
@@ -4397,14 +4427,14 @@ await (async () => {
   });
 
   await test("backend createTopic inserts the new topic at rank 0 and pushes the last topic out of the active window", async () => {
-    await withTempStore((store) => {
-      const initialPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const initialPayload = await store.bootstrap({
         sessionId: "session-create-bootstrap",
         authMode: "registered"
       });
       const displacedTopicId = initialPayload.topics.at(-1).id;
 
-      const created = store.createTopic({
+      const created = await store.createTopic({
         sessionId: "session-create",
         authMode: "registered",
         title: "Tema backend",
@@ -4423,8 +4453,8 @@ await (async () => {
   });
 
   await test("backend comment revives hidden active topics to the top of the visible window", async () => {
-    await withTempStore((store) => {
-      const initialPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const initialPayload = await store.bootstrap({
         sessionId: "session-revive-bootstrap",
         authMode: "registered"
       });
@@ -4432,7 +4462,7 @@ await (async () => {
 
       assert.ok(hiddenTopic);
 
-      const updated = store.addMessage(hiddenTopic.id, {
+      const updated = await store.addMessage(hiddenTopic.id, {
         sessionId: "session-revive-comment",
         authMode: "registered",
         text: "Comentario que revive el tema oculto."
@@ -4445,8 +4475,8 @@ await (async () => {
   });
 
   await test("backend keeps the root message and only the latest 29 replies", async () => {
-    await withTempStore((store) => {
-      const created = store.createTopic({
+    await withTempStore(async (store) => {
+      const created = await store.createTopic({
         sessionId: "session-root-topic",
         authMode: "registered",
         title: "Overflow",
@@ -4456,19 +4486,19 @@ await (async () => {
 
       for (let index = 0; index < 31; index += 1) {
         const sessionId = `session-root-reply-${index}`;
-        store.registerWithPassword({
+        await store.registerWithPassword({
           sessionId,
           email: `root-reply-${index}@example.com`,
           password: "password-segura",
           nickname: `root_reply_${index}`
         });
-        store.addMessage(topicId, {
+        await store.addMessage(topicId, {
           sessionId,
           text: `reply ${index}`
         });
       }
 
-      const updated = store.openTopic(topicId, {
+      const updated = await store.openTopic(topicId, {
         sessionId: "session-root-open",
         authMode: "registered"
       });
@@ -4484,8 +4514,8 @@ await (async () => {
   });
 
   await test("backend cumulatively archives every topic displaced after the 40 active slots", async () => {
-    await withTempStore((store) => {
-      const initialPayload = store.bootstrap({
+    await withTempStore(async (store) => {
+      const initialPayload = await store.bootstrap({
         sessionId: "session-expel-bootstrap",
         authMode: "registered"
       });
@@ -4495,13 +4525,13 @@ await (async () => {
 
       for (let index = 0; index < expelledCandidateIds.length; index += 1) {
         const creatorSessionId = `session-expel-create-${index}`;
-        store.registerWithPassword({
+        await store.registerWithPassword({
           sessionId: creatorSessionId,
           email: `archive-creator-${index}@example.com`,
           password: "password-segura",
           nickname: `archive_creator_${index}`
         });
-        store.createTopic({
+        await store.createTopic({
           sessionId: creatorSessionId,
           authMode: "registered",
           title: `Tema nuevo que desplaza al anterior ${index + 1}`,
@@ -4509,7 +4539,7 @@ await (async () => {
         });
       }
 
-      const activeAfterRotation = store.bootstrap({
+      const activeAfterRotation = await store.bootstrap({
         sessionId: "session-after-cumulative-archive",
         authMode: "registered"
       });
@@ -4521,7 +4551,9 @@ await (async () => {
         true
       );
 
-      const archivedSeoIds = new Set(store.getSeoArchivedTopicEntries().map((topic) => topic.id));
+      const archivedSeoIds = new Set(
+        (await store.getSeoArchivedTopicEntries()).map((topic) => topic.id)
+      );
       assert.equal(
         expelledCandidateIds.every((topicId) => archivedSeoIds.has(topicId)),
         true
@@ -4531,7 +4563,7 @@ await (async () => {
       // usa el servidor para NO rebotar a un navegador hacia un tema de solo lectura,
       // y la pagina servida tiene que invitar a la conversacion viva, no a si misma.
       for (const archivedId of expelledCandidateIds) {
-        const pageData = store.getTopicPageData(archivedId);
+        const pageData = await store.getTopicPageData(archivedId);
         assert.equal(pageData.isArchived, true);
 
         const archivedPage = renderTopicPage(pageData, { origin: "https://topykly.com" });
@@ -4545,9 +4577,9 @@ await (async () => {
       }
 
       for (const expelledCandidateId of expelledCandidateIds) {
-        assert.throws(
-          () => {
-            store.addMessage(expelledCandidateId, {
+        await assert.rejects(
+          async () => {
+            await store.addMessage(expelledCandidateId, {
               sessionId: `session-expel-comment-${expelledCandidateId}`,
               authMode: "registered",
               text: "No deberia entrar"
@@ -4556,7 +4588,7 @@ await (async () => {
           (error) => error.code === "TOPIC_EXPELLED_OR_BLOCKED" && error.topicStatus === "expelled"
         );
 
-        const archivedPayload = store.openTopic(expelledCandidateId, {
+        const archivedPayload = await store.openTopic(expelledCandidateId, {
           sessionId: `session-archive-open-${expelledCandidateId}`,
           authMode: "registered"
         });
@@ -4573,9 +4605,9 @@ await (async () => {
 
         const archivedMessageId = archivedTopic.messages[0].id;
         for (const toggleReaction of [store.toggleMessageLike, store.toggleMessageDislike]) {
-          assert.throws(
-            () =>
-              toggleReaction.call(store, archivedMessageId, {
+          await assert.rejects(
+            async () =>
+              await toggleReaction.call(store, archivedMessageId, {
                 sessionId: `session-archive-reaction-${expelledCandidateId}`,
                 authMode: "registered",
                 selectedTopicId: expelledCandidateId
@@ -4585,25 +4617,27 @@ await (async () => {
           );
         }
 
-        const archivedPage = store.getTopicPageData(expelledCandidateId);
+        const archivedPage = await store.getTopicPageData(expelledCandidateId);
         assert.equal(archivedPage.isArchived, true);
         assert.equal(archivedPage.messages.length <= TOPIC_TOTAL_MESSAGE_LIMIT, true);
       }
 
-      const activeTopicId = store.bootstrap({
-        sessionId: "session-rate-bootstrap",
-        authMode: "registered"
-      }).topics[0].id;
+      const activeTopicId = (
+        await store.bootstrap({
+          sessionId: "session-rate-bootstrap",
+          authMode: "registered"
+        })
+      ).topics[0].id;
 
-      store.addMessage(activeTopicId, {
+      await store.addMessage(activeTopicId, {
         sessionId: "session-rate-a",
         authMode: "registered",
         text: "Primer comentario"
       });
 
-      assert.throws(
-        () => {
-          store.addMessage(activeTopicId, {
+      await assert.rejects(
+        async () => {
+          await store.addMessage(activeTopicId, {
             sessionId: "session-rate-b",
             authMode: "registered",
             text: "Segundo comentario demasiado rapido"
@@ -4616,19 +4650,19 @@ await (async () => {
 
   await test("backend applies progressive sanctions and can restore an incorrect permanent sanction", async () => {
     await withTempStore(async (store) => {
-      store.login({
+      await store.login({
         sessionId: "session-progressive-moderator",
         userId: "u2"
       });
 
-      store.applyModerationAction("expel_user", {
+      await store.applyModerationAction("expel_user", {
         sessionId: "session-progressive-moderator",
         targetType: "user",
         targetId: "u3",
         banHours: "progressive"
       });
 
-      let dashboard = store.getAdminDashboard({
+      let dashboard = await store.getAdminDashboard({
         sessionId: "session-progressive-moderator"
       });
       let sanction = dashboard.activeSanctions.find((item) => item.userId === "u3");
@@ -4636,12 +4670,12 @@ await (async () => {
       assert.equal(sanction.stage, 1);
       assert.equal(sanction.label, "24 horas");
 
-      store.applyModerationAction("restore_user", {
+      await store.applyModerationAction("restore_user", {
         sessionId: "session-progressive-moderator",
         targetType: "user",
         targetId: "u3"
       });
-      dashboard = store.getAdminDashboard({
+      dashboard = await store.getAdminDashboard({
         sessionId: "session-progressive-moderator"
       });
       assert.equal(
@@ -4649,26 +4683,26 @@ await (async () => {
         false
       );
 
-      store.applyModerationAction("expel_user", {
+      await store.applyModerationAction("expel_user", {
         sessionId: "session-progressive-moderator",
         targetType: "user",
         targetId: "u3",
         banHours: "progressive"
       });
-      dashboard = store.getAdminDashboard({
+      dashboard = await store.getAdminDashboard({
         sessionId: "session-progressive-moderator"
       });
       sanction = dashboard.activeSanctions.find((item) => item.userId === "u3");
       assert.equal(sanction.stage, 1);
       assert.equal(sanction.label, "24 horas");
 
-      store.applyModerationAction("restore_user", {
+      await store.applyModerationAction("restore_user", {
         sessionId: "session-progressive-moderator",
         targetType: "user",
         targetId: "u3"
       });
       for (let index = 0; index < 3; index += 1) {
-        store.applyModerationAction("expel_user", {
+        await store.applyModerationAction("expel_user", {
           sessionId: "session-progressive-moderator",
           targetType: "user",
           targetId: "u3",
@@ -4677,13 +4711,13 @@ await (async () => {
         await new Promise((resolve) => setTimeout(resolve, 8));
       }
 
-      store.applyModerationAction("expel_user", {
+      await store.applyModerationAction("expel_user", {
         sessionId: "session-progressive-moderator",
         targetType: "user",
         targetId: "u3",
         banHours: "progressive"
       });
-      dashboard = store.getAdminDashboard({
+      dashboard = await store.getAdminDashboard({
         sessionId: "session-progressive-moderator"
       });
       sanction = dashboard.activeSanctions.find((item) => item.userId === "u3");
@@ -4691,12 +4725,12 @@ await (async () => {
       assert.equal(sanction.stage, 4);
       assert.equal(sanction.label, "Permanente");
 
-      store.applyModerationAction("restore_user", {
+      await store.applyModerationAction("restore_user", {
         sessionId: "session-progressive-moderator",
         targetType: "user",
         targetId: "u3"
       });
-      dashboard = store.getAdminDashboard({
+      dashboard = await store.getAdminDashboard({
         sessionId: "session-progressive-moderator"
       });
       assert.equal(
@@ -4707,20 +4741,22 @@ await (async () => {
   });
 
   await test("backend publishes pending moderation counts to admins during live refreshes", async () => {
-    await withTempStore((store) => {
-      const topicId = store.bootstrap({
-        sessionId: "session-live-report-source"
-      }).topics[0].id;
-      store.login({
+    await withTempStore(async (store) => {
+      const topicId = (
+        await store.bootstrap({
+          sessionId: "session-live-report-source"
+        })
+      ).topics[0].id;
+      await store.login({
         sessionId: "session-live-report-admin",
         userId: "u2"
       });
-      store.reportEntity("topic", topicId, {
+      await store.reportEntity("topic", topicId, {
         sessionId: "session-live-report-source",
         reason: "Necesita revision"
       });
 
-      const adminPayload = store.bootstrap({
+      const adminPayload = await store.bootstrap({
         sessionId: "session-live-report-admin",
         authMode: "registered"
       });
@@ -4730,10 +4766,10 @@ await (async () => {
   });
 
   await test("backend explains the 30 minute, own-comment and 10 second publishing delays", async () => {
-    await withTempStore((store) => {
+    await withTempStore(async (store) => {
       const firstSessionId = "session-clear-delay-first";
       const secondSessionId = "session-clear-delay-second";
-      const firstUser = store.registerWithPassword({
+      const firstUser = await store.registerWithPassword({
         sessionId: firstSessionId,
         email: "clear-delay-first@example.com",
         password: "password-segura",
@@ -4741,15 +4777,15 @@ await (async () => {
       });
       const topicId = firstUser.topics[0].id;
 
-      store.createTopic({
+      await store.createTopic({
         sessionId: firstSessionId,
         title: "Primer posteo con delay",
         text: "Activa el limite entre posteos."
       });
 
-      assert.throws(
-        () =>
-          store.createTopic({
+      await assert.rejects(
+        async () =>
+          await store.createTopic({
             sessionId: firstSessionId,
             title: "Segundo posteo demasiado pronto",
             text: "Debe explicar el delay de treinta minutos."
@@ -4760,14 +4796,14 @@ await (async () => {
           /esperar 30 minutos para crear otro posteo/i.test(error.message)
       );
 
-      store.addMessage(topicId, {
+      await store.addMessage(topicId, {
         sessionId: firstSessionId,
         text: "Primer comentario del usuario."
       });
 
-      assert.throws(
-        () =>
-          store.addMessage(topicId, {
+      await assert.rejects(
+        async () =>
+          await store.addMessage(topicId, {
             sessionId: firstSessionId,
             text: "Comentario consecutivo demasiado pronto."
           }),
@@ -4778,20 +4814,20 @@ await (async () => {
           /volver a comentar en 5 minutos/i.test(error.message)
       );
 
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: secondSessionId,
         email: "clear-delay-second@example.com",
         password: "password-segura",
         nickname: "Clear_delay_second"
       });
-      store.addMessage(topicId, {
+      await store.addMessage(topicId, {
         sessionId: secondSessionId,
         text: "Comentario de otro usuario."
       });
 
-      assert.throws(
-        () =>
-          store.addMessage(topicId, {
+      await assert.rejects(
+        async () =>
+          await store.addMessage(topicId, {
             sessionId: firstSessionId,
             text: "Comentario dentro de los diez segundos."
           }),
@@ -4804,16 +4840,18 @@ await (async () => {
   });
 
   await test("backend rejects guest publishing without materializing guest state", async () => {
-    await withTempStore((store) => {
-      const activeTopicId = store.bootstrap({
-        sessionId: "session-guest-ip-bootstrap",
-        authMode: "guest",
-        ipAddress: "203.0.113.50"
-      }).topics[0].id;
+    await withTempStore(async (store) => {
+      const activeTopicId = (
+        await store.bootstrap({
+          sessionId: "session-guest-ip-bootstrap",
+          authMode: "guest",
+          ipAddress: "203.0.113.50"
+        })
+      ).topics[0].id;
 
-      assert.throws(
-        () => {
-          store.addMessage(activeTopicId, {
+      await assert.rejects(
+        async () => {
+          await store.addMessage(activeTopicId, {
             sessionId: "session-guest-ip-a",
             authMode: "guest",
             text: "Comentario guest bloqueado",
@@ -4822,9 +4860,9 @@ await (async () => {
         },
         (error) => error.code === "LOGIN_REQUIRED"
       );
-      assert.throws(
-        () => {
-          store.createTopic({
+      await assert.rejects(
+        async () => {
+          await store.createTopic({
             sessionId: "session-guest-topic-ip-a",
             authMode: "guest",
             title: "Tema guest bloqueado",
@@ -4834,41 +4872,41 @@ await (async () => {
         },
         (error) => error.code === "LOGIN_REQUIRED"
       );
-      assert.equal(store.getDiagnostics().sessions, 0);
+      assert.equal((await store.getDiagnostics()).sessions, 0);
     });
   });
   await test("backend session and ip blocks deny participation without breaking read access", async () => {
-    await withTempStore((store) => {
-      const blockedSessionPayload = store.login({
+    await withTempStore(async (store) => {
+      const blockedSessionPayload = await store.login({
         sessionId: "session-blocked-registered",
         authMode: "registered",
         ipAddress: "203.0.113.10"
       });
       const topicId = blockedSessionPayload.topics[0].id;
 
-      store.addMessage(topicId, {
+      await store.addMessage(topicId, {
         sessionId: "session-blocked-registered",
         authMode: "registered",
         text: "Mensaje antes del bloqueo",
         ipAddress: "203.0.113.10"
       });
 
-      store.login({
+      await store.login({
         sessionId: "session-moderator",
         userId: "u2",
         ipAddress: "198.51.100.20"
       });
 
-      store.applyModerationAction("block_session", {
+      await store.applyModerationAction("block_session", {
         sessionId: "session-moderator",
         targetType: "session",
         targetId: "session-blocked-registered",
         reason: "Spam reiterado"
       });
 
-      assert.throws(
-        () => {
-          store.addMessage(topicId, {
+      await assert.rejects(
+        async () => {
+          await store.addMessage(topicId, {
             sessionId: "session-blocked-registered",
             authMode: "registered",
             text: "No deberia publicar",
@@ -4878,7 +4916,7 @@ await (async () => {
         (error) => error.code === "SESSION_BLOCKED"
       );
 
-      const readOnlyPayload = store.openTopic(topicId, {
+      const readOnlyPayload = await store.openTopic(topicId, {
         sessionId: "session-blocked-registered",
         authMode: "registered",
         ipAddress: "203.0.113.10"
@@ -4886,16 +4924,16 @@ await (async () => {
 
       assert.equal(readOnlyPayload.selectedTopicId, topicId);
 
-      store.applyModerationAction("block_ip", {
+      await store.applyModerationAction("block_ip", {
         sessionId: "session-moderator",
         targetType: "ip",
         targetId: "203.0.113.99",
         reason: "Reincidencia"
       });
 
-      assert.throws(
-        () => {
-          store.createTopic({
+      await assert.rejects(
+        async () => {
+          await store.createTopic({
             sessionId: "session-ip-blocked",
             authMode: "guest",
             title: "No entra",
@@ -4906,9 +4944,9 @@ await (async () => {
         (error) => error.code === "IP_BLOCKED"
       );
 
-      assert.throws(
-        () => {
-          store.login({
+      await assert.rejects(
+        async () => {
+          await store.login({
             sessionId: "session-ip-login",
             ipAddress: "203.0.113.99"
           });
@@ -4916,7 +4954,7 @@ await (async () => {
         (error) => error.code === "IP_BLOCKED"
       );
 
-      const diagnostics = store.getDiagnostics();
+      const diagnostics = await store.getDiagnostics();
 
       assert.deepEqual(diagnostics, {
         dbPath: diagnostics.dbPath,
@@ -6776,7 +6814,7 @@ await (async () => {
     let server = null;
 
     try {
-      store = createBackendStore({ dbPath: path.join(tempDir, "serverless.sqlite") });
+      store = await createBackendStore({ dbPath: path.join(tempDir, "serverless.sqlite") });
       const handler = createRequestHandler({
         store,
         authService: createAuthService(),
@@ -6812,7 +6850,7 @@ await (async () => {
       if (server) {
         await new Promise((resolve) => server.close(resolve));
       }
-      store?.close();
+      await await store?.close();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
@@ -6826,7 +6864,7 @@ await (async () => {
     let reader = null;
 
     try {
-      preview = startPreviewServer({
+      preview = await startPreviewServer({
         port: 0,
         host: "127.0.0.1",
         log() {},
@@ -6852,7 +6890,7 @@ await (async () => {
 
       const address = preview.server.address();
       const origin = `http://127.0.0.1:${address.port}`;
-      preview.store.registerWithPassword({
+      await preview.store.registerWithPassword({
         sessionId: "session-live-author",
         email: "live-author@example.com",
         password: "password-segura",
@@ -6927,7 +6965,7 @@ await (async () => {
       process.env.TOPYKLY_SESSION_SECRET = "test-session-secret";
       process.env.TOPYKLY_TURNSTILE_SITE_KEY = "test-site-key";
       process.env.TOPYKLY_TURNSTILE_SECRET_KEY = "test-secret-key";
-      preview = startPreviewServer({
+      preview = await startPreviewServer({
         port: 0,
         host: "127.0.0.1",
         log() {},
@@ -7052,9 +7090,9 @@ await (async () => {
       process.env.TOPYKLY_SESSION_SECRET = "";
       process.env.CHETREND_SESSION_SECRET = "";
 
-      assert.throws(
-        () =>
-          startPreviewServer({
+      await assert.rejects(
+        async () =>
+          await startPreviewServer({
             port: 0,
             host: "127.0.0.1",
             log() {},
@@ -7087,7 +7125,7 @@ await (async () => {
     let preview = null;
 
     try {
-      preview = startPreviewServer({
+      preview = await startPreviewServer({
         port: 0,
         host: "127.0.0.1",
         log() {},
@@ -7569,7 +7607,7 @@ await (async () => {
     let preview = null;
 
     try {
-      preview = startPreviewServer({
+      preview = await startPreviewServer({
         port: 0,
         host: "127.0.0.1",
         log() {},
@@ -7586,13 +7624,13 @@ await (async () => {
       const origin = `http://127.0.0.1:${address.port}`;
       const store = preview.store;
 
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-seo-author",
         email: "seo-author@example.com",
         password: "password-segura",
         nickname: "seo_author"
       });
-      const created = store.createTopic({
+      const created = await store.createTopic({
         sessionId: "session-seo-author",
         authMode: "registered",
         title: "El mejor tema de fútbol",
@@ -7632,13 +7670,13 @@ await (async () => {
 
       for (let index = 0; index < 3; index += 1) {
         const commenterSession = `session-seo-commenter-${index}`;
-        store.registerWithPassword({
+        await store.registerWithPassword({
           sessionId: commenterSession,
           email: `seo-commenter-${index}@example.com`,
           password: "password-segura",
           nickname: `seo_com_${index}`
         });
-        store.addMessage(topicId, {
+        await store.addMessage(topicId, {
           sessionId: commenterSession,
           authMode: "registered",
           text: `Comentario número ${index + 1}`
@@ -7668,13 +7706,13 @@ await (async () => {
         true
       );
 
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-seo-offensive-commenter",
         email: "seo-offensive@example.com",
         password: "password-segura",
         nickname: "seo_ofensivo"
       });
-      store.addMessage(topicId, {
+      await store.addMessage(topicId, {
         sessionId: "session-seo-offensive-commenter",
         authMode: "registered",
         text: "Este comentario contiene una mierda ofensiva."
@@ -7713,7 +7751,7 @@ await (async () => {
     let preview = null;
 
     try {
-      preview = startPreviewServer({
+      preview = await startPreviewServer({
         port: 0,
         host: "127.0.0.1",
         log() {},
@@ -7730,19 +7768,19 @@ await (async () => {
       const origin = `http://127.0.0.1:${address.port}`;
       const store = preview.store;
 
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-profile-owner",
         email: "profile-owner@example.com",
         password: "password-segura",
         nickname: "perfil_publico"
       });
-      store.createTopic({
+      await store.createTopic({
         sessionId: "session-profile-owner",
         authMode: "registered",
         title: "Tema del perfil público",
         text: "Primer mensaje del tema."
       });
-      store.updateProfile({
+      await store.updateProfile({
         sessionId: "session-profile-owner",
         authMode: "registered",
         displayName: "Perfil <b>Público</b>",
@@ -7767,7 +7805,7 @@ await (async () => {
       );
       assert.equal(profileHtml.includes(`href="/?perfil=Perfil_publico"`), true);
 
-      const sharedBootstrap = store.bootstrap({
+      const sharedBootstrap = await store.bootstrap({
         sessionId: "session-profile-visitor",
         authMode: "guest",
         profileNickname: "PERFIL_PUBLICO"
@@ -7782,7 +7820,7 @@ await (async () => {
       assert.equal(caseRedirect.headers.get("location"), "/u/Perfil_publico");
       await caseRedirect.arrayBuffer();
 
-      const optOut = store.updateProfile({
+      const optOut = await store.updateProfile({
         sessionId: "session-profile-owner",
         authMode: "registered",
         displayName: "Perfil <b>Público</b>",
@@ -7795,7 +7833,7 @@ await (async () => {
       const noindexHtml = await noindexResponse.text();
       assert.equal(noindexHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
 
-      const keepsOptOut = store.updateProfile({
+      const keepsOptOut = await store.updateProfile({
         sessionId: "session-profile-owner",
         authMode: "registered",
         displayName: "Perfil <b>Público</b>"
@@ -7819,13 +7857,13 @@ await (async () => {
   await test("topics move to the archive after the inactivity window", async () => {
     await withTempStore(
       async (store) => {
-        store.registerWithPassword({
+        await store.registerWithPassword({
           sessionId: "session-archive-author",
           email: "archive-author@example.com",
           password: "password-segura",
           nickname: "archive_autor"
         });
-        const stale = store.createTopic({
+        const stale = await store.createTopic({
           sessionId: "session-archive-author",
           authMode: "registered",
           title: "Tema que va a quedar inactivo",
@@ -7834,13 +7872,13 @@ await (async () => {
         const staleTopicId = stale.selectedTopicId || stale.topics[0].id;
         for (let index = 0; index < 3; index += 1) {
           const commenterSession = `session-archive-commenter-${index}`;
-          store.registerWithPassword({
+          await store.registerWithPassword({
             sessionId: commenterSession,
             email: `archive-commenter-${index}@example.com`,
             password: "password-segura",
             nickname: `archive_com_${index}`
           });
-          store.addMessage(staleTopicId, {
+          await store.addMessage(staleTopicId, {
             sessionId: commenterSession,
             authMode: "registered",
             text: `Comentario ${index + 1} del tema inactivo`
@@ -7849,13 +7887,13 @@ await (async () => {
 
         // El segundo tema lo crea otro usuario: el limite de creacion es de 30
         // minutos por persona, no del sistema.
-        store.registerWithPassword({
+        await store.registerWithPassword({
           sessionId: "session-archive-fresh",
           email: "archive-fresh@example.com",
           password: "password-segura",
           nickname: "archive_fresco"
         });
-        const fresh = store.createTopic({
+        const fresh = await store.createTopic({
           sessionId: "session-archive-fresh",
           authMode: "registered",
           title: "Tema con actividad reciente",
@@ -7865,7 +7903,7 @@ await (async () => {
 
         // Un tema fijado sin actividad no debe archivarse: su permanencia es una
         // decision de moderacion.
-        const pinned = store.createTopic({
+        const pinned = await store.createTopic({
           sessionId: "session-archive-commenter-0",
           authMode: "registered",
           title: "Tema fijado y sin actividad",
@@ -7881,13 +7919,13 @@ await (async () => {
         backdate.run("2020-01-01T00:00:00.000Z", "pinned", pinnedTopicId);
         maintenanceDb.close();
 
-        const result = store.archiveInactiveTopics();
+        const result = await store.archiveInactiveTopics();
         assert.equal(result.archivedTopicIds.includes(staleTopicId), true);
         assert.equal(result.archivedTopicIds.includes(freshTopicId), false);
         assert.equal(result.archivedTopicIds.includes(pinnedTopicId), false);
 
-        const activeIds = store.getSeoTopicEntries().map((row) => row.id);
-        const archivedIds = store.getSeoArchivedTopicEntries().map((row) => row.id);
+        const activeIds = (await store.getSeoTopicEntries()).map((row) => row.id);
+        const archivedIds = (await store.getSeoArchivedTopicEntries()).map((row) => row.id);
         assert.equal(activeIds.includes(staleTopicId), false);
         assert.equal(archivedIds.includes(staleTopicId), true);
         assert.equal(activeIds.includes(freshTopicId), true);
@@ -7896,7 +7934,7 @@ await (async () => {
 
         // Archivar conserva el mensaje raiz y los comentarios, asi que la pagina
         // sigue siendo indexable en vez de convertirse en contenido delgado.
-        const page = store.getTopicPageData(staleTopicId);
+        const page = await store.getTopicPageData(staleTopicId);
         assert.equal(page.isArchived, true);
         assert.equal(page.commentCount, 3);
         assert.equal(page.isThin, false);
@@ -7924,7 +7962,7 @@ await (async () => {
     let preview = null;
 
     try {
-      preview = startPreviewServer({
+      preview = await startPreviewServer({
         port: 0,
         host: "127.0.0.1",
         log() {},
@@ -7941,13 +7979,13 @@ await (async () => {
       const origin = `http://127.0.0.1:${address.port}`;
       const store = preview.store;
 
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-sitemap-author",
         email: "sitemap-author@example.com",
         password: "password-segura",
         nickname: "sitemap_autor"
       });
-      const richTopic = store.createTopic({
+      const richTopic = await store.createTopic({
         sessionId: "session-sitemap-author",
         authMode: "registered",
         title: "Tema con muchos comentarios",
@@ -7956,26 +7994,26 @@ await (async () => {
       const richTopicId = richTopic.selectedTopicId || richTopic.topics[0].id;
       for (let index = 0; index < 3; index += 1) {
         const commenterSession = `session-sitemap-commenter-${index}`;
-        store.registerWithPassword({
+        await store.registerWithPassword({
           sessionId: commenterSession,
           email: `sitemap-commenter-${index}@example.com`,
           password: "password-segura",
           nickname: `sitemap_com_${index}`
         });
-        store.addMessage(richTopicId, {
+        await store.addMessage(richTopicId, {
           sessionId: commenterSession,
           authMode: "registered",
           text: `Comentario ${index + 1}`
         });
       }
 
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-sitemap-thin",
         email: "sitemap-thin@example.com",
         password: "password-segura",
         nickname: "sitemap_thin"
       });
-      const thinTopic = store.createTopic({
+      const thinTopic = await store.createTopic({
         sessionId: "session-sitemap-thin",
         authMode: "registered",
         title: "Tema sin comentarios",
@@ -7983,18 +8021,18 @@ await (async () => {
       });
       const thinTopicId = thinTopic.selectedTopicId || thinTopic.topics[0].id;
 
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-sitemap-optout",
         email: "sitemap-optout@example.com",
         password: "password-segura",
         nickname: "sitemap_optout"
       });
-      store.addMessage(richTopicId, {
+      await store.addMessage(richTopicId, {
         sessionId: "session-sitemap-optout",
         authMode: "registered",
         text: "Comentario de quien no quiere indexarse"
       });
-      store.updateProfile({
+      await store.updateProfile({
         sessionId: "session-sitemap-optout",
         authMode: "registered",
         displayName: "Opt Out",
@@ -8004,13 +8042,13 @@ await (async () => {
       // Perfil que supera el umbral de contribuciones: un tema propio y dos
       // comentarios. El limite de 10 s entre mensajes se saltea envejeciendo
       // last_message_at, que es lo unico que separa a este usuario del resto.
-      store.registerWithPassword({
+      await store.registerWithPassword({
         sessionId: "session-sitemap-activo",
         email: "sitemap-activo@example.com",
         password: "password-segura",
         nickname: "sitemap_activo"
       });
-      const activoTopic = store.createTopic({
+      const activoTopic = await store.createTopic({
         sessionId: "session-sitemap-activo",
         authMode: "registered",
         title: "Tema de un perfil activo",
@@ -8027,7 +8065,7 @@ await (async () => {
       // tema chocarian con el limite de comentario consecutivo, que es otro.
       for (const targetTopicId of [richTopicId, thinTopicId]) {
         agePostingLimits();
-        store.addMessage(targetTopicId, {
+        await store.addMessage(targetTopicId, {
           sessionId: "session-sitemap-activo",
           authMode: "registered",
           text: `Comentario del perfil activo en ${targetTopicId}`
@@ -11009,7 +11047,7 @@ await (async () => {
     assert.match(backendStore, /function getFrontendUsers\(db, viewerId, profileUserIds = \[\]\)/);
     assert.match(
       backendStore,
-      /users: getFrontendUsers\(db, context\.viewer\.id, profileUserIds\)/
+      /users: \(await getFrontendUsers\(db, context\.viewer\.id, profileUserIds\)\)/
     );
     assert.match(previewServer, /"Retry-After": String\(result.retryAfterSeconds\)/);
     assert.match(
@@ -11018,7 +11056,7 @@ await (async () => {
     );
     assert.match(
       previewServer,
-      /setInterval\(\(\) => runGuestCleanup\(store, log\), guestCleanupIntervalMs\)/
+      /setInterval\(async \(\) => await runGuestCleanup\(store, log\), guestCleanupIntervalMs\)/
     );
     assert.match(previewServer, /clearInterval\(guestCleanupTimer\)/);
     const vercelConfig = await read("vercel.json");
@@ -13341,14 +13379,14 @@ await (async () => {
   });
 
   await test("backend persists viewer settings and exposes last liker respecting anonymity", async () => {
-    await withTempStore((store) => {
-      store.registerWithPassword({
+    await withTempStore(async (store) => {
+      await store.registerWithPassword({
         sessionId: "session-settings-author",
         email: "settings-author@example.com",
         password: "password-segura",
         nickname: "settings_author"
       });
-      const voterPayload = store.registerWithPassword({
+      const voterPayload = await store.registerWithPassword({
         sessionId: "session-settings-voter",
         email: "settings-voter@example.com",
         password: "password-segura",
@@ -13362,7 +13400,7 @@ await (async () => {
       assert.equal(voterPayload.viewer.slowMode, false);
       assert.equal(voterPayload.viewer.emailActivityEnabled, false);
 
-      const updated = store.updateSettings({
+      const updated = await store.updateSettings({
         sessionId: "session-settings-voter",
         filterProfanity: false,
         notificationsFriendsOnly: true,
@@ -13376,24 +13414,24 @@ await (async () => {
       assert.equal(updated.viewer.likesAnonymous, false);
 
       // La visibilidad en buscadores se guarda desde configuracion.
-      const optedOut = store.updateSettings({
+      const optedOut = await store.updateSettings({
         sessionId: "session-settings-voter",
         profileIndexable: false
       });
       assert.equal(optedOut.viewer.profileIndexable, false);
-      const keptOptOut = store.updateSettings({
+      const keptOptOut = await store.updateSettings({
         sessionId: "session-settings-voter",
         likesAnonymous: false
       });
       assert.equal(keptOptOut.viewer.profileIndexable, false);
       assert.equal(keptOptOut.viewer.slowMode, true);
-      const optedIn = store.updateSettings({
+      const optedIn = await store.updateSettings({
         sessionId: "session-settings-voter",
         profileIndexable: true
       });
       assert.equal(optedIn.viewer.profileIndexable, true);
 
-      const created = store.createTopic({
+      const created = await store.createTopic({
         sessionId: "session-settings-author",
         title: "Tema para likes con nombre",
         text: "Mensaje raiz"
@@ -13401,7 +13439,7 @@ await (async () => {
       const topic = created.topics.find((entry) => entry.title === "Tema para likes con nombre");
       const rootMessage = topic.messages[0];
 
-      const liked = store.toggleMessageLike(rootMessage.id, {
+      const liked = await store.toggleMessageLike(rootMessage.id, {
         sessionId: "session-settings-voter",
         selectedTopicId: topic.id
       });
@@ -13411,11 +13449,11 @@ await (async () => {
       assert.equal(likedMessage.lastLikeByName, voterName);
 
       // Con likes anonimos el nombre deja de exponerse.
-      store.updateSettings({
+      await store.updateSettings({
         sessionId: "session-settings-voter",
         likesAnonymous: true
       });
-      const refreshed = store.openTopic(topic.id, { sessionId: "session-settings-author" });
+      const refreshed = await store.openTopic(topic.id, { sessionId: "session-settings-author" });
       const refreshedMessage = refreshed.topics
         .find((entry) => entry.id === topic.id)
         .messages.find((entry) => entry.id === rootMessage.id);
@@ -13424,8 +13462,12 @@ await (async () => {
       assert.equal(refreshedMessage.likes, 1);
 
       // Los invitados no pueden guardar configuracion.
-      assert.throws(
-        () => store.updateSettings({ sessionId: "session-settings-guest", filterProfanity: true }),
+      await assert.rejects(
+        async () =>
+          await store.updateSettings({
+            sessionId: "session-settings-guest",
+            filterProfanity: true
+          }),
         (error) => error?.code === "LOGIN_REQUIRED"
       );
     });
@@ -13433,14 +13475,14 @@ await (async () => {
 
   await test("backend persists followed topics and prepares opted-in activity emails", async () => {
     await withTempStore(
-      (store) => {
-        const author = store.registerWithPassword({
+      async (store) => {
+        const author = await store.registerWithPassword({
           sessionId: "session-follow-author",
           email: "follow-author@example.com",
           password: "password-segura",
           nickname: "follow_author"
         });
-        const registration = store.createEmailAuthChallenge({
+        const registration = await store.createEmailAuthChallenge({
           email: "follow-reader@example.com",
           nickname: "follow_reader",
           age: MINIMUM_REGISTRATION_AGE,
@@ -13449,41 +13491,44 @@ await (async () => {
           password: "password-segura",
           nowMs: Date.UTC(2026, 6, 16, 12)
         });
-        const reader = store.verifyEmailAuthChallenge({
+        const reader = await store.verifyEmailAuthChallenge({
           challengeId: registration.challengeId,
           code: registration.code,
           sessionId: "session-follow-reader",
           nowMs: Date.UTC(2026, 6, 16, 12, 0, 1)
         });
-        const created = store.createTopic({
+        const created = await store.createTopic({
           sessionId: "session-follow-author",
           title: "Charla seguida",
           text: "Mensaje inicial"
         });
         const topic = created.topics.find((entry) => entry.title === "Charla seguida");
 
-        const followed = store.followTopic(topic.id, {
+        const followed = await store.followTopic(topic.id, {
           sessionId: "session-follow-reader"
         });
         assert.deepEqual(followed.followedTopicIds, [topic.id]);
 
-        const optedIn = store.updateSettings({
+        const optedIn = await store.updateSettings({
           sessionId: "session-follow-reader",
           selectedTopicId: topic.id,
           emailActivityEnabled: true
         });
         assert.equal(optedIn.viewer.emailActivityEnabled, true);
         assert.equal(
-          store
-            .bootstrap({
+          (
+            await store.bootstrap({
               sessionId: "session-follow-reader",
               selectedTopicId: topic.id
             })
-            .followedTopicIds.includes(topic.id),
+          ).followedTopicIds.includes(topic.id),
           true
         );
 
-        const recipients = store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id);
+        const recipients = await store.claimTopicActivityEmailRecipients(
+          topic.id,
+          author.viewer.id
+        );
         assert.deepEqual(
           recipients.map(({ userId, email, topicId }) => ({ userId, email, topicId })),
           [
@@ -13494,15 +13539,18 @@ await (async () => {
             }
           ]
         );
-        assert.deepEqual(store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id), []);
+        assert.deepEqual(
+          await store.claimTopicActivityEmailRecipients(topic.id, author.viewer.id),
+          []
+        );
       },
       { seedDemoData: false }
     );
   });
 
   await test("backend records a pseudonymous product funnel for moderators", async () => {
-    await withTempStore((store) => {
-      const pageView = store.recordProductEvent({
+    await withTempStore(async (store) => {
+      const pageView = await store.recordProductEvent({
         sessionId: "session-product-analytics",
         authMode: "guest",
         eventName: "page_view",
@@ -13510,25 +13558,25 @@ await (async () => {
         sourceGroup: "social",
         ipAddress: "203.0.113.20"
       });
-      store.recordProductEvent({
+      await store.recordProductEvent({
         sessionId: pageView.sessionId,
         authMode: "guest",
         eventName: "topic_open",
         routeGroup: "/tema/topic-1/charla",
         ipAddress: "203.0.113.20"
       });
-      store.recordProductEvent({
+      await store.recordProductEvent({
         sessionId: pageView.sessionId,
         authMode: "guest",
         eventName: "auth_open",
         routeGroup: "/"
       });
 
-      store.login({
+      await store.login({
         sessionId: "session-product-moderator",
         userId: "u2"
       });
-      const report = store.getProductAnalyticsForViewer({
+      const report = await store.getProductAnalyticsForViewer({
         sessionId: "session-product-moderator",
         days: 30
       });
@@ -13555,7 +13603,7 @@ await (async () => {
       ]);
       assert.equal(report.cohorts.length, 1);
       assert.equal(report.cohorts[0].visitors, 1);
-      const dashboard = store.getAdminDashboard({
+      const dashboard = await store.getAdminDashboard({
         sessionId: "session-product-moderator"
       });
       assert.equal(dashboard.productAnalytics.days, 30);
@@ -13563,14 +13611,14 @@ await (async () => {
         dashboard.productAnalytics.events.find((event) => event.eventName === "page_view")?.total,
         1
       );
-      assert.equal(store.getDiagnostics().productEvents, 3);
-      assert.throws(
-        () => store.getProductAnalyticsForViewer({ sessionId: pageView.sessionId }),
+      assert.equal((await store.getDiagnostics()).productEvents, 3);
+      await assert.rejects(
+        async () => await store.getProductAnalyticsForViewer({ sessionId: pageView.sessionId }),
         (error) => error?.code === "MODERATOR_REQUIRED"
       );
-      assert.throws(
-        () =>
-          store.recordProductEvent({
+      await assert.rejects(
+        async () =>
+          await store.recordProductEvent({
             sessionId: pageView.sessionId,
             eventName: "return_visit",
             routeGroup: "/"
@@ -13581,8 +13629,8 @@ await (async () => {
   });
 
   await test("product analytics splits retention by acquisition source", async () => {
-    await withTempStore((store) => {
-      store.recordProductEvent({
+    await withTempStore(async (store) => {
+      await store.recordProductEvent({
         sessionId: "session-src-search",
         authMode: "guest",
         eventName: "page_view",
@@ -13590,7 +13638,7 @@ await (async () => {
         sourceGroup: "search",
         ipAddress: "203.0.113.30"
       });
-      store.recordProductEvent({
+      await store.recordProductEvent({
         sessionId: "session-src-direct",
         authMode: "guest",
         eventName: "page_view",
@@ -13599,8 +13647,8 @@ await (async () => {
         ipAddress: "203.0.113.31"
       });
 
-      store.login({ sessionId: "session-src-moderator", userId: "u2" });
-      const report = store.getProductAnalyticsForViewer({
+      await store.login({ sessionId: "session-src-moderator", userId: "u2" });
+      const report = await store.getProductAnalyticsForViewer({
         sessionId: "session-src-moderator",
         days: 30
       });
@@ -13624,14 +13672,14 @@ await (async () => {
   });
 
   await test("backend deletes account anonymizing the user and downgrading to guest", async () => {
-    await withTempStore((store) => {
-      store.registerWithPassword({
+    await withTempStore(async (store) => {
+      await store.registerWithPassword({
         sessionId: "session-delete-me",
         email: "delete-me@example.com",
         password: "password-segura",
         nickname: "delete_me"
       });
-      const created = store.createTopic({
+      const created = await store.createTopic({
         sessionId: "session-delete-me",
         title: "Tema que sobrevive",
         text: "Mensaje que sobrevive"
@@ -13639,7 +13687,7 @@ await (async () => {
       const topic = created.topics.find((entry) => entry.title === "Tema que sobrevive");
       const deletedUserId = created.viewer.id;
 
-      const payload = store.deleteAccount({
+      const payload = await store.deleteAccount({
         sessionId: "session-delete-me",
         currentPassword: "password-segura"
       });
@@ -13653,9 +13701,9 @@ await (async () => {
         true
       );
 
-      assert.throws(
-        () =>
-          store.loginWithPassword({
+      await assert.rejects(
+        async () =>
+          await store.loginWithPassword({
             sessionId: "session-delete-me-2",
             email: "delete-me@example.com",
             password: "password-segura"
@@ -13664,8 +13712,8 @@ await (async () => {
       );
 
       // Los invitados no pueden eliminar cuentas.
-      assert.throws(
-        () => store.deleteAccount({ sessionId: "session-guest-delete" }),
+      await assert.rejects(
+        async () => await store.deleteAccount({ sessionId: "session-guest-delete" }),
         (error) => error?.code === "LOGIN_REQUIRED"
       );
     });

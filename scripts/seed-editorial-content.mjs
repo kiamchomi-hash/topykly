@@ -20,14 +20,14 @@ if (!shouldApply) {
   process.exit(0);
 }
 
-const store = createBackendStore({
+const store = await createBackendStore({
   dbPath: dbConfig.dbPath,
   seedDemoData: true,
   includeFakeFriendRequests: false
 });
 
 try {
-  const result = store.seedEditorialContent({ limit });
+  const result = await store.seedEditorialContent({ limit });
   console.log(`Temas editoriales insertados: ${result.insertedTopics}.`);
   console.log(`Cuentas editoriales insertadas: ${result.insertedUsers}.`);
   if (result.archivedTopicIds.length) {
@@ -36,5 +36,5 @@ try {
     console.log("La rotación no archivó temas adicionales.");
   }
 } finally {
-  store.close();
+  await store.close();
 }

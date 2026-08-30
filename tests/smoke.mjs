@@ -17,7 +17,7 @@ const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-smoke-"));
 const dbPath = path.join(tempDir, "topykly.sqlite");
 const previousSeedDemoData = process.env.TOPYKLY_SEED_DEMO_DATA;
 process.env.TOPYKLY_SEED_DEMO_DATA = "true";
-const app = startPreviewServer({
+const app = await startPreviewServer({
   port,
   host,
   dbPath,
@@ -75,8 +75,8 @@ function readSessionId(cookie = "") {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-function registerVerifiedUserFixture({ sessionId, email, password, nickname }) {
-  const challenge = app.store.createEmailAuthChallenge({
+async function registerVerifiedUserFixture({ sessionId, email, password, nickname }) {
+  const challenge = await app.store.createEmailAuthChallenge({
     email,
     nickname,
     age: MINIMUM_REGISTRATION_AGE,
@@ -84,7 +84,7 @@ function registerVerifiedUserFixture({ sessionId, email, password, nickname }) {
     acceptedTerms: true,
     termsVersion: TERMS_VERSION
   });
-  const registered = app.store.verifyEmailAuthChallenge({
+  const registered = await app.store.verifyEmailAuthChallenge({
     challengeId: challenge.challengeId,
     code: challenge.code,
     sessionId: readSessionId(cookieJars.get(sessionId)) || `fixture-${sessionId}`,
@@ -225,7 +225,7 @@ try {
     process.env.TOPYKLY_TURNSTILE_SECRET_KEY = "";
 
     try {
-      isolatedApp = startPreviewServer({
+      isolatedApp = await startPreviewServer({
         port: isolatedPort,
         host,
         dbPath: path.join(isolatedTempDir, "topykly.sqlite"),
@@ -335,7 +335,7 @@ try {
     const sessionId = "session-smoke-comment";
     const initial = await request("/api/bootstrap", { sessionId });
     const guestCookie = cookieJars.get(sessionId);
-    registerVerifiedUserFixture({
+    await registerVerifiedUserFixture({
       sessionId,
       email: `smoke-comment-${Date.now()}@example.com`,
       password: "password-segura",
@@ -373,7 +373,7 @@ try {
     const title = `Smoke topic ${Date.now()}`;
     const text = "Smoke topic root message";
 
-    registerVerifiedUserFixture({
+    await registerVerifiedUserFixture({
       sessionId,
       email: `smoke-topic-${Date.now()}@example.com`,
       password: "password-segura",
@@ -398,7 +398,7 @@ try {
     const title = `Smoke like topic ${Date.now()}`;
     const text = "Smoke like root message";
 
-    registerVerifiedUserFixture({
+    await registerVerifiedUserFixture({
       sessionId,
       email: `smoke-like-${Date.now()}@example.com`,
       password: "password-segura",
@@ -431,7 +431,7 @@ try {
   await test("reports a topic and hydrates reported ids", async () => {
     const sessionId = "session-smoke-report";
     const initial = await request("/api/bootstrap", { sessionId });
-    registerVerifiedUserFixture({
+    await registerVerifiedUserFixture({
       sessionId,
       email: `smoke-comment-${Date.now()}@example.com`,
       password: "password-segura",

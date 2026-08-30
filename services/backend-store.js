@@ -649,13 +649,13 @@ function isStoredAvatarUrl(value) {
   return Boolean(fileName) && fileName === path.basename(fileName) && !fileName.startsWith(".");
 }
 
-function cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl) {
+async function cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl) {
   const normalized = String(avatarUrl || "").trim();
   if (!isStoredAvatarUrl(normalized)) {
     return;
   }
 
-  const reference = db
+  const reference = await db
     .prepare(
       `
     SELECT id
@@ -682,9 +682,9 @@ function scheduleStoredAvatarCleanup(registerAfterCommit, db, avatarStorageDir, 
     return;
   }
 
-  registerAfterCommit(() => {
+  registerAfterCommit(async () => {
     for (const avatarUrl of uniqueUrls) {
-      cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl);
+      await cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl);
     }
   });
 }
@@ -712,19 +712,17 @@ function getMessageReactionResetDay(now = new Date()) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function resetDailyMessageReactionsIfNeeded(db, now = new Date()) {
+async function resetDailyMessageReactionsIfNeeded(db, now = new Date()) {
   const resetDay = getMessageReactionResetDay(now);
   const nowIso = (now instanceof Date ? now : new Date(now)).toISOString();
-  const row = db
+  const row = await db
     .prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(MESSAGE_REACTION_RESET_META_KEY);
 
   if (!row) {
-    db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
-      MESSAGE_REACTION_RESET_META_KEY,
-      resetDay,
-      nowIso
-    );
+    await db
+      .prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)")
+      .run(MESSAGE_REACTION_RESET_META_KEY, resetDay, nowIso);
     return { reset: false, resetDay, deletedLikes: 0, deletedDislikes: 0 };
   }
 
@@ -732,14 +730,14 @@ function resetDailyMessageReactionsIfNeeded(db, now = new Date()) {
     return { reset: false, resetDay, deletedLikes: 0, deletedDislikes: 0 };
   }
 
-  const deletedLikes = db.prepare("DELETE FROM message_likes").run().changes ?? 0;
-  const deletedDislikes = db.prepare("DELETE FROM message_dislikes").run().changes ?? 0;
-  db.prepare("UPDATE messages SET likes = 0, dislikes = 0 WHERE likes <> 0 OR dislikes <> 0").run();
-  db.prepare("UPDATE app_metadata SET value = ?, updated_at = ? WHERE key = ?").run(
-    resetDay,
-    nowIso,
-    MESSAGE_REACTION_RESET_META_KEY
-  );
+  const deletedLikes = (await db.prepare("DELETE FROM message_likes").run()).changes ?? 0;
+  const deletedDislikes = (await db.prepare("DELETE FROM message_dislikes").run()).changes ?? 0;
+  await db
+    .prepare("UPDATE messages SET likes = 0, dislikes = 0 WHERE likes <> 0 OR dislikes <> 0")
+    .run();
+  await db
+    .prepare("UPDATE app_metadata SET value = ?, updated_at = ? WHERE key = ?")
+    .run(resetDay, nowIso, MESSAGE_REACTION_RESET_META_KEY);
 
   return { reset: true, resetDay, deletedLikes, deletedDislikes };
 }
@@ -799,20 +797,24 @@ function createRateLimitMessage(kind, retryAfterSeconds) {
 // ejecutar todo lo que pasa dentro de la transaccion. Los sitios de llamada lo
 // reciben con el nombre `db`, tapando al de afuera, para que ninguna consulta
 // del cuerpo quede escribiendo fuera de la transaccion por descuido.
-function withTransaction(db, task) {
+async function withTransaction(db, task) {
   const afterCommitTasks = [];
-  db.exec("BEGIN IMMEDIATE");
+  await db.exec("BEGIN IMMEDIATE");
   try {
-    const result = task((callback) => {
+    const result = await task((callback) => {
       if (typeof callback === "function") {
         afterCommitTasks.push(callback);
       }
     }, db);
-    db.exec("COMMIT");
-    afterCommitTasks.forEach((callback) => callback());
+    await db.exec("COMMIT");
+    // Se esperan una por una: si el llamador observa el resultado, el efecto
+    // posterior al commit ya tiene que haber ocurrido.
+    for (const callback of afterCommitTasks) {
+      await callback();
+    }
     return result;
   } catch (error) {
-    db.exec("ROLLBACK");
+    await db.exec("ROLLBACK");
     throw error;
   }
 }
@@ -856,8 +858,8 @@ function getSeedTopicEntries() {
   return [...topicSeedData, ...EXTRA_TOPIC_SEEDS].slice(0, ACTIVE_TOPIC_LIMIT);
 }
 
-function initSchema(db) {
-  db.exec(`
+async function initSchema(db) {
+  await db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA busy_timeout = 5000;
     PRAGMA foreign_keys = ON;
@@ -1095,55 +1097,55 @@ function initSchema(db) {
     );
   `);
 
-  ensureColumn(db, "users", "last_topic_at", "TEXT");
-  ensureColumn(db, "users", "last_message_at", "TEXT");
-  ensureColumn(db, "users", "auth_provider", "TEXT");
-  ensureColumn(db, "users", "auth_subject", "TEXT");
-  ensureColumn(db, "users", "email", "TEXT");
-  ensureColumn(db, "users", "email_verified_at", "TEXT");
-  ensureColumn(db, "users", "description", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "users", "profile_show_description", "INTEGER NOT NULL DEFAULT 1");
-  ensureColumn(db, "users", "profile_show_joined_at", "INTEGER NOT NULL DEFAULT 1");
-  ensureColumn(db, "users", "social_whatsapp", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "users", "social_instagram", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "users", "social_tiktok", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "users", "social_facebook", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "users", "social_twitter", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "users", "social_discord", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "users", "profile_show_social", "INTEGER NOT NULL DEFAULT 1");
-  ensureColumn(db, "users", "likes_anonymous", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 1");
-  ensureColumn(db, "users", "notifications_friends_only", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "email_activity_enabled", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "slow_mode", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "profile_indexable", "INTEGER NOT NULL DEFAULT 1");
-  ensureColumn(db, "users", "nickname", "TEXT");
-  ensureColumn(db, "users", "nickname_norm", "TEXT");
-  ensureColumn(db, "users", "password_hash", "TEXT");
-  ensureColumn(db, "users", "avatar_url", "TEXT");
-  ensureColumn(db, "users", "avatar_pending_url", "TEXT");
-  ensureColumn(db, "users", "avatar_review_status", "TEXT");
-  ensureColumn(db, "users", "profile_pending", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "profile_suggested_name", "TEXT");
-  ensureColumn(db, "users", "profile_suggested_avatar_url", "TEXT");
-  ensureColumn(db, "users", "registration_age", "INTEGER");
-  ensureColumn(db, "users", "banned_until", "TEXT");
-  ensureColumn(db, "users", "terms_accepted_at", "TEXT");
-  ensureColumn(db, "users", "terms_version", "TEXT");
-  ensureColumn(db, "auth_email_challenges", "password_hash", "TEXT");
-  ensureColumn(db, "messages", "dislikes", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "reports", "reporter_session_id", "TEXT");
-  ensureColumn(db, "reports", "reporter_user_id", "TEXT");
-  ensureColumn(db, "reports", "status", `TEXT NOT NULL DEFAULT '${REPORT_STATUS_OPEN}'`);
-  ensureColumn(db, "reports", "resolved_at", "TEXT");
-  ensureColumn(db, "moderation_actions", "actor_user_id", "TEXT");
-  ensureColumn(db, "moderation_actions", "reason", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "product_events", "source_group", "TEXT NOT NULL DEFAULT 'direct'");
-  ensureColumn(db, "users", "total_connected_seconds", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "connected_seconds_24h", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "users", "connected_seconds_today", "INTEGER NOT NULL DEFAULT 0");
-  db.exec("DROP TABLE IF EXISTS user_presence_hourly;");
-  db.exec(`
+  await ensureColumn(db, "users", "last_topic_at", "TEXT");
+  await ensureColumn(db, "users", "last_message_at", "TEXT");
+  await ensureColumn(db, "users", "auth_provider", "TEXT");
+  await ensureColumn(db, "users", "auth_subject", "TEXT");
+  await ensureColumn(db, "users", "email", "TEXT");
+  await ensureColumn(db, "users", "email_verified_at", "TEXT");
+  await ensureColumn(db, "users", "description", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "users", "profile_show_description", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn(db, "users", "profile_show_joined_at", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn(db, "users", "social_whatsapp", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "users", "social_instagram", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "users", "social_tiktok", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "users", "social_facebook", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "users", "social_twitter", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "users", "social_discord", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "users", "profile_show_social", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn(db, "users", "likes_anonymous", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "users", "filter_profanity", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn(db, "users", "notifications_friends_only", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "users", "email_activity_enabled", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "users", "slow_mode", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "users", "profile_indexable", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn(db, "users", "nickname", "TEXT");
+  await ensureColumn(db, "users", "nickname_norm", "TEXT");
+  await ensureColumn(db, "users", "password_hash", "TEXT");
+  await ensureColumn(db, "users", "avatar_url", "TEXT");
+  await ensureColumn(db, "users", "avatar_pending_url", "TEXT");
+  await ensureColumn(db, "users", "avatar_review_status", "TEXT");
+  await ensureColumn(db, "users", "profile_pending", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "users", "profile_suggested_name", "TEXT");
+  await ensureColumn(db, "users", "profile_suggested_avatar_url", "TEXT");
+  await ensureColumn(db, "users", "registration_age", "INTEGER");
+  await ensureColumn(db, "users", "banned_until", "TEXT");
+  await ensureColumn(db, "users", "terms_accepted_at", "TEXT");
+  await ensureColumn(db, "users", "terms_version", "TEXT");
+  await ensureColumn(db, "auth_email_challenges", "password_hash", "TEXT");
+  await ensureColumn(db, "messages", "dislikes", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "reports", "reporter_session_id", "TEXT");
+  await ensureColumn(db, "reports", "reporter_user_id", "TEXT");
+  await ensureColumn(db, "reports", "status", `TEXT NOT NULL DEFAULT '${REPORT_STATUS_OPEN}'`);
+  await ensureColumn(db, "reports", "resolved_at", "TEXT");
+  await ensureColumn(db, "moderation_actions", "actor_user_id", "TEXT");
+  await ensureColumn(db, "moderation_actions", "reason", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "product_events", "source_group", "TEXT NOT NULL DEFAULT 'direct'");
+  await ensureColumn(db, "users", "total_connected_seconds", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "users", "connected_seconds_24h", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "users", "connected_seconds_today", "INTEGER NOT NULL DEFAULT 0");
+  await db.exec("DROP TABLE IF EXISTS user_presence_hourly;");
+  await db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS users_auth_identity_idx
     ON users(auth_provider, auth_subject)
     WHERE auth_provider IS NOT NULL AND auth_subject IS NOT NULL;
@@ -1270,40 +1272,36 @@ function initSchema(db) {
   // Migracion unica: el filtro de insultos paso a estar activado por defecto;
   // las filas creadas con el default viejo (0) nunca reflejaron una eleccion del usuario.
   const filterProfanityDefaultKey = "filter_profanity_default_on";
-  const filterProfanityDefaultRow = db
+  const filterProfanityDefaultRow = await db
     .prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(filterProfanityDefaultKey);
   if (!filterProfanityDefaultRow) {
-    db.prepare("UPDATE users SET filter_profanity = 1").run();
-    db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
-      filterProfanityDefaultKey,
-      "1",
-      new Date().toISOString()
-    );
+    await db.prepare("UPDATE users SET filter_profanity = 1").run();
+    await db
+      .prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)")
+      .run(filterProfanityDefaultKey, "1", new Date().toISOString());
   }
 }
 
-function ensureColumn(db, tableName, columnName, columnDefinition) {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+async function ensureColumn(db, tableName, columnName, columnDefinition) {
+  const columns = await db.prepare(`PRAGMA table_info(${tableName})`).all();
   if (columns.some((column) => column.name === columnName)) {
     return;
   }
 
-  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  await db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
 }
 
-function rollConnectedHoursIfNeeded(db, nowIso) {
+async function rollConnectedHoursIfNeeded(db, nowIso) {
   const resetDay = getMessageReactionResetDay(nowIso);
-  const row = db
+  const row = await db
     .prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(PRESENCE_RESET_META_KEY);
 
   if (!row) {
-    db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
-      PRESENCE_RESET_META_KEY,
-      resetDay,
-      nowIso
-    );
+    await db
+      .prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)")
+      .run(PRESENCE_RESET_META_KEY, resetDay, nowIso);
     return;
   }
 
@@ -1311,18 +1309,18 @@ function rollConnectedHoursIfNeeded(db, nowIso) {
     return;
   }
 
-  db.prepare(
-    "UPDATE users SET connected_seconds_24h = connected_seconds_today, connected_seconds_today = 0"
-  ).run();
-  db.prepare("UPDATE app_metadata SET value = ?, updated_at = ? WHERE key = ?").run(
-    resetDay,
-    nowIso,
-    PRESENCE_RESET_META_KEY
-  );
+  await db
+    .prepare(
+      "UPDATE users SET connected_seconds_24h = connected_seconds_today, connected_seconds_today = 0"
+    )
+    .run();
+  await db
+    .prepare("UPDATE app_metadata SET value = ?, updated_at = ? WHERE key = ?")
+    .run(resetDay, nowIso, PRESENCE_RESET_META_KEY);
 }
 
-function accumulatePresence(db, userId, previousUpdatedAtIso, nowIso) {
-  rollConnectedHoursIfNeeded(db, nowIso);
+async function accumulatePresence(db, userId, previousUpdatedAtIso, nowIso) {
+  await rollConnectedHoursIfNeeded(db, nowIso);
 
   if (!userId || !previousUpdatedAtIso) {
     return;
@@ -1335,18 +1333,20 @@ function accumulatePresence(db, userId, previousUpdatedAtIso, nowIso) {
     return;
   }
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     UPDATE users
     SET total_connected_seconds = total_connected_seconds + ?,
         connected_seconds_today = connected_seconds_today + ?
     WHERE id = ?
   `
-  ).run(elapsedSeconds, elapsedSeconds, userId);
+    )
+    .run(elapsedSeconds, elapsedSeconds, userId);
 }
 
-function seedUsers(db) {
-  const countRow = db.prepare("SELECT COUNT(*) AS count FROM users").get();
+async function seedUsers(db) {
+  const countRow = await db.prepare("SELECT COUNT(*) AS count FROM users").get();
   if ((countRow?.count ?? 0) > 0) {
     return;
   }
@@ -1361,7 +1361,7 @@ function seedUsers(db) {
   const nowIso = new Date().toISOString();
   for (const user of initialUsers) {
     const nickname = user.nickname ? normalizeNickname(user.nickname) : null;
-    insertUser.run(
+    await insertUser.run(
       user.id,
       user.name,
       nickname,
@@ -1375,8 +1375,8 @@ function seedUsers(db) {
   }
 }
 
-function seedTopics(db) {
-  const countRow = db.prepare("SELECT COUNT(*) AS count FROM topics").get();
+async function seedTopics(db) {
+  const countRow = await db.prepare("SELECT COUNT(*) AS count FROM topics").get();
   if ((countRow?.count ?? 0) > 0) {
     return;
   }
@@ -1404,7 +1404,7 @@ function seedTopics(db) {
     const topicId = `topic-${topicIndex + 1}`;
     const authorId = users[topicIndex % users.length];
     const createdAt = createIsoTimestamp(topicIndex * 4, baseMs);
-    insertTopic.run(
+    await insertTopic.run(
       topicId,
       normalizeTopicTitle(title),
       summarizeText(subtitle),
@@ -1418,7 +1418,7 @@ function seedTopics(db) {
 
     let lastMessageId = 0;
     const rootText = `${normalizeTopicTitle(title)}. ${normalizeMessageText(subtitle)}`;
-    const rootResult = insertMessage.run(
+    const rootResult = await insertMessage.run(
       topicId,
       authorId,
       rootText,
@@ -1443,7 +1443,7 @@ function seedTopics(db) {
     for (const [replyIndex, replyText] of replies.entries()) {
       const replyAuthorId = users[(topicIndex + replyIndex + 1) % users.length];
       const replyCreatedAt = createIsoTimestamp(topicIndex * 4 + replyIndex + 1, baseMs);
-      const replyResult = insertMessage.run(
+      const replyResult = await insertMessage.run(
         topicId,
         replyAuthorId,
         normalizeMessageText(replyText),
@@ -1456,10 +1456,10 @@ function seedTopics(db) {
       subtitlePreview = summarizeText(replyText);
     }
 
-    updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
+    await updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
   }
 
-  rebuildActiveTopicRanks(db);
+  await rebuildActiveTopicRanks(db);
 }
 
 function shouldSeedDemoData(env = process.env, fallback = true) {
@@ -1475,8 +1475,8 @@ function shouldSeedDemoData(env = process.env, fallback = true) {
 
   return fallback;
 }
-function seedFakeFriendRequests(db) {
-  const countRow = db
+async function seedFakeFriendRequests(db) {
+  const countRow = await db
     .prepare("SELECT COUNT(*) AS count FROM users WHERE id LIKE 'fake-user-%'")
     .get();
   if ((countRow?.count ?? 0) > 0) {
@@ -1499,27 +1499,27 @@ function seedFakeFriendRequests(db) {
   for (let i = 1; i <= 30; i++) {
     const userId = `fake-user-in-${i}`;
     const name = `Usuario Recibido ${i}`;
-    insertUser.run(userId, name, nowIso, nowIso);
-    insertRequest.run(userId, "u1", nowIso, nowIso);
+    await insertUser.run(userId, name, nowIso, nowIso);
+    await insertRequest.run(userId, "u1", nowIso, nowIso);
   }
 
   // Create 30 fake users receiving request from u1 (outgoing)
   for (let i = 1; i <= 30; i++) {
     const userId = `fake-user-out-${i}`;
     const name = `Usuario Enviado ${i}`;
-    insertUser.run(userId, name, nowIso, nowIso);
-    insertRequest.run("u1", userId, nowIso, nowIso);
+    await insertUser.run(userId, name, nowIso, nowIso);
+    await insertRequest.run("u1", userId, nowIso, nowIso);
   }
 }
 
-function seedDatabase(db, { includeFakeFriendRequests = true } = {}) {
-  seedUsers(db);
-  seedTopics(db);
+async function seedDatabase(db, { includeFakeFriendRequests = true } = {}) {
+  await seedUsers(db);
+  await seedTopics(db);
 
   const isRunningTests =
     process.argv[1] && (process.argv[1].endsWith("run.mjs") || process.argv[1].includes("tests"));
   if (includeFakeFriendRequests && !isRunningTests) {
-    seedFakeFriendRequests(db);
+    await seedFakeFriendRequests(db);
   }
 }
 
@@ -1536,8 +1536,8 @@ export const EDITORIAL_ROLE = "Cuenta editorial";
 // likes, los follows y los envios de email.
 //
 // moderation_actions NO se toca: es el registro de auditoria.
-function removeEditorialSeedContentFromDatabase(db, { dryRun = true } = {}) {
-  const editorialUsers = db
+async function removeEditorialSeedContentFromDatabase(db, { dryRun = true } = {}) {
+  const editorialUsers = await db
     .prepare("SELECT id, name, nickname FROM users WHERE role = ? ORDER BY id ASC")
     .all(EDITORIAL_ROLE);
   const editorialUserIds = editorialUsers.map((row) => row.id);
@@ -1547,13 +1547,13 @@ function removeEditorialSeedContentFromDatabase(db, { dryRun = true } = {}) {
   }
 
   const placeholders = editorialUserIds.map(() => "?").join(", ");
-  const topics = db
+  const topics = await db
     .prepare(
       `SELECT id, title FROM topics WHERE author_id IN (${placeholders}) ORDER BY created_at ASC`
     )
     .all(...editorialUserIds);
   const topicIds = topics.map((row) => row.id);
-  const messageRows = db
+  const messageRows = await db
     .prepare(
       `SELECT id FROM messages
        WHERE author_id IN (${placeholders})
@@ -1577,41 +1577,49 @@ function removeEditorialSeedContentFromDatabase(db, { dryRun = true } = {}) {
   // 1. Reportes: la tabla no tiene claves foraneas, hay que limpiarla a mano.
   const messageIds = messageRows.map((row) => String(row.id));
   if (messageIds.length) {
-    db.prepare(
-      `DELETE FROM reports WHERE entity_type = 'message' AND entity_id IN (${messageIds.map(() => "?").join(", ")})`
-    ).run(...messageIds);
+    await db
+      .prepare(
+        `DELETE FROM reports WHERE entity_type = 'message' AND entity_id IN (${messageIds.map(() => "?").join(", ")})`
+      )
+      .run(...messageIds);
   }
   if (topicIds.length) {
-    db.prepare(
-      `DELETE FROM reports WHERE entity_type = 'topic' AND entity_id IN (${topicIds.map(() => "?").join(", ")})`
-    ).run(...topicIds);
+    await db
+      .prepare(
+        `DELETE FROM reports WHERE entity_type = 'topic' AND entity_id IN (${topicIds.map(() => "?").join(", ")})`
+      )
+      .run(...topicIds);
   }
-  db.prepare(
-    `DELETE FROM reports WHERE entity_type = 'user' AND entity_id IN (${placeholders})`
-  ).run(...editorialUserIds);
+  await db
+    .prepare(`DELETE FROM reports WHERE entity_type = 'user' AND entity_id IN (${placeholders})`)
+    .run(...editorialUserIds);
 
   // 2. Sesiones: FK sin cascada.
-  db.prepare(`DELETE FROM sessions WHERE user_id IN (${placeholders})`).run(...editorialUserIds);
+  await db
+    .prepare(`DELETE FROM sessions WHERE user_id IN (${placeholders})`)
+    .run(...editorialUserIds);
 
   // 3. Temas. La cascada arrastra mensajes, likes, dislikes, follows y emails.
   if (topicIds.length) {
-    db.prepare(`DELETE FROM topics WHERE id IN (${topicIds.map(() => "?").join(", ")})`).run(
-      ...topicIds
-    );
+    await db
+      .prepare(`DELETE FROM topics WHERE id IN (${topicIds.map(() => "?").join(", ")})`)
+      .run(...topicIds);
   }
 
   // 4. Mensajes que estas cuentas dejaron en temas de gente real: no los alcanza la
   //    cascada anterior y bloquearian el borrado del usuario.
-  db.prepare(`DELETE FROM messages WHERE author_id IN (${placeholders})`).run(...editorialUserIds);
+  await db
+    .prepare(`DELETE FROM messages WHERE author_id IN (${placeholders})`)
+    .run(...editorialUserIds);
 
   // 5. Usuarios. Ahora si: la cascada limpia amistades, bloqueos y follows restantes.
-  db.prepare(`DELETE FROM users WHERE id IN (${placeholders})`).run(...editorialUserIds);
+  await db.prepare(`DELETE FROM users WHERE id IN (${placeholders})`).run(...editorialUserIds);
 
-  rebuildActiveTopicRanks(db);
+  await rebuildActiveTopicRanks(db);
   return summary;
 }
 
-function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
+async function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
   const limit = normalizePositiveInteger(requestedLimit, 5, {
     min: 1,
     max: editorialTopicSeedData.length
@@ -1621,7 +1629,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     .map((entry, index) => ({ entry, index }));
   const entries = [];
   for (const candidate of candidates) {
-    const existing = db
+    const existing = await db
       .prepare("SELECT 1 FROM topics WHERE title = ? LIMIT 1")
       .get(candidate.entry[0]);
     if (!existing) {
@@ -1646,7 +1654,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
   for (const user of initialUsers) {
     const nickname = normalizeNickname(user.nickname);
     const nicknameKey = normalizeUniqueNameKey(nickname);
-    const existingByNickname = db
+    const existingByNickname = await db
       .prepare("SELECT id, role FROM users WHERE nickname_norm = ? LIMIT 1")
       .get(nicknameKey);
     if (existingByNickname) {
@@ -1662,7 +1670,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     }
 
     const editorialUserId = `editorial-${user.id}`;
-    const existingById = db
+    const existingById = await db
       .prepare("SELECT nickname FROM users WHERE id = ? LIMIT 1")
       .get(editorialUserId);
     if (existingById) {
@@ -1673,7 +1681,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
       );
     }
 
-    insertUser.run(
+    await insertUser.run(
       editorialUserId,
       user.name,
       nickname,
@@ -1688,7 +1696,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     insertedUsers += 1;
   }
 
-  const activeTopicIdsBefore = new Set(getOrderedActiveTopicRows(db).map((row) => row.id));
+  const activeTopicIdsBefore = new Set((await getOrderedActiveTopicRows(db)).map((row) => row.id));
   const insertTopic = db.prepare(`
     INSERT INTO topics (
       id, title, subtitle, author_id, status, active_rank, last_message_id, last_activity_at, created_at, updated_at
@@ -1718,7 +1726,9 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
       .digest("hex")
       .slice(0, 16);
     const topicId = `editorial-topic-${titleHash}`;
-    const existingId = db.prepare("SELECT title FROM topics WHERE id = ? LIMIT 1").get(topicId);
+    const existingId = await db
+      .prepare("SELECT title FROM topics WHERE id = ? LIMIT 1")
+      .get(topicId);
     if (existingId) {
       throw new ApiError(
         409,
@@ -1736,7 +1746,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
       Date.now() - entries.length * 10 * 60_000
     );
     const rootText = `${normalizedTitle}. ${normalizeMessageText(subtitle)}`;
-    insertTopic.run(
+    await insertTopic.run(
       topicId,
       normalizedTitle,
       summarizeText(rootText),
@@ -1747,7 +1757,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
       createdAt
     );
 
-    const rootResult = insertMessage.run(
+    const rootResult = await insertMessage.run(
       topicId,
       authorId,
       rootText,
@@ -1766,7 +1776,7 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
         insertionIndex * 4 + replyIndex + 1,
         Date.now() - entries.length * 10 * 60_000
       );
-      const replyResult = insertMessage.run(
+      const replyResult = await insertMessage.run(
         topicId,
         replyAuthorId,
         normalizeMessageText(replyText),
@@ -1779,13 +1789,13 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
       subtitlePreview = summarizeText(replyText);
     }
 
-    updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
+    await updateTopic.run(subtitlePreview, lastMessageId, lastActivityAt, lastActivityAt, topicId);
   }
 
-  rebuildActiveTopicRanks(db);
+  await rebuildActiveTopicRanks(db);
   const archivedTopicIds = [];
   for (const topicId of activeTopicIdsBefore) {
-    const row = db.prepare("SELECT status FROM topics WHERE id = ?").get(topicId);
+    const row = await db.prepare("SELECT status FROM topics WHERE id = ?").get(topicId);
     if (row?.status === TOPIC_STATUS_EXPELLED) {
       archivedTopicIds.push(topicId);
     }
@@ -1799,70 +1809,83 @@ function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
   };
 }
 
-function purgeDemoData(db) {
+async function purgeDemoData(db) {
   const demoUserIds = initialUsers.map((user) => user.id);
   const demoTopicIds = getSeedTopicEntries().map((_, index) => `topic-${index + 1}`);
   const demoMessageIds = demoTopicIds.length
-    ? db
-        .prepare(
-          `
+    ? (
+        await db
+          .prepare(
+            `
       SELECT id
       FROM messages
       WHERE topic_id IN (${demoTopicIds.map(() => "?").join(", ")})
     `
-        )
-        .all(...demoTopicIds)
-        .map((row) => String(row.id))
+          )
+          .all(...demoTopicIds)
+      ).map((row) => String(row.id))
     : [];
 
   if (demoTopicIds.length) {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       DELETE FROM reports
       WHERE entity_type = 'topic' AND entity_id IN (${demoTopicIds.map(() => "?").join(", ")})
     `
-    ).run(...demoTopicIds);
-    db.prepare(
-      `
+      )
+      .run(...demoTopicIds);
+    await db
+      .prepare(
+        `
       DELETE FROM topics
       WHERE id IN (${demoTopicIds.map(() => "?").join(", ")})
     `
-    ).run(...demoTopicIds);
+      )
+      .run(...demoTopicIds);
   }
 
   if (demoMessageIds.length) {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       DELETE FROM reports
       WHERE entity_type = 'message' AND entity_id IN (${demoMessageIds.map(() => "?").join(", ")})
     `
-    ).run(...demoMessageIds);
+      )
+      .run(...demoMessageIds);
   }
 
   if (demoUserIds.length) {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       DELETE FROM reports
       WHERE entity_type = 'user' AND entity_id IN (${demoUserIds.map(() => "?").join(", ")})
     `
-    ).run(...demoUserIds);
-    db.prepare(
-      `
+      )
+      .run(...demoUserIds);
+    await db
+      .prepare(
+        `
       DELETE FROM sessions
       WHERE user_id IN (${demoUserIds.map(() => "?").join(", ")})
     `
-    ).run(...demoUserIds);
-    db.prepare(
-      `
+      )
+      .run(...demoUserIds);
+    await db
+      .prepare(
+        `
       DELETE FROM users
       WHERE id IN (${demoUserIds.map(() => "?").join(", ")})
         AND NOT EXISTS (SELECT 1 FROM topics WHERE topics.author_id = users.id)
         AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.author_id = users.id)
     `
-    ).run(...demoUserIds);
+      )
+      .run(...demoUserIds);
   }
 
-  rebuildActiveTopicRanks(db);
+  await rebuildActiveTopicRanks(db);
 }
 
 function mapViewerRow(row, sessionRow) {
@@ -1962,22 +1985,24 @@ function createTransientGuestContext(sessionId, ipAddress = "") {
   };
 }
 
-function getOrCreateGuestUser(db) {
+async function getOrCreateGuestUser(db) {
   const nowIso = new Date().toISOString();
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO users (id, name, type, role, score, status, created_at, updated_at)
     VALUES (?, ?, 'guest', 'Invitado', 0, 'active', ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       updated_at = excluded.updated_at
   `
-  ).run(SHARED_GUEST_USER_ID, GUEST_DISPLAY_NAME, nowIso, nowIso);
+    )
+    .run(SHARED_GUEST_USER_ID, GUEST_DISPLAY_NAME, nowIso, nowIso);
 
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(SHARED_GUEST_USER_ID);
+  return await db.prepare("SELECT * FROM users WHERE id = ?").get(SHARED_GUEST_USER_ID);
 }
 
-function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionId = "") {
+async function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionId = "") {
   const expiresBeforeIso = new Date(nowMs - GUEST_SESSION_TTL_MS).toISOString();
   const registeredExpiresBeforeIso = new Date(nowMs - REGISTERED_SESSION_TTL_MS).toISOString();
   const nowIso = new Date(nowMs).toISOString();
@@ -1990,21 +2015,24 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
   let deletedSessions = 0;
 
   deletedSessions +=
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     DELETE FROM sessions
     WHERE auth_mode = 'guest' AND updated_at < ? AND id <> ?
   `
-      )
-      .run(expiresBeforeIso, keepSessionId).changes ?? 0;
+        )
+        .run(expiresBeforeIso, keepSessionId)
+    ).changes ?? 0;
 
   const normalizedIpAddress = normalizeIpAddress(ipAddress);
   if (normalizedIpAddress) {
     deletedSessions +=
-      db
-        .prepare(
-          `
+      (
+        await db
+          .prepare(
+            `
       DELETE FROM sessions
       WHERE id IN (
         SELECT id
@@ -2014,14 +2042,16 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
         LIMIT -1 OFFSET ?
       )
     `
-        )
-        .run(normalizedIpAddress, keepSessionId, perIpOffset).changes ?? 0;
+          )
+          .run(normalizedIpAddress, keepSessionId, perIpOffset)
+      ).changes ?? 0;
   }
 
   deletedSessions +=
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     DELETE FROM sessions
     WHERE id IN (
       SELECT id
@@ -2031,48 +2061,57 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
       LIMIT -1 OFFSET ?
     )
   `
-      )
-      .run(keepSessionId, totalOffset).changes ?? 0;
+        )
+        .run(keepSessionId, totalOffset)
+    ).changes ?? 0;
 
   const deletedGuestIpRateLimits =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     DELETE FROM guest_ip_rate_limits
     WHERE updated_at < ?
   `
-      )
-      .run(expiresBeforeIso).changes ?? 0;
+        )
+        .run(expiresBeforeIso)
+    ).changes ?? 0;
 
   const deletedRegisteredSessions =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     DELETE FROM sessions
     WHERE auth_mode = 'registered' AND updated_at < ? AND id <> ?
   `
-      )
-      .run(registeredExpiresBeforeIso, keepSessionId).changes ?? 0;
+        )
+        .run(registeredExpiresBeforeIso, keepSessionId)
+    ).changes ?? 0;
 
   const deletedExpiredAuthChallenges =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     DELETE FROM auth_email_challenges
     WHERE expires_at <= ?
   `
-      )
-      .run(nowIso).changes ?? 0;
+        )
+        .run(nowIso)
+    ).changes ?? 0;
 
   const deletedExpiredPasswordResetChallenges =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     DELETE FROM password_reset_challenges
     WHERE expires_at <= ?
   `
-      )
-      .run(nowIso).changes ?? 0;
+        )
+        .run(nowIso)
+    ).changes ?? 0;
 
   return {
     deletedSessions,
@@ -2083,8 +2122,8 @@ function pruneGuestSessions(db, ipAddress = "", nowMs = Date.now(), keepSessionI
   };
 }
 
-function getRegisteredViewerRow(db, userId = REGISTERED_USER_ID) {
-  const viewerRow = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+async function getRegisteredViewerRow(db, userId = REGISTERED_USER_ID) {
+  const viewerRow = await db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   if (!viewerRow) {
     throw new ApiError(
       500,
@@ -2103,8 +2142,8 @@ function getRegisteredViewerRow(db, userId = REGISTERED_USER_ID) {
   return viewerRow;
 }
 
-function readSessionRow(db, sessionId) {
-  return db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId);
+async function readSessionRow(db, sessionId) {
+  return await db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId);
 }
 
 function createRotatedSessionId(previousSessionId = "") {
@@ -2116,47 +2155,51 @@ function createRotatedSessionId(previousSessionId = "") {
   return nextSessionId;
 }
 
-function invalidateSession(db, sessionId) {
+async function invalidateSession(db, sessionId) {
   const normalizedSessionId = String(sessionId || "").trim();
   if (normalizedSessionId) {
-    db.prepare("DELETE FROM sessions WHERE id = ?").run(normalizedSessionId);
+    await db.prepare("DELETE FROM sessions WHERE id = ?").run(normalizedSessionId);
   }
 }
 
-function invalidatePreviousSession(db, previousSessionId, nextSessionId) {
+async function invalidatePreviousSession(db, previousSessionId, nextSessionId) {
   if (previousSessionId && previousSessionId !== nextSessionId) {
-    invalidateSession(db, previousSessionId);
+    await invalidateSession(db, previousSessionId);
   }
 }
 
-function createGuestSession(db, sessionId, ipAddress, nowIso, existingSessionRow = null) {
+async function createGuestSession(db, sessionId, ipAddress, nowIso, existingSessionRow = null) {
   const resolvedIpAddress = normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "");
-  const guestRow = getOrCreateGuestUser(db);
+  const guestRow = await getOrCreateGuestUser(db);
   const guestLabel =
     existingSessionRow?.auth_mode === "guest" && existingSessionRow.guest_label
       ? existingSessionRow.guest_label
       : createGuestName();
 
   if (existingSessionRow) {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE sessions
       SET user_id = ?, auth_mode = 'guest', guest_label = ?, last_ip = ?, last_topic_at = NULL, last_message_at = NULL, updated_at = ?
       WHERE id = ?
     `
-    ).run(guestRow.id, guestLabel, resolvedIpAddress, nowIso, sessionId);
+      )
+      .run(guestRow.id, guestLabel, resolvedIpAddress, nowIso, sessionId);
   } else {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       INSERT INTO sessions (
         id, user_id, auth_mode, guest_label, last_ip, last_topic_at, last_message_at, created_at, updated_at
       ) VALUES (?, ?, 'guest', ?, ?, NULL, NULL, ?, ?)
     `
-    ).run(sessionId, guestRow.id, guestLabel, resolvedIpAddress, nowIso, nowIso);
+      )
+      .run(sessionId, guestRow.id, guestLabel, resolvedIpAddress, nowIso, nowIso);
   }
 
-  pruneGuestSessions(db, resolvedIpAddress, new Date(nowIso).getTime(), sessionId);
-  const sessionRow = readSessionRow(db, sessionId);
+  await pruneGuestSessions(db, resolvedIpAddress, new Date(nowIso).getTime(), sessionId);
+  const sessionRow = await readSessionRow(db, sessionId);
   return {
     sessionId,
     sessionRow,
@@ -2166,7 +2209,7 @@ function createGuestSession(db, sessionId, ipAddress, nowIso, existingSessionRow
   };
 }
 
-function createRegisteredSession(
+async function createRegisteredSession(
   db,
   sessionId,
   ipAddress,
@@ -2174,43 +2217,47 @@ function createRegisteredSession(
   existingSessionRow = null,
   userId = REGISTERED_USER_ID
 ) {
-  const registeredViewerRow = getRegisteredViewerRow(db, userId);
+  const registeredViewerRow = await getRegisteredViewerRow(db, userId);
   const resolvedIpAddress = normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "");
 
   if (existingSessionRow?.id === sessionId) {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE sessions
       SET user_id = ?, auth_mode = 'registered', guest_label = NULL, last_ip = ?, last_topic_at = ?, last_message_at = ?, updated_at = ?
       WHERE id = ?
     `
-    ).run(
-      registeredViewerRow.id,
-      resolvedIpAddress,
-      registeredViewerRow.last_topic_at ?? null,
-      registeredViewerRow.last_message_at ?? null,
-      nowIso,
-      sessionId
-    );
+      )
+      .run(
+        registeredViewerRow.id,
+        resolvedIpAddress,
+        registeredViewerRow.last_topic_at ?? null,
+        registeredViewerRow.last_message_at ?? null,
+        nowIso,
+        sessionId
+      );
   } else {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       INSERT INTO sessions (
         id, user_id, auth_mode, guest_label, last_ip, last_topic_at, last_message_at, created_at, updated_at
       ) VALUES (?, ?, 'registered', NULL, ?, ?, ?, ?, ?)
     `
-    ).run(
-      sessionId,
-      registeredViewerRow.id,
-      resolvedIpAddress,
-      registeredViewerRow.last_topic_at ?? null,
-      registeredViewerRow.last_message_at ?? null,
-      nowIso,
-      nowIso
-    );
+      )
+      .run(
+        sessionId,
+        registeredViewerRow.id,
+        resolvedIpAddress,
+        registeredViewerRow.last_topic_at ?? null,
+        registeredViewerRow.last_message_at ?? null,
+        nowIso,
+        nowIso
+      );
   }
 
-  const sessionRow = readSessionRow(db, sessionId);
+  const sessionRow = await readSessionRow(db, sessionId);
   return {
     sessionId,
     sessionRow,
@@ -2220,39 +2267,41 @@ function createRegisteredSession(
   };
 }
 
-function resolveViewer(
+async function resolveViewer(
   db,
   { sessionId, authMode = "guest", ipAddress = "", persistGuest = false }
 ) {
   const normalizedSessionId = ensureViewerSessionId(sessionId);
   const fallbackAuthMode = authMode === "registered" ? "registered" : "guest";
   const nowIso = new Date().toISOString();
-  const sessionRow = readSessionRow(db, normalizedSessionId);
+  const sessionRow = await readSessionRow(db, normalizedSessionId);
 
   if (!sessionRow) {
     if (fallbackAuthMode === "registered") {
-      return createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso);
+      return await createRegisteredSession(db, normalizedSessionId, ipAddress, nowIso);
     }
 
     return persistGuest
-      ? createGuestSession(db, normalizedSessionId, ipAddress, nowIso)
+      ? await createGuestSession(db, normalizedSessionId, ipAddress, nowIso)
       : createTransientGuestContext(normalizedSessionId, ipAddress);
   }
 
   const resolvedIpAddress = normalizeIpAddress(ipAddress || sessionRow.last_ip || "");
 
-  accumulatePresence(db, sessionRow.user_id, sessionRow.updated_at, nowIso);
+  await accumulatePresence(db, sessionRow.user_id, sessionRow.updated_at, nowIso);
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     UPDATE sessions
     SET last_ip = ?, updated_at = ?
     WHERE id = ?
   `
-  ).run(resolvedIpAddress, nowIso, normalizedSessionId);
+    )
+    .run(resolvedIpAddress, nowIso, normalizedSessionId);
 
   if (sessionRow.auth_mode === "registered") {
-    return createRegisteredSession(
+    return await createRegisteredSession(
       db,
       normalizedSessionId,
       resolvedIpAddress,
@@ -2262,12 +2311,12 @@ function resolveViewer(
     );
   }
 
-  let viewerRow = db.prepare("SELECT * FROM users WHERE id = ?").get(sessionRow.user_id);
+  let viewerRow = await db.prepare("SELECT * FROM users WHERE id = ?").get(sessionRow.user_id);
   if (!viewerRow || viewerRow.type !== "guest") {
-    return createGuestSession(db, normalizedSessionId, resolvedIpAddress, nowIso, sessionRow);
+    return await createGuestSession(db, normalizedSessionId, resolvedIpAddress, nowIso, sessionRow);
   }
 
-  const updatedSession = readSessionRow(db, normalizedSessionId);
+  const updatedSession = await readSessionRow(db, normalizedSessionId);
   return {
     sessionId: normalizedSessionId,
     sessionRow: updatedSession,
@@ -2277,7 +2326,7 @@ function resolveViewer(
   };
 }
 
-function getFrontendUsers(db, viewerId, profileUserIds = []) {
+async function getFrontendUsers(db, viewerId, profileUserIds = []) {
   const friendshipStatusByUserId = arguments[3] instanceof Map ? arguments[3] : new Map();
   const extraUserIds = [
     ...new Set(profileUserIds.filter((userId) => userId && userId !== viewerId))
@@ -2287,7 +2336,7 @@ function getFrontendUsers(db, viewerId, profileUserIds = []) {
     : "";
   const nowMs = Date.now();
 
-  const rows = db
+  const rows = await db
     .prepare(
       `
     SELECT
@@ -2372,10 +2421,11 @@ function getFrontendUsers(db, viewerId, profileUserIds = []) {
   });
 }
 
-function hydrateTopicMessages(db, topicId, viewerId = null) {
-  return db
-    .prepare(
-      `
+async function hydrateTopicMessages(db, topicId, viewerId = null) {
+  return (
+    await db
+      .prepare(
+        `
     SELECT
       messages.id,
       messages.topic_id,
@@ -2410,24 +2460,24 @@ function hydrateTopicMessages(db, topicId, viewerId = null) {
     WHERE messages.topic_id = ?
     ORDER BY messages.id ASC
   `
-    )
-    .all(viewerId || "", viewerId || "", topicId)
-    .map((row) => ({
-      id: `message-${row.id}`,
-      topicId: row.topic_id,
-      authorId: row.author_id,
-      text: row.text,
-      kind: row.kind,
-      likes: row.likes,
-      dislikes: row.dislikes,
-      isRoot: Boolean(row.is_root),
-      likedByViewer: Boolean(row.liked_by_viewer),
-      dislikedByViewer: Boolean(row.disliked_by_viewer),
-      lastLikeById: row.last_like_by_id ?? null,
-      lastLikeByName: row.last_like_by_name ?? null,
-      createdAt: row.created_at,
-      timestamp: row.created_at
-    }));
+      )
+      .all(viewerId || "", viewerId || "", topicId)
+  ).map((row) => ({
+    id: `message-${row.id}`,
+    topicId: row.topic_id,
+    authorId: row.author_id,
+    text: row.text,
+    kind: row.kind,
+    likes: row.likes,
+    dislikes: row.dislikes,
+    isRoot: Boolean(row.is_root),
+    likedByViewer: Boolean(row.liked_by_viewer),
+    dislikedByViewer: Boolean(row.disliked_by_viewer),
+    lastLikeById: row.last_like_by_id ?? null,
+    lastLikeByName: row.last_like_by_name ?? null,
+    createdAt: row.created_at,
+    timestamp: row.created_at
+  }));
 }
 
 function formatBackendCommentCount(count) {
@@ -2456,10 +2506,10 @@ function mapRankingRows(rows, { emptyTitle, emptyMeta, formatMeta, currentUserId
   }));
 }
 
-function getBackendPostRankingEntries(db, metric = "comments") {
+async function getBackendPostRankingEntries(db, metric = "comments") {
   const rows =
     metric === "likes"
-      ? db
+      ? await db
           .prepare(
             `
       SELECT topics.id, topics.title, COALESCE(SUM(messages.likes), 0) AS count
@@ -2473,7 +2523,7 @@ function getBackendPostRankingEntries(db, metric = "comments") {
     `
           )
           .all(TOPIC_STATUS_EXPELLED)
-      : db
+      : await db
           .prepare(
             `
       SELECT topics.id, topics.title, COUNT(messages.id) AS count
@@ -2498,7 +2548,7 @@ function getBackendPostRankingEntries(db, metric = "comments") {
   });
 }
 
-function getBackendUserRankingEntries(
+async function getBackendUserRankingEntries(
   db,
   { metric = "comments", selectedTopicId = null, currentUserId = null } = {}
 ) {
@@ -2506,7 +2556,7 @@ function getBackendUserRankingEntries(
   const params = selectedTopicId ? [selectedTopicId] : [];
   const rows =
     metric === "likes"
-      ? db
+      ? await db
           .prepare(
             `
       SELECT users.id, users.name AS title, COALESCE(SUM(messages.likes), 0) AS count
@@ -2525,7 +2575,7 @@ function getBackendUserRankingEntries(
     `
           )
           .all(...params)
-      : db
+      : await db
           .prepare(
             `
       SELECT users.id, users.name AS title, COUNT(messages.id) AS count
@@ -2556,19 +2606,19 @@ function getBackendUserRankingEntries(
   });
 }
 
-function buildBackendRankings(db, context, selectedTopicId = null) {
+async function buildBackendRankings(db, context, selectedTopicId = null) {
   return {
     global: {
       posts: {
-        comments: getBackendPostRankingEntries(db, "comments"),
-        likes: getBackendPostRankingEntries(db, "likes")
+        comments: await getBackendPostRankingEntries(db, "comments"),
+        likes: await getBackendPostRankingEntries(db, "likes")
       },
       users: {
-        comments: getBackendUserRankingEntries(db, {
+        comments: await getBackendUserRankingEntries(db, {
           metric: "comments",
           currentUserId: context.viewer.id
         }),
-        likes: getBackendUserRankingEntries(db, {
+        likes: await getBackendUserRankingEntries(db, {
           metric: "likes",
           currentUserId: context.viewer.id
         })
@@ -2577,14 +2627,14 @@ function buildBackendRankings(db, context, selectedTopicId = null) {
     topic: {
       users: {
         comments: selectedTopicId
-          ? getBackendUserRankingEntries(db, {
+          ? await getBackendUserRankingEntries(db, {
               metric: "comments",
               selectedTopicId,
               currentUserId: context.viewer.id
             })
           : emptyRankingEntry("Sin tema", "Selecciona un tema para ver su actividad real."),
         likes: selectedTopicId
-          ? getBackendUserRankingEntries(db, {
+          ? await getBackendUserRankingEntries(db, {
               metric: "likes",
               selectedTopicId,
               currentUserId: context.viewer.id
@@ -2603,21 +2653,27 @@ function buildBackendRankings(db, context, selectedTopicId = null) {
 //
 // Cuenta a quien tiene sesion persistida. Una lectura anonima no persiste sesion
 // (defensa antibot), asi que quien solo mira de paso no entra en el numero.
-function countOnlineUsers(db) {
+async function countOnlineUsers(db) {
   const since = new Date(Date.now() - PRESENCE_ONLINE_WINDOW_MS).toISOString();
   return Number(
-    db
-      .prepare(
-        `SELECT COUNT(DISTINCT CASE WHEN auth_mode = 'registered' THEN user_id ELSE id END) AS count
+    (
+      await db
+        .prepare(
+          `SELECT COUNT(DISTINCT CASE WHEN auth_mode = 'registered' THEN user_id ELSE id END) AS count
          FROM sessions
          WHERE updated_at >= ?`
-      )
-      .get(since)?.count ?? 0
+        )
+        .get(since)
+    )?.count ?? 0
   );
 }
 
-function hydrateTopic(db, row, { forceVisible = null, viewerId = null, visibleLimit = null } = {}) {
-  const resolvedVisibleLimit = visibleLimit ?? resolveVisibleTopicLimit(countOnlineUsers(db));
+async function hydrateTopic(
+  db,
+  row,
+  { forceVisible = null, viewerId = null, visibleLimit = null } = {}
+) {
+  const resolvedVisibleLimit = visibleLimit ?? resolveVisibleTopicLimit(await countOnlineUsers(db));
   const isVisible =
     forceVisible ??
     (row.status !== TOPIC_STATUS_EXPELLED &&
@@ -2635,16 +2691,16 @@ function hydrateTopic(db, row, { forceVisible = null, viewerId = null, visibleLi
     isVisible,
     visible: isVisible,
     messageCount:
-      db.prepare("SELECT COUNT(*) AS count FROM messages WHERE topic_id = ?").get(row.id)?.count ??
-      0,
+      (await db.prepare("SELECT COUNT(*) AS count FROM messages WHERE topic_id = ?").get(row.id))
+        ?.count ?? 0,
     lastActivityAt: row.last_activity_at,
     createdAt: row.created_at,
-    messages: hydrateTopicMessages(db, row.id, viewerId)
+    messages: await hydrateTopicMessages(db, row.id, viewerId)
   };
 }
 
-function getOrderedActiveTopicRows(db) {
-  return db
+async function getOrderedActiveTopicRows(db) {
+  return await db
     .prepare(
       `
     SELECT *
@@ -2663,14 +2719,14 @@ function getOrderedActiveTopicRows(db) {
 // Manda al archivo los temas sin actividad reciente. Conserva el mensaje raiz y
 // las ultimas respuestas: trimTopicReplies solo toca lo que excede el tope, asi
 // que un tema archivado sin comentarios queda con su mensaje principal intacto.
-function archiveInactiveTopics(db, now = Date.now()) {
+async function archiveInactiveTopics(db, now = Date.now()) {
   const windowMs = resolveTopicInactivityArchiveMs();
   if (!windowMs) {
     return [];
   }
 
   const cutoffIso = new Date(now - windowMs).toISOString();
-  const staleRows = db
+  const staleRows = await db
     .prepare(
       `
     SELECT id
@@ -2692,18 +2748,18 @@ function archiveInactiveTopics(db, now = Date.now()) {
   `);
 
   for (const row of staleRows) {
-    trimTopicReplies(db, row.id);
-    expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
+    await trimTopicReplies(db, row.id);
+    await expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
   }
 
   return staleRows.map((row) => row.id);
 }
 
-function rebuildActiveTopicRanks(db, now = Date.now()) {
+async function rebuildActiveTopicRanks(db, now = Date.now()) {
   // Primero la inactividad y despues el desborde: un tema que ya se fue por
   // viejo no debe ocupar un lugar del conjunto activo ni empujar a otro afuera.
-  archiveInactiveTopics(db, now);
-  const orderedRows = getOrderedActiveTopicRows(db);
+  await archiveInactiveTopics(db, now);
+  const orderedRows = await getOrderedActiveTopicRows(db);
   const keptRows = orderedRows.slice(0, ACTIVE_TOPIC_LIMIT);
   const droppedRows = orderedRows.slice(ACTIVE_TOPIC_LIMIT);
   const updateRank = db.prepare("UPDATE topics SET active_rank = ?, updated_at = ? WHERE id = ?");
@@ -2715,25 +2771,27 @@ function rebuildActiveTopicRanks(db, now = Date.now()) {
   const nowIso = new Date(now).toISOString();
 
   for (const [index, row] of keptRows.entries()) {
-    updateRank.run(index, nowIso, row.id);
+    await updateRank.run(index, nowIso, row.id);
   }
 
   for (const row of droppedRows) {
-    trimTopicReplies(db, row.id);
-    expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
+    await trimTopicReplies(db, row.id);
+    await expelTopic.run(TOPIC_STATUS_EXPELLED, nowIso, row.id);
   }
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     UPDATE topics
     SET active_rank = NULL
     WHERE status = ?
   `
-  ).run(TOPIC_STATUS_BLOCKED);
+    )
+    .run(TOPIC_STATUS_BLOCKED);
 }
 
-function getActiveTopicsForFrontend(db) {
-  return db
+async function getActiveTopicsForFrontend(db) {
+  return await db
     .prepare(
       `
     SELECT *
@@ -2755,20 +2813,21 @@ function getFriendshipUserSummary(row) {
   };
 }
 
-function getFriendshipsForFrontend(db, viewerId) {
+async function getFriendshipsForFrontend(db, viewerId) {
   const empty = { incoming: [], outgoing: [], friends: [] };
   if (!viewerId) {
     return empty;
   }
 
-  const viewerRow = db.prepare("SELECT id, type FROM users WHERE id = ?").get(viewerId);
+  const viewerRow = await db.prepare("SELECT id, type FROM users WHERE id = ?").get(viewerId);
   if (!viewerRow || viewerRow.type !== "registered") {
     return empty;
   }
 
-  const incoming = db
-    .prepare(
-      `
+  const incoming = (
+    await db
+      .prepare(
+        `
     SELECT users.id, users.name, users.nickname, users.avatar_url
     FROM friend_requests
     JOIN users ON users.id = friend_requests.requester_id
@@ -2778,13 +2837,14 @@ function getFriendshipsForFrontend(db, viewerId) {
     ORDER BY friend_requests.updated_at DESC, friend_requests.id DESC
     LIMIT 50
   `
-    )
-    .all(viewerId)
-    .map(getFriendshipUserSummary);
+      )
+      .all(viewerId)
+  ).map(getFriendshipUserSummary);
 
-  const outgoing = db
-    .prepare(
-      `
+  const outgoing = (
+    await db
+      .prepare(
+        `
     SELECT users.id, users.name, users.nickname, users.avatar_url
     FROM friend_requests
     JOIN users ON users.id = friend_requests.addressee_id
@@ -2794,14 +2854,15 @@ function getFriendshipsForFrontend(db, viewerId) {
     ORDER BY friend_requests.updated_at DESC, friend_requests.id DESC
     LIMIT 50
   `
-    )
-    .all(viewerId)
-    .map(getFriendshipUserSummary);
+      )
+      .all(viewerId)
+  ).map(getFriendshipUserSummary);
 
   const nowMs = Date.now();
-  const friends = db
-    .prepare(
-      `
+  const friends = (
+    await db
+      .prepare(
+        `
     SELECT users.id, users.name, users.nickname, users.avatar_url, presence.last_seen_at
     FROM friend_requests
     JOIN users ON users.id = CASE
@@ -2817,14 +2878,14 @@ function getFriendshipsForFrontend(db, viewerId) {
     ORDER BY friend_requests.updated_at DESC, users.name ASC
     LIMIT 80
   `
-    )
-    .all(viewerId, viewerId, viewerId)
-    .map((row) => ({
-      ...getFriendshipUserSummary(row),
-      online:
-        Boolean(row.last_seen_at) &&
-        nowMs - new Date(row.last_seen_at).getTime() <= PRESENCE_ONLINE_WINDOW_MS
-    }));
+      )
+      .all(viewerId, viewerId, viewerId)
+  ).map((row) => ({
+    ...getFriendshipUserSummary(row),
+    online:
+      Boolean(row.last_seen_at) &&
+      nowMs - new Date(row.last_seen_at).getTime() <= PRESENCE_ONLINE_WINDOW_MS
+  }));
 
   return { incoming, outgoing, friends };
 }
@@ -2837,14 +2898,15 @@ function getFriendshipStatusByUserId(friendships) {
   return statusByUserId;
 }
 
-function getBlockedUsersForFrontend(db, viewerId) {
+async function getBlockedUsersForFrontend(db, viewerId) {
   if (!viewerId) {
     return [];
   }
 
-  return db
-    .prepare(
-      `
+  return (
+    await db
+      .prepare(
+        `
     SELECT
       users.id,
       users.name,
@@ -2858,31 +2920,32 @@ function getBlockedUsersForFrontend(db, viewerId) {
       AND users.type = 'registered'
     ORDER BY user_blocks.updated_at DESC, users.name ASC
   `
-    )
-    .all(viewerId)
-    .map((user) => ({
-      ...user,
-      hideContent: user.hideContent === 1
-    }));
+      )
+      .all(viewerId)
+  ).map((user) => ({
+    ...user,
+    hideContent: user.hideContent === 1
+  }));
 }
 
-function getHiddenBlockedUserIds(db, viewerId) {
+async function getHiddenBlockedUserIds(db, viewerId) {
   return new Set(
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     SELECT blocked_id
     FROM user_blocks
     WHERE blocker_id = ? AND hide_content = 1
   `
-      )
-      .all(viewerId)
-      .map((row) => row.blocked_id)
+        )
+        .all(viewerId)
+    ).map((row) => row.blocked_id)
   );
 }
 
-function getFriendRequestBetween(db, leftUserId, rightUserId) {
-  return db
+async function getFriendRequestBetween(db, leftUserId, rightUserId) {
+  return await db
     .prepare(
       `
     SELECT *
@@ -2896,7 +2959,7 @@ function getFriendRequestBetween(db, leftUserId, rightUserId) {
     .get(leftUserId, rightUserId, rightUserId, leftUserId);
 }
 
-function assertFriendTarget(db, viewerId, targetUserId) {
+async function assertFriendTarget(db, viewerId, targetUserId) {
   const normalizedTargetUserId = String(targetUserId || "").trim();
   if (!normalizedTargetUserId) {
     throw new ApiError(400, "VALIDATION_ERROR", "Selecciona un usuario para agregar.");
@@ -2905,7 +2968,7 @@ function assertFriendTarget(db, viewerId, targetUserId) {
     throw new ApiError(400, "INVALID_FRIEND_TARGET", "No puedes agregarte a ti mismo.");
   }
 
-  const target = db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedTargetUserId);
+  const target = await db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedTargetUserId);
   if (!target || target.type !== "registered" || target.status !== USER_STATUS_ACTIVE) {
     throw new ApiError(404, "NOT_FOUND", "Usuario no disponible para amistad.");
   }
@@ -2913,21 +2976,21 @@ function assertFriendTarget(db, viewerId, targetUserId) {
   return target;
 }
 
-function assertRegisteredFriendContext(db, context) {
-  assertContextCanParticipate(db, context);
+async function assertRegisteredFriendContext(db, context) {
+  await assertContextCanParticipate(db, context);
   if (context.viewer.type !== "registered") {
     throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para agregar amigos.");
   }
 }
 
-function assertRegisteredBlockContext(db, context) {
-  assertContextCanParticipate(db, context);
+async function assertRegisteredBlockContext(db, context) {
+  await assertContextCanParticipate(db, context);
   if (context.viewer.type !== "registered") {
     throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para bloquear usuarios.");
   }
 }
 
-function assertBlockTarget(db, viewerId, targetUserId) {
+async function assertBlockTarget(db, viewerId, targetUserId) {
   const normalizedTargetUserId = String(targetUserId || "").trim();
   if (!normalizedTargetUserId) {
     throw new ApiError(400, "VALIDATION_ERROR", "Selecciona un usuario para bloquear.");
@@ -2936,16 +2999,16 @@ function assertBlockTarget(db, viewerId, targetUserId) {
     throw new ApiError(400, "INVALID_BLOCK_TARGET", "No puedes bloquearte a ti mismo.");
   }
 
-  const target = db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedTargetUserId);
+  const target = await db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedTargetUserId);
   if (!target || target.type !== "registered" || target.status !== USER_STATUS_ACTIVE) {
     throw new ApiError(404, "NOT_FOUND", "Usuario no disponible para bloquear.");
   }
   return target;
 }
 
-function usersBlockEachOther(db, leftUserId, rightUserId) {
+async function usersBlockEachOther(db, leftUserId, rightUserId) {
   return Boolean(
-    db
+    await db
       .prepare(
         `
     SELECT 1
@@ -2959,20 +3022,20 @@ function usersBlockEachOther(db, leftUserId, rightUserId) {
   );
 }
 
-function isTopicSeoProblematic(db, topicId, title = "", messages = null) {
+async function isTopicSeoProblematic(db, topicId, title = "", messages = null) {
   if (hasProfanity(title)) {
     return true;
   }
 
   const topicMessages = Array.isArray(messages)
     ? messages
-    : db.prepare("SELECT text FROM messages WHERE topic_id = ?").all(String(topicId || ""));
+    : await db.prepare("SELECT text FROM messages WHERE topic_id = ?").all(String(topicId || ""));
   if (topicMessages.some((message) => hasProfanity(message.text))) {
     return true;
   }
 
   return Boolean(
-    db
+    await db
       .prepare(
         `
     SELECT 1
@@ -3004,36 +3067,44 @@ function isSeoTopicRowProblematic(row) {
   );
 }
 
-function followTopicForRegisteredViewer(db, context, topicId, nowIso = new Date().toISOString()) {
+async function followTopicForRegisteredViewer(
+  db,
+  context,
+  topicId,
+  nowIso = new Date().toISOString()
+) {
   if (context.viewer.type !== "registered" || !topicId) {
     return;
   }
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO topic_follows (user_id, topic_id, created_at, updated_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id, topic_id) DO UPDATE SET updated_at = excluded.updated_at
   `
-  ).run(context.viewer.id, topicId, nowIso, nowIso);
+    )
+    .run(context.viewer.id, topicId, nowIso, nowIso);
 }
 
-function getFollowedTopicIds(db, viewerId) {
+async function getFollowedTopicIds(db, viewerId) {
   if (!viewerId) {
     return [];
   }
 
-  return db
-    .prepare(
-      `
+  return (
+    await db
+      .prepare(
+        `
     SELECT topic_id
     FROM topic_follows
     WHERE user_id = ?
     ORDER BY updated_at DESC
   `
-    )
-    .all(viewerId)
-    .map((row) => row.topic_id);
+      )
+      .all(viewerId)
+  ).map((row) => row.topic_id);
 }
 
 function normalizeProductRouteGroup(value) {
@@ -3069,8 +3140,8 @@ function normalizeProductSourceGroup(value) {
   return allowedSources.has(normalized) ? normalized : "referral";
 }
 
-function getProductAnalyticsSalt(db) {
-  const existing = db
+async function getProductAnalyticsSalt(db) {
+  const existing = await db
     .prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(PRODUCT_ANALYTICS_SALT_META_KEY);
   if (existing?.value) {
@@ -3078,28 +3149,26 @@ function getProductAnalyticsSalt(db) {
   }
 
   const salt = crypto.randomBytes(32).toString("base64url");
-  db.prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)").run(
-    PRODUCT_ANALYTICS_SALT_META_KEY,
-    salt,
-    new Date().toISOString()
-  );
+  await db
+    .prepare("INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?)")
+    .run(PRODUCT_ANALYTICS_SALT_META_KEY, salt, new Date().toISOString());
   return salt;
 }
 
-function getProductAnalyticsSubjectKey(db, context) {
+async function getProductAnalyticsSubjectKey(db, context) {
   const identity =
     context.viewer.type === "registered"
       ? `registered:${context.viewer.id}`
       : `guest:${context.sessionId}`;
   return crypto
-    .createHmac("sha256", getProductAnalyticsSalt(db))
+    .createHmac("sha256", await getProductAnalyticsSalt(db))
     .update(identity)
     .digest("base64url");
 }
 
-function pruneProductAnalyticsIfNeeded(db, now = new Date()) {
+async function pruneProductAnalyticsIfNeeded(db, now = new Date()) {
   const today = now.toISOString().slice(0, 10);
-  const lastPrune = db
+  const lastPrune = await db
     .prepare("SELECT value FROM app_metadata WHERE key = ?")
     .get(PRODUCT_ANALYTICS_PRUNE_META_KEY);
   if (lastPrune?.value === today) {
@@ -3109,17 +3178,19 @@ function pruneProductAnalyticsIfNeeded(db, now = new Date()) {
   const cutoff = new Date(
     now.getTime() - PRODUCT_ANALYTICS_RETENTION_DAYS * 24 * 60 * 60_000
   ).toISOString();
-  db.prepare("DELETE FROM product_events WHERE created_at < ?").run(cutoff);
-  db.prepare(
-    `
+  await db.prepare("DELETE FROM product_events WHERE created_at < ?").run(cutoff);
+  await db
+    .prepare(
+      `
     INSERT INTO app_metadata (key, value, updated_at)
     VALUES (?, ?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
   `
-  ).run(PRODUCT_ANALYTICS_PRUNE_META_KEY, today, now.toISOString());
+    )
+    .run(PRODUCT_ANALYTICS_PRUNE_META_KEY, today, now.toISOString());
 }
 
-function recordProductEvent(
+async function recordProductEvent(
   db,
   context,
   eventName,
@@ -3132,15 +3203,15 @@ function recordProductEvent(
     throw new ApiError(400, "INVALID_PRODUCT_EVENT", "El evento de producto no es válido.");
   }
 
-  pruneProductAnalyticsIfNeeded(db, now);
-  const subjectKey = getProductAnalyticsSubjectKey(db, context);
+  await pruneProductAnalyticsIfNeeded(db, now);
+  const subjectKey = await getProductAnalyticsSubjectKey(db, context);
   const normalizedRouteGroup = normalizeProductRouteGroup(routeGroup);
   const normalizedSourceGroup = normalizeProductSourceGroup(sourceGroup);
   const createdAt = now.toISOString();
   let returnVisitRecorded = false;
 
   if (normalizedEventName === "page_view") {
-    const previousVisit = db
+    const previousVisit = await db
       .prepare(
         `
       SELECT created_at
@@ -3156,38 +3227,42 @@ function recordProductEvent(
       Number.isFinite(previousVisitMs) && now.getTime() - previousVisitMs >= 12 * 60 * 60_000;
   }
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, source_group, created_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `
-  ).run(
-    subjectKey,
-    context.viewer.type,
-    normalizedEventName,
-    normalizedRouteGroup,
-    normalizedSourceGroup,
-    createdAt
-  );
+    )
+    .run(
+      subjectKey,
+      context.viewer.type,
+      normalizedEventName,
+      normalizedRouteGroup,
+      normalizedSourceGroup,
+      createdAt
+    );
 
   if (returnVisitRecorded) {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       INSERT INTO product_events (subject_key, viewer_type, event_name, route_group, source_group, created_at)
       VALUES (?, ?, 'return_visit', ?, ?, ?)
     `
-    ).run(subjectKey, context.viewer.type, normalizedRouteGroup, normalizedSourceGroup, createdAt);
+      )
+      .run(subjectKey, context.viewer.type, normalizedRouteGroup, normalizedSourceGroup, createdAt);
   }
 
   return { accepted: true, returnVisitRecorded };
 }
 
-function buildFrontendPayload(db, context, selectedTopicId = null, profileNickname = null) {
-  rebuildActiveTopicRanks(db);
+async function buildFrontendPayload(db, context, selectedTopicId = null, profileNickname = null) {
+  await rebuildActiveTopicRanks(db);
 
-  const blockedUsers = getBlockedUsersForFrontend(db, context.viewer.id);
-  const hiddenBlockedUserIds = getHiddenBlockedUserIds(db, context.viewer.id);
-  const activeTopicRows = getActiveTopicsForFrontend(db).filter(
+  const blockedUsers = await getBlockedUsersForFrontend(db, context.viewer.id);
+  const hiddenBlockedUserIds = await getHiddenBlockedUserIds(db, context.viewer.id);
+  const activeTopicRows = (await getActiveTopicsForFrontend(db)).filter(
     (row) => !hiddenBlockedUserIds.has(row.author_id)
   );
   const topicIds = new Set(activeTopicRows.map((row) => row.id));
@@ -3206,13 +3281,13 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   };
   // Una sola lectura de presencia por request: la ventana visible es la misma para
   // todos los temas de este snapshot.
-  const onlineCount = countOnlineUsers(db);
+  const onlineCount = await countOnlineUsers(db);
   const visibleLimit = resolveVisibleTopicLimit(onlineCount);
   const topics = [];
   for (const [index, row] of activeTopicRows.entries()) {
     topics.push(
       hideBlockedMessages(
-        hydrateTopic(db, row, {
+        await hydrateTopic(db, row, {
           forceVisible: index < visibleLimit,
           viewerId: context.viewer.id,
           visibleLimit
@@ -3220,18 +3295,18 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
       )
     );
   }
-  const reportSnapshot = getReportSnapshot(db, context.sessionId);
-  const friendships = getFriendshipsForFrontend(db, context.viewer.id);
+  const reportSnapshot = await getReportSnapshot(db, context.sessionId);
+  const friendships = await getFriendshipsForFrontend(db, context.viewer.id);
   const friendshipStatusByUserId = getFriendshipStatusByUserId(friendships);
   let resolvedSelectedTopicId =
     selectedTopicId && topicIds.has(selectedTopicId) ? selectedTopicId : null;
 
   if (selectedTopicId && !topicIds.has(selectedTopicId)) {
-    const selectedRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(selectedTopicId);
+    const selectedRow = await db.prepare("SELECT * FROM topics WHERE id = ?").get(selectedTopicId);
     if (selectedRow && !hiddenBlockedUserIds.has(selectedRow.author_id)) {
       topics.push(
         hideBlockedMessages(
-          hydrateTopic(db, selectedRow, {
+          await hydrateTopic(db, selectedRow, {
             forceVisible: false,
             viewerId: context.viewer.id,
             visibleLimit
@@ -3249,7 +3324,7 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   profileUserIds.push(...blockedUsers.map((user) => user.id));
 
   if (profileNickname) {
-    const sharedProfileRow = db
+    const sharedProfileRow = await db
       .prepare(
         "SELECT id FROM users WHERE nickname_norm = ? AND type = 'registered' AND status = 'active'"
       )
@@ -3262,26 +3337,30 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   let pendingModerationCount = 0;
   if (context.viewer.isAdmin) {
     const reportsCount =
-      db
-        .prepare(
-          `
+      (
+        await db
+          .prepare(
+            `
       SELECT COUNT(*) AS count
       FROM reports
       WHERE status = ?
     `
-        )
-        .get(REPORT_STATUS_OPEN)?.count ?? 0;
+          )
+          .get(REPORT_STATUS_OPEN)
+      )?.count ?? 0;
 
     const avatarsCount =
-      db
-        .prepare(
-          `
+      (
+        await db
+          .prepare(
+            `
       SELECT COUNT(*) AS count
       FROM users
       WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
     `
-        )
-        .get()?.count ?? 0;
+          )
+          .get()
+      )?.count ?? 0;
 
     pendingModerationCount = reportsCount + avatarsCount;
   }
@@ -3289,7 +3368,7 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
   return {
     sessionId: context.sessionId,
     viewer: context.viewer,
-    users: getFrontendUsers(db, context.viewer.id, profileUserIds).map((user) => ({
+    users: (await getFrontendUsers(db, context.viewer.id, profileUserIds)).map((user) => ({
       ...user,
       friendshipStatus:
         user.id === context.viewer.id ? "self" : friendshipStatusByUserId.get(user.id) || "none"
@@ -3297,12 +3376,12 @@ function buildFrontendPayload(db, context, selectedTopicId = null, profileNickna
     friendships,
     blockedUsers,
     followedTopicIds:
-      context.viewer.type === "registered" ? getFollowedTopicIds(db, context.viewer.id) : [],
+      context.viewer.type === "registered" ? await getFollowedTopicIds(db, context.viewer.id) : [],
     topics,
     selectedTopicId: resolvedSelectedTopicId,
     reportedTopicIds: reportSnapshot.reportedTopicIds,
     reportedMessageIds: reportSnapshot.reportedMessageIds,
-    rankings: buildBackendRankings(db, context, resolvedSelectedTopicId),
+    rankings: await buildBackendRankings(db, context, resolvedSelectedTopicId),
     // Gente realmente conectada, invitados incluidos. La lista de usuarios solo
     // muestra registrados, asi que sin este numero una sala con invitados parece
     // vacia. Es el dato crudo: si hay 3 personas, se informan 3.
@@ -3338,12 +3417,12 @@ function assertRateLimit(lastAtIso, viewerType, fieldName) {
   }
 }
 
-function assertConsecutiveCommentRateLimit(db, context, topicId) {
+async function assertConsecutiveCommentRateLimit(db, context, topicId) {
   if (context.viewer.type !== "registered") {
     return;
   }
 
-  const latestComment = db
+  const latestComment = await db
     .prepare(
       `
     SELECT author_id, created_at
@@ -3375,13 +3454,13 @@ function assertConsecutiveCommentRateLimit(db, context, topicId) {
   }
 }
 
-function getGuestIpActivityAt(db, context, fieldName) {
+async function getGuestIpActivityAt(db, context, fieldName) {
   const ipAddress = getEffectiveContextIpAddress(context);
   if (!ipAddress) {
     return null;
   }
 
-  const row = db
+  const row = await db
     .prepare(
       `
     SELECT ${fieldName} AS last_at
@@ -3395,46 +3474,52 @@ function getGuestIpActivityAt(db, context, fieldName) {
   return row?.last_at ?? null;
 }
 
-function getContextActivityAt(db, context, fieldName) {
+async function getContextActivityAt(db, context, fieldName) {
   if (context.viewer.type === "registered") {
     return context.viewerRow[fieldName];
   }
 
-  return getGuestIpActivityAt(db, context, fieldName) || context.sessionRow[fieldName];
+  return (await getGuestIpActivityAt(db, context, fieldName)) || context.sessionRow[fieldName];
 }
 
-function updateViewerActivity(db, context, fieldName) {
+async function updateViewerActivity(db, context, fieldName) {
   const nowIso = new Date().toISOString();
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     UPDATE sessions
     SET ${fieldName} = ?, updated_at = ?
     WHERE id = ?
   `
-  ).run(nowIso, nowIso, context.sessionId);
+    )
+    .run(nowIso, nowIso, context.sessionId);
 
   if (context.viewer.type === "registered") {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE users
       SET ${fieldName} = ?, updated_at = ?
       WHERE id = ?
     `
-    ).run(nowIso, nowIso, context.viewer.id);
+      )
+      .run(nowIso, nowIso, context.viewer.id);
     return;
   }
 
   const ipAddress = getEffectiveContextIpAddress(context);
   if (ipAddress) {
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       INSERT INTO guest_ip_rate_limits (ip_address, ${fieldName}, created_at, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(ip_address) DO UPDATE SET
         ${fieldName} = excluded.${fieldName},
         updated_at = excluded.updated_at
     `
-    ).run(ipAddress, nowIso, nowIso, nowIso);
+      )
+      .run(ipAddress, nowIso, nowIso, nowIso);
   }
 }
 
@@ -3532,8 +3617,8 @@ function getEffectiveContextIpAddress(context) {
   return normalizeIpAddress(context.ipAddress || context.sessionRow?.last_ip || "");
 }
 
-function assertContextNotBlocked(db, context) {
-  const blockedSession = db
+async function assertContextNotBlocked(db, context) {
+  const blockedSession = await db
     .prepare(
       `
     SELECT session_id
@@ -3552,7 +3637,7 @@ function assertContextNotBlocked(db, context) {
     return;
   }
 
-  const blockedIp = db
+  const blockedIp = await db
     .prepare(
       `
     SELECT ip_address
@@ -3579,14 +3664,14 @@ function assertProfileReady(context) {
   );
 }
 
-function assertContextCanParticipate(db, context) {
+async function assertContextCanParticipate(db, context) {
   assertViewerCanParticipate(context.viewerRow);
-  assertContextNotBlocked(db, context);
+  await assertContextNotBlocked(db, context);
   assertProfileReady(context);
 }
 
-function assertRegisteredContextCanPost(db, context) {
-  assertContextCanParticipate(db, context);
+async function assertRegisteredContextCanPost(db, context) {
+  await assertContextCanParticipate(db, context);
   if (context.viewer.type !== "registered") {
     throw new ApiError(
       403,
@@ -3596,13 +3681,13 @@ function assertRegisteredContextCanPost(db, context) {
   }
 }
 
-function assertExistingTopic(db, topicId) {
+async function assertExistingTopic(db, topicId) {
   const normalizedTopicId = String(topicId || "").trim();
   if (!normalizedTopicId) {
     throw new ApiError(404, "NOT_FOUND", "Tema no encontrado.");
   }
 
-  const topicRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(normalizedTopicId);
+  const topicRow = await db.prepare("SELECT * FROM topics WHERE id = ?").get(normalizedTopicId);
   if (!topicRow) {
     throw new ApiError(404, "NOT_FOUND", "Tema no encontrado.");
   }
@@ -3615,9 +3700,9 @@ function normalizeMessageLikeId(messageId) {
   return Number(normalized);
 }
 
-function assertLikeableMessage(db, messageId) {
+async function assertLikeableMessage(db, messageId) {
   const normalizedMessageId = normalizeMessageLikeId(messageId);
-  const messageRow = db
+  const messageRow = await db
     .prepare(
       `
     SELECT messages.id, messages.topic_id, messages.kind, topics.status AS topic_status
@@ -3651,24 +3736,28 @@ function assertLikeableMessage(db, messageId) {
   return messageRow;
 }
 
-function refreshMessageReactionCounts(db, messageId) {
+async function refreshMessageReactionCounts(db, messageId) {
   const likes =
-    db.prepare("SELECT COUNT(*) AS count FROM message_likes WHERE message_id = ?").get(messageId)
-      ?.count ?? 0;
+    (
+      await db
+        .prepare("SELECT COUNT(*) AS count FROM message_likes WHERE message_id = ?")
+        .get(messageId)
+    )?.count ?? 0;
   const dislikes =
-    db.prepare("SELECT COUNT(*) AS count FROM message_dislikes WHERE message_id = ?").get(messageId)
-      ?.count ?? 0;
-  db.prepare("UPDATE messages SET likes = ?, dislikes = ? WHERE id = ?").run(
-    likes,
-    dislikes,
-    messageId
-  );
+    (
+      await db
+        .prepare("SELECT COUNT(*) AS count FROM message_dislikes WHERE message_id = ?")
+        .get(messageId)
+    )?.count ?? 0;
+  await db
+    .prepare("UPDATE messages SET likes = ?, dislikes = ? WHERE id = ?")
+    .run(likes, dislikes, messageId);
   return { likes, dislikes };
 }
 
-function recordMessageReaction(db, messageRow, userId, reactionType) {
+async function recordMessageReaction(db, messageRow, userId, reactionType) {
   const tableName = reactionType === "dislike" ? "message_dislikes" : "message_likes";
-  const existingReaction = db
+  const existingReaction = await db
     .prepare(
       `
     SELECT 'like' AS reaction_type
@@ -3691,22 +3780,24 @@ function recordMessageReaction(db, messageRow, userId, reactionType) {
     );
   }
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO ${tableName} (message_id, user_id, created_at)
     VALUES (?, ?, ?)
   `
-  ).run(messageRow.id, userId, new Date().toISOString());
+    )
+    .run(messageRow.id, userId, new Date().toISOString());
 
-  refreshMessageReactionCounts(db, messageRow.id);
+  await refreshMessageReactionCounts(db, messageRow.id);
 }
-function assertExistingUser(db, userId) {
+async function assertExistingUser(db, userId) {
   const normalizedUserId = String(userId || "").trim();
   if (!normalizedUserId) {
     throw new ApiError(404, "NOT_FOUND", "Usuario no encontrado.");
   }
 
-  const userRow = db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedUserId);
+  const userRow = await db.prepare("SELECT * FROM users WHERE id = ?").get(normalizedUserId);
   if (!userRow) {
     throw new ApiError(404, "NOT_FOUND", "Usuario no encontrado.");
   }
@@ -3714,8 +3805,8 @@ function assertExistingUser(db, userId) {
   return userRow;
 }
 
-function assertNicknameAvailable(db, nicknameKey, userId = null) {
-  const existing = db
+async function assertNicknameAvailable(db, nicknameKey, userId = null) {
+  const existing = await db
     .prepare(
       `
     SELECT id
@@ -3747,10 +3838,10 @@ function normalizeGeneratedNicknameBase(value) {
   return normalizeNickname(candidate.slice(0, NICKNAME_MAX_LENGTH));
 }
 
-function createAvailableNickname(db, preferredValue, userId) {
+async function createAvailableNickname(db, preferredValue, userId) {
   const baseNickname = normalizeGeneratedNicknameBase(preferredValue);
   const baseKey = normalizeNicknameKey(baseNickname);
-  const existingBase = db
+  const existingBase = await db
     .prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1")
     .get(baseKey);
   if (!existingBase || existingBase.id === userId) {
@@ -3766,7 +3857,7 @@ function createAvailableNickname(db, preferredValue, userId) {
     const suffix = `_${digest.slice(0, 5)}${attempt || ""}`;
     const prefixLength = NICKNAME_MAX_LENGTH - suffix.length;
     const candidate = normalizeNickname(`${baseNickname.slice(0, prefixLength)}${suffix}`);
-    const existing = db
+    const existing = await db
       .prepare("SELECT id FROM users WHERE nickname_norm = ? LIMIT 1")
       .get(normalizeNicknameKey(candidate));
     if (!existing || existing.id === userId) {
@@ -3777,8 +3868,8 @@ function createAvailableNickname(db, preferredValue, userId) {
   throw new ApiError(409, "NICKNAME_TAKEN", "No pudimos generar un username disponible.");
 }
 
-function backfillRegisteredNicknames(db) {
-  const rows = db
+async function backfillRegisteredNicknames(db) {
+  const rows = await db
     .prepare(
       `
     SELECT id, name, nickname
@@ -3798,13 +3889,14 @@ function backfillRegisteredNicknames(db) {
   `);
 
   for (const row of rows) {
-    const nickname = createAvailableNickname(db, row.nickname || row.name, row.id);
-    updateNickname.run(nickname, normalizeNicknameKey(nickname), row.id);
+    const nickname = await createAvailableNickname(db, row.nickname || row.name, row.id);
+    await updateNickname.run(nickname, normalizeNicknameKey(nickname), row.id);
   }
 }
-function backfillVerifiedPasswordEmails(db) {
-  db.prepare(
-    `
+async function backfillVerifiedPasswordEmails(db) {
+  await db
+    .prepare(
+      `
     UPDATE users
     SET email_verified_at = terms_accepted_at
     WHERE type = 'registered'
@@ -3814,11 +3906,12 @@ function backfillVerifiedPasswordEmails(db) {
       AND terms_accepted_at IS NOT NULL
       AND terms_version = ?
   `
-  ).run(TERMS_VERSION);
+    )
+    .run(TERMS_VERSION);
 }
 
-function getPasswordUserByEmail(db, email) {
-  return db
+async function getPasswordUserByEmail(db, email) {
+  return await db
     .prepare(
       `
     SELECT *
@@ -3830,8 +3923,8 @@ function getPasswordUserByEmail(db, email) {
     .get(email);
 }
 
-function getRegisteredUserByEmail(db, email) {
-  return db
+async function getRegisteredUserByEmail(db, email) {
+  return await db
     .prepare(
       `
     SELECT *
@@ -3844,7 +3937,7 @@ function getRegisteredUserByEmail(db, email) {
     .get(email);
 }
 
-function insertPasswordUser(
+async function insertPasswordUser(
   db,
   {
     email,
@@ -3862,44 +3955,46 @@ function insertPasswordUser(
   const normalizedDisplayName =
     displayName === null ? normalizedNickname : normalizeRequiredDisplayName(displayName);
   const nicknameKey = normalizeNicknameKey(normalizedNickname);
-  if (getRegisteredUserByEmail(db, normalizedEmail)) {
+  if (await getRegisteredUserByEmail(db, normalizedEmail)) {
     throw new ApiError(409, "EMAIL_TAKEN", "Ese email ya tiene cuenta.");
   }
-  assertNicknameAvailable(db, nicknameKey);
+  await assertNicknameAvailable(db, nicknameKey);
 
   const userId = `user-${crypto.randomUUID()}`;
   const isMinorRegistration = Number.isInteger(age) && age < 18;
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO users (
       id, name, nickname, nickname_norm, type, role, score, status, email, email_verified_at, password_hash,
       registration_age, terms_accepted_at, terms_version, profile_pending, profile_indexable,
       notifications_friends_only, created_at, updated_at
     ) VALUES (?, ?, ?, ?, 'registered', ?, 0, 'active', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
   `
-  ).run(
-    userId,
-    normalizedDisplayName,
-    normalizedNickname,
-    nicknameKey,
-    emailVerified && isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE,
-    normalizedEmail,
-    emailVerified ? nowIso : null,
-    passwordHash,
-    age,
-    termsVersion ? nowIso : null,
-    termsVersion,
-    isMinorRegistration ? 0 : 1,
-    isMinorRegistration ? 1 : 0,
-    nowIso,
-    nowIso
-  );
+    )
+    .run(
+      userId,
+      normalizedDisplayName,
+      normalizedNickname,
+      nicknameKey,
+      emailVerified && isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE,
+      normalizedEmail,
+      emailVerified ? nowIso : null,
+      passwordHash,
+      age,
+      termsVersion ? nowIso : null,
+      termsVersion,
+      isMinorRegistration ? 0 : 1,
+      isMinorRegistration ? 1 : 0,
+      nowIso,
+      nowIso
+    );
 
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  return await db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
 }
 
-function createPasswordUser(db, { email, password, nickname, nowIso }) {
-  return insertPasswordUser(db, {
+async function createPasswordUser(db, { email, password, nickname, nowIso }) {
+  return await insertPasswordUser(db, {
     email,
     passwordHash: hashPassword(validatePassword(password)),
     nickname,
@@ -3907,9 +4002,9 @@ function createPasswordUser(db, { email, password, nickname, nowIso }) {
   });
 }
 
-function getAuthenticatedPasswordUser(db, { email, password }) {
+async function getAuthenticatedPasswordUser(db, { email, password }) {
   const normalizedEmail = normalizeRequiredEmail(email);
-  const userRow = getPasswordUserByEmail(db, normalizedEmail);
+  const userRow = await getPasswordUserByEmail(db, normalizedEmail);
   const passwordMatches = verifyPassword(password, userRow?.password_hash || DUMMY_PASSWORD_HASH);
   if (!userRow || !passwordMatches) {
     throw new ApiError(401, "INVALID_CREDENTIALS", "Email o contrasena incorrectos.");
@@ -3927,7 +4022,7 @@ function resolvePreservedSuggestedDisplayName(nextValue, currentValue = null) {
   return normalized || currentValue || null;
 }
 
-function getOrCreateAuthenticatedUser(
+async function getOrCreateAuthenticatedUser(
   db,
   { authProvider, authSubject, email, emailVerified = false, displayName, avatarUrl, nowIso }
 ) {
@@ -3939,7 +4034,7 @@ function getOrCreateAuthenticatedUser(
   }
 
   const normalizedSuggestedAvatarUrl = normalizeAvatarUrl(avatarUrl, { discardInvalid: true });
-  const existingUser = db
+  const existingUser = await db
     .prepare(
       `
     SELECT *
@@ -3959,14 +4054,16 @@ function getOrCreateAuthenticatedUser(
       normalizedSuggestedAvatarUrl,
       existingUser.profile_suggested_avatar_url
     );
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE users
       SET profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
       WHERE id = ?
     `
-    ).run(nextSuggestedDisplayName, nextSuggestedAvatarUrl, nowIso, existingUser.id);
-    return db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
+      )
+      .run(nextSuggestedDisplayName, nextSuggestedAvatarUrl, nowIso, existingUser.id);
+    return await db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
   }
 
   if (emailVerified !== true) {
@@ -3983,7 +4080,7 @@ function getOrCreateAuthenticatedUser(
     normalizedEmail.split("@")[0]
   );
   const resolvedRole = isAdminEmail(normalizedEmail) ? ADMIN_ROLE : DEFAULT_REGISTERED_ROLE;
-  const matchingEmailUsers = db
+  const matchingEmailUsers = await db
     .prepare(
       `
     SELECT *
@@ -4013,23 +4110,25 @@ function getOrCreateAuthenticatedUser(
           ? ADMIN_ROLE
           : existingUser.role
         : DEFAULT_REGISTERED_ROLE;
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE users
       SET role = ?, email = ?, email_verified_at = COALESCE(email_verified_at, ?),
           profile_suggested_name = ?, profile_suggested_avatar_url = ?, updated_at = ?
       WHERE id = ?
     `
-    ).run(
-      nextRole,
-      normalizedEmail,
-      nowIso,
-      nextSuggestedDisplayName,
-      nextSuggestedAvatarUrl,
-      nowIso,
-      existingUser.id
-    );
-    return db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
+      )
+      .run(
+        nextRole,
+        normalizedEmail,
+        nowIso,
+        nextSuggestedDisplayName,
+        nextSuggestedAvatarUrl,
+        nowIso,
+        existingUser.id
+      );
+    return await db.prepare("SELECT * FROM users WHERE id = ?").get(existingUser.id);
   }
 
   if (matchingEmailUsers.length > 1) {
@@ -4063,52 +4162,56 @@ function getOrCreateAuthenticatedUser(
           ? ADMIN_ROLE
           : existingEmailUser.role
         : DEFAULT_REGISTERED_ROLE;
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE users
       SET role = ?, auth_provider = ?, auth_subject = ?, email_verified_at = COALESCE(email_verified_at, ?),
           updated_at = ?
       WHERE id = ?
     `
-    ).run(nextRole, normalizedProvider, normalizedSubject, nowIso, nowIso, existingEmailUser.id);
-    return db.prepare("SELECT * FROM users WHERE id = ?").get(existingEmailUser.id);
+      )
+      .run(nextRole, normalizedProvider, normalizedSubject, nowIso, nowIso, existingEmailUser.id);
+    return await db.prepare("SELECT * FROM users WHERE id = ?").get(existingEmailUser.id);
   }
 
   const userId = `user-${crypto.randomUUID()}`;
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO users (
       id, name, type, role, score, status, auth_provider, auth_subject, email, email_verified_at, avatar_url,
       profile_pending, profile_suggested_name, profile_suggested_avatar_url, created_at, updated_at
     ) VALUES (?, 'Usuario', 'registered', ?, 0, 'active', ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?)
   `
-  ).run(
-    userId,
-    resolvedRole,
-    normalizedProvider,
-    normalizedSubject,
-    normalizedEmail,
-    nowIso,
-    normalizedSuggestedDisplayName,
-    normalizedSuggestedAvatarUrl,
-    nowIso,
-    nowIso
-  );
+    )
+    .run(
+      userId,
+      resolvedRole,
+      normalizedProvider,
+      normalizedSubject,
+      normalizedEmail,
+      nowIso,
+      normalizedSuggestedDisplayName,
+      normalizedSuggestedAvatarUrl,
+      nowIso,
+      nowIso
+    );
 
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  return await db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
 }
-function assertReportableEntity(db, entityType, entityId) {
+async function assertReportableEntity(db, entityType, entityId) {
   if (entityType === "topic") {
     return {
       entityType,
-      entityId: assertExistingTopic(db, entityId).id,
+      entityId: (await assertExistingTopic(db, entityId)).id,
       topicId: String(entityId || "").trim()
     };
   }
 
   if (entityType === "message") {
     const normalizedMessageId = normalizeMessageEntityId(entityId);
-    const messageRow = db
+    const messageRow = await db
       .prepare(
         `
       SELECT id, topic_id
@@ -4132,7 +4235,7 @@ function assertReportableEntity(db, entityType, entityId) {
   if (entityType === "user") {
     return {
       entityType,
-      entityId: assertExistingUser(db, entityId).id,
+      entityId: (await assertExistingUser(db, entityId)).id,
       topicId: null
     };
   }
@@ -4140,9 +4243,10 @@ function assertReportableEntity(db, entityType, entityId) {
   throw new ApiError(400, "INVALID_REPORT_TARGET", "Entidad de reporte no soportada.");
 }
 
-function insertOrUpdateBlockedSession(db, { sessionId, actorUserId, reason, createdAt }) {
-  db.prepare(
-    `
+async function insertOrUpdateBlockedSession(db, { sessionId, actorUserId, reason, createdAt }) {
+  await db
+    .prepare(
+      `
     INSERT INTO blocked_sessions (session_id, actor_user_id, reason, created_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
@@ -4150,12 +4254,14 @@ function insertOrUpdateBlockedSession(db, { sessionId, actorUserId, reason, crea
       reason = excluded.reason,
       created_at = excluded.created_at
   `
-  ).run(sessionId, actorUserId, reason, createdAt);
+    )
+    .run(sessionId, actorUserId, reason, createdAt);
 }
 
-function insertOrUpdateBlockedIp(db, { ipAddress, actorUserId, reason, createdAt }) {
-  db.prepare(
-    `
+async function insertOrUpdateBlockedIp(db, { ipAddress, actorUserId, reason, createdAt }) {
+  await db
+    .prepare(
+      `
     INSERT INTO blocked_ips (ip_address, actor_user_id, reason, created_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(ip_address) DO UPDATE SET
@@ -4163,7 +4269,8 @@ function insertOrUpdateBlockedIp(db, { ipAddress, actorUserId, reason, createdAt
       reason = excluded.reason,
       created_at = excluded.created_at
   `
-  ).run(ipAddress, actorUserId, reason, createdAt);
+    )
+    .run(ipAddress, actorUserId, reason, createdAt);
 }
 
 function assertModerator(viewerRow) {
@@ -4172,8 +4279,8 @@ function assertModerator(viewerRow) {
   }
 }
 
-function getReportSnapshot(db, sessionId) {
-  const rows = db
+async function getReportSnapshot(db, sessionId) {
+  const rows = await db
     .prepare(
       `
     SELECT entity_type, entity_id
@@ -4204,16 +4311,18 @@ function getReportSnapshot(db, sessionId) {
   };
 }
 
-function recordModerationAction(
+async function recordModerationAction(
   db,
   { actionType, targetType, targetId, actorUserId, reason = "", metadataJson = "{}", createdAt }
 ) {
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO moderation_actions (action_type, target_type, target_id, actor_user_id, reason, metadata_json, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `
-  ).run(actionType, targetType, targetId, actorUserId, reason, metadataJson, createdAt);
+    )
+    .run(actionType, targetType, targetId, actorUserId, reason, metadataJson, createdAt);
 }
 
 function parseModerationMetadata(metadataJson) {
@@ -4225,8 +4334,8 @@ function parseModerationMetadata(metadataJson) {
   }
 }
 
-function getUserSanctionHistory(db, userId) {
-  const rows = db
+async function getUserSanctionHistory(db, userId) {
+  const rows = await db
     .prepare(
       `
     SELECT id, action_type, reason, metadata_json, created_at
@@ -4263,8 +4372,8 @@ function getUserSanctionHistory(db, userId) {
   };
 }
 
-function getNextProgressiveSanction(db, userId) {
-  const history = getUserSanctionHistory(db, userId);
+async function getNextProgressiveSanction(db, userId) {
+  const history = await getUserSanctionHistory(db, userId);
   const index = Math.min(history.sanctions.length, PROGRESSIVE_SANCTION_STEPS.length - 1);
   const step = PROGRESSIVE_SANCTION_STEPS[index];
   return {
@@ -4274,10 +4383,12 @@ function getNextProgressiveSanction(db, userId) {
   };
 }
 
-function getUserSanctionSummary(db, userId) {
-  const history = getUserSanctionHistory(db, userId);
-  const next = getNextProgressiveSanction(db, userId);
-  const userRow = db.prepare("SELECT status, banned_until FROM users WHERE id = ?").get(userId);
+async function getUserSanctionSummary(db, userId) {
+  const history = await getUserSanctionHistory(db, userId);
+  const next = await getNextProgressiveSanction(db, userId);
+  const userRow = await db
+    .prepare("SELECT status, banned_until FROM users WHERE id = ?")
+    .get(userId);
   const active = Boolean(
     userRow &&
     (userRow.status === USER_STATUS_EXPELLED ||
@@ -4292,9 +4403,9 @@ function getUserSanctionSummary(db, userId) {
   };
 }
 
-function listActiveSanctions(db) {
+async function listActiveSanctions(db) {
   const nowIso = new Date().toISOString();
-  const sanctionedRows = db
+  const sanctionedRows = await db
     .prepare(
       `
     SELECT id, name, status, banned_until
@@ -4308,7 +4419,7 @@ function listActiveSanctions(db) {
 
   const sanctions = [];
   for (const row of sanctionedRows) {
-    const history = getUserSanctionHistory(db, row.id);
+    const history = await getUserSanctionHistory(db, row.id);
     const active = history.activeSanction;
     const metadata = active?.metadata || {};
     sanctions.push({
@@ -4327,18 +4438,20 @@ function listActiveSanctions(db) {
   return sanctions;
 }
 
-function resolveReportsForEntity(db, entityType, entityId, resolvedAt) {
-  db.prepare(
-    `
+async function resolveReportsForEntity(db, entityType, entityId, resolvedAt) {
+  await db
+    .prepare(
+      `
     UPDATE reports
     SET status = ?, resolved_at = ?
     WHERE entity_type = ? AND entity_id = ? AND status = ?
   `
-  ).run(REPORT_STATUS_RESOLVED, resolvedAt, entityType, entityId, REPORT_STATUS_OPEN);
+    )
+    .run(REPORT_STATUS_RESOLVED, resolvedAt, entityType, entityId, REPORT_STATUS_OPEN);
 }
 
-function recalculateTopicActivity(db, topicId, updatedAt) {
-  const latestMessage = db
+async function recalculateTopicActivity(db, topicId, updatedAt) {
+  const latestMessage = await db
     .prepare(
       `
     SELECT id, text, created_at
@@ -4354,53 +4467,58 @@ function recalculateTopicActivity(db, topicId, updatedAt) {
     throw new ApiError(409, "INVALID_TOPIC_STATE", "El tema no puede quedar sin mensajes.");
   }
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     UPDATE topics
     SET subtitle = ?, last_message_id = ?, last_activity_at = ?, updated_at = ?
     WHERE id = ?
   `
-  ).run(
-    summarizeText(latestMessage.text),
-    Number(latestMessage.id),
-    latestMessage.created_at,
-    updatedAt,
-    topicId
-  );
+    )
+    .run(
+      summarizeText(latestMessage.text),
+      Number(latestMessage.id),
+      latestMessage.created_at,
+      updatedAt,
+      topicId
+    );
 }
 
-function listPendingAvatars(db, options = {}) {
+async function listPendingAvatars(db, options = {}) {
   const pagination = normalizePaginationOptions(options, ADMIN_AVATAR_PAGE_SIZE);
   const total =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     SELECT COUNT(*) AS count
     FROM users
     WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
   `
-      )
-      .get()?.count ?? 0;
-  const items = db
-    .prepare(
-      `
+        )
+        .get()
+    )?.count ?? 0;
+  const items = (
+    await db
+      .prepare(
+        `
     SELECT id, name, email, avatar_pending_url, avatar_review_status, updated_at
     FROM users
     WHERE type = 'registered' AND avatar_pending_url IS NOT NULL AND avatar_pending_url <> ''
     ORDER BY updated_at DESC, created_at DESC
     LIMIT ? OFFSET ?
   `
-    )
-    .all(pagination.limit, pagination.offset)
-    .map((row) => ({
-      userId: row.id,
-      name: row.name,
-      email: row.email ?? null,
-      description: row.description ?? "",
-      avatarPendingUrl: row.avatar_pending_url,
-      avatarReviewStatus: row.avatar_review_status || "pending",
-      updatedAt: row.updated_at
-    }));
+      )
+      .all(pagination.limit, pagination.offset)
+  ).map((row) => ({
+    userId: row.id,
+    name: row.name,
+    email: row.email ?? null,
+    description: row.description ?? "",
+    avatarPendingUrl: row.avatar_pending_url,
+    avatarReviewStatus: row.avatar_review_status || "pending",
+    updatedAt: row.updated_at
+  }));
 
   return {
     items,
@@ -4408,7 +4526,7 @@ function listPendingAvatars(db, options = {}) {
   };
 }
 
-function attachReportTargets(db, items) {
+async function attachReportTargets(db, items) {
   const messageIds = items
     .filter((item) => item.entityType === "message")
     .map((item) => item.entityId);
@@ -4417,7 +4535,7 @@ function attachReportTargets(db, items) {
 
   const messageTargets = new Map();
   if (messageIds.length) {
-    for (const row of db
+    for (const row of await db
       .prepare(
         `
       SELECT
@@ -4441,14 +4559,14 @@ function attachReportTargets(db, items) {
         authorName: row.author_name || "Usuario eliminado",
         topicId: row.topic_id,
         topicTitle: row.topic_title || "Tema eliminado",
-        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
+        sanction: row.author_id ? await getUserSanctionSummary(db, row.author_id) : null
       });
     }
   }
 
   const topicTargets = new Map();
   if (topicIds.length) {
-    for (const row of db
+    for (const row of await db
       .prepare(
         `
       SELECT topics.id, topics.title, topics.author_id, users.name AS author_name
@@ -4463,14 +4581,14 @@ function attachReportTargets(db, items) {
         title: row.title || "Tema eliminado",
         authorId: row.author_id,
         authorName: row.author_name || "Usuario eliminado",
-        sanction: row.author_id ? getUserSanctionSummary(db, row.author_id) : null
+        sanction: row.author_id ? await getUserSanctionSummary(db, row.author_id) : null
       });
     }
   }
 
   const userTargets = new Map();
   if (userIds.length) {
-    for (const row of db
+    for (const row of await db
       .prepare(
         `
       SELECT id, name, status
@@ -4483,7 +4601,7 @@ function attachReportTargets(db, items) {
         kind: "user",
         name: row.name || "Usuario eliminado",
         status: row.status,
-        sanction: getUserSanctionSummary(db, row.id)
+        sanction: await getUserSanctionSummary(db, row.id)
       });
     }
   }
@@ -4502,21 +4620,24 @@ function attachReportTargets(db, items) {
   });
 }
 
-function listOpenReports(db, options = {}) {
+async function listOpenReports(db, options = {}) {
   const pagination = normalizePaginationOptions(options, ADMIN_REPORT_PAGE_SIZE);
   const total =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     SELECT COUNT(*) AS count
     FROM reports
     WHERE status = ?
   `
-      )
-      .get(REPORT_STATUS_OPEN)?.count ?? 0;
-  const items = db
-    .prepare(
-      `
+        )
+        .get(REPORT_STATUS_OPEN)
+    )?.count ?? 0;
+  const items = (
+    await db
+      .prepare(
+        `
     SELECT
       reports.id,
       reports.entity_type,
@@ -4532,27 +4653,27 @@ function listOpenReports(db, options = {}) {
     ORDER BY reports.created_at DESC, reports.id DESC
     LIMIT ? OFFSET ?
   `
-    )
-    .all(REPORT_STATUS_OPEN, pagination.limit, pagination.offset)
-    .map((row) => ({
-      id: row.id,
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      reason: row.reason,
-      createdAt: row.created_at,
-      reporterSessionId: row.reporter_session_id,
-      reporterUserId: row.reporter_user_id,
-      reporterName: row.reporter_name || "Anonimo"
-    }));
+      )
+      .all(REPORT_STATUS_OPEN, pagination.limit, pagination.offset)
+  ).map((row) => ({
+    id: row.id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    reason: row.reason,
+    createdAt: row.created_at,
+    reporterSessionId: row.reporter_session_id,
+    reporterUserId: row.reporter_user_id,
+    reporterName: row.reporter_name || "Anonimo"
+  }));
 
   return {
-    items: attachReportTargets(db, items),
+    items: await attachReportTargets(db, items),
     pagination: createPaginationMeta(total, pagination)
   };
 }
 
-function trimTopicReplies(db, topicId) {
-  const overflowRows = db
+async function trimTopicReplies(db, topicId) {
+  const overflowRows = await db
     .prepare(
       `
     SELECT id
@@ -4570,19 +4691,21 @@ function trimTopicReplies(db, topicId) {
 
   const deleteMessage = db.prepare("DELETE FROM messages WHERE id = ?");
   for (const row of overflowRows) {
-    deleteMessage.run(row.id);
+    await deleteMessage.run(row.id);
   }
 }
 
-function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new Date()) {
-  const topic = db.prepare("SELECT id, title FROM topics WHERE id = ?").get(String(topicId || ""));
+async function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new Date()) {
+  const topic = await db
+    .prepare("SELECT id, title FROM topics WHERE id = ?")
+    .get(String(topicId || ""));
   if (!topic) {
     return [];
   }
 
   const cutoff = new Date(now.getTime() - TOPIC_ACTIVITY_EMAIL_COOLDOWN_MS).toISOString();
   const nowIso = now.toISOString();
-  const recipients = db
+  const recipients = await db
     .prepare(
       `
     SELECT users.id, users.name, users.email
@@ -4617,7 +4740,7 @@ function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new D
     ON CONFLICT(user_id, topic_id) DO UPDATE SET last_sent_at = excluded.last_sent_at
   `);
   for (const recipient of recipients) {
-    claim.run(recipient.id, topic.id, nowIso);
+    await claim.run(recipient.id, topic.id, nowIso);
   }
 
   return recipients.map((recipient) => ({
@@ -4629,12 +4752,13 @@ function claimTopicActivityEmailRecipients(db, topicId, actorUserId, now = new D
   }));
 }
 
-function buildProductAnalyticsReport(db, days = 30) {
+async function buildProductAnalyticsReport(db, days = 30) {
   const normalizedDays = Math.max(1, Math.min(90, Number.parseInt(days, 10) || 30));
   const cutoff = new Date(Date.now() - normalizedDays * 24 * 60 * 60_000).toISOString();
-  const events = db
-    .prepare(
-      `
+  const events = (
+    await db
+      .prepare(
+        `
     SELECT
       event_name AS eventName,
       COUNT(*) AS total,
@@ -4644,16 +4768,17 @@ function buildProductAnalyticsReport(db, days = 30) {
     GROUP BY event_name
     ORDER BY total DESC, event_name ASC
   `
-    )
-    .all(cutoff)
-    .map((row) => ({
-      eventName: row.eventName,
-      total: Number(row.total ?? 0),
-      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-    }));
-  const daily = db
-    .prepare(
-      `
+      )
+      .all(cutoff)
+  ).map((row) => ({
+    eventName: row.eventName,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+  const daily = (
+    await db
+      .prepare(
+        `
     SELECT
       substr(created_at, 1, 10) AS day,
       event_name AS eventName,
@@ -4664,17 +4789,18 @@ function buildProductAnalyticsReport(db, days = 30) {
     GROUP BY day, event_name
     ORDER BY day ASC, event_name ASC
   `
-    )
-    .all(cutoff)
-    .map((row) => ({
-      day: row.day,
-      eventName: row.eventName,
-      total: Number(row.total ?? 0),
-      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-    }));
-  const routes = db
-    .prepare(
-      `
+      )
+      .all(cutoff)
+  ).map((row) => ({
+    day: row.day,
+    eventName: row.eventName,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+  const routes = (
+    await db
+      .prepare(
+        `
     SELECT
       route_group AS routeGroup,
       COUNT(*) AS total,
@@ -4684,16 +4810,17 @@ function buildProductAnalyticsReport(db, days = 30) {
     GROUP BY route_group
     ORDER BY total DESC, route_group ASC
   `
-    )
-    .all(cutoff)
-    .map((row) => ({
-      routeGroup: row.routeGroup,
-      total: Number(row.total ?? 0),
-      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-    }));
-  const sources = db
-    .prepare(
-      `
+      )
+      .all(cutoff)
+  ).map((row) => ({
+    routeGroup: row.routeGroup,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+  const sources = (
+    await db
+      .prepare(
+        `
     SELECT
       source_group AS sourceGroup,
       COUNT(*) AS total,
@@ -4703,16 +4830,17 @@ function buildProductAnalyticsReport(db, days = 30) {
     GROUP BY source_group
     ORDER BY total DESC, source_group ASC
   `
-    )
-    .all(cutoff)
-    .map((row) => ({
-      sourceGroup: row.sourceGroup,
-      total: Number(row.total ?? 0),
-      uniqueSubjects: Number(row.uniqueSubjects ?? 0)
-    }));
-  const cohorts = db
-    .prepare(
-      `
+      )
+      .all(cutoff)
+  ).map((row) => ({
+    sourceGroup: row.sourceGroup,
+    total: Number(row.total ?? 0),
+    uniqueSubjects: Number(row.uniqueSubjects ?? 0)
+  }));
+  const cohorts = (
+    await db
+      .prepare(
+        `
     WITH first_visits AS (
       SELECT subject_key, MIN(created_at) AS first_at
       FROM product_events
@@ -4734,21 +4862,22 @@ function buildProductAnalyticsReport(db, days = 30) {
     GROUP BY cohortDay
     ORDER BY cohortDay ASC
   `
-    )
-    .all(cutoff)
-    .map((row) => ({
-      cohortDay: row.cohortDay,
-      visitors: Number(row.visitors ?? 0),
-      returnedVisitors: Number(row.returnedVisitors ?? 0)
-    }));
+      )
+      .all(cutoff)
+  ).map((row) => ({
+    cohortDay: row.cohortDay,
+    visitors: Number(row.visitors ?? 0),
+    returnedVisitors: Number(row.returnedVisitors ?? 0)
+  }));
   // Retention split by acquisition source: answers whether search-sourced
   // visitors come back at a different rate than direct/social ones — the signal
   // that couples the SEO loop with the product loop. A subject's source is the
   // source_group of its first page_view; SQLite returns that bare column from
   // the same row as MIN(created_at) because there is exactly one min aggregate.
-  const retentionBySource = db
-    .prepare(
-      `
+  const retentionBySource = (
+    await db
+      .prepare(
+        `
     WITH first_visits AS (
       SELECT
         subject_key,
@@ -4773,13 +4902,13 @@ function buildProductAnalyticsReport(db, days = 30) {
     GROUP BY first_source
     ORDER BY visitors DESC, sourceGroup ASC
   `
-    )
-    .all(cutoff)
-    .map((row) => ({
-      sourceGroup: row.sourceGroup,
-      visitors: Number(row.visitors ?? 0),
-      returnedVisitors: Number(row.returnedVisitors ?? 0)
-    }));
+      )
+      .all(cutoff)
+  ).map((row) => ({
+    sourceGroup: row.sourceGroup,
+    visitors: Number(row.visitors ?? 0),
+    returnedVisitors: Number(row.returnedVisitors ?? 0)
+  }));
 
   return {
     days: normalizedDays,
@@ -4805,7 +4934,7 @@ function assertCommentableTopic(row) {
   }
 }
 
-function createStoredEmailAuthChallenge(
+async function createStoredEmailAuthChallenge(
   db,
   {
     email,
@@ -4819,7 +4948,7 @@ function createStoredEmailAuthChallenge(
 ) {
   const normalizedEmail = normalizeRequiredEmail(email);
   const nowIso = new Date(nowMs).toISOString();
-  const recentChallenge = db
+  const recentChallenge = await db
     .prepare(
       `
     SELECT created_at
@@ -4853,40 +4982,44 @@ function createStoredEmailAuthChallenge(
   assertTermsAccepted(acceptedTerms, termsVersion);
   const normalizedTermsVersion = TERMS_VERSION;
   const passwordHash = hashPassword(validatePassword(password));
-  if (getRegisteredUserByEmail(db, normalizedEmail)) {
+  if (await getRegisteredUserByEmail(db, normalizedEmail)) {
     throw new ApiError(409, "EMAIL_TAKEN", "Ese email ya tiene cuenta.");
   }
-  assertNicknameAvailable(db, normalizeNicknameKey(normalizedNickname));
+  await assertNicknameAvailable(db, normalizeNicknameKey(normalizedNickname));
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     DELETE FROM auth_email_challenges
     WHERE expires_at <= ? OR consumed_at IS NOT NULL
   `
-  ).run(nowIso);
+    )
+    .run(nowIso);
 
   const challengeId = `email-code-${crypto.randomUUID()}`;
   const code = String(crypto.randomInt(100000, 1_000_000));
   const expiresAt = new Date(nowMs + EMAIL_AUTH_CODE_TTL_MS).toISOString();
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     INSERT INTO auth_email_challenges (
       id, email, intent, code_hash, nickname, age, terms_version, password_hash,
       expires_at, attempts, max_attempts, consumed_at, created_at
     ) VALUES (?, ?, 'register', ?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)
   `
-  ).run(
-    challengeId,
-    normalizedEmail,
-    hashEmailAuthCode(challengeId, code),
-    normalizedNickname,
-    normalizedAge,
-    normalizedTermsVersion,
-    passwordHash,
-    expiresAt,
-    EMAIL_AUTH_MAX_ATTEMPTS,
-    nowIso
-  );
+    )
+    .run(
+      challengeId,
+      normalizedEmail,
+      hashEmailAuthCode(challengeId, code),
+      normalizedNickname,
+      normalizedAge,
+      normalizedTermsVersion,
+      passwordHash,
+      expiresAt,
+      EMAIL_AUTH_MAX_ATTEMPTS,
+      nowIso
+    );
 
   return {
     challengeId,
@@ -4897,7 +5030,7 @@ function createStoredEmailAuthChallenge(
   };
 }
 
-function verifyStoredEmailAuthChallenge(
+async function verifyStoredEmailAuthChallenge(
   db,
   {
     challengeId,
@@ -4919,8 +5052,8 @@ function verifyStoredEmailAuthChallenge(
     );
   }
 
-  const result = withTransaction(db, (afterCommit, db) => {
-    const challenge = db
+  const result = await withTransaction(db, async (afterCommit, db) => {
+    const challenge = await db
       .prepare(
         `
       SELECT * FROM auth_email_challenges WHERE id = ? LIMIT 1
@@ -4950,22 +5083,22 @@ function verifyStoredEmailAuthChallenge(
 
     const actualHash = hashEmailAuthCode(normalizedChallengeId, normalizedCode);
     if (!codesMatch(actualHash, challenge.code_hash)) {
-      db.prepare("UPDATE auth_email_challenges SET attempts = attempts + 1 WHERE id = ?").run(
-        normalizedChallengeId
-      );
+      await db
+        .prepare("UPDATE auth_email_challenges SET attempts = attempts + 1 WHERE id = ?")
+        .run(normalizedChallengeId);
       return {
         error: new ApiError(401, "INVALID_EMAIL_CODE", "El codigo ingresado no es correcto.")
       };
     }
 
     const normalizedSessionId = ensureViewerSessionId(sessionId);
-    const existingSessionRow = readSessionRow(db, normalizedSessionId);
-    assertContextNotBlocked(db, {
+    const existingSessionRow = await readSessionRow(db, normalizedSessionId);
+    await assertContextNotBlocked(db, {
       sessionId: normalizedSessionId,
       sessionRow: existingSessionRow,
       ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
     });
-    const viewerRow = insertPasswordUser(db, {
+    const viewerRow = await insertPasswordUser(db, {
       email: challenge.email,
       passwordHash: challenge.password_hash,
       nickname: challenge.nickname,
@@ -4975,14 +5108,13 @@ function verifyStoredEmailAuthChallenge(
       nowIso
     });
 
-    db.prepare("UPDATE auth_email_challenges SET consumed_at = ? WHERE id = ?").run(
-      nowIso,
-      normalizedChallengeId
-    );
+    await db
+      .prepare("UPDATE auth_email_challenges SET consumed_at = ? WHERE id = ?")
+      .run(nowIso, normalizedChallengeId);
     const nextSessionId = rotateSession
       ? createRotatedSessionId(normalizedSessionId)
       : normalizedSessionId;
-    const context = createRegisteredSession(
+    const context = await createRegisteredSession(
       db,
       nextSessionId,
       ipAddress,
@@ -4990,8 +5122,8 @@ function verifyStoredEmailAuthChallenge(
       existingSessionRow,
       viewerRow.id
     );
-    invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
-    return { payload: buildFrontendPayload(db, context, selectedTopicId) };
+    await invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
+    return { payload: await buildFrontendPayload(db, context, selectedTopicId) };
   });
 
   if (result.error) {
@@ -5000,7 +5132,7 @@ function verifyStoredEmailAuthChallenge(
   return result.payload;
 }
 
-function createStoredPasswordResetChallenge(
+async function createStoredPasswordResetChallenge(
   db,
   { email, ipAddress = "", nowMs = Date.now() } = {}
 ) {
@@ -5012,14 +5144,16 @@ function createStoredPasswordResetChallenge(
   const rateWindowStartIso = new Date(nowMs - PASSWORD_RESET_RATE_WINDOW_MS).toISOString();
   const expiresAt = new Date(nowMs + PASSWORD_RESET_CODE_TTL_MS).toISOString();
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     DELETE FROM password_reset_challenges
     WHERE created_at < ? AND (expires_at <= ? OR consumed_at IS NOT NULL)
   `
-  ).run(rateWindowStartIso, nowIso);
+    )
+    .run(rateWindowStartIso, nowIso);
 
-  const recentChallenge = db
+  const recentChallenge = await db
     .prepare(
       `
     SELECT created_at
@@ -5032,25 +5166,29 @@ function createStoredPasswordResetChallenge(
     .get(emailKey);
   const recentCreatedAtMs = Date.parse(recentChallenge?.created_at || "");
   const emailHourlyCount =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     SELECT COUNT(*) AS count
     FROM password_reset_challenges
     WHERE email_key = ? AND created_at >= ?
   `
-      )
-      .get(emailKey, rateWindowStartIso)?.count ?? 0;
+        )
+        .get(emailKey, rateWindowStartIso)
+    )?.count ?? 0;
   const ipHourlyCount =
-    db
-      .prepare(
-        `
+    (
+      await db
+        .prepare(
+          `
     SELECT COUNT(*) AS count
     FROM password_reset_challenges
     WHERE request_ip_key = ? AND created_at >= ?
   `
-      )
-      .get(requestIpKey, rateWindowStartIso)?.count ?? 0;
+        )
+        .get(requestIpKey, rateWindowStartIso)
+    )?.count ?? 0;
   const resendLimited =
     Number.isFinite(recentCreatedAtMs) &&
     nowMs - recentCreatedAtMs < PASSWORD_RESET_RESEND_DELAY_MS;
@@ -5070,7 +5208,7 @@ function createStoredPasswordResetChallenge(
     };
   }
 
-  const matchingUsers = db
+  const matchingUsers = await db
     .prepare(
       `
     SELECT *
@@ -5088,30 +5226,34 @@ function createStoredPasswordResetChallenge(
   const challengeId = `password-reset-${crypto.randomUUID()}`;
   const code = String(crypto.randomInt(100000, 1_000_000));
 
-  db.prepare(
-    `
+  await db
+    .prepare(
+      `
     UPDATE password_reset_challenges
     SET consumed_at = ?
     WHERE email_key = ? AND consumed_at IS NULL
   `
-  ).run(nowIso, emailKey);
-  db.prepare(
-    `
+    )
+    .run(nowIso, emailKey);
+  await db
+    .prepare(
+      `
     INSERT INTO password_reset_challenges (
       id, user_id, email_key, request_ip_key, code_hash, expires_at,
       attempts, max_attempts, consumed_at, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)
   `
-  ).run(
-    challengeId,
-    targetUser?.id ?? null,
-    emailKey,
-    requestIpKey,
-    hashPasswordResetCode(challengeId, code),
-    expiresAt,
-    PASSWORD_RESET_MAX_ATTEMPTS,
-    nowIso
-  );
+    )
+    .run(
+      challengeId,
+      targetUser?.id ?? null,
+      emailKey,
+      requestIpKey,
+      hashPasswordResetCode(challengeId, code),
+      expiresAt,
+      PASSWORD_RESET_MAX_ATTEMPTS,
+      nowIso
+    );
 
   return {
     challengeId,
@@ -5123,7 +5265,7 @@ function createStoredPasswordResetChallenge(
   };
 }
 
-function verifyStoredPasswordResetChallenge(
+async function verifyStoredPasswordResetChallenge(
   db,
   {
     challengeId,
@@ -5146,8 +5288,8 @@ function verifyStoredPasswordResetChallenge(
     );
   }
 
-  const result = withTransaction(db, (afterCommit, db) => {
-    const challenge = db
+  const result = await withTransaction(db, async (afterCommit, db) => {
+    const challenge = await db
       .prepare(
         `
       SELECT * FROM password_reset_challenges WHERE id = ? LIMIT 1
@@ -5185,9 +5327,9 @@ function verifyStoredPasswordResetChallenge(
 
     const actualHash = hashPasswordResetCode(normalizedChallengeId, normalizedCode);
     if (!codesMatch(actualHash, challenge.code_hash) || !challenge.user_id) {
-      db.prepare("UPDATE password_reset_challenges SET attempts = attempts + 1 WHERE id = ?").run(
-        normalizedChallengeId
-      );
+      await db
+        .prepare("UPDATE password_reset_challenges SET attempts = attempts + 1 WHERE id = ?")
+        .run(normalizedChallengeId);
       return {
         error: new ApiError(
           401,
@@ -5197,14 +5339,14 @@ function verifyStoredPasswordResetChallenge(
       };
     }
 
-    const userRow = db
+    const userRow = await db
       .prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1")
       .get(challenge.user_id);
     const expectedEmailKey = userRow?.email
       ? createPrivateLookupKey("password-reset-email", normalizeRequiredEmail(userRow.email))
       : "";
     const matchingEmailUsers = userRow?.email
-      ? db
+      ? await db
           .prepare("SELECT id FROM users WHERE email = ? AND type = 'registered'")
           .all(userRow.email)
       : [];
@@ -5224,8 +5366,8 @@ function verifyStoredPasswordResetChallenge(
 
     const nextPasswordHash = hashPassword(validatePassword(newPassword));
     const normalizedSessionId = ensureViewerSessionId(sessionId);
-    const sourceSessionRow = readSessionRow(db, normalizedSessionId);
-    assertContextNotBlocked(db, {
+    const sourceSessionRow = await readSessionRow(db, normalizedSessionId);
+    await assertContextNotBlocked(db, {
       sessionId: normalizedSessionId,
       sessionRow: sourceSessionRow,
       ipAddress: normalizeIpAddress(ipAddress || sourceSessionRow?.last_ip || "")
@@ -5235,28 +5377,39 @@ function verifyStoredPasswordResetChallenge(
       : isModeratorRole(userRow.role || "")
         ? userRow.role
         : DEFAULT_REGISTERED_ROLE;
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE users
       SET password_hash = ?, email_verified_at = COALESCE(email_verified_at, ?), role = ?, updated_at = ?
       WHERE id = ?
     `
-    ).run(nextPasswordHash, nowIso, nextRole, nowIso, userRow.id);
-    db.prepare(
-      `
+      )
+      .run(nextPasswordHash, nowIso, nextRole, nowIso, userRow.id);
+    await db
+      .prepare(
+        `
       UPDATE password_reset_challenges
       SET consumed_at = ?
       WHERE user_id = ? AND consumed_at IS NULL
     `
-    ).run(nowIso, userRow.id);
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userRow.id);
+      )
+      .run(nowIso, userRow.id);
+    await db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userRow.id);
 
     const nextSessionId = rotateSession
       ? createRotatedSessionId(normalizedSessionId)
       : normalizedSessionId;
-    const context = createRegisteredSession(db, nextSessionId, ipAddress, nowIso, null, userRow.id);
-    invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
-    return { payload: buildFrontendPayload(db, context, selectedTopicId) };
+    const context = await createRegisteredSession(
+      db,
+      nextSessionId,
+      ipAddress,
+      nowIso,
+      null,
+      userRow.id
+    );
+    await invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
+    return { payload: await buildFrontendPayload(db, context, selectedTopicId) };
   });
 
   if (result.error) {
@@ -5265,9 +5418,9 @@ function verifyStoredPasswordResetChallenge(
   return result.payload;
 }
 
-function getIdentityLinkTarget(db, { sessionId, authMode, ipAddress = "", password } = {}) {
-  const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-  assertContextNotBlocked(db, context);
+async function getIdentityLinkTarget(db, { sessionId, authMode, ipAddress = "", password } = {}) {
+  const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+  await assertContextNotBlocked(db, context);
   assertViewerCanParticipate(context.viewerRow);
   if (
     context.viewer.type !== "registered" ||
@@ -5297,7 +5450,7 @@ function getIdentityLinkTarget(db, { sessionId, authMode, ipAddress = "", passwo
   };
 }
 
-function linkIdentityToCurrentUser(
+async function linkIdentityToCurrentUser(
   db,
   {
     sessionId,
@@ -5334,8 +5487,8 @@ function linkIdentityToCurrentUser(
     );
   }
 
-  return withTransaction(db, (afterCommit, db) => {
-    const sourceSessionRow = readSessionRow(db, normalizedSourceSessionId);
+  return await withTransaction(db, async (afterCommit, db) => {
+    const sourceSessionRow = await readSessionRow(db, normalizedSourceSessionId);
     if (
       !sourceSessionRow ||
       sourceSessionRow.auth_mode !== "registered" ||
@@ -5347,13 +5500,13 @@ function linkIdentityToCurrentUser(
         "La sesion para vincular la cuenta vencio. Intentalo de nuevo."
       );
     }
-    assertContextNotBlocked(db, {
+    await assertContextNotBlocked(db, {
       sessionId: normalizedSourceSessionId,
       sessionRow: sourceSessionRow,
       ipAddress: normalizeIpAddress(ipAddress || sourceSessionRow.last_ip || "")
     });
 
-    const targetUser = db
+    const targetUser = await db
       .prepare("SELECT * FROM users WHERE id = ? AND type = 'registered' LIMIT 1")
       .get(targetUserId);
     if (
@@ -5376,7 +5529,7 @@ function linkIdentityToCurrentUser(
       );
     }
 
-    const identityOwner = db
+    const identityOwner = await db
       .prepare(
         `
       SELECT id FROM users WHERE auth_provider = ? AND auth_subject = ? LIMIT 1
@@ -5390,7 +5543,7 @@ function linkIdentityToCurrentUser(
         "Esa identidad de Google ya pertenece a otra cuenta."
       );
     }
-    const emailOwners = db
+    const emailOwners = await db
       .prepare(
         `
       SELECT id FROM users WHERE email = ? AND type = 'registered'
@@ -5411,29 +5564,31 @@ function linkIdentityToCurrentUser(
       : isModeratorRole(targetUser.role || "")
         ? targetUser.role
         : DEFAULT_REGISTERED_ROLE;
-    db.prepare(
-      `
+    await db
+      .prepare(
+        `
       UPDATE users
       SET auth_provider = ?, auth_subject = ?, email_verified_at = COALESCE(email_verified_at, ?),
           role = ?, updated_at = ?
       WHERE id = ?
     `
-    ).run(normalizedProvider, normalizedSubject, nowIso, nextRole, nowIso, targetUser.id);
+      )
+      .run(normalizedProvider, normalizedSubject, nowIso, nextRole, nowIso, targetUser.id);
 
-    const context = createRegisteredSession(
+    const context = await createRegisteredSession(
       db,
       normalizedNextSessionId,
       ipAddress,
       nowIso,
-      readSessionRow(db, normalizedNextSessionId),
+      await readSessionRow(db, normalizedNextSessionId),
       targetUser.id
     );
-    invalidatePreviousSession(db, normalizedSourceSessionId, normalizedNextSessionId);
-    return buildFrontendPayload(db, context, selectedTopicId);
+    await invalidatePreviousSession(db, normalizedSourceSessionId, normalizedNextSessionId);
+    return await buildFrontendPayload(db, context, selectedTopicId);
   });
 }
 
-export function createBackendStore({
+export async function createBackendStore({
   dbPath = null,
   seedDemoData = true,
   includeFakeFriendRequests = true
@@ -5446,14 +5601,14 @@ export function createBackendStore({
   mkdirSync(avatarStorageDir, { recursive: true });
   const db = new DatabaseSync(resolvedDbPath);
 
-  initSchema(db);
+  await initSchema(db);
   if (seedDemoData) {
-    seedDatabase(db, { includeFakeFriendRequests });
+    await seedDatabase(db, { includeFakeFriendRequests });
   } else {
-    purgeDemoData(db);
+    await purgeDemoData(db);
   }
-  backfillVerifiedPasswordEmails(db);
-  backfillRegisteredNicknames(db);
+  await backfillVerifiedPasswordEmails(db);
+  await backfillRegisteredNicknames(db);
 
   return {
     dbPath: resolvedDbPath,
@@ -5461,56 +5616,70 @@ export function createBackendStore({
     close() {
       db.close();
     },
-    cleanupInactiveGuests({ nowMs = Date.now() } = {}) {
-      return withTransaction(db, (afterCommit, db) => pruneGuestSessions(db, "", nowMs, ""));
+    async cleanupInactiveGuests({ nowMs = Date.now() } = {}) {
+      return await withTransaction(
+        db,
+        async (afterCommit, db) => await pruneGuestSessions(db, "", nowMs, "")
+      );
     },
-    resetDailyMessageReactions({ now = new Date() } = {}) {
-      return withTransaction(db, (afterCommit, db) => resetDailyMessageReactionsIfNeeded(db, now));
+    async resetDailyMessageReactions({ now = new Date() } = {}) {
+      return await withTransaction(
+        db,
+        async (afterCommit, db) => await resetDailyMessageReactionsIfNeeded(db, now)
+      );
     },
     // El archivado tambien corre dentro de rebuildActiveTopicRanks, que se
     // dispara con cualquier interaccion. Esto cubre los periodos sin trafico,
     // donde nadie construye payload y el archivo se quedaria desactualizado
     // justo cuando lo visita un rastreador.
-    archiveInactiveTopics({ nowMs = Date.now() } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const archivedTopicIds = archiveInactiveTopics(db, nowMs);
+    async archiveInactiveTopics({ nowMs = Date.now() } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const archivedTopicIds = await archiveInactiveTopics(db, nowMs);
         if (archivedTopicIds.length) {
-          rebuildActiveTopicRanks(db, nowMs);
+          await rebuildActiveTopicRanks(db, nowMs);
         }
         return { archivedTopicIds };
       });
     },
-    createEmailAuthChallenge(options = {}) {
-      return withTransaction(db, (afterCommit, db) => createStoredEmailAuthChallenge(db, options));
-    },
-    discardEmailAuthChallenge(challengeId) {
-      db.prepare("DELETE FROM auth_email_challenges WHERE id = ?").run(String(challengeId || ""));
-    },
-    verifyEmailAuthChallenge(options = {}) {
-      return verifyStoredEmailAuthChallenge(db, options);
-    },
-    createPasswordResetChallenge(options = {}) {
-      return withTransaction(db, (afterCommit, db) =>
-        createStoredPasswordResetChallenge(db, options)
+    async createEmailAuthChallenge(options = {}) {
+      return await withTransaction(
+        db,
+        async (afterCommit, db) => await createStoredEmailAuthChallenge(db, options)
       );
     },
-    discardPasswordResetChallenge(challengeId) {
-      db.prepare(
-        `
+    async discardEmailAuthChallenge(challengeId) {
+      await db
+        .prepare("DELETE FROM auth_email_challenges WHERE id = ?")
+        .run(String(challengeId || ""));
+    },
+    async verifyEmailAuthChallenge(options = {}) {
+      return await verifyStoredEmailAuthChallenge(db, options);
+    },
+    async createPasswordResetChallenge(options = {}) {
+      return await withTransaction(
+        db,
+        async (afterCommit, db) => await createStoredPasswordResetChallenge(db, options)
+      );
+    },
+    async discardPasswordResetChallenge(challengeId) {
+      await db
+        .prepare(
+          `
         UPDATE password_reset_challenges SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL
       `
-      ).run(new Date().toISOString(), String(challengeId || ""));
+        )
+        .run(new Date().toISOString(), String(challengeId || ""));
     },
-    verifyPasswordResetChallenge(options = {}) {
-      return verifyStoredPasswordResetChallenge(db, options);
+    async verifyPasswordResetChallenge(options = {}) {
+      return await verifyStoredPasswordResetChallenge(db, options);
     },
-    prepareIdentityLink(options = {}) {
-      return getIdentityLinkTarget(db, options);
+    async prepareIdentityLink(options = {}) {
+      return await getIdentityLinkTarget(db, options);
     },
-    completeIdentityLink(options = {}) {
-      return linkIdentityToCurrentUser(db, options);
+    async completeIdentityLink(options = {}) {
+      return await linkIdentityToCurrentUser(db, options);
     },
-    registerWithPassword({
+    async registerWithPassword({
       sessionId,
       selectedTopicId = null,
       ipAddress = "",
@@ -5519,20 +5688,20 @@ export function createBackendStore({
       nickname,
       rotateSession = false
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
+      return await withTransaction(db, async (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
-        const existingSessionRow = readSessionRow(db, normalizedSessionId);
-        assertContextNotBlocked(db, {
+        const existingSessionRow = await readSessionRow(db, normalizedSessionId);
+        await assertContextNotBlocked(db, {
           sessionId: normalizedSessionId,
           sessionRow: existingSessionRow,
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
-        const viewerRow = createPasswordUser(db, { email, password, nickname, nowIso });
+        const viewerRow = await createPasswordUser(db, { email, password, nickname, nowIso });
         const nextSessionId = rotateSession
           ? createRotatedSessionId(normalizedSessionId)
           : normalizedSessionId;
-        const context = createRegisteredSession(
+        const context = await createRegisteredSession(
           db,
           nextSessionId,
           ipAddress,
@@ -5540,11 +5709,11 @@ export function createBackendStore({
           existingSessionRow,
           viewerRow.id
         );
-        invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
-        return buildFrontendPayload(db, context, selectedTopicId);
+        await invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    loginWithPassword({
+    async loginWithPassword({
       sessionId,
       selectedTopicId = null,
       ipAddress = "",
@@ -5552,20 +5721,20 @@ export function createBackendStore({
       password,
       rotateSession = false
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
+      return await withTransaction(db, async (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
-        const existingSessionRow = readSessionRow(db, normalizedSessionId);
-        assertContextNotBlocked(db, {
+        const existingSessionRow = await readSessionRow(db, normalizedSessionId);
+        await assertContextNotBlocked(db, {
           sessionId: normalizedSessionId,
           sessionRow: existingSessionRow,
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
         });
-        const viewerRow = getAuthenticatedPasswordUser(db, { email, password });
+        const viewerRow = await getAuthenticatedPasswordUser(db, { email, password });
         const nextSessionId = rotateSession
           ? createRotatedSessionId(normalizedSessionId)
           : normalizedSessionId;
-        const context = createRegisteredSession(
+        const context = await createRegisteredSession(
           db,
           nextSessionId,
           ipAddress,
@@ -5573,22 +5742,22 @@ export function createBackendStore({
           existingSessionRow,
           viewerRow.id
         );
-        invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
-        return buildFrontendPayload(db, context, selectedTopicId);
+        await invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    login({
+    async login({
       sessionId,
       selectedTopicId = null,
       ipAddress = "",
       userId = REGISTERED_USER_ID,
       rotateSession = false
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
+      return await withTransaction(db, async (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
-        const existingSessionRow = readSessionRow(db, normalizedSessionId);
-        assertContextNotBlocked(db, {
+        const existingSessionRow = await readSessionRow(db, normalizedSessionId);
+        await assertContextNotBlocked(db, {
           sessionId: normalizedSessionId,
           sessionRow: existingSessionRow,
           ipAddress: normalizeIpAddress(ipAddress || existingSessionRow?.last_ip || "")
@@ -5596,7 +5765,7 @@ export function createBackendStore({
         const nextSessionId = rotateSession
           ? createRotatedSessionId(normalizedSessionId)
           : normalizedSessionId;
-        const context = createRegisteredSession(
+        const context = await createRegisteredSession(
           db,
           nextSessionId,
           ipAddress,
@@ -5604,11 +5773,11 @@ export function createBackendStore({
           existingSessionRow,
           userId
         );
-        invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
-        return buildFrontendPayload(db, context, selectedTopicId);
+        await invalidatePreviousSession(db, normalizedSessionId, nextSessionId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    loginWithIdentity({
+    async loginWithIdentity({
       sessionId,
       sourceSessionId = sessionId,
       selectedTopicId = null,
@@ -5620,18 +5789,18 @@ export function createBackendStore({
       displayName = "",
       avatarUrl = null
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
+      return await withTransaction(db, async (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const normalizedSourceSessionId = ensureViewerSessionId(sourceSessionId);
         const nowIso = new Date().toISOString();
-        const sourceSessionRow = readSessionRow(db, normalizedSourceSessionId);
-        assertContextNotBlocked(db, {
+        const sourceSessionRow = await readSessionRow(db, normalizedSourceSessionId);
+        await assertContextNotBlocked(db, {
           sessionId: normalizedSourceSessionId,
           sessionRow: sourceSessionRow,
           ipAddress: normalizeIpAddress(ipAddress || sourceSessionRow?.last_ip || "")
         });
 
-        const viewerRow = getOrCreateAuthenticatedUser(db, {
+        const viewerRow = await getOrCreateAuthenticatedUser(db, {
           authProvider,
           authSubject,
           email,
@@ -5640,8 +5809,8 @@ export function createBackendStore({
           avatarUrl,
           nowIso
         });
-        const existingSessionRow = readSessionRow(db, normalizedSessionId);
-        const context = createRegisteredSession(
+        const existingSessionRow = await readSessionRow(db, normalizedSessionId);
+        const context = await createRegisteredSession(
           db,
           normalizedSessionId,
           ipAddress,
@@ -5649,26 +5818,26 @@ export function createBackendStore({
           existingSessionRow,
           viewerRow.id
         );
-        invalidatePreviousSession(db, normalizedSourceSessionId, normalizedSessionId);
-        return buildFrontendPayload(db, context, selectedTopicId);
+        await invalidatePreviousSession(db, normalizedSourceSessionId, normalizedSessionId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    logout({ sessionId, selectedTopicId = null, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
+    async logout({ sessionId, selectedTopicId = null, ipAddress = "" } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
         const normalizedSessionId = ensureViewerSessionId(sessionId);
         const nowIso = new Date().toISOString();
-        const existingSessionRow = readSessionRow(db, normalizedSessionId);
-        const context = createGuestSession(
+        const existingSessionRow = await readSessionRow(db, normalizedSessionId);
+        const context = await createGuestSession(
           db,
           normalizedSessionId,
           ipAddress,
           nowIso,
           existingSessionRow
         );
-        return buildFrontendPayload(db, context, selectedTopicId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateProfile({
+    async updateProfile({
       sessionId,
       authMode,
       displayName = null,
@@ -5692,10 +5861,10 @@ export function createBackendStore({
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
-        assertContextNotBlocked(db, context);
+        await assertContextNotBlocked(db, context);
         if (context.viewer.type !== "registered") {
           throw new ApiError(
             403,
@@ -5731,7 +5900,7 @@ export function createBackendStore({
             "El username no se puede cambiar despues de completar el perfil."
           );
         }
-        assertNicknameAvailable(db, normalizedUsernameKey, context.viewer.id);
+        await assertNicknameAvailable(db, normalizedUsernameKey, context.viewer.id);
         const completingProfile = context.viewer.profilePending;
         const normalizedRegistrationAge = completingProfile
           ? normalizeRegistrationAge(age)
@@ -5782,8 +5951,9 @@ export function createBackendStore({
             ? 1
             : 0;
 
-        db.prepare(
-          `
+        await db
+          .prepare(
+            `
           UPDATE users
           SET name = ?, nickname = ?, nickname_norm = ?, description = ?, profile_show_description = ?, profile_show_joined_at = ?,
               social_whatsapp = ?, social_instagram = ?, social_tiktok = ?, social_facebook = ?, social_twitter = ?, social_discord = ?, profile_show_social = ?,
@@ -5793,31 +5963,32 @@ export function createBackendStore({
               profile_suggested_name = NULL, profile_suggested_avatar_url = NULL, updated_at = ?
           WHERE id = ?
         `
-        ).run(
-          normalizedDisplayName,
-          normalizedUsername,
-          normalizedUsernameKey,
-          normalizedDescription,
-          profileShowDescription === false ? 0 : 1,
-          profileShowJoinedAt === false ? 0 : 1,
-          normalizedSocialWhatsapp,
-          normalizedSocialInstagram,
-          normalizedSocialTiktok,
-          normalizedSocialFacebook,
-          normalizedSocialTwitter,
-          normalizedSocialDiscord,
-          profileShowSocial === false ? 0 : 1,
-          nextProfileIndexable,
-          nextNotificationsFriendsOnly,
-          nextAvatarUrl,
-          nextPendingUrl,
-          nextReviewStatus,
-          normalizedRegistrationAge,
-          nextTermsAcceptedAt,
-          nextTermsVersion,
-          nowIso,
-          context.viewer.id
-        );
+          )
+          .run(
+            normalizedDisplayName,
+            normalizedUsername,
+            normalizedUsernameKey,
+            normalizedDescription,
+            profileShowDescription === false ? 0 : 1,
+            profileShowJoinedAt === false ? 0 : 1,
+            normalizedSocialWhatsapp,
+            normalizedSocialInstagram,
+            normalizedSocialTiktok,
+            normalizedSocialFacebook,
+            normalizedSocialTwitter,
+            normalizedSocialDiscord,
+            profileShowSocial === false ? 0 : 1,
+            nextProfileIndexable,
+            nextNotificationsFriendsOnly,
+            nextAvatarUrl,
+            nextPendingUrl,
+            nextReviewStatus,
+            normalizedRegistrationAge,
+            nextTermsAcceptedAt,
+            nextTermsVersion,
+            nowIso,
+            context.viewer.id
+          );
 
         const nextAvatarUrls = new Set([nextAvatarUrl, nextPendingUrl].filter(Boolean));
         scheduleStoredAvatarCleanup(
@@ -5827,15 +5998,15 @@ export function createBackendStore({
           previousAvatarUrls.filter((avatarUrl) => avatarUrl && !nextAvatarUrls.has(avatarUrl))
         );
 
-        const refreshedContext = resolveViewer(db, {
+        const refreshedContext = await resolveViewer(db, {
           sessionId: context.sessionId,
           authMode,
           ipAddress
         });
-        return buildFrontendPayload(db, refreshedContext, selectedTopicId);
+        return await buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    updateSettings({
+    async updateSettings({
       sessionId,
       authMode,
       likesAnonymous = null,
@@ -5847,10 +6018,10 @@ export function createBackendStore({
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertViewerCanParticipate(context.viewerRow);
-        assertContextNotBlocked(db, context);
+        await assertContextNotBlocked(db, context);
         if (context.viewer.type !== "registered") {
           throw new ApiError(
             403,
@@ -5877,40 +6048,42 @@ export function createBackendStore({
             ? context.viewerRow.profile_indexable !== 0
             : profileIndexable === true;
 
-        db.prepare(
-          `
+        await db
+          .prepare(
+            `
           UPDATE users
           SET likes_anonymous = ?, filter_profanity = ?, notifications_friends_only = ?, email_activity_enabled = ?, slow_mode = ?, profile_indexable = ?, updated_at = ?
           WHERE id = ?
         `
-        ).run(
-          nextLikesAnonymous ? 1 : 0,
-          nextFilterProfanity ? 1 : 0,
-          nextNotificationsFriendsOnly ? 1 : 0,
-          nextEmailActivityEnabled ? 1 : 0,
-          nextSlowMode ? 1 : 0,
-          nextProfileIndexable ? 1 : 0,
-          new Date().toISOString(),
-          context.viewer.id
-        );
+          )
+          .run(
+            nextLikesAnonymous ? 1 : 0,
+            nextFilterProfanity ? 1 : 0,
+            nextNotificationsFriendsOnly ? 1 : 0,
+            nextEmailActivityEnabled ? 1 : 0,
+            nextSlowMode ? 1 : 0,
+            nextProfileIndexable ? 1 : 0,
+            new Date().toISOString(),
+            context.viewer.id
+          );
 
-        const refreshedContext = resolveViewer(db, {
+        const refreshedContext = await resolveViewer(db, {
           sessionId: context.sessionId,
           authMode,
           ipAddress
         });
-        return buildFrontendPayload(db, refreshedContext, selectedTopicId);
+        return await buildFrontendPayload(db, refreshedContext, selectedTopicId);
       });
     },
-    deleteAccount({
+    async deleteAccount({
       sessionId,
       authMode,
       currentPassword = "",
       selectedTopicId = null,
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         if (context.viewer.type !== "registered") {
           throw new ApiError(
             403,
@@ -5944,21 +6117,20 @@ export function createBackendStore({
         const nowIso = new Date().toISOString();
         const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
 
-        db.prepare("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?").run(
-          userId,
-          userId
-        );
-        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?").run(
-          userId,
-          userId
-        );
-        db.prepare("DELETE FROM topic_follows WHERE user_id = ?").run(userId);
-        db.prepare("DELETE FROM topic_email_deliveries WHERE user_id = ?").run(userId);
-        db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+        await db
+          .prepare("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?")
+          .run(userId, userId);
+        await db
+          .prepare("DELETE FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?")
+          .run(userId, userId);
+        await db.prepare("DELETE FROM topic_follows WHERE user_id = ?").run(userId);
+        await db.prepare("DELETE FROM topic_email_deliveries WHERE user_id = ?").run(userId);
+        await db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
 
         // Los mensajes y temas quedan (tienen FK al usuario); la fila se anonimiza y desactiva.
-        db.prepare(
-          `
+        await db
+          .prepare(
+            `
           UPDATE users
           SET name = 'Usuario eliminado', nickname = NULL, nickname_norm = NULL,
               email = NULL, email_verified_at = NULL, auth_provider = NULL, auth_subject = NULL, password_hash = NULL,
@@ -5970,34 +6142,44 @@ export function createBackendStore({
               role = '', status = 'deleted', updated_at = ?
           WHERE id = ?
         `
-        ).run(nowIso, userId);
+          )
+          .run(nowIso, userId);
 
         scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, previousAvatarUrls);
 
-        const guestContext = createGuestSession(db, context.sessionId, ipAddress, nowIso, null);
-        return buildFrontendPayload(db, guestContext, selectedTopicId);
+        const guestContext = await createGuestSession(
+          db,
+          context.sessionId,
+          ipAddress,
+          nowIso,
+          null
+        );
+        return await buildFrontendPayload(db, guestContext, selectedTopicId);
       });
     },
-    bootstrap({
+    async bootstrap({
       sessionId,
       authMode,
       selectedTopicId = null,
       ipAddress = "",
       profileNickname = null
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        return buildFrontendPayload(db, context, selectedTopicId, profileNickname);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        return await buildFrontendPayload(db, context, selectedTopicId, profileNickname);
       });
     },
-    refresh({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        return buildFrontendPayload(db, context, selectedTopicId);
+    async refresh({ sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    seedEditorialContent({ limit = 5 } = {}) {
-      return withTransaction(db, (afterCommit, db) => seedEditorialContentIntoDatabase(db, limit));
+    async seedEditorialContent({ limit = 5 } = {}) {
+      return await withTransaction(
+        db,
+        async (afterCommit, db) => await seedEditorialContentIntoDatabase(db, limit)
+      );
     },
     // Destructivo e irreversible. Por defecto hace una simulacion: hay que pedir
     // explicitamente dryRun:false para que borre.
@@ -6005,14 +6187,14 @@ export function createBackendStore({
     // Antes de borrar toma una copia de la base con VACUUM INTO. La copia queda en
     // el disco del servidor, nunca se expone por HTTP: la base tiene emails, hashes
     // de contrasena y tokens de sesion. Si la copia falla, no se borra nada.
-    removeEditorialSeedContent({ sessionId, authMode, dryRun = true, ipAddress = "" } = {}) {
+    async removeEditorialSeedContent({ sessionId, authMode, dryRun = true, ipAddress = "" } = {}) {
       const wantsDelete = dryRun === false;
 
       // Autorizar primero, para que nadie sin permiso dispare siquiera la copia.
-      const preview = withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      const preview = await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
-        return removeEditorialSeedContentFromDatabase(db, { dryRun: true });
+        return await removeEditorialSeedContentFromDatabase(db, { dryRun: true });
       });
 
       if (!wantsDelete) {
@@ -6031,13 +6213,13 @@ export function createBackendStore({
         );
       }
 
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
-        const summary = removeEditorialSeedContentFromDatabase(db, { dryRun: false });
+        const summary = await removeEditorialSeedContentFromDatabase(db, { dryRun: false });
         summary.backupPath = backupPath;
 
-        recordModerationAction(db, {
+        await recordModerationAction(db, {
           actionType: "remove_editorial_seed",
           targetType: "system",
           targetId: "editorial-seed",
@@ -6054,20 +6236,23 @@ export function createBackendStore({
         return summary;
       });
     },
-    openTopic(topicId, { sessionId, authMode, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        const row = db.prepare("SELECT id FROM topics WHERE id = ?").get(topicId);
+    async openTopic(topicId, { sessionId, authMode, ipAddress = "" } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        const row = await db.prepare("SELECT id FROM topics WHERE id = ?").get(topicId);
         if (!row) {
           throw new ApiError(404, "NOT_FOUND", "Tema no encontrado.");
         }
-        followTopicForRegisteredViewer(db, context, topicId);
-        return buildFrontendPayload(db, context, topicId);
+        await followTopicForRegisteredViewer(db, context, topicId);
+        return await buildFrontendPayload(db, context, topicId);
       });
     },
-    followTopic(topicId, { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+    async followTopic(
+      topicId,
+      { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
+    ) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         if (context.viewer.type !== "registered") {
           throw new ApiError(
             403,
@@ -6075,42 +6260,46 @@ export function createBackendStore({
             "Hace falta iniciar sesión para seguir conversaciones."
           );
         }
-        const row = db.prepare("SELECT id FROM topics WHERE id = ?").get(String(topicId || ""));
+        const row = await db
+          .prepare("SELECT id FROM topics WHERE id = ?")
+          .get(String(topicId || ""));
         if (!row) {
           throw new ApiError(404, "NOT_FOUND", "Tema no encontrado.");
         }
-        followTopicForRegisteredViewer(db, context, row.id);
-        return buildFrontendPayload(db, context, selectedTopicId || row.id);
+        await followTopicForRegisteredViewer(db, context, row.id);
+        return await buildFrontendPayload(db, context, selectedTopicId || row.id);
       });
     },
-    createTopic({ sessionId, authMode, title, text, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredContextCanPost(db, context);
-        const lastTopicAt = getContextActivityAt(db, context, "last_topic_at");
+    async createTopic({ sessionId, authMode, title, text, ipAddress = "" } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredContextCanPost(db, context);
+        const lastTopicAt = await getContextActivityAt(db, context, "last_topic_at");
         assertRateLimit(lastTopicAt, context.viewer.type, "last_topic_at");
         const { normalizedTitle, normalizedText } = validateTopicInput(title, text);
         const topicId = `topic-${crypto.randomUUID()}`;
         const nowIso = new Date().toISOString();
 
-        db.prepare(
-          `
+        await db
+          .prepare(
+            `
           INSERT INTO topics (
             id, title, subtitle, author_id, status, active_rank, last_message_id, last_activity_at, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
         `
-        ).run(
-          topicId,
-          normalizedTitle,
-          summarizeText(normalizedText),
-          context.viewer.id,
-          TOPIC_STATUS_ACTIVE,
-          nowIso,
-          nowIso,
-          nowIso
-        );
+          )
+          .run(
+            topicId,
+            normalizedTitle,
+            summarizeText(normalizedText),
+            context.viewer.id,
+            TOPIC_STATUS_ACTIVE,
+            nowIso,
+            nowIso,
+            nowIso
+          );
 
-        const messageResult = db
+        const messageResult = await db
           .prepare(
             `
           INSERT INTO messages (topic_id, author_id, text, kind, likes, is_root, created_at)
@@ -6119,45 +6308,47 @@ export function createBackendStore({
           )
           .run(topicId, context.viewer.id, normalizedText, nowIso);
 
-        db.prepare(
-          `
+        await db
+          .prepare(
+            `
           UPDATE topics
           SET subtitle = ?, last_message_id = ?, last_activity_at = ?, updated_at = ?
           WHERE id = ?
         `
-        ).run(
-          summarizeText(normalizedText),
-          Number(messageResult.lastInsertRowid),
-          nowIso,
-          nowIso,
-          topicId
-        );
+          )
+          .run(
+            summarizeText(normalizedText),
+            Number(messageResult.lastInsertRowid),
+            nowIso,
+            nowIso,
+            topicId
+          );
 
-        rebuildActiveTopicRanks(db);
-        updateViewerActivity(db, context, "last_topic_at");
-        followTopicForRegisteredViewer(db, context, topicId, nowIso);
+        await rebuildActiveTopicRanks(db);
+        await updateViewerActivity(db, context, "last_topic_at");
+        await followTopicForRegisteredViewer(db, context, topicId, nowIso);
 
-        const refreshedContext = resolveViewer(db, {
+        const refreshedContext = await resolveViewer(db, {
           sessionId: context.sessionId,
           authMode,
           ipAddress
         });
-        return buildFrontendPayload(db, refreshedContext, topicId);
+        return await buildFrontendPayload(db, refreshedContext, topicId);
       });
     },
-    addMessage(topicId, { sessionId, authMode, text, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredContextCanPost(db, context);
+    async addMessage(topicId, { sessionId, authMode, text, ipAddress = "" } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredContextCanPost(db, context);
         const normalizedText = validateMessageInput(text);
-        const topicRow = db.prepare("SELECT * FROM topics WHERE id = ?").get(topicId);
+        const topicRow = await db.prepare("SELECT * FROM topics WHERE id = ?").get(topicId);
         assertCommentableTopic(topicRow);
-        assertConsecutiveCommentRateLimit(db, context, topicId);
-        const lastMessageAt = getContextActivityAt(db, context, "last_message_at");
+        await assertConsecutiveCommentRateLimit(db, context, topicId);
+        const lastMessageAt = await getContextActivityAt(db, context, "last_message_at");
         assertRateLimit(lastMessageAt, context.viewer.type, "last_message_at");
 
         const nowIso = new Date().toISOString();
-        const messageResult = db
+        const messageResult = await db
           .prepare(
             `
           INSERT INTO messages (topic_id, author_id, text, kind, likes, is_root, created_at)
@@ -6166,106 +6357,112 @@ export function createBackendStore({
           )
           .run(topicId, context.viewer.id, normalizedText, nowIso);
 
-        trimTopicReplies(db, topicId);
-        db.prepare(
-          `
+        await trimTopicReplies(db, topicId);
+        await db
+          .prepare(
+            `
           UPDATE topics
           SET subtitle = ?, last_message_id = ?, last_activity_at = ?, updated_at = ?
           WHERE id = ?
         `
-        ).run(
-          summarizeText(normalizedText),
-          Number(messageResult.lastInsertRowid),
-          nowIso,
-          nowIso,
-          topicId
-        );
+          )
+          .run(
+            summarizeText(normalizedText),
+            Number(messageResult.lastInsertRowid),
+            nowIso,
+            nowIso,
+            topicId
+          );
 
-        rebuildActiveTopicRanks(db);
-        updateViewerActivity(db, context, "last_message_at");
-        followTopicForRegisteredViewer(db, context, topicId, nowIso);
+        await rebuildActiveTopicRanks(db);
+        await updateViewerActivity(db, context, "last_message_at");
+        await followTopicForRegisteredViewer(db, context, topicId, nowIso);
 
-        const refreshedContext = resolveViewer(db, {
+        const refreshedContext = await resolveViewer(db, {
           sessionId: context.sessionId,
           authMode,
           ipAddress
         });
-        return buildFrontendPayload(db, refreshedContext, topicId);
+        return await buildFrontendPayload(db, refreshedContext, topicId);
       });
     },
-    toggleMessageLike(
+    async toggleMessageLike(
       messageId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertContextCanParticipate(db, context);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertContextCanParticipate(db, context);
         if (context.viewer.type !== "registered") {
           throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para dar likes.");
         }
 
-        resetDailyMessageReactionsIfNeeded(db);
-        const messageRow = assertLikeableMessage(db, messageId);
-        recordMessageReaction(db, messageRow, context.viewer.id, "like");
-        return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
+        await resetDailyMessageReactionsIfNeeded(db);
+        const messageRow = await assertLikeableMessage(db, messageId);
+        await recordMessageReaction(db, messageRow, context.viewer.id, "like");
+        return await buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
       });
     },
-    toggleMessageDislike(
+    async toggleMessageDislike(
       messageId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertContextCanParticipate(db, context);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertContextCanParticipate(db, context);
         if (context.viewer.type !== "registered") {
           throw new ApiError(403, "LOGIN_REQUIRED", "Hace falta iniciar sesion para dar dislikes.");
         }
 
-        resetDailyMessageReactionsIfNeeded(db);
-        const messageRow = assertLikeableMessage(db, messageId);
-        recordMessageReaction(db, messageRow, context.viewer.id, "dislike");
-        return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
+        await resetDailyMessageReactionsIfNeeded(db);
+        const messageRow = await assertLikeableMessage(db, messageId);
+        await recordMessageReaction(db, messageRow, context.viewer.id, "dislike");
+        return await buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
       });
     },
-    blockUser(
+    async blockUser(
       targetUserId,
       { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredBlockContext(db, context);
-        const target = assertBlockTarget(db, context.viewer.id, targetUserId);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredBlockContext(db, context);
+        const target = await assertBlockTarget(db, context.viewer.id, targetUserId);
         const nowIso = new Date().toISOString();
 
-        db.prepare(
-          `
+        await db
+          .prepare(
+            `
           INSERT INTO user_blocks (blocker_id, blocked_id, hide_content, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(blocker_id, blocked_id) DO UPDATE SET
             hide_content = excluded.hide_content,
             updated_at = excluded.updated_at
         `
-        ).run(context.viewer.id, target.id, hideContent === false ? 0 : 1, nowIso, nowIso);
-        db.prepare(
-          `
+          )
+          .run(context.viewer.id, target.id, hideContent === false ? 0 : 1, nowIso, nowIso);
+        await db
+          .prepare(
+            `
           DELETE FROM friend_requests
           WHERE (requester_id = ? AND addressee_id = ?)
              OR (requester_id = ? AND addressee_id = ?)
         `
-        ).run(context.viewer.id, target.id, target.id, context.viewer.id);
+          )
+          .run(context.viewer.id, target.id, target.id, context.viewer.id);
 
-        return buildFrontendPayload(db, context, selectedTopicId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    updateBlockedUser(
+    async updateBlockedUser(
       targetUserId,
       { sessionId, authMode, hideContent = true, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredBlockContext(db, context);
-        const target = assertBlockTarget(db, context.viewer.id, targetUserId);
-        const result = db
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredBlockContext(db, context);
+        const target = await assertBlockTarget(db, context.viewer.id, targetUserId);
+        const result = await db
           .prepare(
             `
           UPDATE user_blocks
@@ -6282,36 +6479,35 @@ export function createBackendStore({
         if (!result.changes) {
           throw new ApiError(404, "NOT_FOUND", "El usuario no esta bloqueado.");
         }
-        return buildFrontendPayload(db, context, selectedTopicId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    unblockUser(
+    async unblockUser(
       targetUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredBlockContext(db, context);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredBlockContext(db, context);
         const normalizedTargetUserId = String(targetUserId || "").trim();
         if (!normalizedTargetUserId) {
           throw new ApiError(400, "VALIDATION_ERROR", "Selecciona un usuario para desbloquear.");
         }
-        db.prepare("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?").run(
-          context.viewer.id,
-          normalizedTargetUserId
-        );
-        return buildFrontendPayload(db, context, selectedTopicId);
+        await db
+          .prepare("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?")
+          .run(context.viewer.id, normalizedTargetUserId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    sendFriendRequest(
+    async sendFriendRequest(
       targetUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredFriendContext(db, context);
-        const target = assertFriendTarget(db, context.viewer.id, targetUserId);
-        if (usersBlockEachOther(db, context.viewer.id, target.id)) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredFriendContext(db, context);
+        const target = await assertFriendTarget(db, context.viewer.id, targetUserId);
+        if (await usersBlockEachOther(db, context.viewer.id, target.id)) {
           throw new ApiError(
             409,
             "USER_BLOCKED",
@@ -6319,56 +6515,62 @@ export function createBackendStore({
           );
         }
         const nowIso = new Date().toISOString();
-        const existing = getFriendRequestBetween(db, context.viewer.id, target.id);
+        const existing = await getFriendRequestBetween(db, context.viewer.id, target.id);
 
         if (!existing) {
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             INSERT INTO friend_requests (requester_id, addressee_id, status, created_at, updated_at)
             VALUES (?, ?, 'pending', ?, ?)
           `
-          ).run(context.viewer.id, target.id, nowIso, nowIso);
-          return buildFrontendPayload(db, context, selectedTopicId);
+            )
+            .run(context.viewer.id, target.id, nowIso, nowIso);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (existing.status === "accepted") {
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (existing.status === "pending" && existing.addressee_id === context.viewer.id) {
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             UPDATE friend_requests
             SET status = 'accepted', updated_at = ?
             WHERE id = ?
           `
-          ).run(nowIso, existing.id);
-          return buildFrontendPayload(db, context, selectedTopicId);
+            )
+            .run(nowIso, existing.id);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (existing.status === "rejected") {
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             UPDATE friend_requests
             SET requester_id = ?, addressee_id = ?, status = 'pending', updated_at = ?
             WHERE id = ?
           `
-          ).run(context.viewer.id, target.id, nowIso, existing.id);
+            )
+            .run(context.viewer.id, target.id, nowIso, existing.id);
         }
 
-        return buildFrontendPayload(db, context, selectedTopicId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    acceptFriendRequest(
+    async acceptFriendRequest(
       requesterUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredFriendContext(db, context);
-        const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredFriendContext(db, context);
+        const requester = await assertFriendTarget(db, context.viewer.id, requesterUserId);
         const nowIso = new Date().toISOString();
-        const result = db
+        const result = await db
           .prepare(
             `
           UPDATE friend_requests
@@ -6382,19 +6584,19 @@ export function createBackendStore({
           throw new ApiError(404, "NOT_FOUND", "Solicitud de amistad no encontrada.");
         }
 
-        return buildFrontendPayload(db, context, selectedTopicId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    rejectFriendRequest(
+    async rejectFriendRequest(
       requesterUserId,
       { sessionId, authMode, selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
-        assertRegisteredFriendContext(db, context);
-        const requester = assertFriendTarget(db, context.viewer.id, requesterUserId);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
+        await assertRegisteredFriendContext(db, context);
+        const requester = await assertFriendTarget(db, context.viewer.id, requesterUserId);
         const nowIso = new Date().toISOString();
-        const result = db
+        const result = await db
           .prepare(
             `
           UPDATE friend_requests
@@ -6408,23 +6610,28 @@ export function createBackendStore({
           throw new ApiError(404, "NOT_FOUND", "Solicitud de amistad no encontrada.");
         }
 
-        return buildFrontendPayload(db, context, selectedTopicId);
+        return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    reportEntity(
+    async reportEntity(
       entityType,
       entityId,
       { sessionId, authMode, reason = "", selectedTopicId = null, ipAddress = "" } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress, persistGuest: true });
-        assertContextCanParticipate(db, context);
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, {
+          sessionId,
+          authMode,
+          ipAddress,
+          persistGuest: true
+        });
+        await assertContextCanParticipate(db, context);
         const normalizedEntityType =
           entityType === "message" ? "message" : entityType === "user" ? "user" : "topic";
-        const target = assertReportableEntity(db, normalizedEntityType, entityId);
+        const target = await assertReportableEntity(db, normalizedEntityType, entityId);
         const normalizedReason = validateReportReason(reason, target.entityType);
 
-        const existingReport = db
+        const existingReport = await db
           .prepare(
             `
           SELECT id
@@ -6436,21 +6643,23 @@ export function createBackendStore({
           .get(context.sessionId, target.entityType, target.entityId, REPORT_STATUS_OPEN);
 
         if (!existingReport) {
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             INSERT INTO reports (
               entity_type, entity_id, reason, reporter_session_id, reporter_user_id, status, resolved_at, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
           `
-          ).run(
-            target.entityType,
-            target.entityId,
-            normalizedReason,
-            context.sessionId,
-            context.viewer.id,
-            REPORT_STATUS_OPEN,
-            new Date().toISOString()
-          );
+            )
+            .run(
+              target.entityType,
+              target.entityId,
+              normalizedReason,
+              context.sessionId,
+              context.viewer.id,
+              REPORT_STATUS_OPEN,
+              new Date().toISOString()
+            );
         }
 
         const reportSelectedTopicId =
@@ -6459,27 +6668,30 @@ export function createBackendStore({
             : target.entityType === "message"
               ? selectedTopicId || target.topicId
               : selectedTopicId;
-        return buildFrontendPayload(db, context, reportSelectedTopicId);
+        return await buildFrontendPayload(db, context, reportSelectedTopicId);
       });
     },
-    listReports({
+    async listReports({
       sessionId,
       authMode,
       ipAddress = "",
       reportPage = 1,
       reportLimit = ADMIN_REPORT_PAGE_SIZE
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
-        const reportPageResult = listOpenReports(db, { page: reportPage, limit: reportLimit });
+        const reportPageResult = await listOpenReports(db, {
+          page: reportPage,
+          limit: reportLimit
+        });
         return {
           reports: reportPageResult.items,
           reportPagination: reportPageResult.pagination
         };
       });
     },
-    getAdminDashboard({
+    async getAdminDashboard({
       sessionId,
       authMode,
       ipAddress = "",
@@ -6488,23 +6700,29 @@ export function createBackendStore({
       avatarPage = 1,
       avatarLimit = ADMIN_AVATAR_PAGE_SIZE
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
-        const reportPageResult = listOpenReports(db, { page: reportPage, limit: reportLimit });
-        const avatarPageResult = listPendingAvatars(db, { page: avatarPage, limit: avatarLimit });
+        const reportPageResult = await listOpenReports(db, {
+          page: reportPage,
+          limit: reportLimit
+        });
+        const avatarPageResult = await listPendingAvatars(db, {
+          page: avatarPage,
+          limit: avatarLimit
+        });
         return {
           viewer: context.viewer,
           reports: reportPageResult.items,
           reportPagination: reportPageResult.pagination,
           pendingAvatars: avatarPageResult.items,
           avatarPagination: avatarPageResult.pagination,
-          activeSanctions: listActiveSanctions(db),
-          productAnalytics: buildProductAnalyticsReport(db, 30)
+          activeSanctions: await listActiveSanctions(db),
+          productAnalytics: await buildProductAnalyticsReport(db, 30)
         };
       });
     },
-    applyModerationAction(
+    async applyModerationAction(
       actionType,
       {
         sessionId,
@@ -6517,25 +6735,27 @@ export function createBackendStore({
         ipAddress = ""
       } = {}
     ) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
         const nowIso = new Date().toISOString();
         const normalizedActionType = String(actionType || "").trim();
         const normalizedReason = normalizeMessageText(reason);
 
         if (normalizedActionType === "block_topic") {
-          const normalizedTopicId = assertExistingTopic(db, targetId).id;
+          const normalizedTopicId = (await assertExistingTopic(db, targetId)).id;
 
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             UPDATE topics
             SET status = ?, active_rank = NULL, updated_at = ?
             WHERE id = ?
           `
-          ).run(TOPIC_STATUS_BLOCKED, nowIso, normalizedTopicId);
-          resolveReportsForEntity(db, "topic", normalizedTopicId, nowIso);
-          recordModerationAction(db, {
+            )
+            .run(TOPIC_STATUS_BLOCKED, nowIso, normalizedTopicId);
+          await resolveReportsForEntity(db, "topic", normalizedTopicId, nowIso);
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "topic",
             targetId: normalizedTopicId,
@@ -6544,11 +6764,11 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId || normalizedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId || normalizedTopicId);
         }
 
         if (normalizedActionType === "pin_topic") {
-          const topicRow = assertExistingTopic(db, targetId);
+          const topicRow = await assertExistingTopic(db, targetId);
           if (topicRow.status === TOPIC_STATUS_BLOCKED) {
             throw new ApiError(
               409,
@@ -6557,15 +6777,17 @@ export function createBackendStore({
             );
           }
 
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             UPDATE topics
             SET status = ?, updated_at = ?
             WHERE id = ?
           `
-          ).run(TOPIC_STATUS_PINNED, nowIso, topicRow.id);
-          rebuildActiveTopicRanks(db);
-          recordModerationAction(db, {
+            )
+            .run(TOPIC_STATUS_PINNED, nowIso, topicRow.id);
+          await rebuildActiveTopicRanks(db);
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "topic",
             targetId: topicRow.id,
@@ -6574,12 +6796,12 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId || topicRow.id);
+          return await buildFrontendPayload(db, context, selectedTopicId || topicRow.id);
         }
 
         if (normalizedActionType === "delete_message") {
           const normalizedMessageId = normalizeMessageEntityId(targetId);
-          const messageRow = db
+          const messageRow = await db
             .prepare(
               `
             SELECT id, topic_id, is_root
@@ -6599,11 +6821,11 @@ export function createBackendStore({
             );
           }
 
-          db.prepare("DELETE FROM messages WHERE id = ?").run(normalizedMessageId);
-          recalculateTopicActivity(db, messageRow.topic_id, nowIso);
-          rebuildActiveTopicRanks(db);
-          resolveReportsForEntity(db, "message", normalizedMessageId, nowIso);
-          recordModerationAction(db, {
+          await db.prepare("DELETE FROM messages WHERE id = ?").run(normalizedMessageId);
+          await recalculateTopicActivity(db, messageRow.topic_id, nowIso);
+          await rebuildActiveTopicRanks(db);
+          await resolveReportsForEntity(db, "message", normalizedMessageId, nowIso);
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "message",
             targetId: normalizedMessageId,
@@ -6612,7 +6834,7 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
+          return await buildFrontendPayload(db, context, selectedTopicId || messageRow.topic_id);
         }
 
         if (normalizedActionType === "dismiss_report") {
@@ -6631,8 +6853,8 @@ export function createBackendStore({
               "El objetivo del reporte es obligatorio."
             );
           }
-          resolveReportsForEntity(db, normalizedTargetType, normalizedTargetId, nowIso);
-          recordModerationAction(db, {
+          await resolveReportsForEntity(db, normalizedTargetType, normalizedTargetId, nowIso);
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: normalizedTargetType,
             targetId: normalizedTargetId,
@@ -6641,11 +6863,11 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (normalizedActionType === "expel_user") {
-          const userRow = assertExistingUser(db, targetId);
+          const userRow = await assertExistingUser(db, targetId);
           const normalizedUserId = userRow.id;
           if (userRow.type !== "registered") {
             throw new ApiError(
@@ -6679,7 +6901,7 @@ export function createBackendStore({
           let resolvedBanHours = banHours;
 
           if (banHours === "progressive") {
-            const nextSanction = getNextProgressiveSanction(db, normalizedUserId);
+            const nextSanction = await getNextProgressiveSanction(db, normalizedUserId);
             sanctionStage = nextSanction.stage;
             sanctionLabel = nextSanction.label;
             resolvedBanHours = nextSanction.hours === null ? "permanent" : nextSanction.hours;
@@ -6700,15 +6922,17 @@ export function createBackendStore({
             }
           }
 
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             UPDATE users
             SET status = ?, banned_until = ?, updated_at = ?
             WHERE id = ?
           `
-          ).run(status, bannedUntil, nowIso, normalizedUserId);
-          resolveReportsForEntity(db, "user", normalizedUserId, nowIso);
-          recordModerationAction(db, {
+            )
+            .run(status, bannedUntil, nowIso, normalizedUserId);
+          await resolveReportsForEntity(db, "user", normalizedUserId, nowIso);
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
             targetId: normalizedUserId,
@@ -6726,11 +6950,11 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (normalizedActionType === "restore_user") {
-          const userRow = assertExistingUser(db, targetId);
+          const userRow = await assertExistingUser(db, targetId);
           if (userRow.type !== "registered") {
             throw new ApiError(
               409,
@@ -6749,15 +6973,17 @@ export function createBackendStore({
             );
           }
 
-          const activeSanction = getUserSanctionHistory(db, userRow.id).activeSanction;
-          db.prepare(
-            `
+          const activeSanction = (await getUserSanctionHistory(db, userRow.id)).activeSanction;
+          await db
+            .prepare(
+              `
             UPDATE users
             SET status = ?, banned_until = NULL, updated_at = ?
             WHERE id = ?
           `
-          ).run(USER_STATUS_ACTIVE, nowIso, userRow.id);
-          recordModerationAction(db, {
+            )
+            .run(USER_STATUS_ACTIVE, nowIso, userRow.id);
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
             targetId: userRow.id,
@@ -6771,11 +6997,11 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (normalizedActionType === "approve_avatar") {
-          const userRow = assertExistingUser(db, targetId);
+          const userRow = await assertExistingUser(db, targetId);
           if (userRow.type !== "registered" || !userRow.avatar_pending_url) {
             throw new ApiError(
               409,
@@ -6784,13 +7010,15 @@ export function createBackendStore({
             );
           }
 
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             UPDATE users
             SET avatar_url = ?, avatar_pending_url = NULL, avatar_review_status = 'approved', updated_at = ?
             WHERE id = ?
           `
-          ).run(userRow.avatar_pending_url, nowIso, userRow.id);
+            )
+            .run(userRow.avatar_pending_url, nowIso, userRow.id);
           scheduleStoredAvatarCleanup(
             afterCommit,
             db,
@@ -6799,7 +7027,7 @@ export function createBackendStore({
               ? [userRow.avatar_url]
               : []
           );
-          recordModerationAction(db, {
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
             targetId: userRow.id,
@@ -6808,11 +7036,11 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (normalizedActionType === "reject_avatar") {
-          const userRow = assertExistingUser(db, targetId);
+          const userRow = await assertExistingUser(db, targetId);
           if (userRow.type !== "registered" || !userRow.avatar_pending_url) {
             throw new ApiError(
               409,
@@ -6821,17 +7049,19 @@ export function createBackendStore({
             );
           }
 
-          db.prepare(
-            `
+          await db
+            .prepare(
+              `
             UPDATE users
             SET avatar_pending_url = NULL, avatar_review_status = 'rejected', updated_at = ?
             WHERE id = ?
           `
-          ).run(nowIso, userRow.id);
+            )
+            .run(nowIso, userRow.id);
           scheduleStoredAvatarCleanup(afterCommit, db, avatarStorageDir, [
             userRow.avatar_pending_url
           ]);
-          recordModerationAction(db, {
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",
             targetId: userRow.id,
@@ -6840,7 +7070,7 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
         if (normalizedActionType === "block_session") {
           const normalizedSessionId = String(targetId || "").trim();
@@ -6852,18 +7082,18 @@ export function createBackendStore({
             );
           }
 
-          const sessionRow = readSessionRow(db, normalizedSessionId);
+          const sessionRow = await readSessionRow(db, normalizedSessionId);
           if (!sessionRow) {
             throw new ApiError(404, "NOT_FOUND", "Sesion no encontrada.");
           }
 
-          insertOrUpdateBlockedSession(db, {
+          await insertOrUpdateBlockedSession(db, {
             sessionId: normalizedSessionId,
             actorUserId: context.viewer.id,
             reason: normalizedReason,
             createdAt: nowIso
           });
-          recordModerationAction(db, {
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "session",
             targetId: normalizedSessionId,
@@ -6872,7 +7102,7 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (normalizedActionType === "block_ip") {
@@ -6881,13 +7111,13 @@ export function createBackendStore({
             throw new ApiError(400, "INVALID_MODERATION_TARGET", "La IP objetivo es obligatoria.");
           }
 
-          insertOrUpdateBlockedIp(db, {
+          await insertOrUpdateBlockedIp(db, {
             ipAddress: normalizedIpAddress,
             actorUserId: context.viewer.id,
             reason: normalizedReason,
             createdAt: nowIso
           });
-          recordModerationAction(db, {
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "ip",
             targetId: normalizedIpAddress,
@@ -6896,14 +7126,14 @@ export function createBackendStore({
             createdAt: nowIso
           });
 
-          return buildFrontendPayload(db, context, selectedTopicId);
+          return await buildFrontendPayload(db, context, selectedTopicId);
         }
 
         if (normalizedActionType === "mark_problematic") {
           const normalizedTargetType = String(targetType || "").trim();
-          const target = assertReportableEntity(db, normalizedTargetType, targetId);
+          const target = await assertReportableEntity(db, normalizedTargetType, targetId);
           const reportReason = validateReportReason(normalizedReason, target.entityType);
-          const existingModeratorReport = db
+          const existingModeratorReport = await db
             .prepare(
               `
             SELECT id
@@ -6915,23 +7145,25 @@ export function createBackendStore({
             .get(context.viewer.id, target.entityType, target.entityId, REPORT_STATUS_OPEN);
 
           if (!existingModeratorReport) {
-            db.prepare(
-              `
+            await db
+              .prepare(
+                `
               INSERT INTO reports (
                 entity_type, entity_id, reason, reporter_session_id, reporter_user_id, status, resolved_at, created_at
               ) VALUES (?, ?, ?, NULL, ?, ?, NULL, ?)
             `
-            ).run(
-              target.entityType,
-              target.entityId,
-              reportReason,
-              context.viewer.id,
-              REPORT_STATUS_OPEN,
-              nowIso
-            );
+              )
+              .run(
+                target.entityType,
+                target.entityId,
+                reportReason,
+                context.viewer.id,
+                REPORT_STATUS_OPEN,
+                nowIso
+              );
           }
 
-          recordModerationAction(db, {
+          await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: target.entityType,
             targetId: target.entityId,
@@ -6946,17 +7178,18 @@ export function createBackendStore({
               : target.entityType === "message"
                 ? selectedTopicId || target.topicId
                 : selectedTopicId;
-          return buildFrontendPayload(db, context, nextSelectedTopicId);
+          return await buildFrontendPayload(db, context, nextSelectedTopicId);
         }
 
         throw new ApiError(400, "INVALID_MODERATION_ACTION", "Accion de moderacion no soportada.");
       });
     },
     // Lecturas para las páginas SEO server-rendered: nunca crean sesiones ni escriben.
-    getSeoTopicEntries() {
-      return db
-        .prepare(
-          `
+    async getSeoTopicEntries() {
+      return (
+        await db
+          .prepare(
+            `
         SELECT
           topics.id,
           topics.title,
@@ -6994,21 +7227,22 @@ export function createBackendStore({
         ORDER BY topics.active_rank ASC
         LIMIT ?
       `
-        )
-        .all(REPORT_STATUS_OPEN, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT)
-        .map((row) => ({
-          id: row.id,
-          title: row.title,
-          lastActivityAt: row.last_activity_at,
-          commentCount: Number(row.comment_count ?? 0),
-          isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
-          isProblematic: isSeoTopicRowProblematic(row)
-        }));
+          )
+          .all(REPORT_STATUS_OPEN, TOPIC_STATUS_ACTIVE, TOPIC_STATUS_PINNED, ACTIVE_TOPIC_LIMIT)
+      ).map((row) => ({
+        id: row.id,
+        title: row.title,
+        lastActivityAt: row.last_activity_at,
+        commentCount: Number(row.comment_count ?? 0),
+        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
+        isProblematic: isSeoTopicRowProblematic(row)
+      }));
     },
-    getSeoArchivedTopicEntries() {
-      return db
-        .prepare(
-          `
+    async getSeoArchivedTopicEntries() {
+      return (
+        await db
+          .prepare(
+            `
         SELECT
           topics.id,
           topics.title,
@@ -7046,33 +7280,34 @@ export function createBackendStore({
         ORDER BY topics.last_activity_at DESC, topics.created_at DESC
         LIMIT 5000
       `
-        )
-        .all(REPORT_STATUS_OPEN, TOPIC_STATUS_EXPELLED)
-        .map((row) => ({
-          id: row.id,
-          title: row.title,
-          lastActivityAt: row.last_activity_at,
-          commentCount: Number(row.comment_count ?? 0),
-          isArchived: true,
-          isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
-          isProblematic: isSeoTopicRowProblematic(row)
-        }));
+          )
+          .all(REPORT_STATUS_OPEN, TOPIC_STATUS_EXPELLED)
+      ).map((row) => ({
+        id: row.id,
+        title: row.title,
+        lastActivityAt: row.last_activity_at,
+        commentCount: Number(row.comment_count ?? 0),
+        isArchived: true,
+        isThin: Number(row.comment_count ?? 0) < SEO_THIN_TOPIC_COMMENT_COUNT,
+        isProblematic: isSeoTopicRowProblematic(row)
+      }));
     },
-    getTopicPageData(topicId) {
+    async getTopicPageData(topicId) {
       const normalizedId = String(topicId || "").trim();
       const topicRow = normalizedId
-        ? db.prepare("SELECT * FROM topics WHERE id = ?").get(normalizedId)
+        ? await db.prepare("SELECT * FROM topics WHERE id = ?").get(normalizedId)
         : null;
       if (!topicRow || topicRow.status === TOPIC_STATUS_BLOCKED) {
         throw new ApiError(404, "TOPIC_NOT_FOUND", "Tema no encontrado.");
       }
 
-      const authorRow = db
+      const authorRow = await db
         .prepare("SELECT name, nickname, type, avatar_url FROM users WHERE id = ?")
         .get(topicRow.author_id);
-      const messages = db
-        .prepare(
-          `
+      const messages = (
+        await db
+          .prepare(
+            `
         SELECT
           messages.text,
           messages.kind,
@@ -7087,24 +7322,24 @@ export function createBackendStore({
         WHERE messages.topic_id = ?
         ORDER BY messages.id ASC
       `
-        )
-        .all(normalizedId)
-        .map((row) => ({
-          text: row.text,
-          kind: row.kind,
-          likes: Number(row.likes ?? 0),
-          isRoot: Boolean(row.is_root),
-          createdAt: row.created_at,
-          authorName: row.author_name,
-          authorNickname: row.author_nickname ?? null,
-          authorType: row.author_type
-        }));
+          )
+          .all(normalizedId)
+      ).map((row) => ({
+        text: row.text,
+        kind: row.kind,
+        likes: Number(row.likes ?? 0),
+        isRoot: Boolean(row.is_root),
+        createdAt: row.created_at,
+        authorName: row.author_name,
+        authorNickname: row.author_nickname ?? null,
+        authorType: row.author_type
+      }));
       const commentCount = messages.filter(
         (message) => message.kind === "user" && !message.isRoot
       ).length;
       const likeCount = messages.reduce((total, message) => total + message.likes, 0);
-      const isProblematic = isTopicSeoProblematic(db, normalizedId, topicRow.title, messages);
-      const relatedTopics = this.getSeoTopicEntries()
+      const isProblematic = await isTopicSeoProblematic(db, normalizedId, topicRow.title, messages);
+      const relatedTopics = (await this.getSeoTopicEntries())
         .filter((row) => row.id !== normalizedId && !row.isProblematic)
         .slice(0, 5)
         .map((row) => ({ id: row.id, title: row.title }));
@@ -7131,10 +7366,10 @@ export function createBackendStore({
         likeCount
       };
     },
-    getPublicProfileByNickname(nickname) {
+    async getPublicProfileByNickname(nickname) {
       const key = normalizeUniqueNameKey(nickname);
       const row = key
-        ? db
+        ? await db
             .prepare(
               `
           SELECT id, name, nickname, role, description, created_at, updated_at, avatar_url,
@@ -7149,7 +7384,7 @@ export function createBackendStore({
         throw new ApiError(404, "PROFILE_NOT_FOUND", "Perfil no encontrado.");
       }
 
-      const stats = db
+      const stats = await db
         .prepare(
           `
         SELECT
@@ -7159,7 +7394,7 @@ export function createBackendStore({
       `
         )
         .get(row.id, row.id, row.id);
-      const recentTopics = db
+      const recentTopics = await db
         .prepare(
           `
         SELECT id, title
@@ -7189,10 +7424,11 @@ export function createBackendStore({
         lastmod: row.updated_at ?? row.created_at ?? null
       };
     },
-    getSeoProfileEntries() {
-      return db
-        .prepare(
-          `
+    async getSeoProfileEntries() {
+      return (
+        await db
+          .prepare(
+            `
         SELECT users.nickname, users.updated_at, users.created_at
         FROM users
         WHERE users.type = 'registered'
@@ -7212,21 +7448,21 @@ export function createBackendStore({
         ORDER BY users.created_at ASC
         LIMIT 500
       `
-        )
-        .all(SEO_THIN_PROFILE_CONTRIBUTION_COUNT)
-        .map((row) => ({
-          nickname: row.nickname,
-          lastmod: row.updated_at ?? row.created_at ?? null
-        }));
+          )
+          .all(SEO_THIN_PROFILE_CONTRIBUTION_COUNT)
+      ).map((row) => ({
+        nickname: row.nickname,
+        lastmod: row.updated_at ?? row.created_at ?? null
+      }));
     },
-    getDiagnosticsForViewer({ sessionId, authMode, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+    async getDiagnosticsForViewer({ sessionId, authMode, ipAddress = "" } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
-        return this.getDiagnostics();
+        return await this.getDiagnostics();
       });
     },
-    recordProductEvent({
+    async recordProductEvent({
       sessionId,
       authMode,
       eventName,
@@ -7234,8 +7470,8 @@ export function createBackendStore({
       sourceGroup = "direct",
       ipAddress = ""
     } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, {
           sessionId,
           authMode,
           ipAddress,
@@ -7243,37 +7479,49 @@ export function createBackendStore({
         });
         return {
           sessionId: context.sessionId,
-          ...recordProductEvent(db, context, eventName, routeGroup, sourceGroup)
+          ...(await recordProductEvent(db, context, eventName, routeGroup, sourceGroup))
         };
       });
     },
-    getProductAnalyticsForViewer({ sessionId, authMode, days = 30, ipAddress = "" } = {}) {
-      return withTransaction(db, (afterCommit, db) => {
-        const context = resolveViewer(db, { sessionId, authMode, ipAddress });
+    async getProductAnalyticsForViewer({ sessionId, authMode, days = 30, ipAddress = "" } = {}) {
+      return await withTransaction(db, async (afterCommit, db) => {
+        const context = await resolveViewer(db, { sessionId, authMode, ipAddress });
         assertModerator(context.viewerRow);
-        return buildProductAnalyticsReport(db, days);
+        return await buildProductAnalyticsReport(db, days);
       });
     },
-    claimTopicActivityEmailRecipients(topicId, actorUserId) {
-      return withTransaction(db, (afterCommit, db) =>
-        claimTopicActivityEmailRecipients(db, String(topicId || ""), String(actorUserId || ""))
+    async claimTopicActivityEmailRecipients(topicId, actorUserId) {
+      return await withTransaction(
+        db,
+        async (afterCommit, db) =>
+          await claimTopicActivityEmailRecipients(
+            db,
+            String(topicId || ""),
+            String(actorUserId || "")
+          )
       );
     },
-    getDiagnostics() {
-      const topics = db.prepare("SELECT COUNT(*) AS count FROM topics").get()?.count ?? 0;
-      const messages = db.prepare("SELECT COUNT(*) AS count FROM messages").get()?.count ?? 0;
-      const users = db.prepare("SELECT COUNT(*) AS count FROM users").get()?.count ?? 0;
-      const sessions = db.prepare("SELECT COUNT(*) AS count FROM sessions").get()?.count ?? 0;
+    async getDiagnostics() {
+      const topics = (await db.prepare("SELECT COUNT(*) AS count FROM topics").get())?.count ?? 0;
+      const messages =
+        (await db.prepare("SELECT COUNT(*) AS count FROM messages").get())?.count ?? 0;
+      const users = (await db.prepare("SELECT COUNT(*) AS count FROM users").get())?.count ?? 0;
+      const sessions =
+        (await db.prepare("SELECT COUNT(*) AS count FROM sessions").get())?.count ?? 0;
       const reports =
-        db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status = ?").get(REPORT_STATUS_OPEN)
-          ?.count ?? 0;
+        (
+          await db
+            .prepare("SELECT COUNT(*) AS count FROM reports WHERE status = ?")
+            .get(REPORT_STATUS_OPEN)
+        )?.count ?? 0;
       const blockedSessions =
-        db.prepare("SELECT COUNT(*) AS count FROM blocked_sessions").get()?.count ?? 0;
-      const blockedIps = db.prepare("SELECT COUNT(*) AS count FROM blocked_ips").get()?.count ?? 0;
+        (await db.prepare("SELECT COUNT(*) AS count FROM blocked_sessions").get())?.count ?? 0;
+      const blockedIps =
+        (await db.prepare("SELECT COUNT(*) AS count FROM blocked_ips").get())?.count ?? 0;
       const topicFollows =
-        db.prepare("SELECT COUNT(*) AS count FROM topic_follows").get()?.count ?? 0;
+        (await db.prepare("SELECT COUNT(*) AS count FROM topic_follows").get())?.count ?? 0;
       const productEvents =
-        db.prepare("SELECT COUNT(*) AS count FROM product_events").get()?.count ?? 0;
+        (await db.prepare("SELECT COUNT(*) AS count FROM product_events").get())?.count ?? 0;
       return {
         dbPath: resolvedDbPath,
         dbPathSource: dbConfig.dbPathSource,
