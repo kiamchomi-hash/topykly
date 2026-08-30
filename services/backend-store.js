@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
-import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
 import { escapeSqliteString, resolveBackupTarget } from "../scripts/backup-sqlite.mjs";
+import { createAvatarStorage } from "./avatar-storage.js";
 import { createDbClient } from "./db-client.js";
 import { hasProfanity } from "../profanity-filter.js";
 import { SEO_THIN_PROFILE_CONTRIBUTION_COUNT, SEO_THIN_TOPIC_COMMENT_COUNT } from "./seo-pages.js";
@@ -112,7 +113,6 @@ const AVATAR_UPLOAD_EXTENSIONS = new Map([
   ["image/webp", "webp"],
   ["image/gif", "gif"]
 ]);
-const AVATAR_PUBLIC_PATH = "/avatars";
 const ADMIN_REPORT_PAGE_SIZE = 50;
 const ADMIN_AVATAR_PAGE_SIZE = 50;
 const ADMIN_MAX_PAGE_SIZE = 100;
@@ -603,7 +603,7 @@ function hasImageSignature(buffer, mimeType) {
   return false;
 }
 
-function storeAvatarDataUrl(value, avatarStorageDir) {
+async function storeAvatarDataUrl(value, avatarStorage) {
   const normalized = String(value || "").trim();
   if (!normalized) {
     return null;
@@ -643,27 +643,14 @@ function storeAvatarDataUrl(value, avatarStorageDir) {
     );
   }
 
-  const extension = AVATAR_UPLOAD_EXTENSIONS.get(mimeType);
-  const fileName = `${crypto.randomUUID()}.${extension}`;
-  mkdirSync(avatarStorageDir, { recursive: true });
-  writeFileSync(path.join(avatarStorageDir, fileName), avatarBuffer, { flag: "wx" });
-
-  return `${AVATAR_PUBLIC_PATH}/${fileName}`;
+  return await avatarStorage.save(avatarBuffer, AVATAR_UPLOAD_EXTENSIONS.get(mimeType));
 }
 
-function isStoredAvatarUrl(value) {
-  const normalized = String(value || "").trim();
-  if (!normalized.startsWith(`${AVATAR_PUBLIC_PATH}/`)) {
-    return false;
-  }
-
-  const fileName = normalized.slice(AVATAR_PUBLIC_PATH.length + 1);
-  return Boolean(fileName) && fileName === path.basename(fileName) && !fileName.startsWith(".");
-}
-
-async function cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl) {
+async function cleanupStoredAvatarUrl(db, avatarStorage, avatarUrl) {
   const normalized = String(avatarUrl || "").trim();
-  if (!isStoredAvatarUrl(normalized)) {
+  // Una url que no es del almacen propio no es nuestra para borrar: en la base
+  // tambien hay avatares de proveedores externos.
+  if (!avatarStorage.owns(normalized)) {
     return;
   }
 
@@ -681,16 +668,12 @@ async function cleanupStoredAvatarUrl(db, avatarStorageDir, avatarUrl) {
     return;
   }
 
-  try {
-    unlinkSync(path.join(avatarStorageDir, path.basename(normalized)));
-  } catch {
-    // A missing stale file should not break the profile or moderation flow.
-  }
+  await avatarStorage.remove(normalized);
 }
 
 // La limpieza corre despues del commit, cuando la transaccion ya esta cerrada,
 // asi que recibe la conexion y no el handle de la transaccion.
-function scheduleStoredAvatarCleanup(registerAfterCommit, avatarStorageDir, avatarUrls) {
+function scheduleStoredAvatarCleanup(registerAfterCommit, avatarStorage, avatarUrls) {
   const uniqueUrls = [...new Set(avatarUrls.filter(Boolean))];
   if (!uniqueUrls.length) {
     return;
@@ -698,7 +681,7 @@ function scheduleStoredAvatarCleanup(registerAfterCommit, avatarStorageDir, avat
 
   registerAfterCommit(async (connection) => {
     for (const avatarUrl of uniqueUrls) {
-      await cleanupStoredAvatarUrl(connection, avatarStorageDir, avatarUrl);
+      await cleanupStoredAvatarUrl(connection, avatarStorage, avatarUrl);
     }
   });
 }
@@ -5614,7 +5597,7 @@ export async function createBackendStore({
     : path.join(os.tmpdir(), "topykly-storage");
   const avatarStorageDir = path.join(storageDir, "avatars");
   mkdirSync(storageDir, { recursive: true });
-  mkdirSync(avatarStorageDir, { recursive: true });
+  const avatarStorage = createAvatarStorage({ directory: avatarStorageDir });
   const db = await createDbClient({ url: dbConfig.url, authToken: dbConfig.authToken });
 
   await initSchema(db);
@@ -5628,7 +5611,10 @@ export async function createBackendStore({
 
   return {
     dbPath: resolvedDbPath,
-    avatarStorageDir,
+    // Solo tiene valor cuando el almacen es de disco; con almacen de objetos la
+    // ruta local no significa nada y el servidor no debe servir desde ahi.
+    avatarStorageDir: avatarStorage.kind === "disk" ? avatarStorageDir : null,
+    avatarStorage,
     close() {
       db.close();
     },
@@ -5934,7 +5920,7 @@ export async function createBackendStore({
         const previousAvatarUrls = [context.viewer.avatarUrl, context.viewer.avatarPendingUrl];
         const normalizedAvatarDataUrl = removeAvatar
           ? null
-          : storeAvatarDataUrl(avatarDataUrl, avatarStorageDir);
+          : await storeAvatarDataUrl(avatarDataUrl, avatarStorage);
         const nowIso = new Date().toISOString();
         const nextAvatarUrl = removeAvatar ? null : (context.viewer.avatarUrl ?? null);
         const nextPendingUrl = removeAvatar
@@ -6009,7 +5995,7 @@ export async function createBackendStore({
         const nextAvatarUrls = new Set([nextAvatarUrl, nextPendingUrl].filter(Boolean));
         scheduleStoredAvatarCleanup(
           afterCommit,
-          avatarStorageDir,
+          avatarStorage,
           previousAvatarUrls.filter((avatarUrl) => avatarUrl && !nextAvatarUrls.has(avatarUrl))
         );
 
@@ -6160,7 +6146,7 @@ export async function createBackendStore({
           )
           .run(nowIso, userId);
 
-        scheduleStoredAvatarCleanup(afterCommit, avatarStorageDir, previousAvatarUrls);
+        scheduleStoredAvatarCleanup(afterCommit, avatarStorage, previousAvatarUrls);
 
         const guestContext = await createGuestSession(
           db,
@@ -7047,7 +7033,7 @@ export async function createBackendStore({
             .run(userRow.avatar_pending_url, nowIso, userRow.id);
           scheduleStoredAvatarCleanup(
             afterCommit,
-            avatarStorageDir,
+            avatarStorage,
             userRow.avatar_url && userRow.avatar_url !== userRow.avatar_pending_url
               ? [userRow.avatar_url]
               : []
@@ -7083,7 +7069,7 @@ export async function createBackendStore({
           `
             )
             .run(nowIso, userRow.id);
-          scheduleStoredAvatarCleanup(afterCommit, avatarStorageDir, [userRow.avatar_pending_url]);
+          scheduleStoredAvatarCleanup(afterCommit, avatarStorage, [userRow.avatar_pending_url]);
           await recordModerationAction(db, {
             actionType: normalizedActionType,
             targetType: "user",

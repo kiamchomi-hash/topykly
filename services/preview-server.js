@@ -1283,7 +1283,14 @@ async function handleAuthCallback(store, authService, req, res, url) {
   }
 }
 
+// Solo aplica al almacen de disco. Con almacen de objetos la url guardada es
+// absoluta y el navegador la pide directamente, sin pasar por el servidor.
 function handleAvatarRequest(res, url, avatarStorageDir) {
+  if (!avatarStorageDir) {
+    writePlainText(res, 404, "Not found");
+    return;
+  }
+
   const fileName = path.basename(decodeURIComponent(url.pathname));
   if (!fileName || url.pathname !== `/avatars/${fileName}`) {
     writePlainText(res, 400, "Invalid path");
@@ -1488,21 +1495,16 @@ function sendTextResource(res, req, body, contentType, cacheControl) {
   res.end(req.method === "HEAD" ? "" : body);
 }
 
-function readTopicAvatarBuffer(store, topic) {
+// El almacen decide si la url es suya y como leerla: en disco es un archivo, en
+// el almacen de objetos es una descarga.
+async function readTopicAvatarBuffer(store, topic) {
   const avatarUrl = String(topic.author?.avatarUrl || "");
-  if (!avatarUrl.startsWith("/avatars/") || !store.avatarStorageDir) {
-    return null;
-  }
-
-  const fileName = path.basename(avatarUrl);
-  const avatarRoot = path.resolve(store.avatarStorageDir);
-  const avatarPath = path.resolve(avatarRoot, fileName);
-  if (path.dirname(avatarPath) !== avatarRoot) {
+  if (!avatarUrl || !store.avatarStorage?.owns(avatarUrl)) {
     return null;
   }
 
   try {
-    return fs.readFileSync(avatarPath);
+    return await store.avatarStorage.read(avatarUrl);
   } catch {
     return null;
   }
@@ -1560,7 +1562,7 @@ async function handleTopicSocialCardRequest(store, req, res, url) {
     throw error;
   }
 
-  const avatarBuffer = readTopicAvatarBuffer(store, topic);
+  const avatarBuffer = await readTopicAvatarBuffer(store, topic);
   const fingerprint = socialCardFingerprint(topic, avatarBuffer);
   let cached = socialCardCache.get(topic.id);
   if (!cached || cached.fingerprint !== fingerprint) {

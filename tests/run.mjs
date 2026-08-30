@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 import { createAuthService } from "../services/auth-service.js";
+import { createAvatarStorage } from "../services/avatar-storage.js";
 import {
   createDbClient,
   resolveDbClientConfig,
@@ -1999,6 +2000,76 @@ await (async () => {
     assert.equal(topic.messages[0].text, "Primer mensaje para abrir el hilo.");
     assert.equal(topic.messages[0].isRoot, true);
     assert.equal(summarizeTopicMessage("a".repeat(110)).endsWith("..."), true);
+  });
+
+  await test("backend avatar storage on disk keeps urls inside its own directory", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-avatar-disk-"));
+
+    try {
+      const storage = createAvatarStorage({ directory: tempDir, env: {} });
+      assert.equal(storage.kind, "disk");
+
+      const url = await storage.save(Buffer.from("imagen"), "png");
+      assert.match(url, /^\/avatars\/[0-9a-f-]+\.png$/);
+      assert.equal(storage.owns(url), true);
+      assert.deepEqual(await storage.read(url), Buffer.from("imagen"));
+
+      // Nada de esto es del almacen: ni rutas que escapan del directorio ni
+      // avatares de proveedores externos.
+      for (const foreign of [
+        "/avatars/../secreto.png",
+        "/avatars/sub/dir.png",
+        "/avatars/.oculto",
+        "https://lh3.googleusercontent.com/foto.png",
+        ""
+      ]) {
+        assert.equal(storage.owns(foreign), false, foreign);
+        assert.equal(await storage.read(foreign), null, foreign);
+      }
+
+      await storage.remove(url);
+      assert.equal(await storage.read(url), null);
+      // Borrar dos veces no debe romper el flujo de perfil ni de moderacion.
+      await storage.remove(url);
+    } finally {
+      await removeTempDir(tempDir);
+    }
+  });
+
+  await test("backend avatar storage on object store only claims its own bucket", async () => {
+    const uploaded = [];
+    const deleted = [];
+    const storage = createAvatarStorage({
+      env: { BLOB_READ_WRITE_TOKEN: "token-de-prueba" },
+      client: {
+        async put(key, body, options) {
+          uploaded.push({ key, body, options });
+          return { url: `https://cuenta.public.blob.vercel-storage.com/${key}` };
+        },
+        async del(url) {
+          deleted.push(url);
+        }
+      }
+    });
+
+    assert.equal(storage.kind, "blob");
+    assert.equal(storage.directory, null);
+
+    const url = await storage.save(Buffer.from("imagen"), "webp");
+    assert.equal(uploaded.length, 1);
+    assert.match(uploaded[0].key, /^avatars\/[0-9a-f-]+\.webp$/);
+    assert.equal(uploaded[0].options.contentType, "image/webp");
+    assert.equal(uploaded[0].options.access, "public");
+    assert.equal(storage.owns(url), true);
+
+    // Una url de otro dominio no se borra aunque este guardada en la base.
+    const foreign = "https://lh3.googleusercontent.com/foto.png";
+    assert.equal(storage.owns(foreign), false);
+    await storage.remove(foreign);
+    assert.deepEqual(deleted, []);
+
+    await storage.remove(url);
+    assert.deepEqual(deleted, [url]);
   });
 
   await test("backend db client mirrors the node:sqlite statement surface", async () => {
