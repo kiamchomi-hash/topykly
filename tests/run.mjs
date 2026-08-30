@@ -2073,6 +2073,9 @@ await (async () => {
     assert.match(uploaded[0].key, /^avatars\/[0-9a-f-]+\.webp$/);
     assert.equal(uploaded[0].options.contentType, "image/webp");
     assert.equal(uploaded[0].options.access, "public");
+    // Sin acotar la cache, un avatar rechazado por moderacion seguiria sirviendose
+    // desde su url durante semanas despues de borrarlo.
+    assert.equal(uploaded[0].options.cacheControlMaxAge, 300);
     assert.equal(storage.owns(url), true);
 
     // Una url de otro dominio no se borra aunque este guardada en la base.

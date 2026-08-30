@@ -18,6 +18,13 @@ const AVATAR_CONTENT_TYPES = new Map([
   ["gif", "image/gif"]
 ]);
 
+// Un avatar puede ser rechazado por moderacion o borrado por su dueño, y el
+// almacen de objetos cachea por defecto durante semanas: la url seguiria
+// sirviendo la imagen mucho despues de haberla eliminado. Cuando se servia desde
+// disco la cabecera era no-store y el borrado surtia efecto al instante. Cinco
+// minutos acota esa ventana sin volver a pagar una lectura por cada vista.
+const AVATAR_CACHE_MAX_AGE_SECONDS = 300;
+
 function contentTypeFor(extension) {
   return AVATAR_CONTENT_TYPES.get(extension) || "application/octet-stream";
 }
@@ -100,6 +107,7 @@ export function createBlobAvatarStorage({ token = "", prefix = "avatars", client
         access: "public",
         contentType: contentTypeFor(extension),
         addRandomSuffix: false,
+        cacheControlMaxAge: AVATAR_CACHE_MAX_AGE_SECONDS,
         ...credentials
       });
       return result.url;
