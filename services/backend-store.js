@@ -2789,7 +2789,15 @@ async function rebuildActiveTopicRanks(db, now = Date.now()) {
   `);
   const nowIso = new Date(now).toISOString();
 
+  // Esto corre en cada refresco, o sea en cada sondeo de cada pestaña abierta.
+  // Reescribir los cuarenta temas cuando el orden no cambio era una transaccion
+  // de escritura por sondeo contra la base, que es lo que mas se paga cuando la
+  // base es remota. Ademas dejaba a todos los temas con updated_at recien
+  // tocado, que no refleja ninguna actividad real.
   for (const [index, row] of keptRows.entries()) {
+    if (row.active_rank === index) {
+      continue;
+    }
     await updateRank.run(index, nowIso, row.id);
   }
 

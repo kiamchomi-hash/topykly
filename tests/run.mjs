@@ -676,16 +676,16 @@ await (async () => {
       const state = { viewer: { slowMode: false } };
       const sync = createLiveTopicSync({ state, render() {}, documentRef, windowRef });
       sync.start();
-      assert.deepEqual(scheduledDelays, [30000]);
+      assert.deepEqual(scheduledDelays, [60000]);
 
       state.viewer.slowMode = true;
       sync.reschedule();
-      assert.deepEqual(scheduledDelays, [30000, 60000]);
+      assert.deepEqual(scheduledDelays, [60000, 60000]);
       assert.equal(clearedTimers, 1);
 
       documentRef.visibilityState = "hidden";
       sync.reschedule();
-      assert.deepEqual(scheduledDelays, [30000, 60000, 120000]);
+      assert.deepEqual(scheduledDelays, [60000, 60000, 300000]);
       assert.equal(clearedTimers, 2);
 
       sync.stop();
@@ -763,10 +763,10 @@ await (async () => {
       });
 
       sync.start();
-      assert.deepEqual(scheduledDelays, [30000]);
+      assert.deepEqual(scheduledDelays, [60000]);
 
       streamListeners.get("open")();
-      assert.deepEqual(scheduledDelays, [30000, 120000]);
+      assert.deepEqual(scheduledDelays, [60000, 120000]);
 
       streamListeners.get("update")();
       await flushAsyncEvents();
@@ -2241,6 +2241,63 @@ await (async () => {
       isLocal: false
     });
     assert.equal(resolveDbClientConfig({}), null);
+  });
+
+  await test("backend refresh stops rewriting topic ranks when the order did not change", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-rank-writes-"));
+    const dbPath = path.join(tempDir, "ranks.sqlite");
+    const store = await createBackendStore({ dbPath, seedDemoData: false });
+    // Conexion aparte solo para observar la tabla sin pasar por el store.
+    const observer = await createDbClient({ url: `file:${dbPath}` });
+
+    try {
+      // Dos autores porque solo se admite un tema cada media hora por usuario.
+      for (const [index, session] of ["session-rank-a", "session-rank-b"].entries()) {
+        await store.registerWithPassword({
+          sessionId: session,
+          email: `rank${index}@example.com`,
+          password: "password-segura",
+          nickname: `rank_user_${index}`
+        });
+        await store.createTopic({
+          sessionId: session,
+          authMode: "registered",
+          title: `Tema del ranking numero ${index + 1}`,
+          text: "Mensaje inicial del tema."
+        });
+      }
+
+      const stamps = async () =>
+        (await observer.prepare("SELECT id, updated_at FROM topics ORDER BY id").all())
+          .map((row) => `${row.id}:${row.updated_at}`)
+          .join("|");
+
+      const before = await stamps();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      // refresh() corre en cada sondeo de cada pestaña abierta. Si reescribe el
+      // rango de todos los temas cuando nada se movio, cada sondeo es una
+      // transaccion de escritura contra la base.
+      const payload = await store.refresh({
+        sessionId: "session-rank-a",
+        authMode: "registered"
+      });
+      await store.refresh({ sessionId: "session-rank-a", authMode: "registered" });
+      assert.equal(await stamps(), before);
+
+      // Cuando el orden si cambia, la escritura tiene que seguir ocurriendo: el
+      // tema mas viejo sube al comentarlo.
+      await store.addMessage(payload.topics.at(-1).id, {
+        sessionId: "session-rank-b",
+        authMode: "registered",
+        text: "Un comentario que mueve este tema al primer lugar."
+      });
+      assert.notEqual(await stamps(), before);
+    } finally {
+      observer.close();
+      await store.close();
+      await removeTempDir(tempDir);
+    }
   });
 
   await test("backend can start without demo topics for real users", async () => {
@@ -12841,9 +12898,9 @@ await (async () => {
     assert.match(controllerApp, /from "\.\/controller-responsive\.js"/);
     assert.match(controllerApp, /from "\.\/controller-render\.js\?v=20260716-quality1"/);
     assert.match(controllerApp, /from "\.\/controller-runtime\.js"/);
-    assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 30000;/);
+    assert.match(controllerApp, /const LIVE_TOPIC_REFRESH_INTERVAL_MS = 60000;/);
     assert.match(controllerApp, /const SLOW_TOPIC_REFRESH_INTERVAL_MS = 60000;/);
-    assert.match(controllerApp, /const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 120000;/);
+    assert.match(controllerApp, /const HIDDEN_TOPIC_REFRESH_INTERVAL_MS = 300000;/);
     assert.match(
       controllerApp,
       /renderRef\.current = renderers\.render;[\s\S]*responsive\.syncResponsiveView\(\);[\s\S]*responsive\.updateLayoutMetrics\(\);[\s\S]*renderers\.render\(\);/
