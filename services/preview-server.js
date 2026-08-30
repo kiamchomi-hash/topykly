@@ -1919,6 +1919,43 @@ function handleStaticRequest(req, res, url, store) {
   res.end(negotiated.body);
 }
 
+// Las validaciones que no pueden fallar en un despliegue real. Viven aparte
+// porque la entrada serverless no pasa por startPreviewServer y sin esto
+// arrancaria igual sin secreto de sesion: las cookies firmadas usarian un
+// secreto efimero y toda sesion se caeria en cada arranque en frio, en silencio.
+//
+// loopbackHost solo lo pasa el servidor de proceso largo. Sin el, el login local
+// sin contraseña queda prohibido, que es lo correcto en un despliegue.
+export function assertDeploymentConfig({ loopbackHost = null, env = process.env, log } = {}) {
+  const nodeEnv = String(env.NODE_ENV || "")
+    .trim()
+    .toLowerCase();
+  const sessionSecret = String(
+    env.TOPYKLY_SESSION_SECRET || env.CHETREND_SESSION_SECRET || ""
+  ).trim();
+
+  if (nodeEnv === "production" && !sessionSecret) {
+    throw new Error("TOPYKLY_SESSION_SECRET es obligatorio cuando NODE_ENV=production.");
+  }
+
+  if (!isLocalDevLoginAllowed(env)) {
+    return;
+  }
+
+  const host = String(loopbackHost || "")
+    .trim()
+    .toLowerCase();
+  if (!["127.0.0.1", "::1", "localhost"].includes(host)) {
+    throw new Error(
+      "El login local sin contrasena solo puede habilitarse en una interfaz loopback."
+    );
+  }
+
+  log?.(
+    'ADVERTENCIA: login local sin contraseña habilitado porque NODE_ENV no es "production". No usar esta configuración en producción.'
+  );
+}
+
 // El handler vive separado de startPreviewServer para poder montarlo tanto sobre
 // http.createServer como sobre una funcion serverless, que recibe (req, res) con
 // la misma forma. En modo "serverless" no se sirven archivos estaticos: de eso se
@@ -2066,28 +2103,7 @@ export async function startPreviewServer({
   liveEventRelay = null
 }) {
   loadEnvFile(path.join(root, ".env"));
-  const nodeEnv = String(process.env.NODE_ENV || "")
-    .trim()
-    .toLowerCase();
-  const sessionSecret = String(
-    process.env.TOPYKLY_SESSION_SECRET || process.env.CHETREND_SESSION_SECRET || ""
-  ).trim();
-  if (nodeEnv === "production" && !sessionSecret) {
-    throw new Error("TOPYKLY_SESSION_SECRET es obligatorio cuando NODE_ENV=production.");
-  }
-  if (
-    isLocalDevLoginAllowed() &&
-    !["127.0.0.1", "::1", "localhost"].includes(String(host).trim().toLowerCase())
-  ) {
-    throw new Error(
-      "El login local sin contrasena solo puede habilitarse en una interfaz loopback."
-    );
-  }
-  if (isLocalDevLoginAllowed()) {
-    log(
-      'ADVERTENCIA: login local sin contraseña habilitado porque NODE_ENV no es "production". No usar esta configuración en producción.'
-    );
-  }
+  assertDeploymentConfig({ loopbackHost: host, log });
   const store = await createBackendStore({
     dbPath,
     seedDemoData: shouldSeedDemoData(process.env, false)

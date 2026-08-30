@@ -10,11 +10,14 @@
 import { createAuthService } from "../services/auth-service.js";
 import { createBackendStore, shouldSeedDemoData } from "../services/backend-store.js";
 import { createLiveEventHub } from "../services/live-event-hub.js";
-import { createRequestHandler } from "../services/preview-server.js";
+import { assertDeploymentConfig, createRequestHandler } from "../services/preview-server.js";
 
 let handlerPromise = null;
 
 async function buildHandler() {
+  // Antes de nada: sin secreto de sesion en produccion no se arranca.
+  assertDeploymentConfig({ log: console.error });
+
   const store = await createBackendStore({
     seedDemoData: shouldSeedDemoData(process.env, false)
   });

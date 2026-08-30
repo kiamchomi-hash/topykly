@@ -17,6 +17,7 @@ import {
   stripLocalOnlyPragmas
 } from "../services/db-client.js";
 import {
+  assertDeploymentConfig,
   createRequestHandler,
   getRequestIp,
   isDeclaredBotUserAgent,
@@ -7034,6 +7035,33 @@ await (async () => {
     failing = true;
     const degraded = await limiter.check("topykly:rl:api:1.2.3.4", 2, 60_000);
     assert.deepEqual(degraded, { allowed: true, retryAfterSeconds: 0 });
+  });
+
+  await test("preview deployment guard demands a session secret in production", async () => {
+    // La entrada serverless no pasa por startPreviewServer: sin esta validacion
+    // arrancaria sin secreto y las cookies firmadas usarian uno efimero.
+    assert.throws(
+      () => assertDeploymentConfig({ env: { NODE_ENV: "production" }, log() {} }),
+      /TOPYKLY_SESSION_SECRET es obligatorio/
+    );
+
+    assert.doesNotThrow(() =>
+      assertDeploymentConfig({
+        env: { NODE_ENV: "production", TOPYKLY_SESSION_SECRET: "secreto-largo" },
+        log() {}
+      })
+    );
+
+    // Sin host de loopback, que es el caso de un despliegue, el login local sin
+    // contraseña no puede quedar habilitado.
+    const localLoginEnv = { TOPYKLY_ALLOW_LOCAL_LOGIN: "true" };
+    assert.throws(
+      () => assertDeploymentConfig({ env: localLoginEnv, log() {} }),
+      /solo puede habilitarse en una interfaz loopback/
+    );
+    assert.doesNotThrow(() =>
+      assertDeploymentConfig({ env: localLoginEnv, loopbackHost: "127.0.0.1", log() {} })
+    );
   });
 
   await test("preview cron endpoint refuses requests without the configured secret", async () => {
