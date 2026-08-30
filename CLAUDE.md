@@ -15,7 +15,10 @@ TOPYKLY (formerly "chetrend" — the name still appears in legacy env vars, cook
 - `npm run qa` — runs both `tests/run.mjs` and `tests/smoke.mjs`; this is what CI (`.github/workflows/qa.yml`) runs on every push/PR.
 - `npm run format` / `npm run format:check` — Prettier.
 - `npm run hooks:install` — points git at `.githooks`.
-- `npm run backup:sqlite` — runs `scripts/backup-sqlite.mjs`.
+- `npm run backup:sqlite` — runs `scripts/backup-sqlite.mjs` (solo para base en archivo).
+- `node scripts/build-vercel.mjs` — arma `public/` con los estaticos publicables. Falla si detecta que se colaria un archivo del servidor.
+- `node scripts/migrate-db-to-turso.mjs --db <archivo> [--apply]` — copia una base en archivo a la remota en orden de dependencias y compara conteos. Sin `--apply` solo informa.
+- `node scripts/migrate-avatars-to-blob.mjs --avatars <dir> [--apply]` — sube los avatares que quedaron en disco y reescribe las urls.
 
 There's no per-test filtering flag; `tests/run.mjs` is a single script of named assertion blocks — to iterate on one behavior, temporarily comment out unrelated blocks or grep the file for the relevant `console.log`/description string.
 
@@ -23,7 +26,7 @@ There's no per-test filtering flag; `tests/run.mjs` is a single script of named 
 
 ### Boot and data flow
 
-`app.js` → `controller.js` (thin re-export) → `controller-app.js`'s `bootstrap()`, which wires DOM caching, action handlers, renderers, and event binding, hydrates initial state from the backend, and starts a **1s live-polling loop** (`createLiveTopicSync`) that calls `api.refreshTopics()` and merges results into state. There is no websocket — "live" updates are polling-based.
+`app.js` → `controller.js` (thin re-export) → `controller-app.js`'s `bootstrap()`, which wires DOM caching, action handlers, renderers, and event binding, hydrates initial state from the backend, and starts a **live sync** (`createLiveTopicSync`): abre un `EventSource` a `/api/live` (SSE) y mantiene un sondeo de respaldo cada 30 s (`LIVE_TOPIC_REFRESH_INTERVAL_MS`) que llama a `api.refreshTopics()`. No hay websocket. Si el stream no esta disponible el cliente se queda solo con el sondeo, que es lo que ocurre en el despliegue serverless.
 
 Flow for any user action: **UI event → action in `controller-actions.js` / `controller-chat-actions.js` / `controller-ranking-actions.js` → `services/api.js` (real HTTP call) → backend response → `dispatch(state, reducers.hydrateFromBackend, payload)` → `render()`**.
 
@@ -35,11 +38,20 @@ Note: a parallel `features/` directory (chat, rankings, topics, users, titles, p
 
 ### Backend
 
-`services/backend-store.js` (~3300 lines) is the actual backend: SQLite via `node:sqlite` (`DatabaseSync`), with tables for `users`, `sessions`, `topics`, `messages`, `message_likes/dislikes`, `reports`, `friend_requests`, `moderation_actions`, `blocked_sessions/ips`, `auth_email_challenges`, `guest_ip_rate_limits`, `app_metadata`. It can seed demo topics/users from `data.js`.
+`services/backend-store.js` (~7300 lines) is the actual backend. **Todas sus operaciones son asincronicas** y pasan por `services/db-client.js`, que resuelve dos backends detras de la misma interfaz (`prepare(sql)` con `get/all/run`, `exec`, `transaction`): `node:sqlite` cuando la url es `file:` y `@libsql/client/web` (HTTP) cuando hay `TURSO_DATABASE_URL`. Las transacciones entregan su propio handle y las tareas post-commit reciben la conexion. Tablas: `users`, `sessions`, `topics`, `messages`, `message_likes/dislikes`, `reports`, `friend_requests`, `moderation_actions`, `blocked_sessions/ips`, `auth_email_challenges`, `guest_ip_rate_limits`, `app_metadata`. It can seed demo topics/users from `data.js`.
 
 `services/preview-server.js` is a plain `node:http` server (no framework) that routes `/api/*` to `backend-store.js`, serves static files, handles avatar uploads under `/avatars/*`, enforces per-IP rate limiting, sets CSP/security headers, and runs periodic guest-session cleanup + a daily like/dislike reset job. This is both the local dev server and the production server (`local-server.cjs`/`dev-server.cjs` start it).
 
-**Single-instance constraint (open risk).** Production runs exactly one Node process, and two pieces of the design assume that: SQLite is a local file on a Render disk (`TOPYKLY_DB_PATH`, single writer), and the SSE hub in `services/live-event-hub.js` holds connections in-process. `createLiveEventHub` already accepts an optional `liveEventRelay` and stamps a `sourceId` on every event so an instance ignores its own echo, but the default relay is local — no shared pub/sub is configured. **Do not scale to multiple instances** without first migrating persistence to shared storage and wiring a real relay; a second instance would split the SSE fanout and contend for the SQLite writer. A Cloudflare migration (D1 + R2) is scoped in `.agents/reports/cloudflare-migration.json`, but no resources were created and no data was copied.
+**Despliegue: proceso unico o serverless.** El codigo soporta los dos, y lo que cambia entre ellos vive en piezas separadas:
+
+- **Persistencia**: `db-client.js` (archivo local o base remota). Con base remota `store.avatarStorageDir` es `null`.
+- **Avatares**: `services/avatar-storage.js` (disco u almacen de objetos segun `BLOB_READ_WRITE_TOKEN`). `owns(url)` decide que url es propia y por lo tanto borrable.
+- **Limite de trafico**: `services/rate-limit-store.js` (Map en memoria o contador compartido segun `UPSTASH_REDIS_REST_URL`).
+- **Tareas periodicas**: los tres `setInterval` de `startPreviewServer`, o `api/cron/maintenance.js` disparado por el cron de la plataforma.
+- **Entrada HTTP**: `createRequestHandler` en `preview-server.js` es comun a los dos. `startPreviewServer` lo monta sobre `http.createServer`; `api/server.js` lo monta como funcion con `mode: "serverless"`, que ademas deja de servir estaticos y responde 501 en `/api/live`.
+- **Estaticos**: en proceso unico los sirve el propio servidor; en Vercel los publica `public/`, que arma `scripts/build-vercel.mjs` reutilizando las listas de archivos protegidos exportadas por `preview-server.js`.
+
+El hub SSE de `services/live-event-hub.js` sigue siendo en proceso: acepta un `liveEventRelay` opcional y estampa un `sourceId` para ignorar su propio eco, pero no hay pub/sub compartido configurado. Por eso `/api/live` esta apagado en serverless. Con varias instancias y base remota el resto del sistema si es seguro; lo unico que falta para el vivo es implementar ese relay.
 
 Key REST endpoints (`/api/...`): `bootstrap`, `topics`, `topics/:id`, `topics/:id/messages`, `messages/:id/like|dislike`, `reports`, `friends/:id/request|accept|reject`, `profile` (PATCH), `auth/status|login|logout|password/login|password/register|email/request-code|email/verify-code`, `admin/dashboard`, `moderation/reports|actions`, `diagnostics`, plus `/auth/oidc/callback`.
 
@@ -93,4 +105,4 @@ Frontend: `ui/admin-panel.js` renders pending-avatar review and open-report queu
 
 ## Environment
 
-Config is documented in `.env.example`: `TOPYKLY_SESSION_SECRET`; Google OIDC (`TOPYKLY_AUTH_PROVIDER_NAME`, `TOPYKLY_OIDC_ISSUER/CLIENT_ID/CLIENT_SECRET/SCOPE`); Cloudflare Turnstile (`TOPYKLY_TURNSTILE_SITE_KEY/SECRET_KEY`); Resend email (`TOPYKLY_RESEND_API_KEY`, `TOPYKLY_RESEND_FROM`); `TOPYKLY_ADMIN_EMAILS` (admin allowlist); `TOPYKLY_DB_PATH` (persistent SQLite path); `TOPYKLY_TRUST_PROXY`; `TOPYKLY_ALLOW_LOCAL_LOGIN` (must stay off in production); `TOPYKLY_PUBLIC_ORIGIN`; `TOPYKLY_COOKIE_SECURE`.
+Config is documented in `.env.example`. Las variables que deciden el modo de despliegue: `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` (base remota; se impone sobre `TOPYKLY_DB_PATH`), `BLOB_READ_WRITE_TOKEN` (avatares en almacen de objetos), `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (limite de trafico compartido) y `CRON_SECRET` (protege `/api/cron/maintenance`; sin el, el endpoint queda cerrado). El resto: `TOPYKLY_SESSION_SECRET`; Google OIDC (`TOPYKLY_AUTH_PROVIDER_NAME`, `TOPYKLY_OIDC_ISSUER/CLIENT_ID/CLIENT_SECRET/SCOPE`); Cloudflare Turnstile (`TOPYKLY_TURNSTILE_SITE_KEY/SECRET_KEY`); Resend email (`TOPYKLY_RESEND_API_KEY`, `TOPYKLY_RESEND_FROM`); `TOPYKLY_ADMIN_EMAILS` (admin allowlist); `TOPYKLY_DB_PATH` (persistent SQLite path); `TOPYKLY_TRUST_PROXY`; `TOPYKLY_ALLOW_LOCAL_LOGIN` (must stay off in production); `TOPYKLY_PUBLIC_ORIGIN`; `TOPYKLY_COOKIE_SECURE`.

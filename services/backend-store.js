@@ -1277,13 +1277,38 @@ async function initSchema(db) {
   }
 }
 
+// El esquema se revisa entero en cada arranque, y son casi cincuenta columnas
+// sobre un puñado de tablas. Contra una base remota eso serian casi cincuenta
+// viajes de red por arranque en frio, asi que las columnas de cada tabla se
+// consultan una sola vez. La unica via que altera el esquema en caliente es
+// esta misma funcion, que mantiene el cache al dia.
+const tableColumnsCache = new WeakMap();
+
+async function readTableColumns(db, tableName) {
+  let byTable = tableColumnsCache.get(db);
+  if (!byTable) {
+    byTable = new Map();
+    tableColumnsCache.set(db, byTable);
+  }
+
+  let columns = byTable.get(tableName);
+  if (!columns) {
+    const rows = await db.prepare(`PRAGMA table_info(${tableName})`).all();
+    columns = new Set(rows.map((column) => column.name));
+    byTable.set(tableName, columns);
+  }
+
+  return columns;
+}
+
 async function ensureColumn(db, tableName, columnName, columnDefinition) {
-  const columns = await db.prepare(`PRAGMA table_info(${tableName})`).all();
-  if (columns.some((column) => column.name === columnName)) {
+  const columns = await readTableColumns(db, tableName);
+  if (columns.has(columnName)) {
     return;
   }
 
   await db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  columns.add(columnName);
 }
 
 async function rollConnectedHoursIfNeeded(db, nowIso) {
