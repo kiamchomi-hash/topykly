@@ -100,9 +100,16 @@ export function createRedisRateLimiter({ url, token, fetchImpl = fetch, log = co
   };
 }
 
+// La integracion de Upstash en Vercel inyecta las credenciales con el prefijo
+// KV_REST_API_*; el paquete de Upstash usa UPSTASH_REDIS_REST_*. Se aceptan los
+// dos, con el nombre explicito primero.
+//
+// KV_REST_API_READ_ONLY_TOKEN queda deliberadamente afuera: contar peticiones
+// necesita escribir, y con ese token cada INCR fallaria y el limite se caeria
+// sin que se note.
 export function createRateLimiter({ env = process.env, fetchImpl = fetch, log } = {}) {
-  const url = String(env.UPSTASH_REDIS_REST_URL || "").trim();
-  const token = String(env.UPSTASH_REDIS_REST_TOKEN || "").trim();
+  const url = String(env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL || "").trim();
+  const token = String(env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN || "").trim();
 
   if (url && token) {
     return createRedisRateLimiter({ url, token, fetchImpl, log });

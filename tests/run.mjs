@@ -10,7 +10,11 @@ import sharp from "sharp";
 
 import { createAuthService } from "../services/auth-service.js";
 import { createAvatarStorage } from "../services/avatar-storage.js";
-import { createMemoryRateLimiter, createRedisRateLimiter } from "../services/rate-limit-store.js";
+import {
+  createMemoryRateLimiter,
+  createRateLimiter,
+  createRedisRateLimiter
+} from "../services/rate-limit-store.js";
 import {
   createDbClient,
   resolveDbClientConfig,
@@ -6999,6 +7003,40 @@ await (async () => {
     await limiter.check("ip:2", 3, 60_000, start + 61_000);
     const overflow = await limiter.check("ip:3", 3, 60_000, start + 61_000);
     assert.deepEqual(overflow, { allowed: false, retryAfterSeconds: 1 });
+  });
+
+  await test("preview rate limiter accepts both credential namings and never the read-only one", async () => {
+    assert.equal(createRateLimiter({ env: {} }).kind, "memory");
+
+    assert.equal(
+      createRateLimiter({
+        env: {
+          UPSTASH_REDIS_REST_URL: "https://redis.example.com",
+          UPSTASH_REDIS_REST_TOKEN: "token"
+        }
+      }).kind,
+      "redis"
+    );
+
+    // Es como las inyecta la integracion de Upstash en Vercel.
+    assert.equal(
+      createRateLimiter({
+        env: { KV_REST_API_URL: "https://redis.example.com", KV_REST_API_TOKEN: "token" }
+      }).kind,
+      "redis"
+    );
+
+    // Contar peticiones necesita escribir: con el token de solo lectura cada
+    // INCR fallaria y el limite se caeria sin que se note.
+    assert.equal(
+      createRateLimiter({
+        env: {
+          KV_REST_API_URL: "https://redis.example.com",
+          KV_REST_API_READ_ONLY_TOKEN: "token-lectura"
+        }
+      }).kind,
+      "memory"
+    );
   });
 
   await test("preview rate limiter shares the counter and stays open when it fails", async () => {

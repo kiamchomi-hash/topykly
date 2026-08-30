@@ -46,7 +46,7 @@ Note: a parallel `features/` directory (chat, rankings, topics, users, titles, p
 
 - **Persistencia**: `db-client.js` (archivo local o base remota). Con base remota `store.avatarStorageDir` es `null`.
 - **Avatares**: `services/avatar-storage.js` (disco u almacen de objetos segun `BLOB_READ_WRITE_TOKEN` o `BLOB_STORE_ID`). `owns(url)` decide que url es propia y por lo tanto borrable.
-- **Limite de trafico**: `services/rate-limit-store.js` (Map en memoria o contador compartido segun `UPSTASH_REDIS_REST_URL`).
+- **Limite de trafico**: `services/rate-limit-store.js` (Map en memoria o contador compartido segun `UPSTASH_REDIS_REST_URL`, o `KV_REST_API_URL` que es como las inyecta Vercel).
 - **Tareas periodicas**: los tres `setInterval` de `startPreviewServer`, o `api/cron/maintenance.js` disparado por el cron de la plataforma.
 - **Entrada HTTP**: `createRequestHandler` en `preview-server.js` es comun a los dos. `startPreviewServer` lo monta sobre `http.createServer`; `api/server.js` lo monta como funcion con `mode: "serverless"`, que ademas deja de servir estaticos y responde 501 en `/api/live`.
 - **Estaticos**: en proceso unico los sirve el propio servidor; en Vercel los publica `public/`, que arma `scripts/build-vercel.mjs` reutilizando las listas de archivos protegidos exportadas por `preview-server.js`.
