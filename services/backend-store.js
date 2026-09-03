@@ -5,6 +5,7 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
+import { extendedEditorialTopicSeedData, extendedEditorialUsers } from "../data-editorial-extra.js";
 import { escapeSqliteString, resolveBackupTarget } from "../scripts/backup-sqlite.mjs";
 import { createAvatarStorage } from "./avatar-storage.js";
 import { createDbClient } from "./db-client.js";
@@ -1544,6 +1545,13 @@ async function seedDatabase(db, { includeFakeFriendRequests = true } = {}) {
 
 export const EDITORIAL_ROLE = "Cuenta editorial";
 
+// Conjuntos que puede sembrar seedEditorialContent. Se eligen por nombre y no por
+// objeto para que nadie pueda inyectar contenido arbitrario a traves de la API.
+const EDITORIAL_SEED_DATASETS = {
+  base: { topics: editorialTopicSeedData, users: initialUsers },
+  extended: { topics: extendedEditorialTopicSeedData, users: extendedEditorialUsers }
+};
+
 // Inverso de seedEditorialContentIntoDatabase. No existia: la siembra editorial se
 // corrio a mano y no habia forma de deshacerla, ni siquiera apagando
 // TOPYKLY_SEED_DEMO_DATA (ese flag dispara purgeDemoData, que solo alcanza a los ids
@@ -1638,14 +1646,23 @@ async function removeEditorialSeedContentFromDatabase(db, { dryRun = true } = {}
   return summary;
 }
 
-async function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
+async function seedEditorialContentIntoDatabase(db, requestedLimit = 5, datasetName = "base") {
+  const dataset = Object.hasOwn(EDITORIAL_SEED_DATASETS, datasetName)
+    ? EDITORIAL_SEED_DATASETS[datasetName]
+    : null;
+  if (!dataset) {
+    throw new ApiError(
+      400,
+      "EDITORIAL_DATASET_UNKNOWN",
+      `No existe el conjunto editorial "${datasetName}".`
+    );
+  }
+  const { topics: topicSeeds, users: userSeeds } = dataset;
   const limit = normalizePositiveInteger(requestedLimit, 5, {
     min: 1,
-    max: editorialTopicSeedData.length
+    max: topicSeeds.length
   });
-  const candidates = editorialTopicSeedData
-    .slice(0, limit)
-    .map((entry, index) => ({ entry, index }));
+  const candidates = topicSeeds.slice(0, limit).map((entry, index) => ({ entry, index }));
   const entries = [];
   for (const candidate of candidates) {
     const existing = await db
@@ -1670,7 +1687,7 @@ async function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     ) VALUES (?, ?, ?, ?, 'registered', ?, ?, 'active', ?, 1, ?, ?)
   `);
 
-  for (const user of initialUsers) {
+  for (const user of userSeeds) {
     const nickname = normalizeNickname(user.nickname);
     const nicknameKey = normalizeUniqueNameKey(nickname);
     const existingByNickname = await db
@@ -1685,7 +1702,7 @@ async function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
         );
       }
       editorialUserIds.set(user.id, existingByNickname.id);
-      return;
+      continue;
     }
 
     const editorialUserId = `editorial-${user.id}`;
@@ -1757,8 +1774,8 @@ async function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     }
 
     const authorSeed =
-      initialUsers.find((user) => user.id === requestedAuthorId) ||
-      initialUsers[index % initialUsers.length];
+      userSeeds.find((user) => user.id === requestedAuthorId) ||
+      userSeeds[index % userSeeds.length];
     const authorId = editorialUserIds.get(authorSeed.id);
     const createdAt = createIsoTimestamp(
       insertionIndex * 4,
@@ -1789,7 +1806,7 @@ async function seedEditorialContentIntoDatabase(db, requestedLimit = 5) {
     let subtitlePreview = summarizeText(rootText);
 
     for (const [replyIndex, replyText] of replies.entries()) {
-      const replyAuthorSeed = initialUsers[(index + replyIndex + 1) % initialUsers.length];
+      const replyAuthorSeed = userSeeds[(index + replyIndex + 1) % userSeeds.length];
       const replyAuthorId = editorialUserIds.get(replyAuthorSeed.id);
       const replyCreatedAt = createIsoTimestamp(
         insertionIndex * 4 + replyIndex + 1,
@@ -6209,10 +6226,12 @@ export async function createBackendStore({
         return await buildFrontendPayload(db, context, selectedTopicId);
       });
     },
-    async seedEditorialContent({ limit = 5 } = {}) {
+    // dataset: "base" (data.js) o "extended" (data-editorial-extra.js, temas con
+    // 6 a 14 respuestas para que /archivo no quede por debajo del minimo de SEO).
+    async seedEditorialContent({ limit = 5, dataset = "base" } = {}) {
       return await withTransaction(
         db,
-        async (afterCommit, db) => await seedEditorialContentIntoDatabase(db, limit)
+        async (afterCommit, db) => await seedEditorialContentIntoDatabase(db, limit, dataset)
       );
     },
     // Destructivo e irreversible. Por defecto hace una simulacion: hay que pedir

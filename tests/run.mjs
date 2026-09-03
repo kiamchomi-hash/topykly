@@ -48,6 +48,7 @@ import {
   renderProfilePage,
   renderTopicPage,
   resolvePublicOrigin,
+  SEO_THIN_TOPIC_COMMENT_COUNT,
   slugify
 } from "../services/seo-pages.js";
 import { renderTopicSocialCard, TOPIC_SOCIAL_CARD_SIZE } from "../services/social-card.js";
@@ -55,6 +56,7 @@ import { backupSqliteDatabase, resolveBackupConfig } from "../scripts/backup-sql
 import { createChatActions } from "../controller-chat-actions.js";
 import { composeReportReason, REPORT_REASONS } from "../report-reasons.js";
 import { editorialTopicSeedData, initialUsers, topicSeedData } from "../data.js";
+import { extendedEditorialTopicSeedData, extendedEditorialUsers } from "../data-editorial-extra.js";
 import {
   appendMessageToTopic,
   buildTopics,
@@ -2521,6 +2523,68 @@ await (async () => {
         assert.equal(secondRun.insertedTopics, 0);
         assert.equal(secondRun.insertedUsers, 0);
         assert.equal((await store.getDiagnostics()).topics, 3);
+      },
+      { seedDemoData: false }
+    );
+  });
+
+  await test("backend seeds the extended editorial dataset above the SEO thin threshold", async () => {
+    await withTempStore(
+      async (store) => {
+        const run = await store.seedEditorialContent({ limit: 20, dataset: "extended" });
+        assert.equal(run.insertedTopics, extendedEditorialTopicSeedData.length);
+        assert.equal(run.insertedUsers, extendedEditorialUsers.length);
+
+        const payload = await store.bootstrap({ sessionId: "session-editorial-extended" });
+        assert.equal(payload.topics.length, extendedEditorialTopicSeedData.length);
+        // Raiz + entre 6 y 14 respuestas por tema.
+        assert.equal(
+          payload.topics.every(
+            (topic) => topic.messages.length >= 7 && topic.messages.length <= 15
+          ),
+          true
+        );
+        assert.equal(
+          payload.users.every(
+            (user) =>
+              user.role === "Cuenta editorial" &&
+              user.description.includes("Perfil editorial ficticio")
+          ),
+          true
+        );
+
+        // Lo que justifica este conjunto: ninguna pagina queda por debajo del minimo
+        // de comentarios que el sitemap exige para no considerarla delgada.
+        const seoEntries = await store.getSeoTopicEntries();
+        assert.equal(seoEntries.length, extendedEditorialTopicSeedData.length);
+        assert.equal(
+          seoEntries.every((entry) => entry.commentCount >= SEO_THIN_TOPIC_COMMENT_COUNT),
+          true
+        );
+        assert.equal(
+          seoEntries.some((entry) => entry.isThin || entry.isProblematic),
+          false
+        );
+      },
+      { seedDemoData: false }
+    );
+  });
+
+  await test("backend editorial seeding continues when some accounts already exist", async () => {
+    await withTempStore(
+      async (store) => {
+        await store.seedEditorialContent({ limit: 2 });
+        // Antes esto devolvia undefined: al reencontrar la primera cuenta ya creada
+        // la siembra cortaba entera en vez de saltear ese usuario.
+        const rest = await store.seedEditorialContent({ limit: 5 });
+        assert.equal(rest.insertedTopics, 3);
+        assert.equal(rest.insertedUsers, 0);
+        assert.equal((await store.getDiagnostics()).topics, 5);
+
+        await assert.rejects(
+          () => store.seedEditorialContent({ limit: 1, dataset: "constructor" }),
+          (error) => error.code === "EDITORIAL_DATASET_UNKNOWN"
+        );
       },
       { seedDemoData: false }
     );
