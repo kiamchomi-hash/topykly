@@ -5987,6 +5987,25 @@ await (async () => {
     );
   });
 
+  await test("the guest gate takes the composer slot with a full-width button", async () => {
+    const html = await read("index.html");
+    const styles = await read("styles.css");
+
+    // El acceso de invitado reemplaza al compositor, no es una tarjeta aparte: solo
+    // queda el boton, estirado igual que el de enviar.
+    assert.doesNotMatch(html, /Entra para conversar/);
+    assert.doesNotMatch(html, /Necesitas una cuenta para escribir/);
+    assert.match(
+      html,
+      /<div class="guest-composer-gate" data-guest-composer-gate hidden>\s*<button class="primary-button" type="button">Entrar o crear cuenta<\/button>\s*<\/div>/
+    );
+    assert.match(
+      styles,
+      /\.guest-composer-gate \.primary-button\s*\{[\s\S]*justify-self:\s*stretch;[\s\S]*width:\s*100%;/
+    );
+    assert.match(styles, /\.guest-composer-gate\s*\{[\s\S]*border-top:\s*1px solid/);
+  });
+
   await test("ranking builders summarise activity and handle empty topics", () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);
@@ -12898,9 +12917,16 @@ await (async () => {
       styles,
       /html\[data-theme="light"\] \.panel--chat\s*\{[\s\S]*border-top:\s*1px solid[\s\S]*border-top-left-radius:\s*0;[\s\S]*border-top-right-radius:\s*0;[\s\S]*background:\s*var\(--surface-strong\);/
     );
+    // El panel de chat conserva su borde superior tambien al crear un tema. Lo que
+    // se quita es el borde del compositor, que ahi es el primer elemento del panel
+    // y dibujaria una segunda linea pegada a la del panel.
+    assert.doesNotMatch(
+      styles,
+      /\.is-desktop-viewport \.panel--chat\.panel--topic-create\s*\{\s*border-top:\s*0;/
+    );
     assert.match(
       styles,
-      /html\[data-theme="light"\]\.is-desktop-viewport \.panel--chat\.panel--topic-create\s*\{[\s\S]*border-top:\s*0;/
+      /html\.is-desktop-viewport \.panel--chat\.panel--topic-create \.composer--topic-create\s*\{\s*border-top:\s*0;\s*\}/
     );
     assert.doesNotMatch(styles, /#refreshButton|#topicsRefreshButton|icon-button--refresh/);
     assert.match(

@@ -1776,13 +1776,6 @@ html[data-theme="dark"] .panel--chat {
   background: var(--surface-strong);
 }
 
-html[data-theme="light"].is-desktop-viewport .panel--chat.panel--topic-create {
-  border-top: 0;
-}
-html[data-theme="dark"].is-desktop-viewport .panel--chat.panel--topic-create {
-  border-top: 0;
-}
-
 html[data-theme="light"] .panel--chat .panel__header {
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
   background: var(--surface-strong);
@@ -3515,6 +3508,13 @@ html[data-theme="light"] .composer {
 html[data-theme="dark"] .composer {
   border-top: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
   background: var(--surface-strong);
+}
+
+/* Al crear un tema el compositor es lo primero del panel, asi que su borde
+   superior cae justo sobre el del panel y la linea se ve doble. Se quita el del
+   compositor, no el del panel: sin el panel el borde de arriba desaparecia. */
+html.is-desktop-viewport .panel--chat.panel--topic-create .composer--topic-create {
+  border-top: 0;
 }
 
 .panel--users-rankings .panel__header {
@@ -13159,28 +13159,26 @@ body.is-topic-share-open {
     -webkit-line-clamp: 3;
   }
 }
-/* Acceso previo al compositor */
+/* Acceso previo al compositor. Ocupa el mismo lugar que .composer y con el mismo
+   borde y fondo: es el reemplazo del compositor para quien no tiene cuenta, no
+   una tarjeta aparte. El boton se estira como el de enviar por ser item de grid. */
 .guest-composer-gate {
   display: grid;
-  gap: 8px;
-  margin: auto 16px 16px;
-  padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  margin-top: auto;
+  padding: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-strong));
+  background: var(--surface-strong);
 }
 
 .guest-composer-gate[hidden] {
   display: none;
 }
 
-.guest-composer-gate span {
-  color: var(--text-soft);
-  font-size: 0.88rem;
-}
-
+/* .primary-button trae justify-self: start; el compositor lo pisa igual para su
+   boton de enviar. */
 .guest-composer-gate .primary-button {
-  justify-self: start;
+  justify-self: stretch;
+  width: 100%;
 }
 
 /* Tienda */
