@@ -7998,7 +7998,7 @@ await (async () => {
     assert.equal(resolveVisibleTopicLimit(undefined), 5);
   });
 
-  await test("public profile pages stay indexable without a JS redirect", () => {
+  await test("public profile pages stay indexable without a JS redirect", async () => {
     const profileHtml = renderProfilePage(
       {
         name: "Mara",
@@ -8024,6 +8024,16 @@ await (async () => {
       true
     );
     assert.equal(profileHtml.includes(`href="/?perfil=mara"`), true);
+
+    // La otra mitad del bucle: la app tampoco puede devolver a /u/ cuando no
+    // encuentra el perfil de ?perfil=. Se avisa y se queda donde esta.
+    const controllerAppProfileSource = await read("controller-app.js");
+    assert.equal(
+      /window\.location\.replace\(`\/u\//.test(controllerAppProfileSource),
+      false,
+      "la app no debe volver a /u/ cuando no encuentra el perfil compartido"
+    );
+    assert.match(controllerAppProfileSource, /Ese perfil ya no esta disponible\./);
   });
 
   await test("topic sharing builds stable public URLs and branded PNG cards", async () => {
@@ -8358,6 +8368,37 @@ await (async () => {
       assert.equal(guestResponse.status, 404);
       const guestHtml = await guestResponse.text();
       assert.equal(guestHtml.includes(`<meta name="robots" content="noindex,follow">`), true);
+
+      // Un perfil que ya no existe pero sigue indexado no puede rebotar a la app:
+      // la app tampoco lo encuentra y volveria a /u/, dejando la pestana recargando.
+      const browserHeaders = {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      };
+      const deadProfileForBrowser = await fetch(`${origin}/u/desconocido_123`, {
+        headers: browserHeaders,
+        redirect: "manual"
+      });
+      assert.equal(deadProfileForBrowser.status, 404);
+      await deadProfileForBrowser.arrayBuffer();
+
+      // El perfil que si existe sigue abriendo la app, con el nickname canonico.
+      const liveProfileForBrowser = await fetch(`${origin}/u/PERFIL_PUBLICO`, {
+        headers: browserHeaders,
+        redirect: "manual"
+      });
+      assert.equal(liveProfileForBrowser.status, 302);
+      assert.equal(liveProfileForBrowser.headers.get("location"), "/?perfil=Perfil_publico");
+      await liveProfileForBrowser.arrayBuffer();
+
+      // Mismo criterio para los temas: uno borrado que quedo indexado tiene que
+      // terminar en 404 y no rebotar a la app como si todavia existiera.
+      const deadTopicForBrowser = await fetch(`${origin}/tema/tema-inexistente/slug`, {
+        headers: browserHeaders,
+        redirect: "manual"
+      });
+      assert.equal(deadTopicForBrowser.status, 404);
+      await deadTopicForBrowser.arrayBuffer();
     } finally {
       if (preview) {
         const closed = new Promise((resolve) => preview.server.once("close", resolve));

@@ -1646,12 +1646,25 @@ function isSeoPagePath(pathname) {
   );
 }
 
-async function isArchivedTopic(store, topicId) {
+// Devuelve el nickname canonico si el perfil sigue existiendo, o "" si no.
+async function getExistingProfileNickname(store, nickname) {
   try {
-    return (await store.getTopicPageData(topicId)).isArchived === true;
+    return (await store.getPublicProfileByNickname(nickname)).nickname;
   } catch {
-    // Si el tema no existe, que siga el flujo normal y resuelva el 404 mas abajo.
-    return false;
+    // Si el perfil no existe, que siga el flujo normal y resuelva el 404 mas abajo.
+    return "";
+  }
+}
+
+// "missing" cuando el tema ya no existe, "archived" cuando es de solo lectura y
+// "live" cuando sigue abierto. Distinguir el primero importa: un tema borrado que
+// quedo indexado tiene que terminar en 404, no rebotar a la app.
+async function resolveTopicPageStatus(store, topicId) {
+  try {
+    return (await store.getTopicPageData(topicId)).isArchived === true ? "archived" : "live";
+  } catch {
+    // Cualquier otro fallo tambien sigue el flujo normal y resuelve el 404 mas abajo.
+    return "missing";
   }
 }
 
@@ -1682,20 +1695,25 @@ async function handleSeoPageRequest(store, req, res, url) {
       // una busqueda lo deja en una conversacion muerta sin haber leido lo que vino
       // a leer. En ese caso se le sirve la pagina, igual que a un buscador, con su
       // CTA al chat vivo. Los temas activos si siguen abriendo la app directamente.
-      if (topicId && !(await isArchivedTopic(store, topicId))) {
+      if (topicId && (await resolveTopicPageStatus(store, topicId)) === "live") {
         sendRedirect(res, 302, `/?selectedTopicId=${encodeURIComponent(topicId)}`);
         return;
       }
     }
-    if (segments[0] === "u") {
+    if (segments[0] === "u" && segments.length === 2) {
       let nickname = "";
       try {
         nickname = decodeURIComponent(segments[1] || "");
       } catch {
         nickname = "";
       }
-      if (nickname) {
-        sendRedirect(res, 302, `/?perfil=${encodeURIComponent(nickname)}`);
+      // Solo se manda a la app cuando el perfil todavia existe. Con uno borrado el
+      // rebote no tenia salida: la app tampoco lo encontraba, volvia a /u/ y el
+      // navegador quedaba recargando sin parar sobre una url ya indexada. Ahora
+      // esas urls muertas siguen de largo hasta el 404, que es lo que corresponde.
+      const canonicalNickname = nickname ? await getExistingProfileNickname(store, nickname) : "";
+      if (canonicalNickname) {
+        sendRedirect(res, 302, `/?perfil=${encodeURIComponent(canonicalNickname)}`);
         return;
       }
     }

@@ -285,7 +285,7 @@ function createFakeSocialApiClient(baseApi, stateRef) {
   };
 }
 
-function openSharedPublicProfile(nickname) {
+function openSharedPublicProfile(nickname, { showFeedback = null } = {}) {
   const nicknameKey = String(nickname || "")
     .trim()
     .toLowerCase();
@@ -302,15 +302,16 @@ function openSharedPublicProfile(nickname) {
     return;
   }
 
-  if (typeof window !== "undefined") {
-    window.location.replace(`/u/${encodeURIComponent(String(nickname).trim())}`);
-  }
+  // No se vuelve a /u/<nickname>: el servidor devuelve a /?perfil= y con un perfil
+  // que ya no existe las dos partes se rebotaban entre si, dejando la pestana
+  // recargando sin fin. Se avisa y se deja al visitante en la app.
+  showFeedback?.("Ese perfil ya no esta disponible.", { kind: "error" });
 }
 
 async function hydrateInitialData(
   render,
   initialSelectedTopicId = null,
-  { fakeSocial = false, publicProfileNickname = null } = {}
+  { fakeSocial = false, publicProfileNickname = null, showFeedback = null } = {}
 ) {
   try {
     const payload = await api.fetchInitialData(
@@ -325,7 +326,7 @@ async function hydrateInitialData(
     }
     dispatch(state, reducers.setWebNotificationsPermission, getWebNotificationPermission());
     if (publicProfileNickname) {
-      openSharedPublicProfile(publicProfileNickname);
+      openSharedPublicProfile(publicProfileNickname, { showFeedback });
     }
     if (preview) {
       dispatch(state, reducers.setFriendRequestsPanelOpen, false);
@@ -683,7 +684,8 @@ export function bootstrap() {
   clearBootstrapLocationParams();
   scheduleInitialDataHydration(renderers.render, bootstrapLocationParams.selectedTopicId, {
     fakeSocial: bootstrapLocationParams.fakeSocial,
-    publicProfileNickname: bootstrapLocationParams.publicProfileNickname
+    publicProfileNickname: bootstrapLocationParams.publicProfileNickname,
+    showFeedback: actions.showFeedback
   });
   if (!bootstrapLocationParams.fakeSocial) {
     liveTopicSyncRef.current = createLiveTopicSync({
