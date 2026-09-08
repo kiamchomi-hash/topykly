@@ -246,6 +246,18 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse", viewer =
   const submitButton = dom.composerSubmitButton;
   const submitLabel = submitButton?.querySelector(".button-label");
   const guestGate = ensureGuestComposerGate(dom);
+  // Mientras carga, la cabecera y el compositor reales estan ocultos: sin estos
+  // dos marcadores el panel del medio queda como una caja vacia, sin el borde de
+  // arriba y sin el boton de abajo.
+  const headerSkeleton = chatPanel?.querySelector?.("[data-chat-skeleton-header]") || null;
+  const composerSkeleton = chatPanel?.querySelector?.("[data-chat-skeleton-composer]") || null;
+
+  if (headerSkeleton) {
+    headerSkeleton.hidden = !isLoading;
+  }
+  if (composerSkeleton) {
+    composerSkeleton.hidden = !isLoading;
+  }
 
   if (guestGate) {
     guestGate.hidden = isLoading || canParticipate;

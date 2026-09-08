@@ -5946,6 +5946,26 @@ await (async () => {
     );
   });
 
+  await test("the loading chat panel keeps the same frame as the loaded one", async () => {
+    const html = await read("index.html");
+    const chat = await read("ui/chat.js");
+    const styles = await read("styles.css");
+
+    // Mientras carga, la cabecera y el compositor reales estan ocultos. Sin estos
+    // dos marcadores el panel del medio queda como una caja vacia: sin el borde
+    // de arriba y sin el boton de abajo.
+    assert.match(html, /panel__header panel__header--chat chat-skeleton/);
+    assert.match(html, /data-chat-skeleton-header/);
+    assert.match(html, /class="composer chat-skeleton" data-chat-skeleton-composer/);
+    assert.match(html, /chat-skeleton__bar--submit/);
+    assert.match(chat, /headerSkeleton\.hidden = !isLoading/);
+    assert.match(chat, /composerSkeleton\.hidden = !isLoading/);
+
+    // El avatar del mensaje es absolute; si la regla compartida del destello lo
+    // deja en relative se cae al flujo y la fila pierde su columna de avatar.
+    assert.match(styles, /\.message--skeleton \.message__avatar \{\s*position: absolute;\s*\}/);
+  });
+
   await test("ranking builders summarise activity and handle empty topics", () => {
     const users = buildUsers(initialUsers);
     const topics = buildTopics(topicSeedData, users, 1_700_000_000_000);

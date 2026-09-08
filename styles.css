@@ -2321,7 +2321,8 @@ html.is-desktop-viewport .message-stream::-webkit-scrollbar-thumb {
 .ranking-item--skeleton .ranking-item__badge,
 .ranking-item--skeleton .ranking-item__skeleton-line,
 .message--skeleton .message__avatar,
-.message--skeleton .message__skeleton-line {
+.message--skeleton .message__skeleton-line,
+.chat-skeleton__bar {
   position: relative;
   overflow: hidden;
   background: color-mix(in srgb, var(--text) 8%, transparent) !important;
@@ -2335,7 +2336,8 @@ html.is-desktop-viewport .message-stream::-webkit-scrollbar-thumb {
 .ranking-item--skeleton .ranking-item__badge::after,
 .ranking-item--skeleton .ranking-item__skeleton-line::after,
 .message--skeleton .message__avatar::after,
-.message--skeleton .message__skeleton-line::after {
+.message--skeleton .message__skeleton-line::after,
+.chat-skeleton__bar::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2357,7 +2359,8 @@ html[data-theme="dark"] .user-item--skeleton .user-item__skeleton-circle::after,
 html[data-theme="dark"] .ranking-item--skeleton .ranking-item__badge::after,
 html[data-theme="dark"] .ranking-item--skeleton .ranking-item__skeleton-line::after,
 html[data-theme="dark"] .message--skeleton .message__avatar::after,
-html[data-theme="dark"] .message--skeleton .message__skeleton-line::after {
+html[data-theme="dark"] .message--skeleton .message__skeleton-line::after,
+html[data-theme="dark"] .chat-skeleton__bar::after {
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -2435,6 +2438,13 @@ html[data-theme="dark"] .message--skeleton .message__skeleton-line::after {
   animation: chat-skeleton-settle 180ms ease-out both;
 }
 
+/* La regla compartida de los esqueletos pone position: relative para anclar el
+   destello, pero el avatar del mensaje ya es absolute y con relative se caia al
+   flujo: la fila quedaba sin columna de avatar y con el doble de alto. */
+.message--skeleton .message__avatar {
+  position: absolute;
+}
+
 .message--skeleton .message__avatar svg {
   opacity: 0;
 }
@@ -2478,6 +2488,45 @@ html[data-theme="dark"] .message--skeleton .message__skeleton-line::after {
   min-height: min(420px, 100%);
 }
 
+/* Reusan .panel__header--chat y .composer para heredar padding, bordes y fondo:
+   asi el esqueleto ocupa el mismo marco que el panel ya cargado en vez de dejar
+   la caja vacia arriba y abajo. */
+.chat-skeleton[hidden] {
+  display: none;
+}
+
+.chat-skeleton {
+  pointer-events: none;
+}
+
+.chat-skeleton__bar {
+  display: block;
+  border-radius: 8px;
+}
+
+.chat-skeleton__bar--title {
+  width: min(46%, 220px);
+  height: 1.05rem;
+}
+
+.chat-skeleton__bar--action {
+  width: 130px;
+  height: 40px;
+  border-radius: 999px;
+}
+
+.chat-skeleton__bar--field {
+  height: 74px;
+  border-radius: 16px;
+}
+
+/* El boton real del compositor ocupa todo el ancho; como .composer es grid, el
+   marcador se estira solo y queda alineado con el. */
+.chat-skeleton__bar--submit {
+  height: 49px;
+  border-radius: 999px;
+}
+
 @keyframes chat-skeleton-settle {
   from {
     opacity: 0;
@@ -2499,6 +2548,7 @@ html[data-theme="dark"] .message--skeleton .message__skeleton-line::after {
   .ranking-item--skeleton .ranking-item__skeleton-line::after,
   .message--skeleton .message__avatar::after,
   .message--skeleton .message__skeleton-line::after,
+  .chat-skeleton__bar::after,
   .message--skeleton {
     animation: none;
   }
