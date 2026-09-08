@@ -2372,9 +2372,7 @@ async function getFrontendUsers(db, viewerId, profileUserIds = []) {
     : "";
   const nowMs = Date.now();
 
-  const rows = await db
-    .prepare(
-      `
+  const userPayloadSelect = `
     SELECT
       users.id, users.name, users.nickname, users.type, users.role, users.score, users.description,
       users.profile_show_description AS profileShowDescription,
@@ -2410,6 +2408,12 @@ async function getFrontendUsers(db, viewerId, profileUserIds = []) {
     LEFT JOIN (
       SELECT user_id, MAX(updated_at) AS last_seen_at FROM sessions GROUP BY user_id
     ) presence ON presence.user_id = users.id
+  `;
+
+  const rows = await db
+    .prepare(
+      `
+    ${userPayloadSelect}
     WHERE users.status = 'active' AND (users.type = 'registered' OR users.id = ?${extraUserFilter})
     ORDER BY
       COALESCE(post_stats.post_count, 0) DESC,
@@ -2422,6 +2426,24 @@ async function getFrontendUsers(db, viewerId, profileUserIds = []) {
   `
     )
     .all(viewerId, ...extraUserIds);
+
+  // El corte de 80 ordena por actividad, asi que un perfil pedido explicitamente
+  // (el de ?perfil=) puede quedar afuera justo por ser poco activo. Se lo trae
+  // aparte: si el frontend no lo encuentra, no puede mostrar el perfil compartido.
+  const loadedUserIds = new Set(rows.map((row) => row.id));
+  const missingUserIds = extraUserIds.filter((userId) => !loadedUserIds.has(userId));
+  if (missingUserIds.length) {
+    rows.push(
+      ...(await db
+        .prepare(
+          `
+    ${userPayloadSelect}
+    WHERE users.status = 'active' AND users.id IN (${missingUserIds.map(() => "?").join(", ")})
+  `
+        )
+        .all(...missingUserIds))
+    );
+  }
 
   return rows.map((user) => {
     const { lastSeenAt, ...rest } = user;
