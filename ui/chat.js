@@ -5,6 +5,36 @@ import { renderIntoTargets } from "./render-utils.js";
 const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 24;
 const COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX = 1;
 const MESSAGE_CARD_MIN_HEIGHT_PX = 112;
+const LAST_VIEWER_TYPE_STORAGE_KEY = "topykly-last-viewer-type";
+
+// La cookie de sesion es HttpOnly, asi que al arrancar no hay forma de saber si
+// quien entra tiene cuenta. Se recuerda el ultimo tipo conocido para elegir la
+// franja de abajo del esqueleto: a quien no tiene cuenta le llega solo el boton
+// de entrar, y dibujarle un compositor lo hace encoger 86px al cargar.
+function rememberViewerType(viewer) {
+  if (typeof localStorage === "undefined" || !viewer?.type) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(LAST_VIEWER_TYPE_STORAGE_KEY, viewer.type);
+  } catch {
+    // Ventana privada o almacenamiento lleno: se usa el valor por defecto.
+  }
+}
+
+// Ante la duda se asume sin cuenta, que es la primera visita de cualquiera.
+function wasLastViewerRegistered() {
+  if (typeof localStorage === "undefined") {
+    return false;
+  }
+
+  try {
+    return localStorage.getItem(LAST_VIEWER_TYPE_STORAGE_KEY) === "registered";
+  } catch {
+    return false;
+  }
+}
 
 export function syncComposerTextareaHeight(textarea) {
   if (typeof HTMLTextAreaElement === "undefined" || !(textarea instanceof HTMLTextAreaElement)) {
@@ -84,6 +114,7 @@ export function renderChat(state, dom) {
   const topic = getSelectedTopic(state.topics, state.selectedTopicId);
   const isReadOnlyTopic = Boolean(topic && topic.status !== "active" && topic.status !== "pinned");
   const isLoading = !state.viewer;
+  rememberViewerType(state.viewer);
   const reportedMessageIds = new Set(state.reportedMessageIds || []);
   const isTopicReported = Boolean(topic && state.reportedTopicIds?.includes?.(topic.id));
 
@@ -260,6 +291,7 @@ function syncChatComposer(topic, dom, isLoading, mobileView = "browse", viewer =
   }
   if (composerSkeleton) {
     composerSkeleton.hidden = !isLoading;
+    composerSkeleton.classList.toggle("chat-skeleton--guest", !wasLastViewerRegistered());
   }
 
   if (guestGate) {

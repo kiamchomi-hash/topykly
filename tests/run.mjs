@@ -5985,6 +5985,26 @@ await (async () => {
       chat,
       /message-stream message-stream--loading[\s\S]*syncMessageCardHeights\(dom\.messageStream\);\s*clearRenderedChatState/
     );
+
+    // Sin cuenta la franja de abajo es solo el boton de entrar (82px) y no un
+    // compositor (168px). Como la cookie de sesion es HttpOnly, el tipo de viewer
+    // se recuerda del ultimo arranque, y ante la duda se asume sin cuenta.
+    assert.match(chat, /const LAST_VIEWER_TYPE_STORAGE_KEY = "topykly-last-viewer-type";/);
+    assert.match(chat, /rememberViewerType\(state\.viewer\)/);
+    assert.match(
+      chat,
+      /function wasLastViewerRegistered\(\)[\s\S]*getItem\(LAST_VIEWER_TYPE_STORAGE_KEY\) === "registered"/
+    );
+    assert.match(chat, /classList\.toggle\("chat-skeleton--guest", !wasLastViewerRegistered\(\)\)/);
+    assert.match(
+      styles,
+      /\.chat-skeleton--guest \.chat-skeleton__bar--field \{\s*display: none;\s*\}/
+    );
+    // Sin localStorage o con el acceso bloqueado no puede tirar: se cae a invitado.
+    assert.match(
+      chat,
+      /function wasLastViewerRegistered\(\) \{\s*if \(typeof localStorage === "undefined"\) \{\s*return false;/
+    );
   });
 
   await test("the guest gate takes the composer slot with a full-width button", async () => {

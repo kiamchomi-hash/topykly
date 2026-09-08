@@ -2528,6 +2528,12 @@ html[data-theme="dark"] .chat-skeleton__bar::after {
   border-radius: 999px;
 }
 
+/* Sin cuenta no llega un compositor sino el acceso, que es solo el boton: sin
+   esto la franja se encoge 86px justo cuando terminan de cargar los datos. */
+.chat-skeleton--guest .chat-skeleton__bar--field {
+  display: none;
+}
+
 @keyframes chat-skeleton-settle {
   from {
     opacity: 0;
