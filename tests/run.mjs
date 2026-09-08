@@ -5995,6 +5995,18 @@ await (async () => {
       chat,
       /function wasLastViewerRegistered\(\)[\s\S]*getItem\(LAST_VIEWER_TYPE_STORAGE_KEY\) === "registered"/
     );
+    // La pista del servidor manda; localStorage solo cubre el hueco de antes de
+    // que llegue la primera respuesta.
+    assert.match(
+      chat,
+      /function wasLastViewerRegistered\(\) \{\s*const hint = readViewerHintCookie\(\);\s*if \(hint\) \{\s*return hint === "registered";/
+    );
+    const authService = await read("services/auth-service.js");
+    assert.match(authService, /const VIEWER_HINT_COOKIE = "topykly_viewer";/);
+    assert.match(
+      authService,
+      /function createViewerHintCookie\(req, viewerType\)[\s\S]*httpOnly: false/
+    );
     assert.match(chat, /classList\.toggle\("chat-skeleton--guest", !wasLastViewerRegistered\(\)\)/);
     assert.match(
       styles,
@@ -6003,7 +6015,7 @@ await (async () => {
     // Sin localStorage o con el acceso bloqueado no puede tirar: se cae a invitado.
     assert.match(
       chat,
-      /function wasLastViewerRegistered\(\) \{\s*if \(typeof localStorage === "undefined"\) \{\s*return false;/
+      /const hint = readViewerHintCookie\(\);[\s\S]*if \(typeof localStorage === "undefined"\) \{\s*return false;\s*\}\s*try \{[\s\S]*\} catch \{\s*return false;/
     );
   });
 
@@ -8203,6 +8215,77 @@ await (async () => {
         [20, 17, 29],
         "el nombre del autor debe permanecer dentro de la columna lateral"
       );
+    }
+  });
+
+  await test("the viewer hint cookie tracks the session and stays readable by the page", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "topykly-viewer-hint-"));
+    let preview = null;
+
+    try {
+      preview = await startPreviewServer({
+        port: 0,
+        host: "127.0.0.1",
+        log() {},
+        dbPath: path.join(tempDir, "preview.sqlite")
+      });
+      if (!preview.server.listening) {
+        await new Promise((resolve, reject) => {
+          preview.server.once("listening", resolve);
+          preview.server.once("error", reject);
+        });
+      }
+
+      const address = preview.server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const hintOf = (response) =>
+        response.headers.getSetCookie().find((cookie) => cookie.startsWith("topykly_viewer=")) ||
+        "";
+
+      const guest = await fetch(`${origin}/api/bootstrap`);
+      await guest.arrayBuffer();
+      const guestHint = hintOf(guest);
+      assert.match(guestHint, /^topykly_viewer=guest;/);
+      // Tiene que ser legible desde la pagina: es justamente lo que la cookie de
+      // sesion no puede darle al cliente. Y no lleva nada mas que el tipo.
+      assert.doesNotMatch(guestHint, /HttpOnly/);
+      assert.match(guestHint, /SameSite=Lax/);
+      assert.match(
+        guest.headers.getSetCookie().find((cookie) => cookie.startsWith("topykly_sid=")) || "",
+        /HttpOnly/
+      );
+
+      const sessionCookie = (
+        guest.headers.getSetCookie().find((cookie) => cookie.startsWith("topykly_sid=")) || ""
+      ).split(";")[0];
+
+      const store = preview.store;
+      await store.registerWithPassword({
+        sessionId: sessionCookie.split("=")[1],
+        email: "viewer-hint@example.com",
+        password: "password-segura",
+        nickname: "Viewerhint"
+      });
+
+      const registered = await fetch(`${origin}/api/bootstrap`, {
+        headers: { cookie: sessionCookie }
+      });
+      await registered.arrayBuffer();
+      assert.match(hintOf(registered), /^topykly_viewer=registered;/);
+
+      const loggedOut = await fetch(`${origin}/api/auth/logout`, {
+        method: "POST",
+        headers: { cookie: sessionCookie }
+      });
+      await loggedOut.arrayBuffer();
+      assert.match(hintOf(loggedOut), /^topykly_viewer=guest;/);
+    } finally {
+      if (preview) {
+        const closed = new Promise((resolve) => preview.server.once("close", resolve));
+        preview.close();
+        await closed;
+      }
+      await removeTempDir(tempDir);
     }
   });
 

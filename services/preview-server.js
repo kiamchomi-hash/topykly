@@ -570,9 +570,14 @@ function stripPrivateSessionPayload(payload) {
 }
 
 function sendBackendPayload(res, req, authService, statusCode, payload) {
-  sendJson(res, statusCode, stripPrivateSessionPayload(payload), {
-    cookies: payload?.sessionId ? [authService.createSessionCookie(req, payload.sessionId)] : []
-  });
+  const cookies = [];
+  if (payload?.sessionId) {
+    cookies.push(authService.createSessionCookie(req, payload.sessionId));
+  }
+  if (payload?.viewer?.type) {
+    cookies.push(authService.createViewerHintCookie(req, payload.viewer.type));
+  }
+  sendJson(res, statusCode, stripPrivateSessionPayload(payload), { cookies });
 }
 
 async function deliverTopicActivityEmails(

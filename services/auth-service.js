@@ -5,6 +5,11 @@ import { ApiError } from "./backend-store.js";
 const AUTH_FLOW_COOKIE = "topykly_auth_flow";
 const LEGACY_AUTH_FLOW_COOKIE = "chetrend_auth_flow";
 const SESSION_COOKIE = "topykly_sid";
+// Pista legible por el navegador con el tipo de viewer. No es una credencial y el
+// servidor no la lee nunca: existe solo para que la app pueda elegir el esqueleto
+// correcto antes de que conteste /api/bootstrap, porque la cookie de sesion es
+// HttpOnly y desde el cliente no hay forma de saber si hay cuenta.
+const VIEWER_HINT_COOKIE = "topykly_viewer";
 const AUTH_FLOW_TTL_MS = 10 * 60_000;
 const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DISCOVERY_CACHE_TTL_MS = 10 * 60_000;
@@ -444,6 +449,14 @@ export function createAuthService({
     });
   }
 
+  function createViewerHintCookie(req, viewerType) {
+    return createCookie(VIEWER_HINT_COOKIE, viewerType === "registered" ? "registered" : "guest", {
+      httpOnly: false,
+      maxAge: SESSION_TTL_SECONDS,
+      secure: getCookieSecurity(req, env)
+    });
+  }
+
   function createFlowCookie(req, flowPayload) {
     return createCookie(AUTH_FLOW_COOKIE, signPayload(flowPayload, sessionSecret), {
       maxAge: Math.ceil(AUTH_FLOW_TTL_MS / 1000),
@@ -506,7 +519,9 @@ export function createAuthService({
     configured,
     providerLabel,
     sessionCookieName: SESSION_COOKIE,
+    viewerHintCookieName: VIEWER_HINT_COOKIE,
     createSessionCookie,
+    createViewerHintCookie,
     clearFlowCookies,
     isEmailConfigured() {
       return resendConfigured;
@@ -811,7 +826,13 @@ export function createAuthService({
         sourceSessionId: String(flowPayload.sessionId || ""),
         sessionId: nextSessionId,
         selectedTopicId,
-        cookies: [createSessionCookie(req, nextSessionId), ...clearFlowCookies(req)]
+        cookies: [
+          createSessionCookie(req, nextSessionId),
+          // Volver de Google deja sesion con cuenta: sin esto la primera pantalla
+          // despues del login todavia dibujaria el esqueleto de invitado.
+          createViewerHintCookie(req, "registered"),
+          ...clearFlowCookies(req)
+        ]
       };
     }
   };

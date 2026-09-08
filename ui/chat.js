@@ -6,11 +6,33 @@ const CHAT_SCROLL_BOTTOM_THRESHOLD_PX = 24;
 const COMPOSER_TEXTAREA_SCROLL_TOLERANCE_PX = 1;
 const MESSAGE_CARD_MIN_HEIGHT_PX = 112;
 const LAST_VIEWER_TYPE_STORAGE_KEY = "topykly-last-viewer-type";
+const VIEWER_HINT_COOKIE = "topykly_viewer";
 
-// La cookie de sesion es HttpOnly, asi que al arrancar no hay forma de saber si
-// quien entra tiene cuenta. Se recuerda el ultimo tipo conocido para elegir la
-// franja de abajo del esqueleto: a quien no tiene cuenta le llega solo el boton
-// de entrar, y dibujarle un compositor lo hace encoger 86px al cargar.
+// La cookie de sesion es HttpOnly, asi que al arrancar no hay forma de leerla para
+// saber si quien entra tiene cuenta. El servidor deja al lado una pista legible
+// con el tipo de viewer, y localStorage queda de respaldo para cuando no llego
+// todavia. Con eso se elige la franja de abajo del esqueleto: a quien no tiene
+// cuenta le llega solo el boton de entrar, y dibujarle un compositor lo hace
+// encoger 86px al cargar.
+function readViewerHintCookie() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+
+  const match = String(document.cookie || "").match(
+    new RegExp(`(?:^|;\s*)${VIEWER_HINT_COOKIE}=([^;]*)`)
+  );
+  if (!match) {
+    return "";
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return "";
+  }
+}
+
 function rememberViewerType(viewer) {
   if (typeof localStorage === "undefined" || !viewer?.type) {
     return;
@@ -25,6 +47,11 @@ function rememberViewerType(viewer) {
 
 // Ante la duda se asume sin cuenta, que es la primera visita de cualquiera.
 function wasLastViewerRegistered() {
+  const hint = readViewerHintCookie();
+  if (hint) {
+    return hint === "registered";
+  }
+
   if (typeof localStorage === "undefined") {
     return false;
   }
