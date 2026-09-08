@@ -2449,13 +2449,12 @@ html[data-theme="dark"] .chat-skeleton__bar::after {
   opacity: 0;
 }
 
-.message--skeleton .message__body {
-  justify-content: center;
-  min-height: 84px;
-}
-
+/* Cada marcador ocupa el mismo lugar que la pieza real: la fila de meta mide 28px
+   por los botones de puntaje y reporte, y la linea de texto ocupa los 23px de una
+   linea. Asi el mensaje que llega no corre nada de lugar. */
 .message--skeleton .message__meta {
-  margin-bottom: 10px;
+  min-height: 28px;
+  margin-bottom: 8px;
 }
 
 .message--skeleton .message__skeleton-line {
@@ -2465,22 +2464,31 @@ html[data-theme="dark"] .chat-skeleton__bar::after {
 }
 
 .message--skeleton .message__skeleton-line--author {
-  width: min(44%, 180px);
+  width: min(70%, 180px);
+  justify-self: start;
 }
 
 .message--skeleton .message__skeleton-line--time {
-  width: 48px;
-  margin-left: auto;
+  width: 46px;
+  min-width: 46px;
+}
+
+.message--skeleton .message__skeleton-line--like {
+  width: 38px;
+  min-width: 38px;
+  height: 28px;
+}
+
+.message--skeleton .message__skeleton-line--report {
+  width: 100px;
+  min-width: 100px;
+  height: 28px;
 }
 
 .message--skeleton .message__skeleton-line--text {
   width: min(78%, 520px);
-  margin-bottom: 7px;
-}
-
-.message--skeleton .message__skeleton-line--short {
-  width: min(52%, 340px);
-  margin-bottom: 0;
+  height: 0.875rem;
+  margin-block: 4px 5px;
 }
 
 .message-stream--loading {
@@ -10213,6 +10221,13 @@ html.is-mobile-viewport .message__report-button {
   max-width: 40px;
   padding: 0;
   font-size: 0;
+}
+
+/* En movil el boton de reportar se queda solo con el icono; el marcador tiene
+   que seguirlo o la columna del autor cambia de ancho al llegar los mensajes. */
+html.is-mobile-viewport .message--skeleton .message__skeleton-line--report {
+  width: 40px;
+  min-width: 40px;
 }
 
 html.is-mobile-viewport .chat-actions__report .button-label,

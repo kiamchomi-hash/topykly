@@ -238,16 +238,17 @@ export function createMessageSkeleton(index) {
   const avatar = createProfileAvatar("message__avatar");
   const body = el("div", "message__body");
   const meta = el("div", "message__meta");
+  // .message__meta es una grilla de cuatro columnas fijas: autor, hora, puntaje y
+  // reporte. Con menos marcadores que columnas la fila no calza con la del mensaje
+  // ya cargado y todo se corre al recibir los datos.
   meta.append(
     el("span", "message__skeleton-line message__skeleton-line--author"),
-    el("span", "message__skeleton-line message__skeleton-line--time")
+    el("span", "message__skeleton-line message__skeleton-line--time"),
+    el("span", "message__skeleton-line message__skeleton-line--like"),
+    el("span", "message__skeleton-line message__skeleton-line--report")
   );
 
-  body.append(
-    meta,
-    el("span", "message__skeleton-line message__skeleton-line--text"),
-    el("span", "message__skeleton-line message__skeleton-line--text message__skeleton-line--short")
-  );
+  body.append(meta, el("span", "message__skeleton-line message__skeleton-line--text"));
   node.append(avatar, body);
   return node;
 }

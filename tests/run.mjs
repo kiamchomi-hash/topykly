@@ -5964,6 +5964,27 @@ await (async () => {
     // El avatar del mensaje es absolute; si la regla compartida del destello lo
     // deja en relative se cae al flujo y la fila pierde su columna de avatar.
     assert.match(styles, /\.message--skeleton \.message__avatar \{\s*position: absolute;\s*\}/);
+
+    // .message__meta es una grilla de cuatro columnas: el esqueleto necesita un
+    // marcador por columna para que la fila calce con la del mensaje cargado.
+    const components = await read("components.js");
+    assert.match(
+      components,
+      /message__skeleton-line--author[\s\S]*message__skeleton-line--time[\s\S]*message__skeleton-line--like[\s\S]*message__skeleton-line--report/
+    );
+    assert.match(styles, /\.message--skeleton \.message__skeleton-line--like \{/);
+    assert.match(styles, /\.message--skeleton \.message__skeleton-line--report \{/);
+    assert.match(
+      styles,
+      /html\.is-mobile-viewport \.message--skeleton \.message__skeleton-line--report \{/
+    );
+
+    // Las tarjetas reales reciben su alto de syncMessageCardHeights; el esqueleto
+    // tiene que pasar por la misma funcion o la lista salta al llegar los datos.
+    assert.match(
+      chat,
+      /message-stream message-stream--loading[\s\S]*syncMessageCardHeights\(dom\.messageStream\);\s*clearRenderedChatState/
+    );
   });
 
   await test("ranking builders summarise activity and handle empty topics", () => {

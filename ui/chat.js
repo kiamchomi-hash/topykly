@@ -107,6 +107,9 @@ export function renderChat(state, dom) {
     renderIntoTargets([dom.messageStream], "message-stream message-stream--loading", () =>
       Array.from({ length: 4 }, (_, index) => createMessageSkeleton(index))
     );
+    // La misma pasada que le da el alto a las tarjetas reales: sin ella el
+    // esqueleto mide 87px contra los 112 del mensaje que llega y la lista salta.
+    syncMessageCardHeights(dom.messageStream);
     clearRenderedChatState(dom.messageStream);
     return;
   }
